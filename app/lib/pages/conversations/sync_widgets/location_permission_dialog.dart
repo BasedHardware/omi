@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class LocationPermissionHelper {
@@ -23,28 +24,29 @@ class LocationPermissionHelper {
           builder: (context) => AlertDialog(
             backgroundColor: const Color(0xFF1C1C1E),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.location_on, size: 24, color: Colors.orange),
-                SizedBox(width: 12),
+                const Icon(Icons.location_on, size: 24, color: Colors.orange),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text('Location Permission Required', style: TextStyle(color: Colors.white, fontSize: 18)),
+                  child: Text(context.l10n.locationPermissionRequired,
+                      style: const TextStyle(color: Colors.white, fontSize: 18)),
                 ),
               ],
             ),
             content: Text(
-              'Fast Transfer requires location permission to verify WiFi connection. '
-              'Please grant location permission to continue.',
+              context.l10n.locationPermissionContent,
               style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
+                child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade500)),
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Open Settings', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+                child: Text(context.l10n.openSettings,
+                    style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
               ),
             ],
           ),

@@ -8,6 +8,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -60,7 +61,7 @@ class _AddAppPageState extends State<AddAppPage> {
       return Scaffold(
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
-          title: const Text('Submit App'),
+          title: Text(context.l10n.submitApp),
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             Center(
@@ -79,17 +80,17 @@ class _AddAppPageState extends State<AddAppPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Text(
-                            'Docs',
-                            style: TextStyle(
+                            context.l10n.docs,
+                            style: const TextStyle(
                               color: Colors.black,
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                             ),
                           ),
-                          SizedBox(width: 4),
-                          FaIcon(
+                          const SizedBox(width: 4),
+                          const FaIcon(
                             FontAwesomeIcons.arrowUpRightFromSquare,
                             color: Colors.black,
                             size: 10,
@@ -118,7 +119,7 @@ class _AddAppPageState extends State<AddAppPage> {
                       height: 14,
                     ),
                     Text(
-                      provider.isSubmitting ? 'Submitting your app...' : 'Hold on, we are preparing the form for you',
+                      provider.isSubmitting ? context.l10n.submittingYourApp : context.l10n.holdOnPreparingForm,
                       style: const TextStyle(color: Colors.white),
                     ),
                   ],
@@ -173,7 +174,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                     Padding(
                                       padding: EdgeInsets.fromLTRB(8, provider.thumbnailUrls.isNotEmpty ? 8 : 0, 0, 0),
                                       child: Text(
-                                        'Preview Screenshots',
+                                        context.l10n.previewScreenshots,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                       ),
                                     ),
@@ -340,7 +341,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                     children: [
                                       Text.rich(
                                         TextSpan(
-                                          text: 'Capabilities',
+                                          text: context.l10n.capabilities,
                                           style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                           children: const [
                                             TextSpan(
@@ -400,9 +401,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                           if (provider.isCapabilitySelectedById('chat'))
                                             PromptTextField(
                                               controller: provider.chatPromptController,
-                                              label: 'Chat Prompt',
-                                              hint:
-                                                  'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                              label: context.l10n.chatPrompt,
+                                              hint: context.l10n.chatPromptPlaceholder,
                                             ),
                                           if (provider.isCapabilitySelectedById('memories') &&
                                               provider.isCapabilitySelectedById('chat'))
@@ -412,9 +412,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                           if (provider.isCapabilitySelectedById('memories'))
                                             PromptTextField(
                                               controller: provider.conversationPromptController,
-                                              label: 'Conversation Prompt',
-                                              hint:
-                                                  'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                              label: context.l10n.conversationPrompt,
+                                              hint: context.l10n.conversationPromptPlaceholder,
                                             ),
                                         ],
                                       ),
@@ -443,7 +442,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                       Padding(
                                         padding: const EdgeInsets.only(left: 8.0),
                                         child: Text(
-                                          'Notification Scopes',
+                                          context.l10n.notificationScopes,
                                           style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                         ),
                                       ),
@@ -492,9 +491,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Make public',
-                                            style: TextStyle(
+                                          Text(
+                                            context.l10n.makePublic,
+                                            style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 16,
                                               fontWeight: FontWeight.w500,
@@ -503,8 +502,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                           const SizedBox(height: 2),
                                           Text(
                                             provider.makeAppPublic
-                                                ? 'Anyone can discover your app'
-                                                : 'Only you can use this app',
+                                                ? context.l10n.anyoneCanDiscover
+                                                : context.l10n.onlyYouCanUse,
                                             style: TextStyle(
                                               color: Colors.grey.shade500,
                                               fontSize: 13,
@@ -552,9 +551,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Text(
-                                              'Paid app',
-                                              style: TextStyle(
+                                            Text(
+                                              context.l10n.paidApp,
+                                              style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.w500,
@@ -562,7 +561,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              provider.isPaid ? 'Users pay to use your app' : 'Free for everyone',
+                                              provider.isPaid ? context.l10n.usersPayToUse : context.l10n.freeForEveryone,
                                               style: TextStyle(
                                                 color: Colors.grey.shade500,
                                                 fontSize: 13,
@@ -623,7 +622,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                             ),
                                           ),
                                           Text(
-                                            '/ month',
+                                            context.l10n.perMonth,
                                             style: TextStyle(
                                               color: Colors.grey.shade500,
                                               fontSize: 14,
@@ -673,11 +672,11 @@ class _AddAppPageState extends State<AddAppPage> {
                                   context: context,
                                   builder: (ctx) {
                                     return ConfirmationDialog(
-                                      title: 'Submit App?',
+                                      title: context.l10n.submitAppQuestion,
                                       description: provider.makeAppPublic
-                                          ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
-                                          : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
-                                      checkboxText: "Don't show it again",
+                                          ? context.l10n.submitAppPublicDescription
+                                          : context.l10n.submitAppPrivateDescription,
+                                      checkboxText: context.l10n.dontShowAgain,
                                       checkboxValue: !showSubmitAppConfirmation,
                                       onCheckboxChanged: (value) {
                                         setState(() {
@@ -737,19 +736,19 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         ),
                                                       ),
                                                       const SizedBox(height: 20),
-                                                      const Text(
-                                                        'Start Earning! 💰',
-                                                        style: TextStyle(
+                                                      Text(
+                                                        context.l10n.startEarning,
+                                                        style: const TextStyle(
                                                           color: Colors.white,
                                                           fontSize: 24,
                                                           fontWeight: FontWeight.bold,
                                                         ),
                                                       ),
                                                       const SizedBox(height: 12),
-                                                      const Text(
-                                                        'Connect Stripe or PayPal to receive payments for your app.',
+                                                      Text(
+                                                        context.l10n.connectStripeOrPayPal,
                                                         textAlign: TextAlign.center,
-                                                        style: TextStyle(
+                                                        style: const TextStyle(
                                                           color: Colors.grey,
                                                           fontSize: 16,
                                                         ),
@@ -762,9 +761,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                                           Navigator.pop(ctx);
                                                           routeToPage(context, const PaymentsPage());
                                                         },
-                                                        child: const Text(
-                                                          'Connect Now',
-                                                          style: TextStyle(
+                                                        child: Text(
+                                                          context.l10n.connectNow,
+                                                          style: const TextStyle(
                                                             color: Colors.black,
                                                             fontWeight: FontWeight.w600,
                                                           ),
@@ -774,7 +773,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                       CupertinoButton(
                                                         onPressed: () => Navigator.pop(ctx),
                                                         child: Text(
-                                                          'Maybe Later',
+                                                          context.l10n.maybeLater,
                                                           style: TextStyle(
                                                             color: Colors.grey.shade400,
                                                           ),
@@ -806,9 +805,9 @@ class _AddAppPageState extends State<AddAppPage> {
                           borderRadius: BorderRadius.circular(12.0),
                           color: provider.isValid ? Colors.white : Colors.grey.shade700,
                         ),
-                        child: const Text(
-                          'Submit App',
-                          style: TextStyle(color: Colors.black, fontSize: 16),
+                        child: Text(
+                          context.l10n.submitApp,
+                          style: const TextStyle(color: Colors.black, fontSize: 16),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -820,11 +819,11 @@ class _AddAppPageState extends State<AddAppPage> {
                       },
                       child: Text.rich(
                         TextSpan(
-                          text: 'By submitting, you agree to Omi ',
+                          text: context.l10n.bySubmittingYouAgreeToOmi,
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
                           children: [
                             TextSpan(
-                              text: 'Terms & Privacy Policy',
+                              text: context.l10n.termsAndPrivacyPolicy,
                               style: TextStyle(
                                 color: Colors.grey.shade500,
                                 fontSize: 10,

@@ -1,5 +1,13 @@
 # Coding Guidelines
 
+## Setup
+
+### Install Pre-commit Hook
+Run once to enable auto-formatting on commit:
+```bash
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
 ## Backend
 
 ### No In-Function Imports
@@ -40,12 +48,16 @@ from database.redis_db import r
 ```
 
 ### Memory Management
+
 Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
 ## App (Flutter)
 
-### Localization (l10n)
-After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
+### Localization Required
+
+- All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
+
+- After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
 ```bash
 cd app && flutter gen-l10n
 ```
@@ -77,11 +89,3 @@ After making changes, always run the appropriate test script to verify your chan
 
 - **Backend changes**: Run `backend/test.sh`
 - **App changes**: Run `app/test.sh`
-
-## Setup
-
-### Install Pre-commit Hook
-Run once to enable auto-formatting on commit:
-```bash
-ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
-```

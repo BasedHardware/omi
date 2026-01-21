@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/main.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 enum VoiceRecorderState {
   idle,
@@ -204,7 +206,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      AppSnackbar.showSnackbarError('Failed to transcribe audio');
+      AppSnackbar.showSnackbarError(
+          MyApp.navigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio');
     }
   }
 

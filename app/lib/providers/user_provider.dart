@@ -8,7 +8,9 @@ import 'package:omi/backend/http/api/users.dart' as users_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/main.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class UserProvider with ChangeNotifier {
@@ -61,12 +63,13 @@ class UserProvider with ChangeNotifier {
   String get targetLevel => _targetLevel;
 
   String get migrationETA {
+    final ctx = MyApp.navigatorKey.currentContext;
     if (_processedCount == 0 || _startTime == null || migrationTotalCount == 0) {
-      return 'Calculating...';
+      return ctx?.l10n.calculatingETA ?? 'Calculating...';
     }
     final elapsed = DateTime.now().difference(_startTime!);
     if (elapsed.inSeconds < 2) {
-      return 'Calculating...';
+      return ctx?.l10n.calculatingETA ?? 'Calculating...';
     }
     final timePerObject = elapsed.inMilliseconds / _processedCount;
     final remainingObjects = migrationTotalCount - _processedCount;
@@ -74,25 +77,27 @@ class UserProvider with ChangeNotifier {
     final remainingDuration = Duration(milliseconds: remainingMilliseconds);
 
     if (remainingDuration.inMinutes > 1) {
-      return 'About ${remainingDuration.inMinutes} minutes remaining';
+      return ctx?.l10n.aboutMinutesRemaining(remainingDuration.inMinutes) ??
+          'About ${remainingDuration.inMinutes} minutes remaining';
     } else if (remainingDuration.inSeconds > 10) {
-      return 'About a minute remaining';
+      return ctx?.l10n.aboutAMinuteRemaining ?? 'About a minute remaining';
     } else if (remainingObjects > 0) {
-      return 'Almost done...';
+      return ctx?.l10n.almostDone ?? 'Almost done...';
     }
     return '';
   }
 
   String _getMigrationItemName(String type) {
+    final ctx = MyApp.navigatorKey.currentContext;
     switch (type) {
       case 'conversation':
-        return 'conversations';
+        return ctx?.l10n.conversations.toLowerCase() ?? 'conversations';
       case 'memory':
-        return 'memories';
+        return ctx?.l10n.memories.toLowerCase() ?? 'memories';
       case 'chat':
-        return 'chats';
+        return ctx?.l10n.chatsLowercase ?? 'chats';
       default:
-        return 'data';
+        return ctx?.l10n.dataLowercase ?? 'data';
     }
   }
 
@@ -316,12 +321,13 @@ class UserProvider with ChangeNotifier {
   Future<void> updateDataProtectionLevel(String targetLevel) async {
     if (_isMigrating) return;
 
+    final ctx = MyApp.navigatorKey.currentContext;
     _isMigrating = true;
     _migrationFailed = false;
     _sourceLevel = _dataProtectionLevel;
     _targetLevel = targetLevel;
     _startTime = DateTime.now();
-    _migrationMessage = 'Analyzing your data...';
+    _migrationMessage = ctx?.l10n.analyzingYourData ?? 'Analyzing your data...';
     notifyListeners();
 
     try {
@@ -329,8 +335,8 @@ class UserProvider with ChangeNotifier {
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: 'omi says',
-        body: 'Migrating to $targetLevel protection...',
+        title: ctx?.l10n.omiSays ?? 'omi says',
+        body: ctx?.l10n.migratingToProtection(targetLevel) ?? 'Migrating to $targetLevel protection...',
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
       );
@@ -339,7 +345,7 @@ class UserProvider with ChangeNotifier {
       _processedCount = 0;
 
       if (_migrationQueue.isEmpty) {
-        _migrationMessage = 'No data to migrate. Finalizing...';
+        _migrationMessage = ctx?.l10n.noDataToMigrateFinalizing ?? 'No data to migrate. Finalizing...';
         notifyListeners();
         await _finalize(targetLevel);
         return;
@@ -355,24 +361,25 @@ class UserProvider with ChangeNotifier {
 
         _processedCount += batch.length;
         final percentage = ((_processedCount / migrationTotalCount) * 100).toInt();
-        _migrationMessage = 'Migrating $itemType... $percentage%';
+        _migrationMessage =
+            ctx?.l10n.migratingItemsProgress(itemType, percentage) ?? 'Migrating $itemType... $percentage%';
 
         notifyListeners();
       }
 
-      _migrationMessage = 'All objects migrated. Finalizing...';
+      _migrationMessage = ctx?.l10n.allObjectsMigratedFinalizing ?? 'All objects migrated. Finalizing...';
       notifyListeners();
       await _finalize(targetLevel);
     } catch (e, stackTrace) {
       Logger.error('Failed to update data protection level: $e\n$stackTrace');
       _isMigrating = false;
       _migrationFailed = true;
-      _migrationMessage = 'An error occurred during migration. Please try again.';
+      _migrationMessage = ctx?.l10n.migrationErrorOccurred ?? 'An error occurred during migration. Please try again.';
 
       NotificationService.instance.showNotification(
         id: _migrationNotificationId,
-        title: 'omi says',
-        body: 'An error occurred during data migration. Please try again.',
+        title: ctx?.l10n.omiSays ?? 'omi says',
+        body: ctx?.l10n.migrationErrorOccurred ?? 'An error occurred during data migration. Please try again.',
         layout: NotificationLayout.Default,
         payload: {'navigate_to': '/settings/data-privacy'},
       );
@@ -383,19 +390,21 @@ class UserProvider with ChangeNotifier {
   }
 
   Future<void> _finalize(String targetLevel) async {
+    final ctx = MyApp.navigatorKey.currentContext;
     await PrivacyApi.finalizeMigration(targetLevel);
     _dataProtectionLevel = targetLevel;
     _isMigrating = false;
     _migrationFailed = false;
-    _migrationMessage = 'Migration complete!';
+    _migrationMessage = ctx?.l10n.migrationComplete ?? 'Migration complete!';
     _startTime = null;
     _processedCount = 0;
     _migrationQueue = [];
 
     NotificationService.instance.showNotification(
       id: _migrationNotificationId,
-      title: 'omi says',
-      body: 'Your data is now protected with the new $targetLevel settings.',
+      title: ctx?.l10n.omiSays ?? 'omi says',
+      body: ctx?.l10n.dataProtectedWithSettings(targetLevel) ??
+          'Your data is now protected with the new $targetLevel settings.',
       layout: NotificationLayout.Default,
       payload: {'navigate_to': '/settings/data-privacy'},
     );

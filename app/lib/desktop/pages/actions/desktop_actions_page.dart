@@ -11,6 +11,7 @@ import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialo
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
@@ -273,16 +274,16 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     HapticFeedback.mediumImpact();
   }
 
-  String _getCategoryTitle(TaskCategory category) {
+  String _getCategoryTitle(BuildContext context, TaskCategory category) {
     switch (category) {
       case TaskCategory.today:
-        return 'Today';
+        return context.l10n.tasksToday;
       case TaskCategory.tomorrow:
-        return 'Tomorrow';
+        return context.l10n.tasksTomorrow;
       case TaskCategory.noDeadline:
-        return 'No Deadline';
+        return context.l10n.tasksNoDeadline;
       case TaskCategory.later:
-        return 'Later';
+        return context.l10n.tasksLater;
     }
   }
 
@@ -438,7 +439,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                               const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                               const SizedBox(height: 16),
                               Text(
-                                'Loading tasks...',
+                                context.l10n.loadingTasks,
                                 style: ResponsiveHelper(context).bodyLarge.copyWith(
                                       color: ResponsiveHelper.textPrimary,
                                     ),
@@ -497,21 +498,21 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(
+                    const Icon(
                       FontAwesomeIcons.listCheck,
                       color: ResponsiveHelper.textSecondary,
                       size: 18,
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Text(
-                      'Tasks',
-                      style: TextStyle(
+                      context.l10n.tasks,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
@@ -548,7 +549,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             ),
           ),
           OmiButton(
-            label: 'Create',
+            label: context.l10n.create,
             onPressed: () => _showCreateDialog(),
             icon: FontAwesomeIcons.plus,
           ),
@@ -644,7 +645,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     required List<ActionItemWithMetadata> items,
     required ActionItemsProvider provider,
   }) {
-    final title = _getCategoryTitle(category);
+    final title = _getCategoryTitle(context, category);
     final isEmpty = items.isEmpty;
     final orderedItems = _getOrderedItems(category, items);
 
@@ -1085,16 +1086,16 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             width: 1,
           ),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(
+            const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
-              'Loading tasks...',
-              style: TextStyle(
+              context.l10n.loadingTasks,
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
               ),
@@ -1134,19 +1135,19 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'No Tasks Yet',
-              style: TextStyle(
+            Text(
+              context.l10n.noTasksYet,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Tasks from your conversations will appear here.\nClick Create to add one manually.',
+            Text(
+              context.l10n.tasksFromConversationsWillAppear,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 height: 1.5,

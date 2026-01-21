@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 // Bold color palette inspired by LinkedIn Wrapped
@@ -168,7 +169,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     setState(() {
       _status = WrappedStatus.processing;
-      _progress = {'step': 'Starting...', 'pct': 0.0};
+      _progress = {'step': context.l10n.wrappedStarting, 'pct': 0.0};
     });
 
     final response = await generateWrapped2025();
@@ -185,7 +186,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       MixpanelManager().wrappedGenerationFailed(error: 'Failed to start generation');
       setState(() {
         _status = WrappedStatus.error;
-        _error = 'Failed to start generation. Please try again.';
+        _error = context.l10n.wrappedFailedToStartGeneration;
       });
     }
   }
@@ -263,7 +264,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
       await Share.shareXFiles(
         [XFile(file.path)],
-        text: 'My 2025, remembered by Omi ✨ omi.me/wrapped',
+        text: context.l10n.wrappedShareText,
         sharePositionOrigin: sharePositionOrigin,
       );
 
@@ -291,7 +292,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           _currentShareTemplate = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to share. Please try again.')),
+          SnackBar(content: Text(context.l10n.wrappedFailedToShare)),
         );
       }
     }
@@ -382,8 +383,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (funDay != null) {
       memorableDays.add({
         'emoji': funDay['emoji'] ?? '🎉',
-        'label': 'Most Fun',
-        'title': funDay['title'] ?? 'A Great Day',
+        'label': context.l10n.wrappedMostFunDay,
+        'title': funDay['title'] ?? context.l10n.wrappedAGreatDay,
         'description': funDay['description'] ?? '',
         'dateStr': funDay['date'] ?? 'January 1',
       });
@@ -391,8 +392,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (productiveDay != null) {
       memorableDays.add({
         'emoji': productiveDay['emoji'] ?? '💪',
-        'label': 'Most Productive',
-        'title': productiveDay['title'] ?? 'Getting It Done',
+        'label': context.l10n.wrappedMostProductiveDay,
+        'title': productiveDay['title'] ?? context.l10n.wrappedGettingItDone,
         'description': productiveDay['description'] ?? '',
         'dateStr': productiveDay['date'] ?? 'June 15',
       });
@@ -400,8 +401,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (stressfulDay != null) {
       memorableDays.add({
         'emoji': stressfulDay['emoji'] ?? '😤',
-        'label': 'Most Intense',
-        'title': stressfulDay['title'] ?? 'A Challenge',
+        'label': context.l10n.wrappedMostIntenseDay,
+        'title': stressfulDay['title'] ?? context.l10n.wrappedAChallenge,
         'description': stressfulDay['description'] ?? '',
         'dateStr': stressfulDay['date'] ?? 'December 1',
       });
@@ -420,15 +421,15 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     List<Map<String, dynamic>> moments = [
       {
         'emoji': '😂',
-        'label': 'Funniest',
-        'title': funniestEvent?['title'] ?? 'A Hilarious Moment',
+        'label': context.l10n.wrappedFunniestMoment,
+        'title': funniestEvent?['title'] ?? context.l10n.wrappedAHilariousMoment,
         'description': funniestEvent?['story'] ?? '',
         'dateStr': funniestEvent?['date'] ?? 'January 1',
       },
       {
         'emoji': '😅',
-        'label': 'Most Cringe',
-        'title': cringeEvent?['title'] ?? 'That Awkward Moment',
+        'label': context.l10n.wrappedMostCringeMoment,
+        'title': cringeEvent?['title'] ?? context.l10n.wrappedThatAwkwardMoment,
         'description': cringeEvent?['story'] ?? '',
         'dateStr': cringeEvent?['date'] ?? 'January 1',
       },
@@ -445,8 +446,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     List<Map<String, dynamic>> buddyList = buddies.map((b) {
       final buddy = b as Map<String, dynamic>;
       return {
-        'name': buddy['name'] ?? 'Friend',
-        'relationship': buddy['relationship'] ?? 'Friend',
+        'name': buddy['name'] ?? context.l10n.wrappedFriend,
+        'relationship': buddy['relationship'] ?? context.l10n.wrappedFriend,
         'context': buddy['context'] ?? '',
         'emoji': buddy['emoji'] ?? '👋',
       };
@@ -460,13 +461,14 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   void _shareObsessions() {
     final obsessions = _result?['obsessions'] as Map<String, dynamic>?;
+    final notMentioned = context.l10n.wrappedNotMentioned;
     _shareTemplate(
       templates.ObsessionsShareTemplate(
-        show: _capitalizeWords(obsessions?['show'] ?? 'Not mentioned'),
-        movie: _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned'),
-        book: _capitalizeWords(obsessions?['book'] ?? 'Not mentioned'),
-        celebrity: _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned'),
-        food: _capitalizeWords(obsessions?['food'] ?? 'Not mentioned'),
+        show: _capitalizeWords(obsessions?['show'] ?? notMentioned),
+        movie: _capitalizeWords(obsessions?['movie'] ?? notMentioned),
+        book: _capitalizeWords(obsessions?['book'] ?? notMentioned),
+        celebrity: _capitalizeWords(obsessions?['celebrity'] ?? notMentioned),
+        food: _capitalizeWords(obsessions?['food'] ?? notMentioned),
       ),
       'omi_wrapped_obsessions',
     );
@@ -486,7 +488,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final struggle = _result?['struggle'] as Map<String, dynamic>?;
     _shareTemplate(
       templates.StruggleShareTemplate(
-        title: struggle?['title'] ?? 'The Hard Part',
+        title: struggle?['title'] ?? context.l10n.wrappedTheHardPart,
       ),
       'omi_wrapped_struggle',
     );
@@ -496,7 +498,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final win = _result?['personal_win'] as Map<String, dynamic>?;
     _shareTemplate(
       templates.BiggestWinShareTemplate(
-        title: win?['title'] ?? 'Personal Growth',
+        title: win?['title'] ?? context.l10n.wrappedPersonalGrowth,
       ),
       'omi_wrapped_win',
     );
@@ -549,23 +551,23 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     List<Map<String, dynamic>> topDays = [];
     if (days?['most_fun_day'] != null) {
       final d = days!['most_fun_day'] as Map<String, dynamic>;
-      topDays.add({'emoji': d['emoji'] ?? '🎉', 'label': 'Fun', 'title': d['title'] ?? ''});
+      topDays.add({'emoji': d['emoji'] ?? '🎉', 'label': context.l10n.wrappedFunDay, 'title': d['title'] ?? ''});
     }
     if (days?['most_productive_day'] != null) {
       final d = days!['most_productive_day'] as Map<String, dynamic>;
-      topDays.add({'emoji': d['emoji'] ?? '💪', 'label': 'Productive', 'title': d['title'] ?? ''});
+      topDays.add({'emoji': d['emoji'] ?? '💪', 'label': context.l10n.wrappedProductiveDay, 'title': d['title'] ?? ''});
     }
     if (days?['most_stressful_day'] != null) {
       final d = days!['most_stressful_day'] as Map<String, dynamic>;
-      topDays.add({'emoji': d['emoji'] ?? '😤', 'label': 'Intense', 'title': d['title'] ?? ''});
+      topDays.add({'emoji': d['emoji'] ?? '😤', 'label': context.l10n.wrappedIntenseDay, 'title': d['title'] ?? ''});
     }
 
     // Best Moments
     final funniestEvent = _result?['funniest_event'] as Map<String, dynamic>?;
     final cringeEvent = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
     List<Map<String, dynamic>> bestMoments = [
-      {'emoji': '😂', 'title': funniestEvent?['title'] ?? 'Funny Moment'},
-      {'emoji': '😅', 'title': cringeEvent?['title'] ?? 'Cringe Moment'},
+      {'emoji': '😂', 'title': funniestEvent?['title'] ?? context.l10n.wrappedFunnyMomentTitle},
+      {'emoji': '😅', 'title': cringeEvent?['title'] ?? context.l10n.wrappedCringeMomentTitle},
     ];
 
     // Buddies
@@ -577,10 +579,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     // Obsessions
     final obsessions = _result?['obsessions'] as Map<String, dynamic>?;
-    final show = _capitalizeWords(obsessions?['show'] ?? 'Not mentioned');
-    final movie = _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned');
-    final food = _capitalizeWords(obsessions?['food'] ?? 'Not mentioned');
-    final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned');
+    final notMentionedCollage = context.l10n.wrappedNotMentioned;
+    final show = _capitalizeWords(obsessions?['show'] ?? notMentionedCollage);
+    final movie = _capitalizeWords(obsessions?['movie'] ?? notMentionedCollage);
+    final food = _capitalizeWords(obsessions?['food'] ?? notMentionedCollage);
+    final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? notMentionedCollage);
 
     // Phrases
     final phrases = _result?['top_phrases'] as List<dynamic>? ?? [];
@@ -589,8 +592,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     }).toList();
 
     // Struggle + Win
-    final struggle = (_result?['struggle'] as Map<String, dynamic>?)?['title'] ?? 'The Hard Part';
-    final biggestWin = (_result?['personal_win'] as Map<String, dynamic>?)?['title'] ?? 'Personal Growth';
+    final struggle = (_result?['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;
+    final biggestWin = (_result?['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
 
     _shareTemplate(
       templates.FinalCollageShareTemplate(
@@ -658,9 +661,9 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           child: Column(
             children: [
               const Spacer(),
-              const Text(
-                "Let's hit rewind on your",
-                style: TextStyle(
+              Text(
+                context.l10n.wrappedLetsHitRewind,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.w400,
@@ -689,10 +692,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(40),
                   ),
-                  child: const Text(
-                    'Generate My Wrapped',
+                  child: Text(
+                    context.l10n.wrappedGenerateMyWrapped,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: WrappedColors.blue,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -709,7 +712,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   }
 
   Widget _buildProcessingScreen() {
-    final step = _progress?['step'] ?? 'Processing...';
+    final step = _progress?['step'] ?? context.l10n.wrappedProcessingDefault;
     final pct = (_progress?['pct'] ?? 0.0) as num;
 
     return Container(
@@ -725,10 +728,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 style: TextStyle(fontSize: 80),
               ),
               const SizedBox(height: 32),
-              const Text(
-                'Creating your\n2025 story...',
+              Text(
+                context.l10n.wrappedCreatingYourStory,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
@@ -790,10 +793,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 style: TextStyle(fontSize: 80),
               ),
               const SizedBox(height: 32),
-              const Text(
-                'Something\nwent wrong',
+              Text(
+                context.l10n.wrappedSomethingWentWrong,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
@@ -802,7 +805,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               ),
               const SizedBox(height: 16),
               Text(
-                _error ?? 'An error occurred',
+                _error ?? context.l10n.wrappedAnErrorOccurred,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.8),
@@ -819,10 +822,10 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(40),
                   ),
-                  child: const Text(
-                    'Try Again',
+                  child: Text(
+                    context.l10n.wrappedTryAgain,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: WrappedColors.coral,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -840,8 +843,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   Widget _buildWrappedCards() {
     if (_result == null) {
-      return const Center(
-        child: Text('No data available', style: TextStyle(color: Colors.white)),
+      return Center(
+        child: Text(context.l10n.wrappedNoDataAvailable, style: const TextStyle(color: Colors.white)),
       );
     }
 
@@ -970,7 +973,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
             child: Text(
-              'Omi Life Recap',
+              context.l10n.wrappedOmiLifeRecap,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.8),
                 fontSize: 24,
@@ -984,7 +987,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 0, 0),
                 child: Text(
-                  'Swipe up to begin',
+                  context.l10n.wrappedSwipeUpToBegin,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 16,
@@ -1141,8 +1144,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (funDay != null) {
       memorableDays.add(_MemorableDayData(
         emoji: funDay['emoji'] ?? '🎉',
-        label: 'Most Fun',
-        title: funDay['title'] ?? 'A Great Day',
+        label: context.l10n.wrappedMostFunDay,
+        title: funDay['title'] ?? context.l10n.wrappedAGreatDay,
         description: funDay['description'] ?? '',
         dateStr: funDay['date'] ?? 'January 1',
       ));
@@ -1151,8 +1154,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (productiveDay != null) {
       memorableDays.add(_MemorableDayData(
         emoji: productiveDay['emoji'] ?? '💪',
-        label: 'Most Productive',
-        title: productiveDay['title'] ?? 'Getting It Done',
+        label: context.l10n.wrappedMostProductiveDay,
+        title: productiveDay['title'] ?? context.l10n.wrappedGettingItDone,
         description: productiveDay['description'] ?? '',
         dateStr: productiveDay['date'] ?? 'June 15',
       ));
@@ -1161,8 +1164,8 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     if (stressfulDay != null) {
       memorableDays.add(_MemorableDayData(
         emoji: stressfulDay['emoji'] ?? '😤',
-        label: 'Most Intense',
-        title: stressfulDay['title'] ?? 'A Challenge',
+        label: context.l10n.wrappedMostIntenseDay,
+        title: stressfulDay['title'] ?? context.l10n.wrappedAChallenge,
         description: stressfulDay['description'] ?? '',
         dateStr: stressfulDay['date'] ?? 'December 1',
       ));
@@ -1181,27 +1184,27 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   Widget _buildBestMomentsCard() {
     // Funniest moment
     final funniestEvent = _result?['funniest_event'] as Map<String, dynamic>?;
-    final funniestTitle = funniestEvent?['title'] ?? 'A Hilarious Moment';
-    final funniestStory = funniestEvent?['story'] ?? 'You had some funny moments this year!';
+    final funniestTitle = funniestEvent?['title'] ?? context.l10n.wrappedAHilariousMoment;
+    final funniestStory = funniestEvent?['story'] ?? context.l10n.wrappedYouHadFunnyMoments;
     final funniestDateStr = funniestEvent?['date'] ?? 'January 1';
 
     // Cringe moment
     final cringeEvent = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
-    final cringeTitle = cringeEvent?['title'] ?? 'That Awkward Moment';
-    final cringeStory = cringeEvent?['story'] ?? "We've all been there!";
+    final cringeTitle = cringeEvent?['title'] ?? context.l10n.wrappedThatAwkwardMoment;
+    final cringeStory = cringeEvent?['story'] ?? context.l10n.wrappedWeveAllBeenThere;
     final cringeDateStr = cringeEvent?['date'] ?? 'January 1';
 
     final bestMoments = <_MemorableDayData>[
       _MemorableDayData(
         emoji: '😂',
-        label: 'Funniest',
+        label: context.l10n.wrappedFunniestMoment,
         title: funniestTitle,
         description: funniestStory,
         dateStr: funniestDateStr,
       ),
       _MemorableDayData(
         emoji: '😅',
-        label: 'Most Cringe',
+        label: context.l10n.wrappedMostCringeMoment,
         title: cringeTitle,
         description: cringeStory,
         dateStr: cringeDateStr,
@@ -1213,9 +1216,9 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       child: _MemorableDaysAnimated(
         days: bestMoments,
         isActive: _currentPage == 5,
-        headerLine1: 'Best',
-        headerLine2: 'Moments',
-        summaryBadgeText: 'Best Moments',
+        headerLine1: context.l10n.wrappedBestHeader,
+        headerLine2: context.l10n.wrappedMomentsHeader,
+        summaryBadgeText: context.l10n.wrappedBestMomentsBadge,
         badgeColor: WrappedColors.coral,
         onShare: _shareBestMoments,
       ),
@@ -1231,9 +1234,9 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         buddies: buddies.map((b) {
           final buddy = b as Map<String, dynamic>;
           return _BuddyData(
-            name: buddy['name'] ?? 'Friend',
-            relationship: buddy['relationship'] ?? 'Friend',
-            context: buddy['context'] ?? 'Your buddy!',
+            name: buddy['name'] ?? context.l10n.wrappedFriend,
+            relationship: buddy['relationship'] ?? context.l10n.wrappedFriend,
+            context: buddy['context'] ?? context.l10n.wrappedYourBuddy,
             emoji: buddy['emoji'] ?? '👋',
           );
         }).toList(),
@@ -1245,25 +1248,26 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   Widget _buildObsessionsCard() {
     final obsessions = _result?['obsessions'] as Map<String, dynamic>?;
-    final show = _capitalizeWords(obsessions?['show'] ?? 'Not mentioned');
-    final movie = _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned');
-    final book = _capitalizeWords(obsessions?['book'] ?? 'Not mentioned');
-    final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned');
-    final food = _capitalizeWords(obsessions?['food'] ?? 'Not mentioned');
+    final notMentioned = context.l10n.wrappedNotMentioned;
+    final show = _capitalizeWords(obsessions?['show'] ?? notMentioned);
+    final movie = _capitalizeWords(obsessions?['movie'] ?? notMentioned);
+    final book = _capitalizeWords(obsessions?['book'] ?? notMentioned);
+    final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? notMentioned);
+    final food = _capitalizeWords(obsessions?['food'] ?? notMentioned);
 
     return _buildCardBase(
       backgroundColor: WrappedColors.coral,
       child: _TypewriterEndPageAnimated(
-        badgeText: "Couldn't Stop Talking About",
+        badgeText: context.l10n.wrappedCouldntStopTalkingAbout,
         badgeColor: WrappedColors.coral,
         isActive: _currentPage == 7,
         showProgressRing: false,
         items: [
-          _TypewriterItem(label: 'Show', value: show, emoji: '📺'),
-          _TypewriterItem(label: 'Movie', value: movie, emoji: '🎬'),
-          _TypewriterItem(label: 'Book', value: book, emoji: '📚'),
-          _TypewriterItem(label: 'Celebrity', value: celebrity, emoji: '⭐'),
-          _TypewriterItem(label: 'Food', value: food, emoji: '🍕'),
+          _TypewriterItem(label: context.l10n.wrappedShow, value: show, emoji: '📺'),
+          _TypewriterItem(label: context.l10n.wrappedMovie, value: movie, emoji: '🎬'),
+          _TypewriterItem(label: context.l10n.wrappedBook, value: book, emoji: '📚'),
+          _TypewriterItem(label: context.l10n.wrappedCelebrity, value: celebrity, emoji: '⭐'),
+          _TypewriterItem(label: context.l10n.wrappedFood, value: food, emoji: '🍕'),
         ],
         onShare: _shareObsessions,
       ),
@@ -1276,7 +1280,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     return _buildCardBase(
       backgroundColor: const Color(0xFF1a0a2e),
       child: _TypewriterEndPageAnimated(
-        badgeText: 'Movie Recs For Friends',
+        badgeText: context.l10n.wrappedMovieRecs,
         badgeColor: const Color(0xFF1a0a2e),
         isActive: _currentPage == 8,
         showProgressRing: false,
@@ -1294,16 +1298,16 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   Widget _buildStruggleCard() {
     final struggle = _result?['struggle'] as Map<String, dynamic>?;
-    final title = struggle?['title'] ?? 'The Hard Part';
+    final title = struggle?['title'] ?? context.l10n.wrappedTheHardPart;
 
     return _buildCardBase(
       backgroundColor: const Color(0xFF2d4a3e),
       child: _BigMomentAnimated(
         emoji: '😤',
-        headerLine1: 'Biggest',
-        headerLine2: 'Struggle',
+        headerLine1: context.l10n.wrappedBiggestHeader,
+        headerLine2: context.l10n.wrappedStruggleHeader,
         title: title,
-        subtitle: 'But you pushed through 💪',
+        subtitle: context.l10n.wrappedButYouPushedThroughEmoji,
         isActive: _currentPage == 9,
         onShare: _shareStruggle,
         buttonColor: const Color(0xFF2d4a3e),
@@ -1313,16 +1317,16 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   Widget _buildPersonalWinCard() {
     final win = _result?['personal_win'] as Map<String, dynamic>?;
-    final title = win?['title'] ?? 'Personal Growth';
+    final title = win?['title'] ?? context.l10n.wrappedPersonalGrowth;
 
     return _buildCardBase(
       backgroundColor: WrappedColors.mint,
       child: _BigMomentAnimated(
         emoji: '🏆',
-        headerLine1: 'Biggest',
-        headerLine2: 'Win',
+        headerLine1: context.l10n.wrappedBiggestHeader,
+        headerLine2: context.l10n.wrappedWinHeader,
         title: title,
-        subtitle: 'You did it! 🎉',
+        subtitle: context.l10n.wrappedYouDidItEmoji,
         isActive: _currentPage == 10,
         onShare: _sharePersonalWin,
         buttonColor: WrappedColors.mint,
@@ -1397,18 +1401,18 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         child: Column(
           children: [
             const Spacer(),
-            const Text(
-              'My 2025',
-              style: TextStyle(
+            Text(
+              context.l10n.wrappedMy2025,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 80,
                 fontWeight: FontWeight.w900,
                 decoration: TextDecoration.none,
               ),
             ),
-            const Text(
-              'remembered by Omi',
-              style: TextStyle(
+            Text(
+              context.l10n.wrappedRememberedByOmi,
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 36,
                 fontWeight: FontWeight.w500,
@@ -1419,9 +1423,9 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildShareStat(hours, 'hours'),
-                _buildShareStat('$totalConvs', 'convos'),
-                _buildShareStat('$totalActions', 'actions'),
+                _buildShareStat(hours, context.l10n.wrappedHours),
+                _buildShareStat('$totalConvs', context.l10n.wrappedConvos),
+                _buildShareStat('$totalActions', context.l10n.wrappedActions),
               ],
             ),
             const Spacer(),
@@ -1735,7 +1739,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'Top ${widget.percentile}% User',
+                    context.l10n.wrappedTopPercentUser(widget.percentile.toString()),
                     style: const TextStyle(
                       color: WrappedColors.mint,
                       fontSize: 16,
@@ -1758,9 +1762,9 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
             ),
             Opacity(
               opacity: _minutesAnimation.value > 0.3 ? 1.0 : _minutesAnimation.value / 0.3,
-              child: const Text(
-                'minutes',
-                style: TextStyle(
+              child: Text(
+                context.l10n.wrappedMinutes,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w600,
@@ -1785,9 +1789,9 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                   ),
                   Opacity(
                     opacity: _convosAnimation.value > 0.3 ? 1.0 : _convosAnimation.value / 0.3,
-                    child: const Text(
-                      'conversations',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.wrappedConversations,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.w600,
@@ -1815,9 +1819,9 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                   ),
                   Opacity(
                     opacity: _daysAnimation.value > 0.3 ? 1.0 : _daysAnimation.value / 0.3,
-                    child: const Text(
-                      'days active',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.wrappedDaysActive,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.w600,
@@ -1846,18 +1850,18 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.ios_share,
                                 color: WrappedColors.mint,
                                 size: 18,
                               ),
-                              SizedBox(width: 6),
+                              const SizedBox(width: 6),
                               Text(
-                                'Share',
-                                style: TextStyle(
+                                context.l10n.wrappedShare,
+                                style: const TextStyle(
                                   color: WrappedColors.mint,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -1975,7 +1979,7 @@ class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleT
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Share',
+                        context.l10n.wrappedShare,
                         style: TextStyle(
                           color: widget.buttonColor,
                           fontSize: 16,
@@ -2210,9 +2214,9 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text(
-                    'You Talked About',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.wrappedYouTalkedAbout,
+                    style: const TextStyle(
                       color: Color(0xFF2A9D8F),
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -2537,7 +2541,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                       Stack(
                         children: [
                           Text(
-                            'Completed',
+                            context.l10n.wrappedCompletedLabel,
                             style: TextStyle(
                               color: WrappedColors.indigo,
                               fontSize: 16,
@@ -2582,9 +2586,9 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
             ),
             Opacity(
               opacity: _totalAnimation.value > 0.3 ? 1.0 : _totalAnimation.value / 0.3,
-              child: const Text(
-                'tasks generated',
-                style: TextStyle(
+              child: Text(
+                context.l10n.wrappedTasksGenerated,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w600,
@@ -2611,9 +2615,9 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
                     children: [
                       Opacity(
                         opacity: _completedAnimation.value > 0.3 ? 1.0 : _completedAnimation.value / 0.3,
-                        child: const Text(
-                          'tasks completed',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.wrappedTasksCompleted,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
                             fontWeight: FontWeight.w600,
@@ -3891,9 +3895,9 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'Top 5 Phrases',
-                        style: TextStyle(
+                      child: Text(
+                        context.l10n.wrappedTopFivePhrases,
+                        style: const TextStyle(
                           color: WrappedColors.orange,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -4107,14 +4111,14 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('👥', style: TextStyle(fontSize: 18)),
-                      SizedBox(width: 6),
+                      const Text('👥', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 6),
                       Text(
-                        'My Buddies',
-                        style: TextStyle(
+                        context.l10n.wrappedMyBuddiesCard,
+                        style: const TextStyle(
                           color: Color(0xFF6B5B95),
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -4562,8 +4566,8 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
     final signatureCount = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['count'] ?? 0;
 
     // Struggle + Win
-    final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? 'The Hard Part';
-    final biggestWin = (widget.result['personal_win'] as Map<String, dynamic>?)?['title'] ?? 'Personal Growth';
+    final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedTheHardPart;
+    final biggestWin = (widget.result['personal_win'] as Map<String, dynamic>?)?['title'] ?? context.l10n.wrappedPersonalGrowth;
 
     return AnimatedBuilder(
       animation: Listenable.merge([_mainAnimation, _tilesAnimation]),
@@ -4603,7 +4607,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Top $percentile% User',
+                        context.l10n.wrappedTopPercentUser(percentile.toString()),
                         style: const TextStyle(
                           color: WrappedColors.mint,
                           fontSize: 14,
@@ -4630,9 +4634,9 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatItem(_formatNumber(totalMinutes), 'mins', Colors.white),
-                    _buildStatItem(_formatNumber(totalConvs), 'convos', Colors.white),
-                    _buildStatItem(_formatNumber(daysActive), 'days', Colors.white),
+                    _buildStatItem(_formatNumber(totalMinutes), context.l10n.wrappedMins, Colors.white),
+                    _buildStatItem(_formatNumber(totalConvs), context.l10n.wrappedConvos, Colors.white),
+                    _buildStatItem(_formatNumber(daysActive), context.l10n.wrappedDays, Colors.white),
                   ],
                 ),
               ),
@@ -4649,7 +4653,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                       delay: 0.1,
                       progress: tilesProgress,
                       child: _buildMiniTile(
-                        'BUDDIES',
+                        context.l10n.wrappedBuddiesLabel,
                         const Color(0xFF6B5B95),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4683,7 +4687,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                       delay: 0.15,
                       progress: tilesProgress,
                       child: _buildMiniTile(
-                        'OBSESSIONS',
+                        context.l10n.wrappedObsessionsLabelUpper,
                         WrappedColors.coral,
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4720,12 +4724,12 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Text('😤', style: TextStyle(fontSize: 18)),
-                                SizedBox(width: 6),
-                                Text('STRUGGLE',
-                                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                                const Text('😤', style: TextStyle(fontSize: 18)),
+                                const SizedBox(width: 6),
+                                Text(context.l10n.wrappedStruggleLabelUpper,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -4754,12 +4758,12 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Text('🏆', style: TextStyle(fontSize: 18)),
-                                SizedBox(width: 6),
-                                Text('WIN',
-                                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                                const Text('🏆', style: TextStyle(fontSize: 18)),
+                                const SizedBox(width: 6),
+                                Text(context.l10n.wrappedWinLabelUpper,
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -4784,7 +4788,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
               delay: 0.3,
               progress: tilesProgress,
               child: _buildMiniTile(
-                'TOP PHRASES',
+                context.l10n.wrappedTopPhrasesLabelUpper,
                 WrappedColors.orange,
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

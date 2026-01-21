@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class FirmwareUpdateStep {
   final String title;
   final String description;
@@ -48,33 +50,34 @@ class FirmwareUpdateSheet extends StatefulWidget {
 }
 
 class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
-  late final List<FirmwareUpdateStep> updateSteps;
+  late final List<String> stepKeys;
   bool hasUsbStep = false;
 
   @override
   void initState() {
     super.initState();
+    stepKeys = widget.steps;
+    hasUsbStep = widget.steps.contains('no_usb');
+  }
 
-    final stepMap = {
+  Map<String, FirmwareUpdateStep> _getStepMap(BuildContext context) {
+    return {
       'no_usb': FirmwareUpdateStep(
-        title: 'Disconnect USB',
-        description: 'USB connection during updates may damage your device.',
+        title: context.l10n.firmwareDisconnectUsb,
+        description: context.l10n.firmwareUsbWarning,
         icon: FontAwesomeIcons.plug,
       ),
       'battery': FirmwareUpdateStep(
-        title: 'Battery Above 15%',
-        description: 'Ensure your device has 15% battery.',
+        title: context.l10n.firmwareBatteryAbove15,
+        description: context.l10n.firmwareEnsureBattery,
         icon: FontAwesomeIcons.batteryHalf,
       ),
       'internet': FirmwareUpdateStep(
-        title: 'Stable Connection',
-        description: 'Connect to WiFi or cellular.',
+        title: context.l10n.firmwareStableConnection,
+        description: context.l10n.firmwareConnectWifi,
         icon: FontAwesomeIcons.wifi,
       ),
     };
-
-    updateSteps = widget.steps.map((step) => stepMap[step]!).toList();
-    hasUsbStep = widget.steps.contains('no_usb');
   }
 
   void _onConfirmed() {
@@ -84,7 +87,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to start update: $e'),
+          content: Text(context.l10n.failedToStartUpdate(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -126,9 +129,9 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
                     size: 20,
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Before Update, Make Sure:',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.beforeUpdateMakeSure,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -144,7 +147,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
-                children: updateSteps.map((step) => _buildStepItem(step)).toList(),
+                children: stepKeys.map((key) => _buildStepItem(_getStepMap(context)[key]!)).toList(),
               ),
             ),
 
@@ -307,9 +310,9 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           mainAxisAlignment: MainAxisAlignment.center,
                           key: const ValueKey('confirmed'),
                           children: [
-                            const Text(
-                              'Confirmed!',
-                              style: TextStyle(
+                            Text(
+                              context.l10n.confirmed,
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -333,7 +336,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         )
                       : _isDragging && progress > 0.3
                           ? Text(
-                              'Release',
+                              context.l10n.release,
                               key: const ValueKey('release'),
                               style: TextStyle(
                                 color: Colors.grey.shade400,
@@ -342,7 +345,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                               ),
                             )
                           : Text(
-                              'Slide to Update',
+                              context.l10n.slideToUpdate,
                               key: const ValueKey('slide'),
                               style: TextStyle(
                                 color: Colors.grey.shade400,

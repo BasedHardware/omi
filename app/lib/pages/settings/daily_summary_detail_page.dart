@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -148,7 +149,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           ),
           const SizedBox(height: 16),
           Text(
-            'Summary not found',
+            context.l10n.summaryNotFound,
             style: TextStyle(
               color: Colors.grey.shade400,
               fontSize: 18,
@@ -157,7 +158,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           const SizedBox(height: 24),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Go Back'),
+            child: Text(context.l10n.goBack),
           ),
         ],
       ),
@@ -342,7 +343,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
   // Get short name from full address (first part before comma)
   String _getShortLocationName(String? address) {
-    if (address == null || address.isEmpty) return 'Unknown';
+    if (address == null || address.isEmpty) return context.l10n.unknown;
     final parts = address.split(',');
     return parts.first.trim();
   }
@@ -458,7 +459,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Your Day\'s Journey'),
+        _buildSectionTitle(context.l10n.yourDaysJourney),
         const SizedBox(height: 16),
         ClipRRect(
           borderRadius: BorderRadius.circular(24),
@@ -519,7 +520,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Highlights'),
+        _buildSectionTitle(context.l10n.highlights),
         const SizedBox(height: 12),
         ...summary.highlights.map((highlight) {
           return GestureDetector(
@@ -585,7 +586,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       children: [
         Row(
           children: [
-            _buildSectionTitle('Tasks'),
+            _buildSectionTitle(context.l10n.tasks),
             const Spacer(),
             if (completedItems.isNotEmpty)
               Text(
@@ -666,7 +667,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Unresolved Questions'),
+        _buildSectionTitle(context.l10n.unresolvedQuestions),
         const SizedBox(height: 12),
         ...summary.unresolvedQuestions.map((q) {
           return GestureDetector(
@@ -704,7 +705,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Decisions'),
+        _buildSectionTitle(context.l10n.decisions),
         const SizedBox(height: 12),
         ...summary.decisionsMade.map((d) {
           return GestureDetector(
@@ -742,7 +743,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Learnings'),
+        _buildSectionTitle(context.l10n.learnings),
         const SizedBox(height: 12),
         ...summary.knowledgeNuggets.map((k) {
           return GestureDetector(

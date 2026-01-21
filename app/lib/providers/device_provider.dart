@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/main.dart';
@@ -142,9 +143,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         batteryLevel = value;
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
+          final ctx = MyApp.navigatorKey.currentContext;
           NotificationService.instance.createNotification(
-            title: "Low Battery Alert",
-            body: "Your device is running low on battery. Time for a recharge! 🔋",
+            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+            body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = true;
@@ -295,9 +297,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+      final ctx = MyApp.navigatorKey.currentContext;
       NotificationService.instance.createNotification(
-        title: 'Your Omi Device Disconnected',
-        body: 'Please reconnect to continue using your Omi.',
+        title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
+        body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
       );
     });
     MixpanelManager().deviceDisconnected();
@@ -429,11 +432,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
-        title: 'Firmware Update Available',
-        description:
-            'A new firmware update ($_latestFirmwareVersion) is available for your Omi device. Would you like to update now?',
-        confirmText: 'Update',
-        cancelText: 'Later',
+        title: context.l10n.firmwareUpdateAvailable,
+        description: context.l10n.firmwareUpdateAvailableDescription(_latestFirmwareVersion),
+        confirmText: context.l10n.update,
+        cancelText: context.l10n.later,
         onConfirm: () {
           Navigator.of(context).pop();
           setFirmwareUpdateInProgress(true);

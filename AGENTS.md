@@ -2,6 +2,10 @@
 
 These rules apply to Codex when working in this repository.
 
+## Setup
+
+- Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
+
 ## Coding Guidelines
 
 ### Backend
@@ -19,6 +23,7 @@ Module hierarchy (lowest to highest):
 
 ### App (Flutter)
 
+- All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
 - After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`
 
 ## Formatting
@@ -35,7 +40,3 @@ Always format code after making changes. The pre-commit hook handles this automa
 - Always run tests before committing:
   - Backend changes: run `backend/test.sh`
   - App changes: run `app/test.sh`
-
-## Setup
-
-- Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`

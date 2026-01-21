@@ -20,6 +20,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'widgets/conversations_group_widget.dart';
@@ -226,15 +227,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
 
             // Conversations section header
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(left: 16, top: 16, bottom: 8),
-                child: Text(
-                  'Conversations',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+            SliverToBoxAdapter(
+              child: Builder(
+                builder: (context) => Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+                  child: Text(
+                    context.l10n.conversations,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),

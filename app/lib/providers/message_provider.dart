@@ -18,7 +18,9 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/main.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
@@ -143,8 +145,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void captureImage() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (PlatformService.isDesktop) {
-      AppSnackbar.showSnackbarError('Camera capture is not available on this platform');
+      AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
       return;
     }
 
@@ -159,18 +162,21 @@ class MessageProvider extends ChangeNotifier {
       }
     } on PlatformException catch (e) {
       if (e.code == 'camera_access_denied') {
-        AppSnackbar.showSnackbarError('Camera permission denied. Please allow access to camera');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgCameraPermissionDenied ?? 'Camera permission denied. Please allow access to camera');
       } else {
-        AppSnackbar.showSnackbarError('Error accessing camera: ${e.message ?? e.code}');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgCameraAccessError(e.message ?? e.code) ?? 'Error accessing camera: ${e.message ?? e.code}');
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('Error taking photo. Please try again.');
+      AppSnackbar.showSnackbarError(l10n?.msgPhotoError ?? 'Error taking photo. Please try again.');
     }
   }
 
   void selectImage() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
-      AppSnackbar.showSnackbarError('You can only select up to 4 images');
+      AppSnackbar.showSnackbarError(l10n?.msgMaxImagesLimit ?? 'You can only select up to 4 images');
       return;
     }
 
@@ -198,11 +204,12 @@ class MessageProvider extends ChangeNotifier {
             return;
           }
         } on PlatformException catch (e) {
-          AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
+          AppSnackbar.showSnackbarError(
+              l10n?.msgFilePickerError(e.message ?? '') ?? 'Error opening file picker: ${e.message}');
           return;
         } catch (e) {
           Logger.debug('FilePicker general error: $e');
-          AppSnackbar.showSnackbarError('Error selecting images: $e');
+          AppSnackbar.showSnackbarError(l10n?.msgSelectImagesError(e.toString()) ?? 'Error selecting images: $e');
           return;
         }
       } else {
@@ -230,19 +237,22 @@ class MessageProvider extends ChangeNotifier {
     } on PlatformException catch (e) {
       Logger.debug('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
       if (e.code == 'photo_access_denied') {
-        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select images');
+        AppSnackbar.showSnackbarError(l10n?.msgPhotosPermissionDenied ??
+            'Photos permission denied. Please allow access to photos to select images');
       } else {
-        AppSnackbar.showSnackbarError('Error selecting images: ${e.message ?? e.code}');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgSelectImagesError(e.message ?? e.code) ?? 'Error selecting images: ${e.message ?? e.code}');
       }
     } catch (e) {
       Logger.debug('🖼️ General exception during image picking: $e');
-      AppSnackbar.showSnackbarError('Error selecting images. Please try again.');
+      AppSnackbar.showSnackbarError(l10n?.msgSelectImagesGenericError ?? 'Error selecting images. Please try again.');
     }
   }
 
   void selectFile() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
-      AppSnackbar.showSnackbarError('You can only select up to 4 files');
+      AppSnackbar.showSnackbarError(l10n?.msgMaxFilesLimit ?? 'You can only select up to 4 files');
       return;
     }
 
@@ -272,9 +282,10 @@ class MessageProvider extends ChangeNotifier {
         notifyListeners();
       }
     } on PlatformException catch (e) {
-      AppSnackbar.showSnackbarError('Error selecting files: ${e.message ?? e.code}');
+      AppSnackbar.showSnackbarError(
+          l10n?.msgSelectFilesError(e.message ?? e.code) ?? 'Error selecting files: ${e.message ?? e.code}');
     } catch (e) {
-      AppSnackbar.showSnackbarError('Error selecting files. Please try again.');
+      AppSnackbar.showSnackbarError(l10n?.msgSelectFilesGenericError ?? 'Error selecting files. Please try again.');
     }
   }
 
@@ -304,7 +315,8 @@ class MessageProvider extends ChangeNotifier {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
+        final l10n = MyApp.navigatorKey.currentContext?.l10n;
+        AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
       notifyListeners();
@@ -346,8 +358,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Reading your memories...';
+      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
@@ -356,7 +369,7 @@ class MessageProvider extends ChangeNotifier {
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Learning from your memories...';
+      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
       notifyListeners();
     }
     messages = mes;
@@ -612,9 +625,10 @@ class MessageProvider extends ChangeNotifier {
           if (uploadedFilesResult != null) {
             fileIds = uploadedFilesResult.map((f) => f.id).toList();
           } else {
+            final l10n = MyApp.navigatorKey.currentContext?.l10n;
             _askAIChannel.invokeMethod('aiResponseChunk', {
               'type': 'error',
-              'text': 'Failed to upload the attached file.',
+              'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
             });
             return;
           }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/providers/user_speech_samples_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 
 class UserSpeechSamples extends StatelessWidget {
@@ -42,7 +43,7 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
       builder: (context, provider, child) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Speech Samples'),
+            title: Text(context.l10n.speechSamples),
             backgroundColor: Theme.of(context).colorScheme.primary,
             // actions: [
             //   IconButton(
@@ -105,15 +106,15 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                             ),
                             onPressed: () => provider.playPause(index),
                           ),
-                          title: Text(index == 0 ? 'Speech Profile' : 'Additional Sample $index'),
+                          title: Text(index == 0 ? context.l10n.speechProfile : context.l10n.additionalSampleIndex(index.toString())),
                           // _getFileNameFromUrl(samplesUrl[index])
                           subtitle: FutureBuilder<Duration?>(
                             future: AudioPlayer().setUrl(provider.samplesUrl[index]),
                             builder: (context, snapshot) {
                               if (snapshot.hasData) {
-                                return Text('Duration: ${snapshot.data!.inSeconds} seconds');
+                                return Text(context.l10n.durationSeconds(snapshot.data!.inSeconds.toString()));
                               } else {
-                                return const Text('Loading duration...');
+                                return Text(context.l10n.loadingDuration);
                               }
                             },
                           ),
@@ -126,9 +127,9 @@ class _UserSpeechSamplesState extends State<UserSpeechSamplesView> {
                                     var parts = name.split('_segment_');
                                     deleteProfileSample(parts[0], int.tryParse(parts[1])!);
                                     provider.samplesUrl.removeAt(index);
-                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                         content: Text(
-                                      'Additional Speech Sample Removed',
+                                      context.l10n.additionalSpeechSampleRemoved,
                                     )));
                                     setState(() {});
                                   },

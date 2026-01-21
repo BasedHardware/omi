@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopMemoryManagementDialog extends StatelessWidget {
@@ -97,23 +98,23 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Memory Management',
-                  style: TextStyle(
+                  context.l10n.memoryManagement,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                     letterSpacing: -0.3,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Organize and control your memories',
-                  style: TextStyle(
+                  context.l10n.organizeAndControlMemories,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
@@ -170,11 +171,11 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: _buildStatItem('Total', totalMemories.toString())),
+            Expanded(child: _buildStatItem(context.l10n.total, totalMemories.toString())),
             const SizedBox(width: 12),
-            Expanded(child: _buildStatItem('Public', publicMemories.toString())),
+            Expanded(child: _buildStatItem(context.l10n.public, publicMemories.toString())),
             const SizedBox(width: 12),
-            Expanded(child: _buildStatItem('Private', privateMemories.toString())),
+            Expanded(child: _buildStatItem(context.l10n.private, privateMemories.toString())),
           ],
         ),
       ],
@@ -231,14 +232,14 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
       children: [
         // Privacy actions
         _buildActionItem(
-          'Make All Memories Private',
-          'Set all memories to private visibility',
+          context.l10n.makeAllMemoriesPrivate,
+          context.l10n.setAllMemoriesToPrivate,
           () => _makeAllMemoriesPrivate(context),
         ),
 
         _buildActionItem(
-          'Make All Memories Public',
-          'Set all memories to public visibility',
+          context.l10n.makeAllMemoriesPublic,
+          context.l10n.setAllMemoriesToPublic,
           () => _makeAllMemoriesPublic(context),
         ),
 
@@ -263,8 +264,8 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
 
         // Danger zone
         _buildActionItem(
-          'Delete All Memories',
-          'Permanently remove all memories from Omi',
+          context.l10n.deleteAllMemories,
+          context.l10n.permanentlyRemoveAllMemories,
           () => _confirmDeleteAllMemories(context),
           isDangerous: true,
         ),
@@ -354,7 +355,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
     await provider.updateAllMemoriesVisibility(true);
 
     if (context.mounted) {
-      _showSuccessMessage(context, 'All memories are now private', FontAwesomeIcons.userLock);
+      _showSuccessMessage(context, context.l10n.allMemoriesAreNowPrivate, FontAwesomeIcons.userLock);
     }
   }
 
@@ -363,13 +364,13 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
     await provider.updateAllMemoriesVisibility(false);
 
     if (context.mounted) {
-      _showSuccessMessage(context, 'All memories are now public', FontAwesomeIcons.userGroup);
+      _showSuccessMessage(context, context.l10n.allMemoriesAreNowPublic, FontAwesomeIcons.userGroup);
     }
   }
 
   void _confirmDeleteAllMemories(BuildContext context) {
     if (provider.memories.isEmpty) {
-      _showInfoMessage(context, 'No memories to delete');
+      _showInfoMessage(context, context.l10n.noMemoriesToDelete);
       Navigator.pop(context);
       return;
     }
@@ -413,9 +414,9 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Clear Omi\'s Memory',
-                  style: TextStyle(
+                Text(
+                  context.l10n.clearOmisMemory,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -423,7 +424,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Are you sure you want to clear Omi\'s memory? This action cannot be undone and will permanently delete all ${provider.memories.length} memories.',
+                  context.l10n.clearMemoryConfirmation(provider.memories.length),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
@@ -446,10 +447,10 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                               color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text(
-                              'Cancel',
+                            child: Text(
+                              context.l10n.cancel,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: ResponsiveHelper.textSecondary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
@@ -468,8 +469,7 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                             provider.deleteAllMemories();
                             Navigator.pop(context); // Close confirmation dialog
                             Navigator.pop(context); // Close management dialog
-                            _showSuccessMessage(
-                                context, 'Omi\'s memory about you has been cleared', FontAwesomeIcons.trash);
+                            _showSuccessMessage(context, context.l10n.omisMemoryCleared, FontAwesomeIcons.trash);
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
@@ -485,10 +485,10 @@ class DesktopMemoryManagementDialog extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            child: const Text(
-                              'Clear Memory',
+                            child: Text(
+                              context.l10n.clearMemoryButton,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,

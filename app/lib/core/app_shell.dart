@@ -29,6 +29,7 @@ import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -69,7 +70,7 @@ class _AppShellState extends State<AppShell> {
           }
         } else {
           Logger.debug('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+          AppSnackbar.showSnackbarError(context.l10n.appNotAvailable);
         }
       }
     } else if (uri.pathSegments.first == 'wrapped') {
@@ -95,7 +96,7 @@ class _AppShellState extends State<AppShell> {
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Todoist OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Todoist');
+        AppSnackbar.showSnackbarError(context.l10n.failedToConnectTodoist);
         return;
       }
 
@@ -111,7 +112,7 @@ class _AppShellState extends State<AppShell> {
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Asana OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Asana');
+        AppSnackbar.showSnackbarError(context.l10n.failedToConnectAsana);
         return;
       }
 
@@ -128,7 +129,7 @@ class _AppShellState extends State<AppShell> {
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('Google Tasks OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to Google Tasks');
+        AppSnackbar.showSnackbarError(context.l10n.failedToConnectGoogleTasks);
         return;
       }
 
@@ -144,7 +145,7 @@ class _AppShellState extends State<AppShell> {
       final error = uri.queryParameters['error'];
       if (error != null) {
         Logger.debug('ClickUp OAuth error: $error');
-        AppSnackbar.showSnackbarError('Failed to connect to ClickUp');
+        AppSnackbar.showSnackbarError(context.l10n.failedToConnectClickUp);
         return;
       }
 
@@ -174,7 +175,7 @@ class _AppShellState extends State<AppShell> {
     final error = uri.queryParameters['error'];
     if (error != null) {
       Logger.debug('$oauthLogName OAuth error: $error');
-      AppSnackbar.showSnackbarError('Failed to connect to $errorDisplayName: $error');
+      AppSnackbar.showSnackbarError(context.l10n.failedToConnectServiceWithError(errorDisplayName, error));
       return;
     }
 
@@ -196,13 +197,13 @@ class _AppShellState extends State<AppShell> {
     if (success) {
       Logger.debug('✓ Todoist authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Todoist - authentication complete');
-      AppSnackbar.showSnackbar('Successfully connected to Todoist!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedTodoist);
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       Logger.debug('Failed to complete Todoist authentication');
-      AppSnackbar.showSnackbarError('Failed to connect to Todoist. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.failedToConnectTodoistRetry);
     }
   }
 
@@ -215,7 +216,7 @@ class _AppShellState extends State<AppShell> {
     if (success) {
       Logger.debug('✓ Asana authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Asana - authentication complete');
-      AppSnackbar.showSnackbar('Successfully connected to Asana!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedAsana);
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
@@ -226,7 +227,7 @@ class _AppShellState extends State<AppShell> {
       }
     } else {
       Logger.debug('Failed to complete Asana authentication');
-      AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.failedToConnectAsanaRetry);
     }
   }
 
@@ -239,13 +240,13 @@ class _AppShellState extends State<AppShell> {
     if (success) {
       Logger.debug('✓ Google Tasks authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Google Tasks - authentication complete');
-      AppSnackbar.showSnackbar('Successfully connected to Google Tasks!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGoogleTasks);
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
       Logger.debug('Failed to complete Google Tasks authentication');
-      AppSnackbar.showSnackbarError('Failed to connect to Google Tasks. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.failedToConnectGoogleTasksRetry);
     }
   }
 
@@ -258,7 +259,7 @@ class _AppShellState extends State<AppShell> {
     if (success) {
       Logger.debug('✓ ClickUp authentication completed successfully');
       Logger.debug('✓ Task integration enabled: ClickUp - authentication complete');
-      AppSnackbar.showSnackbar('Successfully connected to ClickUp!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedClickUp);
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
@@ -269,7 +270,7 @@ class _AppShellState extends State<AppShell> {
       }
     } else {
       Logger.debug('Failed to complete ClickUp authentication');
-      AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');
+      AppSnackbar.showSnackbarError(context.l10n.failedToConnectClickUpRetry);
     }
   }
 
@@ -286,11 +287,11 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       Logger.debug('✓ Notion authentication completed successfully');
-      AppSnackbar.showSnackbar('Successfully connected to Notion!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedNotion);
     } catch (e) {
       Logger.debug('Error handling Notion callback: $e');
       if (mounted) {
-        AppSnackbar.showSnackbarError('Failed to refresh Notion connection status.');
+        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshNotionStatus);
       }
     }
   }
@@ -308,11 +309,11 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       Logger.debug('✓ Google authentication completed successfully');
-      AppSnackbar.showSnackbar('Successfully connected to Google!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGoogle);
     } catch (e) {
       Logger.debug('Error handling Google Calendar callback: $e');
       if (mounted) {
-        AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
+        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshGoogleStatus);
       }
     }
   }
@@ -330,11 +331,11 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       Logger.debug('✓ Whoop authentication completed successfully');
-      AppSnackbar.showSnackbar('Successfully connected to Whoop!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedWhoop);
     } catch (e) {
       Logger.debug('Error handling Whoop callback: $e');
       if (mounted) {
-        AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
+        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshWhoopStatus);
       }
     }
   }
@@ -352,7 +353,7 @@ class _AppShellState extends State<AppShell> {
 
       if (!mounted) return;
       Logger.debug('✓ GitHub authentication completed successfully');
-      AppSnackbar.showSnackbar('Successfully connected to GitHub!');
+      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGitHub);
 
       // Open GitHub settings page to select default repository
       if (mounted) {
@@ -368,7 +369,7 @@ class _AppShellState extends State<AppShell> {
     } catch (e) {
       Logger.debug('Error handling GitHub callback: $e');
       if (mounted) {
-        AppSnackbar.showSnackbarError('Failed to refresh GitHub connection status.');
+        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshGitHubStatus);
       }
     }
   }

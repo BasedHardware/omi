@@ -164,21 +164,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-              ),
-            ),
+            Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
           ],
         ],
       ),
@@ -197,46 +187,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
         children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
-          ),
+          SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
           const SizedBox(width: 16),
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w400,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
             ),
           ),
           if (chipValue != null) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(100)),
               child: Text(
                 chipValue,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
             if (showChevron) const SizedBox(width: 8),
           ],
-          if (showChevron)
-            const Icon(
-              Icons.chevron_right,
-              color: Color(0xFF3C3C43),
-              size: 20,
-            ),
+          if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
         ],
       ),
     );
@@ -245,9 +215,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return GestureDetector(
         onTap: () {
           Clipboard.setData(ClipboardData(text: copyValue));
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title copied to clipboard')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.itemCopiedToClipboard(title))));
         },
         child: content,
       );
@@ -271,10 +241,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           _buildProfileStyleItem(
@@ -333,10 +300,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final manufacturer = device?.manufacturerName ?? 'Based Hardware';
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           _buildProfileStyleItem(
@@ -386,9 +350,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -400,27 +362,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     margin: const EdgeInsets.only(top: 12, bottom: 16),
                     width: 36,
                     height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3C3C43),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                   ),
                   Text(
                     context.l10n.doubleTapAction,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: Text(
                       context.l10n.endAndProcess,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
                     trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                     onTap: () {
@@ -431,10 +383,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   ListTile(
                     title: Text(
                       context.l10n.pauseResumeRecording,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
                     trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                     onTap: () {
@@ -445,10 +394,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   ListTile(
                     title: Text(
                       context.l10n.starOngoing,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
                     ),
                     trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
                     onTap: () {
@@ -470,9 +416,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -486,29 +430,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       margin: const EdgeInsets.only(bottom: 16),
                       width: 36,
                       height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3C3C43),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           context.l10n.ledBrightness,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),
                         Text(
                           '${_dimRatio.round()}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -519,10 +452,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
                         overlayColor: Colors.white.withOpacity(0.1),
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 12,
-                          elevation: 2,
-                        ),
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
                       ),
@@ -571,9 +501,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -609,40 +537,23 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       margin: const EdgeInsets.only(bottom: 16),
                       width: 36,
                       height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3C3C43),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           context.l10n.micGain,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),
                         Text(
                           getGainLabel(currentLevel),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      getGainDescription(currentLevel),
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 13,
-                      ),
-                    ),
+                    Text(getGainDescription(currentLevel), style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                     const SizedBox(height: 24),
                     SliderTheme(
                       data: SliderThemeData(
@@ -650,10 +561,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
                         overlayColor: Colors.white.withOpacity(0.1),
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 12,
-                          elevation: 2,
-                        ),
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
                       ),
@@ -735,10 +643,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white.withOpacity(0.1) : const Color(0xFF2A2A2E),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? Colors.white.withOpacity(0.5) : Colors.transparent,
-            width: 1,
-          ),
+          border: Border.all(color: isSelected ? Colors.white.withOpacity(0.5) : Colors.transparent, width: 1),
         ),
         child: Center(
           child: Text(
@@ -763,10 +668,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
 
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Double Tap
@@ -801,8 +703,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.wifi,
-              title: 'WiFi Sync',
-              chipValue: 'Available',
+              title: context.l10n.wifiSync,
+              chipValue: context.l10n.available,
               showChevron: false,
             ),
           ],
@@ -813,10 +715,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   Widget _buildActionsSection(DeviceProvider provider) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           // Charging Help
@@ -854,18 +753,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   Expanded(
                     child: Text(
                       context.l10n.chargingIssues,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: Color(0xFF3C3C43),
-                    size: 20,
-                  ),
+                  const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
                 ],
               ),
             ),
@@ -886,9 +777,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 MixpanelManager().disconnectFriendClicked();
                 if (context.mounted) {
                   Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.l10n.deviceDisconnectedMessage)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(context.l10n.deviceDisconnectedMessage)));
                 }
               },
               child: Padding(
@@ -903,11 +794,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     const SizedBox(width: 16),
                     Text(
                       provider.connectedDevice == null ? context.l10n.unpairDevice : context.l10n.disconnectDevice,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ],
                 ),
@@ -926,8 +813,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
-                      await SharedPreferencesUtil()
-                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                      await SharedPreferencesUtil().btDeviceSet(
+                        BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
+                      );
                       SharedPreferencesUtil().deviceName = '';
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
@@ -947,7 +835,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     },
                     context.l10n.unpairDialogTitle,
                     context.l10n.unpairDialogMessage,
-                    okButtonText: 'Unpair',
+                    okButtonText: context.l10n.unpair,
                   ),
                 );
               },
@@ -963,11 +851,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     const SizedBox(width: 16),
                     Text(
                       context.l10n.unpairAndForget,
-                      style: const TextStyle(
-                        color: Colors.orange,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.orange, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ],
                 ),
@@ -983,42 +867,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2E),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(16)),
+            child: Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24)),
           ),
           const SizedBox(height: 20),
           Text(
             context.l10n.deviceNotConnected,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
             context.l10n.connectDeviceMessage,
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 14,
-              height: 1.4,
-            ),
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.4),
           ),
         ],
       ),
@@ -1027,54 +895,52 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DeviceProvider>(builder: (context, provider, child) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
-        appBar: AppBar(
+    return Consumer<DeviceProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
           backgroundColor: const Color(0xFF0D0D0D),
-          elevation: 0,
-          leading: IconButton(
-            icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-            onPressed: () => Navigator.of(context).pop(),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0D0D0D),
+            elevation: 0,
+            leading: IconButton(
+              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: Text(
+              context.l10n.deviceSettings,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            centerTitle: true,
           ),
-          title: Text(
-            context.l10n.deviceSettings,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!provider.isConnected) ...[
+                  const SizedBox(height: 16),
+                  _buildDisconnectedOverlay(),
+                  const SizedBox(height: 32),
+                ],
+                if (provider.isConnected) ...[
+                  const SizedBox(height: 16),
+                  _buildSectionHeader(context.l10n.customizationSection),
+                  _buildCustomizationSection(),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader(context.l10n.deviceInfoSection),
+                  _buildDeviceInfoSection(provider.pairedDevice, provider),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader(context.l10n.hardwareSection),
+                  _buildHardwareInfoSection(provider.pairedDevice),
+                  const SizedBox(height: 32),
+                ],
+                _buildActionsSection(provider),
+                const SizedBox(height: 48),
+              ],
             ),
           ),
-          centerTitle: true,
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!provider.isConnected) ...[
-                const SizedBox(height: 16),
-                _buildDisconnectedOverlay(),
-                const SizedBox(height: 32),
-              ],
-              if (provider.isConnected) ...[
-                const SizedBox(height: 16),
-                _buildSectionHeader(context.l10n.customizationSection),
-                _buildCustomizationSection(),
-                const SizedBox(height: 32),
-                _buildSectionHeader(context.l10n.deviceInfoSection),
-                _buildDeviceInfoSection(provider.pairedDevice, provider),
-                const SizedBox(height: 32),
-                _buildSectionHeader(context.l10n.hardwareSection),
-                _buildHardwareInfoSection(provider.pairedDevice),
-                const SizedBox(height: 32),
-              ],
-              _buildActionsSection(provider),
-              const SizedBox(height: 48),
-            ],
-          ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

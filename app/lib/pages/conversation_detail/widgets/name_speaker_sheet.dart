@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
 
@@ -190,7 +191,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           children: [
             Expanded(
               child: Text(
-                'Tag Speaker ${widget.speakerId}',
+                context.l10n.tagSpeaker(widget.speakerId),
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -228,13 +229,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             setState(() {
               selectedPerson = ''; // When typing, deselect any chosen person.
               if (isDuplicate) {
-                _duplicateNameError = 'A person with this name already exists.';
+                _duplicateNameError = context.l10n.personNameAlreadyExists;
                 setAllowSave(false);
               } else if (trimmedValue.isEmpty) {
                 _duplicateNameError = null;
                 setAllowSave(false);
               } else if (isOwnName) {
-                _duplicateNameError = 'To tag yourself, please select "You" from the list.';
+                _duplicateNameError = context.l10n.selectYouFromList;
                 setAllowSave(false);
               } else {
                 _duplicateNameError = null;
@@ -243,7 +244,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             });
           },
           decoration: InputDecoration(
-            hintText: 'Enter Person\'s Name',
+            hintText: context.l10n.enterPersonsName,
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
@@ -264,7 +265,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               setAllowSave(selectedPerson.isNotEmpty);
             });
           },
-          child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+          child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
         )
       ],
     );
@@ -308,7 +309,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
     final List<Widget> chips = [
       PersonChip(
-        personName: 'Add Person',
+        personName: context.l10n.addPerson,
         isSelected: _isCreatingNewPerson,
         isAddButton: true,
         onSelected: (_) {
@@ -347,8 +348,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         CheckboxListTile(
           title: Text(
             _isSegmentsExpanded
-                ? 'Tag other segments from this speaker ($selectedUntaggedSegmentsCount/${untaggedSegments.length})'
-                : 'Tag other segments',
+                ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
+                : context.l10n.tagOtherSegments,
             style: TextStyle(fontSize: 14, color: untaggedSegments.isNotEmpty ? Colors.white : Colors.grey),
           ),
           value: _isSegmentsExpanded,
@@ -377,7 +378,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
-                'Manage People',
+                context.l10n.managePeople,
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
@@ -467,8 +468,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   Navigator.pop(context);
                 }
               },
-        child: const Center(
-          child: Text('Save'),
+        child: Center(
+          child: Text(context.l10n.save),
         ),
       ),
     );

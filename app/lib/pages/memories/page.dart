@@ -190,7 +190,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   child: SizedBox(
                                     height: 44,
                                     child: SearchBar(
-                                      hintText: context.l10n.searchMemories(provider.memories.length),
+                                      hintText: context.l10n.searchMemories,
                                       leading: const Padding(
                                         padding: EdgeInsets.only(left: 6.0),
                                         child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
@@ -255,7 +255,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     child: SizedBox(
                                       height: 44,
                                       child: SearchBar(
-                                        hintText: context.l10n.searchMemories(provider.memories.length),
+                                        hintText: context.l10n.searchMemories,
                                         leading: const Padding(
                                           padding: EdgeInsets.only(left: 6.0),
                                           child:

@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 // Custom notification class to communicate with parent widgets
 class SelectAppNotification extends Notification {
@@ -40,9 +41,9 @@ class PopularAppsSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
           child: Row(
             children: [
-              const Text(
-                'Popular Apps',
-                style: TextStyle(
+              Text(
+                context.l10n.popularApps,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -98,7 +99,7 @@ class PopularAppsSection extends StatelessWidget {
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Opening ${app.name}...'),
+                    content: Text(context.l10n.openingApp(app.name)),
                     duration: const Duration(milliseconds: 500),
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -228,11 +229,11 @@ class PopularAppsSection extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          app.enabled ? 'Open' : 'Get',
-                          style: TextStyle(
+                          app.enabled ? context.l10n.open : context.l10n.getButton,
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: app.enabled ? Colors.white : Colors.white,
+                            color: Colors.white,
                           ),
                         ),
                       ),

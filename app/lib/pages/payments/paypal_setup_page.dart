@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import '../../utils/other/validators.dart';
 
@@ -38,28 +39,28 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
     });
   }
 
-  String? _validateEmail(String? value) {
+  String? _validateEmail(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your PayPal email';
+      return context.l10n.pleaseEnterPayPalEmail;
     }
     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-      return 'Please enter a valid email address';
+      return context.l10n.pleaseEnterValidEmail;
     }
     return null;
   }
 
-  String? _validatePaypalMeLink(String? value) {
+  String? _validatePaypalMeLink(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your PayPal.me link';
+      return context.l10n.pleaseEnterPayPalMeLink;
     }
     if (value.toLowerCase().startsWith('http') || value.toLowerCase().startsWith('www')) {
-      return 'Do not include http or https or www in the link';
+      return context.l10n.doNotIncludeHttpInLink;
     }
     if (!value.toLowerCase().startsWith('paypal.me/')) {
-      return 'Please enter a valid PayPal.me link';
+      return context.l10n.pleaseEnterValidPayPalMeLink;
     }
     if (!isValidPayPalMeUrl(value)) {
-      return 'Please enter a valid paypal.me link';
+      return context.l10n.pleaseEnterValidPayPalMeLink;
     }
     return null;
   }
@@ -77,7 +78,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(_isComplete ? 'Update PayPal' : 'Set Up PayPal',
+        title: Text(_isComplete ? context.l10n.updatePayPal : context.l10n.setUpPayPal,
             style: const TextStyle(color: Colors.white, fontSize: 20)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
@@ -137,8 +138,8 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                             const SizedBox(height: 24),
                             Text(
                               _isComplete
-                                  ? 'Update your PayPal account details'
-                                  : 'Connect your PayPal account to start receiving payments for your apps',
+                                  ? context.l10n.updatePayPalAccountDetails
+                                  : context.l10n.connectPayPalToReceivePayments,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.grey.shade300,
@@ -161,7 +162,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                             Padding(
                               padding: const EdgeInsets.only(left: 8.0),
                               child: Text(
-                                'PayPal Email',
+                                context.l10n.paypalEmail,
                                 style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                               ),
                             ),
@@ -175,14 +176,14 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                               width: double.infinity,
                               child: TextFormField(
                                 controller: _emailController,
-                                validator: _validateEmail,
+                                validator: (v) => _validateEmail(v, context),
                                 enabled: !_isLoading,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   error: null,
                                   errorText: null,
                                   isDense: true,
                                   border: InputBorder.none,
-                                  hintText: 'nik@example.com',
+                                  hintText: context.l10n.paypalEmailHint,
                                 ),
                               ),
                             ),
@@ -190,7 +191,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                             Padding(
                               padding: const EdgeInsets.only(left: 8.0),
                               child: Text(
-                                'PayPal.me Link',
+                                context.l10n.paypalMeLink,
                                 style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                               ),
                             ),
@@ -204,14 +205,14 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                               width: double.infinity,
                               child: TextFormField(
                                 controller: _paypalMeLinkController,
-                                validator: _validatePaypalMeLink,
+                                validator: (v) => _validatePaypalMeLink(v, context),
                                 enabled: !_isLoading,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   error: null,
                                   errorText: null,
                                   isDense: true,
                                   border: InputBorder.none,
-                                  hintText: 'paypal.me/nik',
+                                  hintText: context.l10n.paypalMeLinkHint,
                                 ),
                               ),
                             ),
@@ -230,18 +231,18 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
                               width: 1,
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.info_outline,
                                 color: Colors.white70,
                                 size: 24,
                               ),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'If Stripe is available in your country, we highly recommend using it for faster and easier payouts.',
-                                  style: TextStyle(
+                                  context.l10n.stripeRecommendation,
+                                  style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 14,
                                   ),
@@ -277,7 +278,7 @@ class _PaypalSetupPageState extends State<PaypalSetupPage> {
               });
             }
           },
-          text: _isComplete ? 'Update PayPal Details' : 'Save PayPal Details',
+          text: _isComplete ? context.l10n.updatePayPalDetails : context.l10n.savePayPalDetails,
           loaderColor: Colors.black,
           width: MediaQuery.of(context).size.width * 0.8,
           textStyle: const TextStyle(
