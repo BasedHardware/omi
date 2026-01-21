@@ -24,7 +24,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteConversationTitle => 'Ștergi conversația?';
 
   @override
-  String get deleteConversationMessage => 'Ești sigur că vrei să ștergi această conversație? Această acțiune nu poate fi anulată.';
+  String get deleteConversationMessage =>
+      'Ești sigur că vrei să ștergi această conversație? Această acțiune nu poate fi anulată.';
 
   @override
   String get confirm => 'Confirmă';
@@ -81,7 +82,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get conversationUrlNotShared => 'URL-ul conversației nu a putut fi partajat.';
 
   @override
-  String get errorProcessingConversation => 'Eroare la procesarea conversației. Te rugăm să încerci din nou mai târziu.';
+  String get errorProcessingConversation =>
+      'Eroare la procesarea conversației. Te rugăm să încerci din nou mai târziu.';
 
   @override
   String get noInternetConnection => 'Fără conexiune la internet';
@@ -145,7 +147,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleting => 'Se șterge...';
 
   @override
-  String get pleaseCompleteAuthentication => 'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
+  String get pleaseCompleteAuthentication =>
+      'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
 
   @override
   String get failedToStartAuthentication => 'Nu s-a putut inițializa autentificarea';
@@ -226,7 +229,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noStarredConversations => 'Nicio conversație cu stea';
 
   @override
-  String get starConversationHint => 'Pentru a marca o conversație ca favorită, deschide-o și apasă iconița de stea din antet.';
+  String get starConversationHint =>
+      'Pentru a marca o conversație ca favorită, deschide-o și apasă iconița de stea din antet.';
 
   @override
   String get searchConversations => 'Căutare conversații...';
@@ -317,7 +321,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get installedApps => 'Aplicații instalate';
 
   @override
-  String get unableToFetchApps => 'Nu s-au putut prelua aplicațiile :(\n\nTe rugăm să verifici conexiunea la internet și să încerci din nou.';
+  String get unableToFetchApps =>
+      'Nu s-au putut prelua aplicațiile :(\n\nTe rugăm să verifici conexiunea la internet și să încerci din nou.';
 
   @override
   String get aboutOmi => 'Despre Omi';
@@ -353,16 +358,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appsDisconnected => 'Aplicațiile și integrările tale vor fi deconectate imediat.';
 
   @override
-  String get exportBeforeDelete => 'Poți exporta datele înainte de a-ți șterge contul, dar odată șters, nu poate fi recuperat.';
+  String get exportBeforeDelete =>
+      'Poți exporta datele înainte de a-ți șterge contul, dar odată șters, nu poate fi recuperat.';
 
   @override
-  String get deleteAccountCheckbox => 'Înțeleg că ștergerea contului meu este permanentă și toate datele, inclusiv amintirile și conversațiile, vor fi pierdute și nu pot fi recuperate.';
+  String get deleteAccountCheckbox =>
+      'Înțeleg că ștergerea contului meu este permanentă și toate datele, inclusiv amintirile și conversațiile, vor fi pierdute și nu pot fi recuperate.';
 
   @override
   String get areYouSure => 'Ești sigur?';
 
   @override
-  String get deleteAccountFinal => 'Această acțiune este ireversibilă și va șterge permanent contul tău și toate datele asociate. Ești sigur că vrei să continui?';
+  String get deleteAccountFinal =>
+      'Această acțiune este ireversibilă și va șterge permanent contul tău și toate datele asociate. Ești sigur că vrei să continui?';
 
   @override
   String get deleteNow => 'Șterge acum';
@@ -371,7 +379,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get goBack => 'Înapoi';
 
   @override
-  String get checkBoxToConfirm => 'Bifează caseta pentru a confirma că înțelegi că ștergerea contului este permanentă și ireversibilă.';
+  String get checkBoxToConfirm =>
+      'Bifează caseta pentru a confirma că înțelegi că ștergerea contului este permanentă și ireversibilă.';
 
   @override
   String get profile => 'Profil';
@@ -449,7 +458,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get yourPrivacyYourControl => 'Confidențialitatea ta, sub controlul tău';
 
   @override
-  String get privacyIntro => 'La Omi, ne angajăm să îți protejăm confidențialitatea. Această pagină îți permite să controlezi modul în care datele tale sunt stocate și utilizate.';
+  String get privacyIntro =>
+      'La Omi, ne angajăm să îți protejăm confidențialitatea. Această pagină îți permite să controlezi modul în care datele tale sunt stocate și utilizate.';
 
   @override
   String get learnMore => 'Află mai multe...';
@@ -458,13 +468,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dataProtectionLevel => 'Nivel de protecție a datelor';
 
   @override
-  String get dataProtectionDesc => 'Datele tale sunt securizate implicit cu criptare puternică. Revizuiește setările și opțiunile viitoare de confidențialitate mai jos.';
+  String get dataProtectionDesc =>
+      'Datele tale sunt securizate implicit cu criptare puternică. Revizuiește setările și opțiunile viitoare de confidențialitate mai jos.';
 
   @override
   String get appAccess => 'Acces aplicații';
 
   @override
-  String get appAccessDesc => 'Următoarele aplicații pot accesa datele tale. Apasă pe o aplicație pentru a-i gestiona permisiunile.';
+  String get appAccessDesc =>
+      'Următoarele aplicații pot accesa datele tale. Apasă pe o aplicație pentru a-i gestiona permisiunile.';
 
   @override
   String get noAppsExternalAccess => 'Nicio aplicație instalată nu are acces extern la datele tale.';
@@ -521,19 +533,22 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceDisconnectedMessage => 'Omi-ul tău a fost deconectat 😔';
 
   @override
-  String get deviceUnpairedMessage => 'Dispozitiv deconectat. Mergeți la Setări > Bluetooth și uitați dispozitivul pentru a finaliza deconectarea.';
+  String get deviceUnpairedMessage =>
+      'Dispozitiv deconectat. Mergeți la Setări > Bluetooth și uitați dispozitivul pentru a finaliza deconectarea.';
 
   @override
   String get unpairDialogTitle => 'Deperechează dispozitivul';
 
   @override
-  String get unpairDialogMessage => 'Acest lucru va deperechia dispozitivul astfel încât să poată fi conectat la alt telefon. Va trebui să mergi la Setări > Bluetooth și să uiți dispozitivul pentru a finaliza procesul.';
+  String get unpairDialogMessage =>
+      'Acest lucru va deperechia dispozitivul astfel încât să poată fi conectat la alt telefon. Va trebui să mergi la Setări > Bluetooth și să uiți dispozitivul pentru a finaliza procesul.';
 
   @override
   String get deviceNotConnected => 'Dispozitiv neconectat';
 
   @override
-  String get connectDeviceMessage => 'Conectează dispozitivul Omi pentru a accesa\nsetările și personalizarea dispozitivului';
+  String get connectDeviceMessage =>
+      'Conectează dispozitivul Omi pentru a accesa\nsetările și personalizarea dispozitivului';
 
   @override
   String get deviceInfoSection => 'Informații dispozitiv';
@@ -548,7 +563,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get v2Undetected => 'V2 nedetectat';
 
   @override
-  String get v2UndetectedMessage => 'Vedem că ai fie un dispozitiv V1, fie dispozitivul tău nu este conectat. Funcționalitatea card SD este disponibilă doar pentru dispozitivele V2.';
+  String get v2UndetectedMessage =>
+      'Vedem că ai fie un dispozitiv V1, fie dispozitivul tău nu este conectat. Funcționalitatea card SD este disponibilă doar pentru dispozitivele V2.';
 
   @override
   String get endConversation => 'Încheie conversația';
@@ -683,7 +699,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noActivityYet => 'Încă nu există activitate';
 
   @override
-  String get startConversationToSeeInsights => 'Începe o conversație cu Omi\npentru a vedea statisticile de utilizare aici.';
+  String get startConversationToSeeInsights =>
+      'Începe o conversație cu Omi\npentru a vedea statisticile de utilizare aici.';
 
   @override
   String get listening => 'Ascultare';
@@ -825,7 +842,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'Ștergi graficul de cunoștințe?';
 
   @override
-  String get deleteKnowledgeGraphMessage => 'Acest lucru va șterge toate datele derivate din graficul de cunoștințe (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.';
+  String get deleteKnowledgeGraphMessage =>
+      'Acest lucru va șterge toate datele derivate din graficul de cunoștințe (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.';
 
   @override
   String get knowledgeGraphDeleted => 'Graficul de cunoștințe a fost șters';
@@ -973,7 +991,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get shortConversationThreshold => 'Prag conversații scurte';
 
   @override
-  String get shortConversationThresholdSubtitle => 'Conversațiile mai scurte decât aceasta vor fi ascunse dacă nu este activată opțiunea de mai sus';
+  String get shortConversationThresholdSubtitle =>
+      'Conversațiile mai scurte decât aceasta vor fi ascunse dacă nu este activată opțiunea de mai sus';
 
   @override
   String get durationThreshold => 'Prag durată';
@@ -1008,7 +1027,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chatToolsFooter => 'Conectează aplicațiile tale pentru a vizualiza date și statistici în chat.';
 
   @override
-  String get completeAuthInBrowser => 'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
+  String get completeAuthInBrowser =>
+      'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
 
   @override
   String failedToStartAuth(String appName) {
@@ -1068,7 +1088,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get needYourPermission => 'Avem nevoie de permisiunea ta';
 
   @override
-  String get alreadyGavePermission => 'Ne-ai dat deja permisiunea de a salva înregistrările tale. Iată un memento despre motivul pentru care avem nevoie:';
+  String get alreadyGavePermission =>
+      'Ne-ai dat deja permisiunea de a salva înregistrările tale. Iată un memento despre motivul pentru care avem nevoie:';
 
   @override
   String get wouldLikePermission => 'Am dori permisiunea ta de a salva înregistrările vocale. Iată de ce:';
@@ -1077,22 +1098,26 @@ class AppLocalizationsRo extends AppLocalizations {
   String get improveSpeechProfile => 'Îmbunătățește profilul tău vocal';
 
   @override
-  String get improveSpeechProfileDesc => 'Folosim înregistrările pentru a antrena și îmbunătăți în continuare profilul tău vocal personal.';
+  String get improveSpeechProfileDesc =>
+      'Folosim înregistrările pentru a antrena și îmbunătăți în continuare profilul tău vocal personal.';
 
   @override
   String get trainFamilyProfiles => 'Antrenează profiluri pentru prieteni și familie';
 
   @override
-  String get trainFamilyProfilesDesc => 'Înregistrările tale ne ajută să recunoaștem și să creăm profiluri pentru prietenii și familia ta.';
+  String get trainFamilyProfilesDesc =>
+      'Înregistrările tale ne ajută să recunoaștem și să creăm profiluri pentru prietenii și familia ta.';
 
   @override
   String get enhanceTranscriptAccuracy => 'Îmbunătățește acuratețea transcrierii';
 
   @override
-  String get enhanceTranscriptAccuracyDesc => 'Pe măsură ce modelul nostru se îmbunătățește, putem oferi rezultate de transcriere mai bune pentru înregistrările tale.';
+  String get enhanceTranscriptAccuracyDesc =>
+      'Pe măsură ce modelul nostru se îmbunătățește, putem oferi rezultate de transcriere mai bune pentru înregistrările tale.';
 
   @override
-  String get legalNotice => 'Notificare legală: Legalitatea înregistrării și stocării datelor vocale poate varia în funcție de locația ta și modul în care folosești această funcție. Este responsabilitatea ta să te asiguri că respecți legile și reglementările locale.';
+  String get legalNotice =>
+      'Notificare legală: Legalitatea înregistrării și stocării datelor vocale poate varia în funcție de locația ta și modul în care folosești această funcție. Este responsabilitatea ta să te asiguri că respecți legile și reglementările locale.';
 
   @override
   String get alreadyAuthorized => 'Deja autorizat';
@@ -1164,13 +1189,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get showMeetingsMenuBar => 'Afișează întâlnirile viitoare în bara de meniu';
 
   @override
-  String get showMeetingsMenuBarDesc => 'Afișează următoarea întâlnire și timpul rămas până începe în bara de meniu macOS';
+  String get showMeetingsMenuBarDesc =>
+      'Afișează următoarea întâlnire și timpul rămas până începe în bara de meniu macOS';
 
   @override
   String get showEventsNoParticipants => 'Afișează evenimente fără participanți';
 
   @override
-  String get showEventsNoParticipantsDesc => 'Când este activat, Coming Up afișează evenimente fără participanți sau link video.';
+  String get showEventsNoParticipantsDesc =>
+      'Când este activat, Coming Up afișează evenimente fără participanți sau link video.';
 
   @override
   String get yourMeetings => 'Întâlnirile tale';
@@ -1211,7 +1238,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noProjectsInWorkspace => 'Nu s-au găsit proiecte în acest spațiu de lucru';
 
   @override
-  String get conversationTimeoutDesc => 'Alege cât timp să aștepți în tăcere înainte de a încheia automat o conversație:';
+  String get conversationTimeoutDesc =>
+      'Alege cât timp să aștepți în tăcere înainte de a încheia automat o conversație:';
 
   @override
   String get timeout2Minutes => '2 minute';
@@ -1258,7 +1286,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get languageForTranscription => 'Setează limba pentru transcrieri mai precise și o experiență personalizată.';
 
   @override
-  String get singleLanguageModeInfo => 'Modul limbă unică este activat. Traducerea este dezactivată pentru o acuratețe mai mare.';
+  String get singleLanguageModeInfo =>
+      'Modul limbă unică este activat. Traducerea este dezactivată pentru o acuratețe mai mare.';
 
   @override
   String get searchLanguageHint => 'Caută limba după nume sau cod';
@@ -1338,7 +1367,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get defaultRepository => 'Repository implicit';
 
   @override
-  String get selectDefaultRepoDesc => 'Selectează un repository implicit pentru crearea de issue-uri. Poți specifica totuși un repository diferit când creezi issue-uri.';
+  String get selectDefaultRepoDesc =>
+      'Selectează un repository implicit pentru crearea de issue-uri. Poți specifica totuși un repository diferit când creezi issue-uri.';
 
   @override
   String get noReposFound => 'Nu s-au găsit repository-uri';
@@ -1385,7 +1415,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get configureSettings => 'Configurează setările';
 
   @override
-  String get completeAuthBrowser => 'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
+  String get completeAuthBrowser =>
+      'Te rugăm să finalizezi autentificarea în browser. După ce ai terminat, revino la aplicație.';
 
   @override
   String failedToStartAppAuth(String appName) {
@@ -1554,7 +1585,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get logsCopied => 'Jurnale copiate';
 
   @override
-  String get noLogsYet => 'Încă nu există jurnale. Începe să înregistrezi pentru a vedea activitatea STT personalizată.';
+  String get noLogsYet =>
+      'Încă nu există jurnale. Începe să înregistrezi pentru a vedea activitatea STT personalizată.';
 
   @override
   String deviceUsesCodec(String device, String reason) {
@@ -1713,7 +1745,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get enableBluetooth => 'Enable Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.';
+  String get bluetoothNeeded =>
+      'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.';
 
   @override
   String get contactSupport => 'Contactează suportul?';
@@ -1746,22 +1779,26 @@ class AppLocalizationsRo extends AppLocalizations {
   String get locationServiceDisabled => 'Serviciul de locație dezactivat';
 
   @override
-  String get locationServiceDisabledDesc => 'Serviciul de locație este dezactivat. Te rugăm să mergi la Setări > Confidențialitate și securitate > Servicii de locație și să-l activezi';
+  String get locationServiceDisabledDesc =>
+      'Serviciul de locație este dezactivat. Te rugăm să mergi la Setări > Confidențialitate și securitate > Servicii de locație și să-l activezi';
 
   @override
   String get backgroundLocationDenied => 'Acces la locație în fundal refuzat';
 
   @override
-  String get backgroundLocationDeniedDesc => 'Te rugăm să mergi la setările dispozitivului și să setezi permisiunea de locație la \"Permite întotdeauna\"';
+  String get backgroundLocationDeniedDesc =>
+      'Te rugăm să mergi la setările dispozitivului și să setezi permisiunea de locație la \"Permite întotdeauna\"';
 
   @override
   String get lovingOmi => 'Loving Omi?';
 
   @override
-  String get leaveReviewIos => 'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
+  String get leaveReviewIos =>
+      'Ajută-ne să ajungem la mai mulți oameni lăsând o recenzie în App Store. Feedback-ul tău înseamnă enorm pentru noi!';
 
   @override
-  String get leaveReviewAndroid => 'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!';
+  String get leaveReviewAndroid =>
+      'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!';
 
   @override
   String get rateOnAppStore => 'Evaluează în App Store';
@@ -1794,13 +1831,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get connectionError => 'Eroare de conexiune';
 
   @override
-  String get connectionErrorDesc => 'Conectarea la server a eșuat. Te rugăm să verifici conexiunea la internet și să încerci din nou.';
+  String get connectionErrorDesc =>
+      'Conectarea la server a eșuat. Te rugăm să verifici conexiunea la internet și să încerci din nou.';
 
   @override
   String get invalidRecordingMultipleSpeakers => 'Înregistrare invalidă detectată';
 
   @override
-  String get multipleSpeakersDesc => 'Se pare că sunt mai mulți vorbitori în înregistrare. Te rugăm să te asiguri că ești într-un loc liniștit și să încerci din nou.';
+  String get multipleSpeakersDesc =>
+      'Se pare că sunt mai mulți vorbitori în înregistrare. Te rugăm să te asiguri că ești într-un loc liniștit și să încerci din nou.';
 
   @override
   String get tooShortDesc => 'Nu s-a detectat suficientă vorbire. Te rugăm să vorbești mai mult și să încerci din nou.';
@@ -1812,13 +1851,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get areYouThere => 'Ești acolo?';
 
   @override
-  String get noSpeechDesc => 'Nu am putut detecta nicio vorbire. Te rugăm să vorbești cel puțin 10 secunde și nu mai mult de 3 minute.';
+  String get noSpeechDesc =>
+      'Nu am putut detecta nicio vorbire. Te rugăm să vorbești cel puțin 10 secunde și nu mai mult de 3 minute.';
 
   @override
   String get connectionLost => 'Conexiune pierdută';
 
   @override
-  String get connectionLostDesc => 'Conexiunea a fost întreruptă. Te rugăm să verifici conexiunea la internet și să încerci din nou.';
+  String get connectionLostDesc =>
+      'Conexiunea a fost întreruptă. Te rugăm să verifici conexiunea la internet și să încerci din nou.';
 
   @override
   String get tryAgain => 'Încearcă din nou';
@@ -1833,7 +1874,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get permissionsRequired => 'Permisiuni necesare';
 
   @override
-  String get permissionsRequiredDesc => 'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.';
+  String get permissionsRequiredDesc =>
+      'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.';
 
   @override
   String get openSettings => 'Deschide setările';
@@ -1875,10 +1917,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get microphonePermission => 'Permisiune microfon';
 
   @override
-  String get permissionGrantedNow => 'Permission granted! Now:\n\nOpen the Omi app on your watch and tap \"Continue\" below';
+  String get permissionGrantedNow =>
+      'Permission granted! Now:\n\nOpen the Omi app on your watch and tap \"Continue\" below';
 
   @override
-  String get needMicrophonePermission => 'Avem nevoie de permisiunea microfonului.\n\n1. Apasă \"Acordă permisiunea\"\n2. Permite pe iPhone\n3. Aplicația de ceas se va închide\n4. Redeschide și apasă \"Continuă\"';
+  String get needMicrophonePermission =>
+      'Avem nevoie de permisiunea microfonului.\n\n1. Apasă \"Acordă permisiunea\"\n2. Permite pe iPhone\n3. Aplicația de ceas se va închide\n4. Redeschide și apasă \"Continuă\"';
 
   @override
   String get grantPermissionButton => 'Acordă permisiunea';
@@ -1887,13 +1931,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get needHelp => 'Ai nevoie de ajutor?';
 
   @override
-  String get troubleshootingSteps => 'Troubleshooting:\n\n1. Ensure Omi is installed on your watch\n2. Open the Omi app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone';
+  String get troubleshootingSteps =>
+      'Troubleshooting:\n\n1. Ensure Omi is installed on your watch\n2. Open the Omi app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Înregistrarea a început cu succes!';
 
   @override
-  String get permissionNotGrantedYet => 'Permisiunea nu a fost acordată încă. Te rugăm să te asiguri că ai permis accesul la microfon și ai redeschis aplicația pe ceas.';
+  String get permissionNotGrantedYet =>
+      'Permisiunea nu a fost acordată încă. Te rugăm să te asiguri că ai permis accesul la microfon și ai redeschis aplicația pe ceas.';
 
   @override
   String errorRequestingPermission(String error) {
@@ -1990,7 +2036,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get welcomeActionItemsTitle => 'Pregătit pentru elemente de acțiune';
 
   @override
-  String get welcomeActionItemsDescription => 'AI-ul tău va extrage automat sarcini și de făcut din conversațiile tale. Vor apărea aici când sunt create.';
+  String get welcomeActionItemsDescription =>
+      'AI-ul tău va extrage automat sarcini și de făcut din conversațiile tale. Vor apărea aici când sunt create.';
 
   @override
   String get autoExtractionFeature => 'Extras automat din conversații';
@@ -2186,13 +2233,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get speechTranscriptionSectionTitle => 'VORBIRE ȘI TRANSCRIERE';
 
   @override
-  String get languageSettingsHelperText => 'Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările.';
+  String get languageSettingsHelperText =>
+      'Limba aplicației schimbă meniurile și butoanele. Limba vorbirii afectează modul în care sunt transcrise înregistrările.';
 
   @override
   String get translationNotice => 'Notificare de traducere';
 
   @override
-  String get translationNoticeMessage => 'Omi traduce conversațiile în limba ta principală. Actualizează-o oricând în Setări → Profiluri.';
+  String get translationNoticeMessage =>
+      'Omi traduce conversațiile în limba ta principală. Actualizează-o oricând în Setări → Profiluri.';
 
   @override
   String get pleaseCheckInternetConnection => 'Verifică conexiunea la internet și încearcă din nou';
@@ -2212,7 +2261,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get conversationCannotBeMerged => 'Această conversație nu poate fi fuzionată (blocată sau deja în curs de fuzionare)';
+  String get conversationCannotBeMerged =>
+      'Această conversație nu poate fi fuzionată (blocată sau deja în curs de fuzionare)';
 
   @override
   String get pleaseEnterFolderName => 'Te rugăm să introduci un nume de dosar';
@@ -2344,7 +2394,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'Deconectează dispozitivul';
 
   @override
-  String get unpairDeviceDialogMessage => 'Aceasta va deconecta dispozitivul astfel încât să poată fi conectat la un alt telefon. Va trebui să mergeți la Setări > Bluetooth și să uitați dispozitivul pentru a finaliza procesul.';
+  String get unpairDeviceDialogMessage =>
+      'Aceasta va deconecta dispozitivul astfel încât să poată fi conectat la un alt telefon. Va trebui să mergeți la Setări > Bluetooth și să uitați dispozitivul pentru a finaliza procesul.';
 
   @override
   String get unpair => 'Deconectează';
@@ -2522,7 +2573,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get howDoesItWork => 'Cum funcționează?';
 
   @override
-  String get sdCardSyncDescription => 'Sincronizarea cardului SD va importa amintirile tale de pe cardul SD în aplicație';
+  String get sdCardSyncDescription =>
+      'Sincronizarea cardului SD va importa amintirile tale de pe cardul SD în aplicație';
 
   @override
   String get checksForAudioFiles => 'Verifică fișierele audio de pe cardul SD';
@@ -2537,7 +2589,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get youreAllSet => 'Sunteți gata!';
 
   @override
-  String get welcomeToOmiDescription => 'Bun venit la Omi! Companionul tău AI este gata să te ajute cu conversații, sarcini și multe altele.';
+  String get welcomeToOmiDescription =>
+      'Bun venit la Omi! Companionul tău AI este gata să te ajute cu conversații, sarcini și multe altele.';
 
   @override
   String get startUsingOmi => 'Începeți să folosiți Omi';
@@ -2616,7 +2669,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reviewAndManageConversations => 'Revizuiește și gestionează conversațiile înregistrate';
 
   @override
-  String get startCapturingConversations => 'Începe să capturezi conversații cu dispozitivul Omi pentru a le vedea aici.';
+  String get startCapturingConversations =>
+      'Începe să capturezi conversații cu dispozitivul Omi pentru a le vedea aici.';
 
   @override
   String get useMobileAppToCapture => 'Folosește aplicația mobilă pentru a captura audio';
@@ -2631,7 +2685,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get showAll => 'Arată tot →';
 
   @override
-  String get noTasksForToday => 'Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
+  String get noTasksForToday =>
+      'Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
 
   @override
   String get dailyScore => 'SCOR ZILNIC';
@@ -2673,7 +2728,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noTasksYet => 'Încă nu există sarcini';
 
   @override
-  String get tasksFromConversationsWillAppear => 'Sarcinile din conversațiile dvs. vor apărea aici.\nFaceți clic pe Creați pentru a adăuga una manual.';
+  String get tasksFromConversationsWillAppear =>
+      'Sarcinile din conversațiile dvs. vor apărea aici.\nFaceți clic pe Creați pentru a adăuga una manual.';
 
   @override
   String get monthJan => 'Ian';
@@ -2730,7 +2786,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteActionItem => 'Șterge elementul de acțiune';
 
   @override
-  String get deleteActionItemConfirmation => 'Sigur doriți să ștergeți acest element de acțiune? Această acțiune nu poate fi anulată.';
+  String get deleteActionItemConfirmation =>
+      'Sigur doriți să ștergeți acest element de acțiune? Această acțiune nu poate fi anulată.';
 
   @override
   String get enterActionItemDescription => 'Introduceți descrierea elementului de acțiune...';
@@ -2772,7 +2829,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get checkBackLaterForNewApps => 'Reveniți mai târziu pentru aplicații noi';
 
   @override
-  String get pleaseCheckInternetConnectionAndTryAgain => 'Vă rugăm să verificați conexiunea la internet și să încercați din nou';
+  String get pleaseCheckInternetConnectionAndTryAgain =>
+      'Vă rugăm să verificați conexiunea la internet și să încercați din nou';
 
   @override
   String get createNewApp => 'Creează Aplicație Nouă';
@@ -2805,13 +2863,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get chatPrompt => 'Solicitare Chat';
 
   @override
-  String get chatPromptPlaceholder => 'Ești o aplicație grozavă, treaba ta este să răspunzi la întrebările utilizatorilor și să-i faci să se simtă bine...';
+  String get chatPromptPlaceholder =>
+      'Ești o aplicație grozavă, treaba ta este să răspunzi la întrebările utilizatorilor și să-i faci să se simtă bine...';
 
   @override
   String get conversationPrompt => 'Prompt de conversație';
 
   @override
-  String get conversationPromptPlaceholder => 'Ești o aplicație grozavă, vei primi o transcriere și un rezumat al unei conversații...';
+  String get conversationPromptPlaceholder =>
+      'Ești o aplicație grozavă, vei primi o transcriere și un rezumat al unei conversații...';
 
   @override
   String get notificationScopes => 'Domenii de Notificare';
@@ -2823,7 +2883,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get makeMyAppPublic => 'Fă aplicația mea publică';
 
   @override
-  String get submitAppTermsAgreement => 'Prin trimiterea acestei aplicații, sunt de acord cu Termenii de Serviciu și Politica de Confidențialitate Omi AI';
+  String get submitAppTermsAgreement =>
+      'Prin trimiterea acestei aplicații, sunt de acord cu Termenii de Serviciu și Politica de Confidențialitate Omi AI';
 
   @override
   String get submitApp => 'Trimite Aplicația';
@@ -2838,10 +2899,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get submitAppQuestion => 'Trimite Aplicația?';
 
   @override
-  String get submitAppPublicDescription => 'Aplicația ta va fi revizuită și făcută publică. Poți începe să o folosești imediat, chiar și în timpul reviziei!';
+  String get submitAppPublicDescription =>
+      'Aplicația ta va fi revizuită și făcută publică. Poți începe să o folosești imediat, chiar și în timpul reviziei!';
 
   @override
-  String get submitAppPrivateDescription => 'Aplicația ta va fi revizuită și pusă la dispoziția ta în mod privat. Poți începe să o folosești imediat, chiar și în timpul reviziei!';
+  String get submitAppPrivateDescription =>
+      'Aplicația ta va fi revizuită și pusă la dispoziția ta în mod privat. Poți începe să o folosești imediat, chiar și în timpul reviziei!';
 
   @override
   String get startEarning => 'Începe să Câștigi! 💰';
@@ -2865,19 +2928,23 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dataAccessNotice => 'Notificare acces la date';
 
   @override
-  String get dataAccessWarning => 'Această aplicație va accesa datele dvs. Omi AI nu este responsabil pentru modul în care datele dvs. sunt utilizate, modificate sau șterse de această aplicație';
+  String get dataAccessWarning =>
+      'Această aplicație va accesa datele dvs. Omi AI nu este responsabil pentru modul în care datele dvs. sunt utilizate, modificate sau șterse de această aplicație';
 
   @override
   String get installApp => 'Instalează aplicația';
 
   @override
-  String get betaTesterNotice => 'Ești tester beta pentru această aplicație. Nu este încă publică. Va fi publică odată ce va fi aprobată.';
+  String get betaTesterNotice =>
+      'Ești tester beta pentru această aplicație. Nu este încă publică. Va fi publică odată ce va fi aprobată.';
 
   @override
-  String get appUnderReviewOwner => 'Aplicația ta este în curs de revizuire și vizibilă doar pentru tine. Va fi publică odată ce va fi aprobată.';
+  String get appUnderReviewOwner =>
+      'Aplicația ta este în curs de revizuire și vizibilă doar pentru tine. Va fi publică odată ce va fi aprobată.';
 
   @override
-  String get appRejectedNotice => 'Aplicația ta a fost respinsă. Te rugăm să actualizezi detaliile aplicației și să o trimiți din nou pentru revizuire.';
+  String get appRejectedNotice =>
+      'Aplicația ta a fost respinsă. Te rugăm să actualizezi detaliile aplicației și să o trimiți din nou pentru revizuire.';
 
   @override
   String get setupSteps => 'Pași de configurare';
@@ -2915,7 +2982,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get errorActivatingApp => 'Eroare la activarea aplicației';
 
   @override
-  String get integrationSetupRequired => 'Dacă aceasta este o aplicație de integrare, asigurați-vă că configurarea este completă.';
+  String get integrationSetupRequired =>
+      'Dacă aceasta este o aplicație de integrare, asigurați-vă că configurarea este completă.';
 
   @override
   String get installed => 'Instalat';
@@ -2942,7 +3010,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get descriptionLabel => 'Descriere';
 
   @override
-  String get appDescriptionPlaceholder => 'Aplicația mea minunată este o aplicație grozavă care face lucruri uimitoare. Este cea mai bună aplicație!';
+  String get appDescriptionPlaceholder =>
+      'Aplicația mea minunată este o aplicație grozavă care face lucruri uimitoare. Este cea mai bună aplicație!';
 
   @override
   String get pleaseProvideValidDescription => 'Vă rugăm să furnizați o descriere validă';
@@ -3094,7 +3163,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get microphonePermissionRequired => 'Permisiunea microfonului este necesară pentru înregistrarea vocală.';
 
   @override
-  String get microphonePermissionDenied => 'Permisiunea microfonului refuzată. Vă rugăm să acordați permisiunea în Preferințe sistem > Confidențialitate și securitate > Microfon.';
+  String get microphonePermissionDenied =>
+      'Permisiunea microfonului refuzată. Vă rugăm să acordați permisiunea în Preferințe sistem > Confidențialitate și securitate > Microfon.';
 
   @override
   String failedToCheckMicrophonePermission(String error) {
@@ -3253,7 +3323,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get createMemory => 'Creează amintire';
 
   @override
-  String get deleteMemoryConfirmation => 'Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.';
+  String get deleteMemoryConfirmation =>
+      'Ești sigur că vrei să ștergi această amintire? Această acțiune nu poate fi anulată.';
 
   @override
   String get makePrivate => 'Fă privat';
@@ -3327,7 +3398,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get whatWeCollect => 'Ce colectăm';
 
   @override
-  String get dataCollectionMessage => 'Continuând, conversațiile, înregistrările și informațiile personale vor fi stocate în siguranță pe serverele noastre pentru a oferi informații alimentate de AI și a activa toate funcțiile aplicației.';
+  String get dataCollectionMessage =>
+      'Continuând, conversațiile, înregistrările și informațiile personale vor fi stocate în siguranță pe serverele noastre pentru a oferi informații alimentate de AI și a activa toate funcțiile aplicației.';
 
   @override
   String get dataProtection => 'Protecția datelor';
@@ -3360,7 +3432,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameMustBeAtLeast2Characters => 'Numele trebuie să aibă cel puțin 2 caractere';
 
   @override
-  String get tellUsHowYouWouldLikeToBeAddressed => 'Spuneți-ne cum doriți să fiți adresat. Acest lucru ajută la personalizarea experienței Omi.';
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Spuneți-ne cum doriți să fiți adresat. Acest lucru ajută la personalizarea experienței Omi.';
 
   @override
   String charactersCount(int count) {
@@ -3368,7 +3441,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get enableFeaturesForBestExperience => 'Activați funcțiile pentru cea mai bună experiență Omi pe dispozitivul dvs.';
+  String get enableFeaturesForBestExperience =>
+      'Activați funcțiile pentru cea mai bună experiență Omi pe dispozitivul dvs.';
 
   @override
   String get microphoneAccess => 'Acces la microfon';
@@ -3377,7 +3451,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get recordAudioConversations => 'Înregistrați conversații audio';
 
   @override
-  String get microphoneAccessDescription => 'Omi are nevoie de acces la microfon pentru a înregistra conversațiile dvs. și a furniza transcripții.';
+  String get microphoneAccessDescription =>
+      'Omi are nevoie de acces la microfon pentru a înregistra conversațiile dvs. și a furniza transcripții.';
 
   @override
   String get screenRecording => 'Înregistrare ecran';
@@ -3386,7 +3461,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureSystemAudioFromMeetings => 'Capturați audio-ul sistemului din întâlniri';
 
   @override
-  String get screenRecordingDescription => 'Omi are nevoie de permisiune de înregistrare a ecranului pentru a captura audio-ul sistemului din întâlnirile dvs. bazate pe browser.';
+  String get screenRecordingDescription =>
+      'Omi are nevoie de permisiune de înregistrare a ecranului pentru a captura audio-ul sistemului din întâlnirile dvs. bazate pe browser.';
 
   @override
   String get accessibility => 'Accesibilitate';
@@ -3395,7 +3471,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get detectBrowserBasedMeetings => 'Detectați întâlnirile bazate pe browser';
 
   @override
-  String get accessibilityDescription => 'Omi are nevoie de permisiune de accesibilitate pentru a detecta când vă alăturați întâlnirilor Zoom, Meet sau Teams în browser-ul dvs.';
+  String get accessibilityDescription =>
+      'Omi are nevoie de permisiune de accesibilitate pentru a detecta când vă alăturați întâlnirilor Zoom, Meet sau Teams în browser-ul dvs.';
 
   @override
   String get pleaseWait => 'Vă rugăm așteptați...';
@@ -3467,10 +3544,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get exportAllConversationsToJson => 'Exportați toate conversațiile dvs. într-un fișier JSON.';
 
   @override
-  String get conversationsExportStarted => 'Export conversații pornit. Aceasta poate dura câteva secunde, vă rugăm așteptați.';
+  String get conversationsExportStarted =>
+      'Export conversații pornit. Aceasta poate dura câteva secunde, vă rugăm așteptați.';
 
   @override
-  String get mcpDescription => 'Pentru a conecta Omi cu alte aplicații pentru a citi, căuta și gestiona amintirile și conversațiile dvs. Creați o cheie pentru a începe.';
+  String get mcpDescription =>
+      'Pentru a conecta Omi cu alte aplicații pentru a citi, căuta și gestiona amintirile și conversațiile dvs. Creați o cheie pentru a începe.';
 
   @override
   String get apiKeys => 'Chei API';
@@ -3511,13 +3590,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionServiceDiagnosticStatus => 'Starea diagnostică a serviciului de transcriere';
 
   @override
-  String get enableDetailedDiagnosticMessages => 'Activați mesajele de diagnostic detaliate de la serviciul de transcriere';
+  String get enableDetailedDiagnosticMessages =>
+      'Activați mesajele de diagnostic detaliate de la serviciul de transcriere';
 
   @override
   String get autoCreateAndTagNewSpeakers => 'Creați și etich etați automat vorbitori noi';
 
   @override
-  String get automaticallyCreateNewPerson => 'Creați automat o persoană nouă când un nume este detectat în transcriere.';
+  String get automaticallyCreateNewPerson =>
+      'Creați automat o persoană nouă când un nume este detectat în transcriere.';
 
   @override
   String get pilotFeatures => 'Funcții pilot';
@@ -3541,7 +3622,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get auto => 'Automat';
 
   @override
-  String get noSummaryForApp => 'Nu există rezumat disponibil pentru această aplicație. Încearcă altă aplicație pentru rezultate mai bune.';
+  String get noSummaryForApp =>
+      'Nu există rezumat disponibil pentru această aplicație. Încearcă altă aplicație pentru rezultate mai bune.';
 
   @override
   String get tryAnotherApp => 'Încercați o altă aplicație';
@@ -3578,7 +3660,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get letOmiChooseAutomatically => 'Lăsați Omi să aleagă automat cea mai bună aplicație';
 
   @override
-  String get deleteConversationConfirmation => 'Sigur doriți să ștergeți această conversație? Această acțiune nu poate fi anulată.';
+  String get deleteConversationConfirmation =>
+      'Sigur doriți să ștergeți această conversație? Această acțiune nu poate fi anulată.';
 
   @override
   String get conversationDeleted => 'Conversație ștearsă';
@@ -3626,7 +3709,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Pregătirea capturării audio a sistemului';
 
   @override
-  String get clickTheButtonToCaptureAudio => 'Faceți clic pe buton pentru a captura audio pentru transcrieri live, informații AI și salvare automată.';
+  String get clickTheButtonToCaptureAudio =>
+      'Faceți clic pe buton pentru a captura audio pentru transcrieri live, informații AI și salvare automată.';
 
   @override
   String get reconnecting => 'Reconectare...';
@@ -3829,7 +3913,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get shortcuts => 'Comenzi rapide';
 
   @override
-  String get shortcutChangeInstruction => 'Faceți clic pe o comandă rapidă pentru a o modifica. Apăsați Escape pentru a anula.';
+  String get shortcutChangeInstruction =>
+      'Faceți clic pe o comandă rapidă pentru a o modifica. Apăsați Escape pentru a anula.';
 
   @override
   String get configurePersonaDescription => 'Configurați-vă persona AI';
@@ -3856,7 +3941,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteKnowledgeGraphQuestion => 'Ștergeți graficul de cunoștințe?';
 
   @override
-  String get deleteKnowledgeGraphWarning => 'Aceasta va șterge toate datele derivate din graficul de cunoștințe. Amintirile dvs. originale rămân în siguranță.';
+  String get deleteKnowledgeGraphWarning =>
+      'Aceasta va șterge toate datele derivate din graficul de cunoștințe. Amintirile dvs. originale rămân în siguranță.';
 
   @override
   String get connectOmiWithAI => 'Conectați Omi cu asistenți AI';
@@ -3871,7 +3957,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get trackPersonalGoals => 'Urmăriți obiective personale pe pagina de pornire';
 
   @override
-  String get dailyReflectionDescription => 'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
+  String get dailyReflectionDescription =>
+      'Primește un memento la ora 21 pentru a reflecta asupra zilei și a-ți nota gândurile.';
 
   @override
   String get endpointURL => 'URL punct final';
@@ -3916,7 +4003,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get updateAppQuestion => 'Actualizați aplicația?';
 
   @override
-  String get updateAppConfirmation => 'Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.';
+  String get updateAppConfirmation =>
+      'Sunteți sigur că doriți să actualizați aplicația? Modificările vor fi vizibile după examinarea de către echipa noastră.';
 
   @override
   String get updateApp => 'Actualizare aplicație';
@@ -3946,7 +4034,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get no => 'Nu';
 
   @override
-  String get subscriptionCancelledSuccessfully => 'Abonament anulat cu succes. Va rămâne activ până la sfârșitul perioadei curente de facturare.';
+  String get subscriptionCancelledSuccessfully =>
+      'Abonament anulat cu succes. Va rămâne activ până la sfârșitul perioadei curente de facturare.';
 
   @override
   String get failedToCancelSubscription => 'Anularea abonamentului a eșuat. Vă rugăm să încercați din nou.';
@@ -3982,7 +4071,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cancelSubscriptionQuestion => 'Anulați abonamentul?';
 
   @override
-  String get cancelSubscriptionConfirmation => 'Sunteți sigur că doriți să vă anulați abonamentul? Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
+  String get cancelSubscriptionConfirmation =>
+      'Sunteți sigur că doriți să vă anulați abonamentul? Veți avea în continuare acces până la sfârșitul perioadei curente de facturare.';
 
   @override
   String get cancelSubscriptionButton => 'Anulare abonament';
@@ -3991,13 +4081,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cancelling => 'Se anulează...';
 
   @override
-  String get betaTesterMessage => 'Sunteți un tester beta pentru această aplicație. Nu este încă publică. Va fi publică după aprobare.';
+  String get betaTesterMessage =>
+      'Sunteți un tester beta pentru această aplicație. Nu este încă publică. Va fi publică după aprobare.';
 
   @override
-  String get appUnderReviewMessage => 'Aplicația dvs. este în curs de examinare și vizibilă doar pentru dvs. Va fi publică după aprobare.';
+  String get appUnderReviewMessage =>
+      'Aplicația dvs. este în curs de examinare și vizibilă doar pentru dvs. Va fi publică după aprobare.';
 
   @override
-  String get appRejectedMessage => 'Aplicația dvs. a fost respinsă. Actualizați detaliile și retrimiteți pentru examinare.';
+  String get appRejectedMessage =>
+      'Aplicația dvs. a fost respinsă. Actualizați detaliile și retrimiteți pentru examinare.';
 
   @override
   String get invalidIntegrationUrl => 'URL de integrare invalid';
@@ -4051,7 +4144,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get issueActivatingApp => 'A apărut o problemă la activarea acestei aplicații. Vă rugăm să încercați din nou.';
 
   @override
-  String get dataAccessNoticeDescription => 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 
   @override
   String get copyUrl => 'Copiază URL';
@@ -4139,7 +4233,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get omiApiKeys => 'Chei API Omi';
 
   @override
-  String get apiKeysDescription => 'Cheile API sunt folosite pentru autentificare atunci când aplicația ta comunică cu serverul OMI. Ele permit aplicației tale să creeze amintiri și să acceseze alte servicii OMI în siguranță.';
+  String get apiKeysDescription =>
+      'Cheile API sunt folosite pentru autentificare atunci când aplicația ta comunică cu serverul OMI. Ele permit aplicației tale să creeze amintiri și să acceseze alte servicii OMI în siguranță.';
 
   @override
   String get aboutOmiApiKeys => 'Despre cheile API Omi';
@@ -4163,7 +4258,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get revokeApiKeyQuestion => 'Revoci cheia API?';
 
   @override
-  String get revokeApiKeyWarning => 'Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.';
+  String get revokeApiKeyWarning =>
+      'Această acțiune nu poate fi anulată. Orice aplicații care folosesc această cheie nu vor mai putea accesa API-ul.';
 
   @override
   String get revoke => 'Revocă';
@@ -4273,7 +4369,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get externalAppAccess => 'Acces aplicații externe';
 
   @override
-  String get externalAppAccessDescription => 'Următoarele aplicații instalate au integrări externe și pot accesa datele tale, cum ar fi conversațiile și amintirile.';
+  String get externalAppAccessDescription =>
+      'Următoarele aplicații instalate au integrări externe și pot accesa datele tale, cum ar fi conversațiile și amintirile.';
 
   @override
   String get noExternalAppsHaveAccess => 'Nicio aplicație externă nu are acces la datele tale.';
@@ -4282,7 +4379,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get maximumSecurityE2ee => 'Securitate maximă (E2EE)';
 
   @override
-  String get e2eeDescription => 'Criptarea end-to-end este standardul de aur pentru confidențialitate. Când este activată, datele dvs. sunt criptate pe dispozitivul dvs. înainte de a fi trimise la serverele noastre. Aceasta înseamnă că nimeni, nici măcar Omi, nu poate accesa conținutul dvs.';
+  String get e2eeDescription =>
+      'Criptarea end-to-end este standardul de aur pentru confidențialitate. Când este activată, datele dvs. sunt criptate pe dispozitivul dvs. înainte de a fi trimise la serverele noastre. Aceasta înseamnă că nimeni, nici măcar Omi, nu poate accesa conținutul dvs.';
 
   @override
   String get importantTradeoffs => 'Compromisuri importante:';
@@ -4297,7 +4395,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get featureComingSoon => 'Această funcție va fi disponibilă în curând!';
 
   @override
-  String get migrationInProgressMessage => 'Migrație în curs. Nu puteți schimba nivelul de protecție până la finalizare.';
+  String get migrationInProgressMessage =>
+      'Migrație în curs. Nu puteți schimba nivelul de protecție până la finalizare.';
 
   @override
   String get migrationFailed => 'Migrația a eșuat';
@@ -4316,16 +4415,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get secureEncryption => 'Criptare securizată';
 
   @override
-  String get secureEncryptionDescription => 'Datele dvs. sunt criptate cu o cheie unică pentru dvs. pe serverele noastre, găzduite pe Google Cloud. Aceasta înseamnă că conținutul dvs. brut este inaccesibil pentru oricine, inclusiv personalul Omi sau Google, direct din baza de date.';
+  String get secureEncryptionDescription =>
+      'Datele dvs. sunt criptate cu o cheie unică pentru dvs. pe serverele noastre, găzduite pe Google Cloud. Aceasta înseamnă că conținutul dvs. brut este inaccesibil pentru oricine, inclusiv personalul Omi sau Google, direct din baza de date.';
 
   @override
   String get endToEndEncryption => 'Criptare end-to-end';
 
   @override
-  String get e2eeCardDescription => 'Activați pentru securitate maximă, unde doar dvs. puteți accesa datele dvs. Atingeți pentru a afla mai multe.';
+  String get e2eeCardDescription =>
+      'Activați pentru securitate maximă, unde doar dvs. puteți accesa datele dvs. Atingeți pentru a afla mai multe.';
 
   @override
-  String get dataAlwaysEncrypted => 'Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit.';
+  String get dataAlwaysEncrypted =>
+      'Indiferent de nivel, datele dvs. sunt întotdeauna criptate în repaus și în tranzit.';
 
   @override
   String get readOnlyScope => 'Doar citire';
@@ -4390,10 +4492,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get trainingDataProgram => 'Program de date de antrenament';
 
   @override
-  String get getOmiUnlimitedFree => 'Obțineți Omi Unlimited gratuit contribuind cu datele dvs. pentru antrenarea modelelor AI.';
+  String get getOmiUnlimitedFree =>
+      'Obțineți Omi Unlimited gratuit contribuind cu datele dvs. pentru antrenarea modelelor AI.';
 
   @override
-  String get trainingDataBullets => '• Datele dvs. ajută la îmbunătățirea modelelor AI\n• Sunt partajate doar date nesensibile\n• Proces complet transparent';
+  String get trainingDataBullets =>
+      '• Datele dvs. ajută la îmbunătățirea modelelor AI\n• Sunt partajate doar date nesensibile\n• Proces complet transparent';
 
   @override
   String get learnMoreAtOmiTraining => 'Aflați mai multe la omi.me/training';
@@ -4405,7 +4509,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get submitRequest => 'Trimite cererea';
 
   @override
-  String get thankYouRequestUnderReview => 'Mulțumim! Cererea dvs. este în curs de examinare. Vă vom notifica după aprobare.';
+  String get thankYouRequestUnderReview =>
+      'Mulțumim! Cererea dvs. este în curs de examinare. Vă vom notifica după aprobare.';
 
   @override
   String planRemainsActiveUntil(String date) {
@@ -4443,7 +4548,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get monthlyPlanContinues => 'Planul dvs. lunar actual va continua până la sfârșitul perioadei de facturare';
 
   @override
-  String get paymentMethodCharged => 'Metoda dvs. de plată existentă va fi debitată automat când planul lunar se încheie';
+  String get paymentMethodCharged =>
+      'Metoda dvs. de plată existentă va fi debitată automat când planul lunar se încheie';
 
   @override
   String get annualSubscriptionStarts => 'Abonamentul dvs. anual de 12 luni va începe automat după debitare';
@@ -4553,7 +4659,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get yourPrivacyMattersToUs => 'Confidențialitatea ta ne interesează';
 
   @override
-  String get privacyIntroText => 'La Omi, luăm foarte în serios confidențialitatea ta. Vrem să fim transparenți despre datele pe care le colectăm și cum le folosim. Iată ce trebuie să știi:';
+  String get privacyIntroText =>
+      'La Omi, luăm foarte în serios confidențialitatea ta. Vrem să fim transparenți despre datele pe care le colectăm și cum le folosim. Iată ce trebuie să știi:';
 
   @override
   String get whatWeTrack => 'Ce urmărim';
@@ -4568,10 +4675,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get ourCommitment => 'Angajamentul nostru';
 
   @override
-  String get commitmentText => 'Ne angajăm să folosim datele pe care le colectăm doar pentru a face Omi un produs mai bun pentru tine. Confidențialitatea și încrederea ta sunt primordiale pentru noi.';
+  String get commitmentText =>
+      'Ne angajăm să folosim datele pe care le colectăm doar pentru a face Omi un produs mai bun pentru tine. Confidențialitatea și încrederea ta sunt primordiale pentru noi.';
 
   @override
-  String get thankYouText => 'Îți mulțumim că ești un utilizator valoros al Omi. Dacă ai întrebări sau nelămuriri, nu ezita să ne contactezi la team@basedhardware.com.';
+  String get thankYouText =>
+      'Îți mulțumim că ești un utilizator valoros al Omi. Dacă ai întrebări sau nelămuriri, nu ezita să ne contactezi la team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'Setări sincronizare WiFi';
@@ -4580,7 +4689,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get enterHotspotCredentials => 'Introduceți datele hotspot-ului telefonului';
 
   @override
-  String get wifiSyncUsesHotspot => 'Sincronizarea WiFi folosește telefonul ca hotspot. Găsește numele și parola în Setări > Hotspot personal.';
+  String get wifiSyncUsesHotspot =>
+      'Sincronizarea WiFi folosește telefonul ca hotspot. Găsește numele și parola în Setări > Hotspot personal.';
 
   @override
   String get hotspotNameSsid => 'Nume hotspot (SSID)';
@@ -4615,7 +4725,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummaryCheckConversations => 'Nu s-a putut genera rezumatul. Asigură-te că ai conversații pentru acea zi.';
+  String get failedToGenerateSummaryCheckConversations =>
+      'Nu s-a putut genera rezumatul. Asigură-te că ai conversații pentru acea zi.';
 
   @override
   String get summaryNotFound => 'Rezumatul nu a fost găsit';
@@ -4645,7 +4756,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => 'Export început. Poate dura câteva secunde...';
 
   @override
-  String get knowledgeGraphDeleteDescription => 'Aceasta va șterge toate datele derivate ale graficului cunoștințelor (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.';
+  String get knowledgeGraphDeleteDescription =>
+      'Aceasta va șterge toate datele derivate ale graficului cunoștințelor (noduri și conexiuni). Amintirile tale originale vor rămâne în siguranță. Graficul va fi reconstruit în timp sau la următoarea solicitare.';
 
   @override
   String get configureDailySummaryDigest => 'Configurați rezumatul zilnic al sarcinilor';
@@ -4715,7 +4827,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Ștergeți toate conversațiile Limitless?';
 
   @override
-  String get deleteAllLimitlessWarning => 'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
+  String get deleteAllLimitlessWarning =>
+      'Aceasta va șterge permanent toate conversațiile importate din Limitless. Această acțiune nu poate fi anulată.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4771,7 +4884,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get howItWorksTitle => 'Cum funcționează?';
 
   @override
-  String get howPeopleWorks => 'Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!';
+  String get howPeopleWorks =>
+      'Odată ce o persoană este creată, puteți merge la transcripția unei conversații și să le atribuiți segmentele corespunzătoare, astfel Omi va putea recunoaște și vocea lor!';
 
   @override
   String get tapToDelete => 'Atingeți pentru a șterge';
@@ -4797,7 +4911,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get privacyNotice => 'Notificare de confidențialitate';
 
   @override
-  String get recordingsMayCaptureOthers => 'Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.';
+  String get recordingsMayCaptureOthers =>
+      'Înregistrările pot captura vocile altora. Asigurați-vă că aveți consimțământul tuturor participanților înainte de activare.';
 
   @override
   String get enable => 'Activează';
@@ -4809,7 +4924,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get on => 'Pornit';
 
   @override
-  String get storeAudioDescription => 'Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.';
+  String get storeAudioDescription =>
+      'Păstrați toate înregistrările audio stocate local pe telefon. Când este dezactivat, doar încărcările eșuate sunt păstrate pentru a economisi spațiu.';
 
   @override
   String get enableLocalStorage => 'Activare stocare locală';
@@ -4827,10 +4943,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get storeAudioOnCloud => 'Stochează audio în cloud';
 
   @override
-  String get cloudStorageDialogMessage => 'Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.';
+  String get cloudStorageDialogMessage =>
+      'Înregistrările dvs. în timp real vor fi stocate în spațiul de stocare cloud privat în timp ce vorbiți.';
 
   @override
-  String get storeAudioCloudDescription => 'Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.';
+  String get storeAudioCloudDescription =>
+      'Stocați înregistrările în timp real în spațiul de stocare cloud privat în timp ce vorbiți. Audio este capturat și salvat în siguranță în timp real.';
 
   @override
   String get downloadingFirmware => 'Se descarcă firmware-ul';
@@ -4839,7 +4957,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get installingFirmware => 'Se instalează firmware-ul';
 
   @override
-  String get firmwareUpdateWarning => 'Nu închideți aplicația și nu opriți dispozitivul. Acest lucru ar putea deteriora dispozitivul.';
+  String get firmwareUpdateWarning =>
+      'Nu închideți aplicația și nu opriți dispozitivul. Acest lucru ar putea deteriora dispozitivul.';
 
   @override
   String get firmwareUpdated => 'Firmware actualizat';
@@ -4883,7 +5002,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payments => 'Plăți';
 
   @override
-  String get connectPaymentMethodInfo => 'Conectați o metodă de plată mai jos pentru a începe să primiți plăți pentru aplicațiile dvs.';
+  String get connectPaymentMethodInfo =>
+      'Conectați o metodă de plată mai jos pentru a începe să primiți plăți pentru aplicațiile dvs.';
 
   @override
   String get selectedPaymentMethod => 'Metodă de plată selectată';
@@ -4937,7 +5057,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get connectingYourStripeAccount => 'Conectarea contului dvs. Stripe';
 
   @override
-  String get stripeOnboardingInstructions => 'Vă rugăm să finalizați procesul de integrare Stripe în browserul dvs. Această pagină se va actualiza automat după finalizare.';
+  String get stripeOnboardingInstructions =>
+      'Vă rugăm să finalizați procesul de integrare Stripe în browserul dvs. Această pagină se va actualiza automat după finalizare.';
 
   @override
   String get failedTryAgain => 'A eșuat? Încercați din nou';
@@ -4949,13 +5070,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get successfullyConnected => 'Conectat cu succes!';
 
   @override
-  String get stripeReadyForPayments => 'Contul dvs. Stripe este acum gata să primească plăți. Puteți începe să câștigați din vânzările aplicațiilor imediat.';
+  String get stripeReadyForPayments =>
+      'Contul dvs. Stripe este acum gata să primească plăți. Puteți începe să câștigați din vânzările aplicațiilor imediat.';
 
   @override
   String get updateStripeDetails => 'Actualizați detaliile Stripe';
 
   @override
-  String get errorUpdatingStripeDetails => 'Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu.';
+  String get errorUpdatingStripeDetails =>
+      'Eroare la actualizarea detaliilor Stripe! Vă rugăm să încercați din nou mai târziu.';
 
   @override
   String get updatePayPal => 'Actualizați PayPal';
@@ -4967,7 +5090,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get updatePayPalAccountDetails => 'Actualizați detaliile contului dvs. PayPal';
 
   @override
-  String get connectPayPalToReceivePayments => 'Conectați contul dvs. PayPal pentru a începe să primiți plăți pentru aplicațiile dvs.';
+  String get connectPayPalToReceivePayments =>
+      'Conectați contul dvs. PayPal pentru a începe să primiți plăți pentru aplicațiile dvs.';
 
   @override
   String get paypalEmail => 'E-mail PayPal';
@@ -4976,7 +5100,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paypalMeLink => 'Link PayPal.me';
 
   @override
-  String get stripeRecommendation => 'Dacă Stripe este disponibil în țara dvs., vă recomandăm cu tărie să îl utilizați pentru plăți mai rapide și mai ușoare.';
+  String get stripeRecommendation =>
+      'Dacă Stripe este disponibil în țara dvs., vă recomandăm cu tărie să îl utilizați pentru plăți mai rapide și mai ușoare.';
 
   @override
   String get updatePayPalDetails => 'Actualizați detaliile PayPal';
@@ -5028,10 +5153,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Mostră vocală suplimentară eliminată';
 
   @override
-  String get consentDataMessage => 'Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației.';
+  String get consentDataMessage =>
+      'Continuând, toate datele pe care le partajați cu această aplicație (inclusiv conversațiile, înregistrările și informațiile personale) vor fi stocate în siguranță pe serverele noastre pentru a vă oferi informații bazate pe IA și pentru a activa toate funcțiile aplicației.';
 
   @override
-  String get tasksEmptyStateMessage => 'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
+  String get tasksEmptyStateMessage =>
+      'Sarcinile din conversațiile tale vor apărea aici.\nAtinge + pentru a crea una manual.';
 
   @override
   String get clearChatAction => 'Șterge conversația';
@@ -5067,13 +5194,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get installOmiOnAppleWatch => 'Instalează Omi pe\nApple Watch';
 
   @override
-  String get installOmiOnAppleWatchDescription => 'Pentru a utiliza Apple Watch cu Omi, trebuie să instalezi mai întâi aplicația Omi pe ceas.';
+  String get installOmiOnAppleWatchDescription =>
+      'Pentru a utiliza Apple Watch cu Omi, trebuie să instalezi mai întâi aplicația Omi pe ceas.';
 
   @override
   String get openOmiOnAppleWatch => 'Deschide Omi pe\nApple Watch';
 
   @override
-  String get openOmiOnAppleWatchDescription => 'Aplicația Omi este instalată pe Apple Watch. Deschide-o și apasă Start pentru a începe.';
+  String get openOmiOnAppleWatchDescription =>
+      'Aplicația Omi este instalată pe Apple Watch. Deschide-o și apasă Start pentru a începe.';
 
   @override
   String get openWatchApp => 'Deschide aplicația Watch';
@@ -5082,13 +5211,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => 'Am instalat și deschis aplicația';
 
   @override
-  String get unableToOpenWatchApp => 'Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".';
+  String get unableToOpenWatchApp =>
+      'Nu se poate deschide aplicația Apple Watch. Deschide manual aplicația Watch pe Apple Watch și instalează Omi din secțiunea \"Aplicații disponibile\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch conectat cu succes!';
 
   @override
-  String get appleWatchNotReachable => 'Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.';
+  String get appleWatchNotReachable =>
+      'Apple Watch încă nu este accesibil. Asigură-te că aplicația Omi este deschisă pe ceas.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5175,7 +5306,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get welcomeBackSimple => 'Bine ai revenit';
 
   @override
-  String get addVocabularyDescription => 'Adăugați cuvinte pe care Omi ar trebui să le recunoască în timpul transcrierii.';
+  String get addVocabularyDescription =>
+      'Adăugați cuvinte pe care Omi ar trebui să le recunoască în timpul transcrierii.';
 
   @override
   String get enterWordsCommaSeparated => 'Introduceți cuvinte (separate prin virgulă)';
@@ -5516,25 +5648,29 @@ class AppLocalizationsRo extends AppLocalizations {
   String get multipleSpeakersDetected => 'Au fost detectați mai mulți vorbitori';
 
   @override
-  String get multipleSpeakersDescription => 'Se pare că în înregistrare sunt mai mulți vorbitori. Asigurați-vă că sunteți într-un loc liniștit și încercați din nou.';
+  String get multipleSpeakersDescription =>
+      'Se pare că în înregistrare sunt mai mulți vorbitori. Asigurați-vă că sunteți într-un loc liniștit și încercați din nou.';
 
   @override
   String get invalidRecordingDetected => 'Înregistrare invalidă detectată';
 
   @override
-  String get notEnoughSpeechDescription => 'Nu a fost detectată suficientă vorbire. Vă rugăm să vorbiți mai mult și să încercați din nou.';
+  String get notEnoughSpeechDescription =>
+      'Nu a fost detectată suficientă vorbire. Vă rugăm să vorbiți mai mult și să încercați din nou.';
 
   @override
   String get speechDurationDescription => 'Asigurați-vă că vorbiți cel puțin 5 secunde și nu mai mult de 90.';
 
   @override
-  String get connectionLostDescription => 'Conexiunea a fost întreruptă. Verificați conexiunea la internet și încercați din nou.';
+  String get connectionLostDescription =>
+      'Conexiunea a fost întreruptă. Verificați conexiunea la internet și încercați din nou.';
 
   @override
   String get howToTakeGoodSample => 'Cum să faci o probă bună?';
 
   @override
-  String get goodSampleInstructions => '1. Asigurați-vă că sunteți într-un loc liniștit.\n2. Vorbiți clar și natural.\n3. Asigurați-vă că dispozitivul dvs. este în poziția sa naturală pe gât.\n\nOdată creat, îl puteți îmbunătăți oricând sau îl puteți face din nou.';
+  String get goodSampleInstructions =>
+      '1. Asigurați-vă că sunteți într-un loc liniștit.\n2. Vorbiți clar și natural.\n3. Asigurați-vă că dispozitivul dvs. este în poziția sa naturală pe gât.\n\nOdată creat, îl puteți îmbunătăți oricând sau îl puteți face din nou.';
 
   @override
   String get noDeviceConnectedUseMic => 'Niciun dispozitiv conectat. Se va folosi microfonul telefonului.';
@@ -5597,10 +5733,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get howItWorks => 'Cum funcționează';
 
   @override
-  String get dailyScoreExplanation => 'Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!';
+  String get dailyScoreExplanation =>
+      'Scorul tău zilnic se bazează pe finalizarea sarcinilor. Finalizează sarcinile pentru a-ți îmbunătăți scorul!';
 
   @override
-  String get notificationFrequencyDescription => 'Controlează cât de des îți trimite Omi notificări proactive și mementouri.';
+  String get notificationFrequencyDescription =>
+      'Controlează cât de des îți trimite Omi notificări proactive și mementouri.';
 
   @override
   String get sliderOff => 'Oprit';
@@ -5693,7 +5831,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get selectApp => 'Selectează aplicația';
 
   @override
-  String get noChatAppsEnabled => 'Nicio aplicație de chat activată.\nApasă pe \"Activează aplicații\" pentru a adăuga.';
+  String get noChatAppsEnabled =>
+      'Nicio aplicație de chat activată.\nApasă pe \"Activează aplicații\" pentru a adăuga.';
 
   @override
   String get disable => 'Dezactivează';
@@ -5903,7 +6042,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get webhookUrlNotSet => 'URL-ul webhook nu este setat';
 
   @override
-  String get setWebhookUrlInSettings => 'Te rugăm să setezi URL-ul webhook în setările pentru dezvoltatori pentru a folosi această funcție.';
+  String get setWebhookUrlInSettings =>
+      'Te rugăm să setezi URL-ul webhook în setările pentru dezvoltatori pentru a folosi această funcție.';
 
   @override
   String get sendWebUrl => 'Trimite URL web';
@@ -5977,13 +6117,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo => '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo =>
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
 
   @override
-  String get localProcessingInfo => 'Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.';
+  String get localProcessingInfo =>
+      'Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.';
 
   @override
   String get model => 'Model';
@@ -5992,13 +6134,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get performanceWarning => 'Avertisment de performanță';
 
   @override
-  String get largeModelWarning => 'Acest model este mare și poate bloca aplicația sau poate rula foarte lent pe dispozitive mobile.\n\n\"small\" sau \"base\" este recomandat.';
+  String get largeModelWarning =>
+      'Acest model este mare și poate bloca aplicația sau poate rula foarte lent pe dispozitive mobile.\n\n\"small\" sau \"base\" este recomandat.';
 
   @override
   String get usingNativeIosSpeech => 'Utilizarea recunoașterii vocale native iOS';
 
   @override
-  String get noModelDownloadRequired => 'Se va utiliza motorul de vorbire nativ al dispozitivului. Nu este necesară descărcarea unui model.';
+  String get noModelDownloadRequired =>
+      'Se va utiliza motorul de vorbire nativ al dispozitivului. Nu este necesară descărcarea unui model.';
 
   @override
   String get modelReady => 'Model pregătit';
@@ -6043,7 +6187,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceNotCompatibleTitle => 'Dispozitiv incompatibil';
 
   @override
-  String get deviceNotMeetRequirements => 'Dispozitivul dvs. nu îndeplinește cerințele pentru transcrierea pe dispozitiv.';
+  String get deviceNotMeetRequirements =>
+      'Dispozitivul dvs. nu îndeplinește cerințele pentru transcrierea pe dispozitiv.';
 
   @override
   String get transcriptionSlowerOnDevice => 'Transcrierea pe dispozitiv poate fi mai lentă pe acest dispozitiv.';
@@ -6055,10 +6200,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get batteryDrainSignificantly => 'Descărcarea bateriei va crește semnificativ.';
 
   @override
-  String get premiumMinutesMonth => '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+  String get premiumMinutesMonth =>
+      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
-  String get audioProcessedLocally => 'Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.';
+  String get audioProcessedLocally =>
+      'Audio este procesat local. Funcționează offline, mai privat, dar consumă mai multă baterie.';
 
   @override
   String get languageLabel => 'Limbă';
@@ -6067,10 +6214,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get modelLabel => 'Model';
 
   @override
-  String get modelTooLargeWarning => 'Acest model este mare și poate cauza blocarea aplicației sau rulare foarte lentă pe dispozitivele mobile.\n\nsmall sau base este recomandat.';
+  String get modelTooLargeWarning =>
+      'Acest model este mare și poate cauza blocarea aplicației sau rulare foarte lentă pe dispozitivele mobile.\n\nsmall sau base este recomandat.';
 
   @override
-  String get nativeEngineNoDownload => 'Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.';
+  String get nativeEngineNoDownload =>
+      'Motorul vocal nativ al dispozitivului va fi folosit. Nu este necesară descărcarea modelului.';
 
   @override
   String modelReadyWithName(String model) {
@@ -6106,7 +6255,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'Transcrierea live integrată a Omi este optimizată pentru conversații în timp real cu detectarea automată a vorbitorului și diarizare.';
+  String get omiTranscriptionOptimized =>
+      'Transcrierea live integrată a Omi este optimizată pentru conversații în timp real cu detectarea automată a vorbitorului și diarizare.';
 
   @override
   String get reset => 'Resetează';
@@ -6326,7 +6476,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Se construiește graficul cunoștințelor din amintiri...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Graficul cunoștințelor va fi construit automat când creați amintiri noi.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Graficul cunoștințelor va fi construit automat când creați amintiri noi.';
 
   @override
   String get buildGraphButton => 'Construiește grafic';
@@ -6421,7 +6572,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get disconnectTwitter => 'Disconnect Twitter';
 
   @override
-  String get disconnectTwitterConfirmation => 'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
 
   @override
   String get getOmiDeviceDescription => 'Creează o clonă mai precisă cu conversațiile tale personale';
@@ -6568,7 +6720,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get contactsPermissionRequiredForSms => 'Permisiunea pentru contacte este necesară pentru partajare prin SMS';
 
   @override
-  String get grantContactsPermissionForSms => 'Vă rugăm să acordați permisiunea pentru contacte pentru a partaja prin SMS';
+  String get grantContactsPermissionForSms =>
+      'Vă rugăm să acordați permisiunea pentru contacte pentru a partaja prin SMS';
 
   @override
   String get noContactsWithPhoneNumbers => 'Nu s-au găsit contacte cu numere de telefon';
@@ -6580,7 +6733,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get failedToLoadContacts => 'Nu s-au putut încărca contactele';
 
   @override
-  String get failedToPrepareConversationForSharing => 'Nu s-a putut pregăti conversația pentru partajare. Vă rugăm să încercați din nou.';
+  String get failedToPrepareConversationForSharing =>
+      'Nu s-a putut pregăti conversația pentru partajare. Vă rugăm să încercați din nou.';
 
   @override
   String get couldNotOpenSmsApp => 'Nu s-a putut deschide aplicația SMS. Vă rugăm să încercați din nou.';
@@ -6646,7 +6800,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
 
   @override
-  String get transferRequiredDescription => 'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription =>
+      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
 
   @override
   String get cancelTransfer => 'Anulează transferul';
@@ -6667,7 +6822,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get shareRecording => 'Partajează înregistrarea';
 
   @override
-  String get deleteRecordingConfirmation => 'Ești sigur că vrei să ștergi definitiv această înregistrare? Această acțiune nu poate fi anulată.';
+  String get deleteRecordingConfirmation =>
+      'Ești sigur că vrei să ștergi definitiv această înregistrare? Această acțiune nu poate fi anulată.';
 
   @override
   String get recordingIdLabel => 'ID înregistrare';
@@ -6726,13 +6882,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get enableFastTransfer => 'Activează transferul rapid';
 
   @override
-  String get fastTransferDescription => 'Transferul rapid folosește WiFi pentru viteze de ~5x mai rapide. Telefonul se va conecta temporar la rețeaua WiFi a dispozitivului Omi în timpul transferului.';
+  String get fastTransferDescription =>
+      'Transferul rapid folosește WiFi pentru viteze de ~5x mai rapide. Telefonul se va conecta temporar la rețeaua WiFi a dispozitivului Omi în timpul transferului.';
 
   @override
   String get internetAccessPausedDuringTransfer => 'Accesul la internet este întrerupt în timpul transferului';
 
   @override
-  String get chooseTransferMethodDescription => 'Alegeți cum sunt transferate înregistrările de pe dispozitivul Omi pe telefon.';
+  String get chooseTransferMethodDescription =>
+      'Alegeți cum sunt transferate înregistrările de pe dispozitivul Omi pe telefon.';
 
   @override
   String get wifiSpeed => '~150 KB/s prin WiFi';
@@ -6741,7 +6899,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get fiveTimesFaster => 'DE 5X MAI RAPID';
 
   @override
-  String get fastTransferMethodDescription => 'Creează o conexiune WiFi directă la dispozitivul Omi. Telefonul se deconectează temporar de la WiFi-ul obișnuit în timpul transferului.';
+  String get fastTransferMethodDescription =>
+      'Creează o conexiune WiFi directă la dispozitivul Omi. Telefonul se deconectează temporar de la WiFi-ul obișnuit în timpul transferului.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6750,7 +6909,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get bleSpeed => '~30 KB/s prin BLE';
 
   @override
-  String get bluetoothMethodDescription => 'Folosește conexiunea Bluetooth Low Energy standard. Mai lent, dar nu afectează conexiunea WiFi.';
+  String get bluetoothMethodDescription =>
+      'Folosește conexiunea Bluetooth Low Energy standard. Mai lent, dar nu afectează conexiunea WiFi.';
 
   @override
   String get selected => 'Selectat';
@@ -6788,10 +6948,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appDeleteFailed => 'Nu s-a putut șterge aplicația. Vă rugăm să încercați din nou mai târziu.';
 
   @override
-  String get appVisibilityChangedSuccessfully => 'Vizibilitatea aplicației a fost schimbată cu succes. Poate dura câteva minute până se reflectă.';
+  String get appVisibilityChangedSuccessfully =>
+      'Vizibilitatea aplicației a fost schimbată cu succes. Poate dura câteva minute până se reflectă.';
 
   @override
-  String get errorActivatingAppIntegration => 'Eroare la activarea aplicației. Dacă este o aplicație de integrare, asigurați-vă că configurarea este completă.';
+  String get errorActivatingAppIntegration =>
+      'Eroare la activarea aplicației. Dacă este o aplicație de integrare, asigurați-vă că configurarea este completă.';
 
   @override
   String get errorUpdatingAppStatus => 'A apărut o eroare la actualizarea stării aplicației.';
@@ -6871,7 +7033,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get nameMustBeAtLeast3Characters => 'Numele trebuie să aibă cel puțin 3 caractere';
 
   @override
-  String get conversationPromptHint => 'ex., Extrageți acțiuni, decizii luate și concluzii cheie din conversația furnizată.';
+  String get conversationPromptHint =>
+      'ex., Extrageți acțiuni, decizii luate și concluzii cheie din conversația furnizată.';
 
   @override
   String get pleaseEnterAppPrompt => 'Vă rugăm să introduceți un prompt pentru aplicația dvs.';
@@ -7116,13 +7279,15 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get planUpgradeScheduledMessage => 'Upgrade programat! Planul tău lunar continuă până la sfârșitul perioadei de facturare, apoi trece automat la anual.';
+  String get planUpgradeScheduledMessage =>
+      'Upgrade programat! Planul tău lunar continuă până la sfârșitul perioadei de facturare, apoi trece automat la anual.';
 
   @override
   String get couldNotSchedulePlanChange => 'Nu s-a putut programa schimbarea planului. Te rugăm să încerci din nou.';
 
   @override
-  String get subscriptionReactivatedDefault => 'Abonamentul tău a fost reactivat! Fără taxă acum - vei fi facturat la sfârșitul perioadei curente.';
+  String get subscriptionReactivatedDefault =>
+      'Abonamentul tău a fost reactivat! Fără taxă acum - vei fi facturat la sfârșitul perioadei curente.';
 
   @override
   String get subscriptionSuccessfulCharged => 'Abonament reușit! Ai fost taxat pentru noua perioadă de facturare.';
@@ -7296,7 +7461,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
 
   @override
-  String get authUnexpectedErrorFirebase => 'Eroare neașteptată la autentificare, eroare Firebase, vă rugăm încercați din nou.';
+  String get authUnexpectedErrorFirebase =>
+      'Eroare neașteptată la autentificare, eroare Firebase, vă rugăm încercați din nou.';
 
   @override
   String get authUnexpectedError => 'Eroare neașteptată la autentificare, vă rugăm încercați din nou';
@@ -7311,7 +7477,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingBluetoothRequired => 'Este necesară permisiunea Bluetooth pentru a vă conecta la dispozitiv.';
 
   @override
-  String get onboardingBluetoothDeniedSystemPrefs => 'Permisiunea Bluetooth a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Permisiunea Bluetooth a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
 
   @override
   String onboardingBluetoothStatusCheckPrefs(String status) {
@@ -7324,10 +7491,12 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingNotificationDeniedSystemPrefs => 'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem.';
 
   @override
-  String get onboardingNotificationDeniedNotifications => 'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem > Notificări.';
+  String get onboardingNotificationDeniedNotifications =>
+      'Permisiunea pentru notificări a fost refuzată. Acordați permisiunea în Preferințe Sistem > Notificări.';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
@@ -7340,13 +7509,15 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingLocationGrantInSettings => 'Acordați permisiunea pentru locație în Setări > Confidențialitate și securitate > Servicii de localizare';
+  String get onboardingLocationGrantInSettings =>
+      'Acordați permisiunea pentru locație în Setări > Confidențialitate și securitate > Servicii de localizare';
 
   @override
   String get onboardingMicrophoneRequired => 'Este necesară permisiunea pentru microfon pentru înregistrare.';
 
   @override
-  String get onboardingMicrophoneDenied => 'Permisiunea pentru microfon a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Microfon.';
+  String get onboardingMicrophoneDenied =>
+      'Permisiunea pentru microfon a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Microfon.';
 
   @override
   String onboardingMicrophoneStatusCheckPrefs(String status) {
@@ -7359,10 +7530,12 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'Este necesară permisiunea de captură a ecranului pentru înregistrarea audio a sistemului.';
+  String get onboardingScreenCaptureRequired =>
+      'Este necesară permisiunea de captură a ecranului pentru înregistrarea audio a sistemului.';
 
   @override
-  String get onboardingScreenCaptureDenied => 'Permisiunea de captură a ecranului a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Înregistrare ecran.';
+  String get onboardingScreenCaptureDenied =>
+      'Permisiunea de captură a ecranului a fost refuzată. Acordați permisiunea în Preferințe Sistem > Confidențialitate și securitate > Înregistrare ecran.';
 
   @override
   String onboardingScreenCaptureStatusCheckPrefs(String status) {
@@ -7375,7 +7548,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingAccessibilityRequired => 'Este necesară permisiunea de accesibilitate pentru detectarea întâlnirilor din browser.';
+  String get onboardingAccessibilityRequired =>
+      'Este necesară permisiunea de accesibilitate pentru detectarea întâlnirilor din browser.';
 
   @override
   String onboardingAccessibilityStatusCheckPrefs(String status) {
@@ -7415,7 +7589,8 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get msgPhotosPermissionDenied => 'Permisiunea pentru fotografii refuzată. Vă rugăm să permiteți accesul la fotografii pentru a selecta imagini';
+  String get msgPhotosPermissionDenied =>
+      'Permisiunea pentru fotografii refuzată. Vă rugăm să permiteți accesul la fotografii pentru a selecta imagini';
 
   @override
   String get msgSelectImagesGenericError => 'Eroare la selectarea imaginilor. Vă rugăm să încercați din nou.';
@@ -7487,7 +7662,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get locationPermissionRequired => 'Permisiune de locație necesară';
 
   @override
-  String get locationPermissionContent => 'Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.';
+  String get locationPermissionContent =>
+      'Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.';
 
   @override
   String get pdfTranscriptExport => 'Export transcriere';
