@@ -2390,5 +2390,21 @@
   "onboardingFailedCheckScreenCapture": "无法检查屏幕捕获权限：{error}",
   "onboardingAccessibilityRequired": "检测浏览器会议需要辅助功能权限。",
   "onboardingAccessibilityStatusCheckPrefs": "辅助功能权限状态：{status}。请检查系统偏好设置。",
-  "onboardingFailedCheckAccessibility": "无法检查辅助功能权限：{error}"
+  "onboardingFailedCheckAccessibility": "无法检查辅助功能权限：{error}",
+  "msgCameraNotAvailable": "此平台不支持相机拍摄",
+  "msgCameraPermissionDenied": "相机权限被拒绝。请允许访问相机",
+  "msgCameraAccessError": "访问相机错误：{error}",
+  "msgPhotoError": "拍照错误。请重试。",
+  "msgMaxImagesLimit": "您最多只能选择4张图片",
+  "msgFilePickerError": "打开文件选择器错误：{error}",
+  "msgSelectImagesError": "选择图片错误：{error}",
+  "msgPhotosPermissionDenied": "照片权限被拒绝。请允许访问照片以选择图片",
+  "msgSelectImagesGenericError": "选择图片错误。请重试。",
+  "msgMaxFilesLimit": "您最多只能选择4个文件",
+  "msgSelectFilesError": "选择文件错误：{error}",
+  "msgSelectFilesGenericError": "选择文件错误。请重试。",
+  "msgUploadFileFailed": "文件上传失败，请稍后重试",
+  "msgReadingMemories": "正在读取您的记忆...",
+  "msgLearningMemories": "正在从您的记忆中学习...",
+  "msgUploadAttachedFileFailed": "上传附件失败。"
 }

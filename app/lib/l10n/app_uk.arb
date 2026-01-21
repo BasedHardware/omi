@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Не вдалося перевірити дозвіл на захоплення екрана: {error}",
   "onboardingAccessibilityRequired": "Для виявлення зустрічей у браузері потрібен дозвіл на доступність.",
   "onboardingAccessibilityStatusCheckPrefs": "Статус дозволу на доступність: {status}. Перевірте Системні налаштування.",
-  "onboardingFailedCheckAccessibility": "Не вдалося перевірити дозвіл на доступність: {error}"
+  "onboardingFailedCheckAccessibility": "Не вдалося перевірити дозвіл на доступність: {error}",
+  "msgCameraNotAvailable": "Зйомка камерою недоступна на цій платформі",
+  "msgCameraPermissionDenied": "Дозвіл на камеру відхилено. Будь ласка, дозвольте доступ до камери",
+  "msgCameraAccessError": "Помилка доступу до камери: {error}",
+  "msgPhotoError": "Помилка під час фотографування. Будь ласка, спробуйте ще раз.",
+  "msgMaxImagesLimit": "Ви можете вибрати лише до 4 зображень",
+  "msgFilePickerError": "Помилка відкриття вибору файлів: {error}",
+  "msgSelectImagesError": "Помилка вибору зображень: {error}",
+  "msgPhotosPermissionDenied": "Дозвіл на фото відхилено. Будь ласка, дозвольте доступ до фото для вибору зображень",
+  "msgSelectImagesGenericError": "Помилка вибору зображень. Будь ласка, спробуйте ще раз.",
+  "msgMaxFilesLimit": "Ви можете вибрати лише до 4 файлів",
+  "msgSelectFilesError": "Помилка вибору файлів: {error}",
+  "msgSelectFilesGenericError": "Помилка вибору файлів. Будь ласка, спробуйте ще раз.",
+  "msgUploadFileFailed": "Не вдалося завантажити файл, спробуйте пізніше",
+  "msgReadingMemories": "Читаємо ваші спогади...",
+  "msgLearningMemories": "Вчимося з ваших спогадів...",
+  "msgUploadAttachedFileFailed": "Не вдалося завантажити прикріплений файл."
 }

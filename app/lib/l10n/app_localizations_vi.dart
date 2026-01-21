@@ -7532,4 +7532,61 @@ class AppLocalizationsVi extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Không thể kiểm tra quyền trợ năng: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Chụp ảnh bằng camera không khả dụng trên nền tảng này';
+
+  @override
+  String get msgCameraPermissionDenied => 'Quyền truy cập camera bị từ chối. Vui lòng cho phép truy cập camera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Lỗi truy cập camera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Lỗi khi chụp ảnh. Vui lòng thử lại.';
+
+  @override
+  String get msgMaxImagesLimit => 'Bạn chỉ có thể chọn tối đa 4 hình ảnh';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Lỗi mở trình chọn tệp: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Lỗi chọn hình ảnh: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Quyền truy cập ảnh bị từ chối. Vui lòng cho phép truy cập ảnh để chọn hình ảnh';
+
+  @override
+  String get msgSelectImagesGenericError => 'Lỗi chọn hình ảnh. Vui lòng thử lại.';
+
+  @override
+  String get msgMaxFilesLimit => 'Bạn chỉ có thể chọn tối đa 4 tệp';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Lỗi chọn tệp: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Lỗi chọn tệp. Vui lòng thử lại.';
+
+  @override
+  String get msgUploadFileFailed => 'Tải tệp lên thất bại, vui lòng thử lại sau';
+
+  @override
+  String get msgReadingMemories => 'Đang đọc kỷ niệm của bạn...';
+
+  @override
+  String get msgLearningMemories => 'Đang học từ kỷ niệm của bạn...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Tải tệp đính kèm lên thất bại.';
 }

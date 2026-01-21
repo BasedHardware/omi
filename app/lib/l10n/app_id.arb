@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Gagal memeriksa izin tangkapan layar: {error}",
   "onboardingAccessibilityRequired": "Izin aksesibilitas diperlukan untuk mendeteksi rapat browser.",
   "onboardingAccessibilityStatusCheckPrefs": "Status izin aksesibilitas: {status}. Silakan periksa Preferensi Sistem.",
-  "onboardingFailedCheckAccessibility": "Gagal memeriksa izin aksesibilitas: {error}"
+  "onboardingFailedCheckAccessibility": "Gagal memeriksa izin aksesibilitas: {error}",
+  "msgCameraNotAvailable": "Pengambilan gambar kamera tidak tersedia di platform ini",
+  "msgCameraPermissionDenied": "Izin kamera ditolak. Harap izinkan akses ke kamera",
+  "msgCameraAccessError": "Kesalahan mengakses kamera: {error}",
+  "msgPhotoError": "Kesalahan mengambil foto. Silakan coba lagi.",
+  "msgMaxImagesLimit": "Anda hanya dapat memilih hingga 4 gambar",
+  "msgFilePickerError": "Kesalahan membuka pemilih file: {error}",
+  "msgSelectImagesError": "Kesalahan memilih gambar: {error}",
+  "msgPhotosPermissionDenied": "Izin foto ditolak. Harap izinkan akses ke foto untuk memilih gambar",
+  "msgSelectImagesGenericError": "Kesalahan memilih gambar. Silakan coba lagi.",
+  "msgMaxFilesLimit": "Anda hanya dapat memilih hingga 4 file",
+  "msgSelectFilesError": "Kesalahan memilih file: {error}",
+  "msgSelectFilesGenericError": "Kesalahan memilih file. Silakan coba lagi.",
+  "msgUploadFileFailed": "Gagal mengunggah file, silakan coba lagi nanti",
+  "msgReadingMemories": "Membaca kenangan Anda...",
+  "msgLearningMemories": "Belajar dari kenangan Anda...",
+  "msgUploadAttachedFileFailed": "Gagal mengunggah file terlampir."
 }

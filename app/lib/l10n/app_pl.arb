@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Nie udało się sprawdzić uprawnienia przechwytywania ekranu: {error}",
   "onboardingAccessibilityRequired": "Uprawnienie dostępności jest wymagane do wykrywania spotkań przeglądarki.",
   "onboardingAccessibilityStatusCheckPrefs": "Status uprawnienia dostępności: {status}. Sprawdź Preferencje systemowe.",
-  "onboardingFailedCheckAccessibility": "Nie udało się sprawdzić uprawnienia dostępności: {error}"
+  "onboardingFailedCheckAccessibility": "Nie udało się sprawdzić uprawnienia dostępności: {error}",
+  "msgCameraNotAvailable": "Przechwytywanie z kamery nie jest dostępne na tej platformie",
+  "msgCameraPermissionDenied": "Odmowa dostępu do kamery. Proszę zezwolić na dostęp do kamery",
+  "msgCameraAccessError": "Błąd dostępu do kamery: {error}",
+  "msgPhotoError": "Błąd podczas robienia zdjęcia. Spróbuj ponownie.",
+  "msgMaxImagesLimit": "Możesz wybrać maksymalnie 4 obrazy",
+  "msgFilePickerError": "Błąd podczas otwierania wyboru plików: {error}",
+  "msgSelectImagesError": "Błąd podczas wybierania obrazów: {error}",
+  "msgPhotosPermissionDenied": "Odmowa dostępu do zdjęć. Proszę zezwolić na dostęp do zdjęć, aby wybrać obrazy",
+  "msgSelectImagesGenericError": "Błąd podczas wybierania obrazów. Spróbuj ponownie.",
+  "msgMaxFilesLimit": "Możesz wybrać maksymalnie 4 pliki",
+  "msgSelectFilesError": "Błąd podczas wybierania plików: {error}",
+  "msgSelectFilesGenericError": "Błąd podczas wybierania plików. Spróbuj ponownie.",
+  "msgUploadFileFailed": "Nie udało się przesłać pliku, spróbuj ponownie później",
+  "msgReadingMemories": "Czytanie twoich wspomnień...",
+  "msgLearningMemories": "Uczenie się z twoich wspomnień...",
+  "msgUploadAttachedFileFailed": "Nie udało się przesłać załączonego pliku."
 }

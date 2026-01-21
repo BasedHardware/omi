@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Nu s-a putut verifica permisiunea de captură a ecranului: {error}",
   "onboardingAccessibilityRequired": "Este necesară permisiunea de accesibilitate pentru detectarea întâlnirilor din browser.",
   "onboardingAccessibilityStatusCheckPrefs": "Starea permisiunii de accesibilitate: {status}. Verificați Preferințele Sistem.",
-  "onboardingFailedCheckAccessibility": "Nu s-a putut verifica permisiunea de accesibilitate: {error}"
+  "onboardingFailedCheckAccessibility": "Nu s-a putut verifica permisiunea de accesibilitate: {error}",
+  "msgCameraNotAvailable": "Captura camerei nu este disponibilă pe această platformă",
+  "msgCameraPermissionDenied": "Permisiunea camerei refuzată. Vă rugăm să permiteți accesul la cameră",
+  "msgCameraAccessError": "Eroare la accesarea camerei: {error}",
+  "msgPhotoError": "Eroare la realizarea fotografiei. Vă rugăm să încercați din nou.",
+  "msgMaxImagesLimit": "Puteți selecta doar până la 4 imagini",
+  "msgFilePickerError": "Eroare la deschiderea selectorului de fișiere: {error}",
+  "msgSelectImagesError": "Eroare la selectarea imaginilor: {error}",
+  "msgPhotosPermissionDenied": "Permisiunea pentru fotografii refuzată. Vă rugăm să permiteți accesul la fotografii pentru a selecta imagini",
+  "msgSelectImagesGenericError": "Eroare la selectarea imaginilor. Vă rugăm să încercați din nou.",
+  "msgMaxFilesLimit": "Puteți selecta doar până la 4 fișiere",
+  "msgSelectFilesError": "Eroare la selectarea fișierelor: {error}",
+  "msgSelectFilesGenericError": "Eroare la selectarea fișierelor. Vă rugăm să încercați din nou.",
+  "msgUploadFileFailed": "Încărcarea fișierului a eșuat, vă rugăm să încercați din nou mai târziu",
+  "msgReadingMemories": "Se citesc amintirile tale...",
+  "msgLearningMemories": "Se învață din amintirile tale...",
+  "msgUploadAttachedFileFailed": "Încărcarea fișierului atașat a eșuat."
 }

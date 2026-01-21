@@ -2349,5 +2349,21 @@
   "onboardingFailedCheckScreenCapture": "Nepodařilo se zkontrolovat oprávnění pro snímání obrazovky: {error}",
   "onboardingAccessibilityRequired": "K detekci schůzek v prohlížeči je vyžadováno oprávnění přístupnosti.",
   "onboardingAccessibilityStatusCheckPrefs": "Stav oprávnění přístupnosti: {status}. Zkontrolujte prosím Předvolby systému.",
-  "onboardingFailedCheckAccessibility": "Nepodařilo se zkontrolovat oprávnění přístupnosti: {error}"
+  "onboardingFailedCheckAccessibility": "Nepodařilo se zkontrolovat oprávnění přístupnosti: {error}",
+  "msgCameraNotAvailable": "Snímání fotoaparátem není na této platformě k dispozici",
+  "msgCameraPermissionDenied": "Oprávnění k fotoaparátu bylo zamítnuto. Povolte prosím přístup k fotoaparátu",
+  "msgCameraAccessError": "Chyba při přístupu k fotoaparátu: {error}",
+  "msgPhotoError": "Chyba při pořizování fotografie. Zkuste to prosím znovu.",
+  "msgMaxImagesLimit": "Můžete vybrat maximálně 4 obrázky",
+  "msgFilePickerError": "Chyba při otevírání výběru souborů: {error}",
+  "msgSelectImagesError": "Chyba při výběru obrázků: {error}",
+  "msgPhotosPermissionDenied": "Oprávnění k fotografiím bylo zamítnuto. Povolte prosím přístup k fotografiím pro výběr obrázků",
+  "msgSelectImagesGenericError": "Chyba při výběru obrázků. Zkuste to prosím znovu.",
+  "msgMaxFilesLimit": "Můžete vybrat maximálně 4 soubory",
+  "msgSelectFilesError": "Chyba při výběru souborů: {error}",
+  "msgSelectFilesGenericError": "Chyba při výběru souborů. Zkuste to prosím znovu.",
+  "msgUploadFileFailed": "Nahrávání souboru se nezdařilo, zkuste to prosím později",
+  "msgReadingMemories": "Čtení vašich vzpomínek...",
+  "msgLearningMemories": "Učení se z vašich vzpomínek...",
+  "msgUploadAttachedFileFailed": "Nahrání přiloženého souboru se nezdařilo."
 }

@@ -7531,4 +7531,61 @@ class AppLocalizationsUk extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Не вдалося перевірити дозвіл на доступність: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Зйомка камерою недоступна на цій платформі';
+
+  @override
+  String get msgCameraPermissionDenied => 'Дозвіл на камеру відхилено. Будь ласка, дозвольте доступ до камери';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Помилка доступу до камери: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Помилка під час фотографування. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get msgMaxImagesLimit => 'Ви можете вибрати лише до 4 зображень';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Помилка відкриття вибору файлів: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Помилка вибору зображень: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Дозвіл на фото відхилено. Будь ласка, дозвольте доступ до фото для вибору зображень';
+
+  @override
+  String get msgSelectImagesGenericError => 'Помилка вибору зображень. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get msgMaxFilesLimit => 'Ви можете вибрати лише до 4 файлів';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Помилка вибору файлів: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Помилка вибору файлів. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get msgUploadFileFailed => 'Не вдалося завантажити файл, спробуйте пізніше';
+
+  @override
+  String get msgReadingMemories => 'Читаємо ваші спогади...';
+
+  @override
+  String get msgLearningMemories => 'Вчимося з ваших спогадів...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Не вдалося завантажити прикріплений файл.';
 }

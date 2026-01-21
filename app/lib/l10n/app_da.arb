@@ -2347,5 +2347,21 @@
   "onboardingFailedCheckScreenCapture": "Kunne ikke kontrollere skærmoptagelsestilladelse: {error}",
   "onboardingAccessibilityRequired": "Tilgængelighedstilladelse er påkrævet for at registrere browsermøder.",
   "onboardingAccessibilityStatusCheckPrefs": "Tilgængelighedstilladelsestatus: {status}. Tjek venligst Systemindstillinger.",
-  "onboardingFailedCheckAccessibility": "Kunne ikke kontrollere tilgængelighedstilladelse: {error}"
+  "onboardingFailedCheckAccessibility": "Kunne ikke kontrollere tilgængelighedstilladelse: {error}",
+  "msgCameraNotAvailable": "Kameraoptagelse er ikke tilgængelig på denne platform",
+  "msgCameraPermissionDenied": "Kameratilladelse nægtet. Tillad venligst adgang til kameraet",
+  "msgCameraAccessError": "Fejl ved adgang til kamera: {error}",
+  "msgPhotoError": "Fejl ved at tage foto. Prøv venligst igen.",
+  "msgMaxImagesLimit": "Du kan kun vælge op til 4 billeder",
+  "msgFilePickerError": "Fejl ved åbning af filvælger: {error}",
+  "msgSelectImagesError": "Fejl ved valg af billeder: {error}",
+  "msgPhotosPermissionDenied": "Fototilladelse nægtet. Tillad venligst adgang til fotos for at vælge billeder",
+  "msgSelectImagesGenericError": "Fejl ved valg af billeder. Prøv venligst igen.",
+  "msgMaxFilesLimit": "Du kan kun vælge op til 4 filer",
+  "msgSelectFilesError": "Fejl ved valg af filer: {error}",
+  "msgSelectFilesGenericError": "Fejl ved valg af filer. Prøv venligst igen.",
+  "msgUploadFileFailed": "Kunne ikke uploade fil, prøv venligst igen senere",
+  "msgReadingMemories": "Læser dine minder...",
+  "msgLearningMemories": "Lærer fra dine minder...",
+  "msgUploadAttachedFileFailed": "Kunne ikke uploade den vedhæftede fil."
 }

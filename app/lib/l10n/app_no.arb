@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Kunne ikke sjekke skjermopptakstillatelse: {error}",
   "onboardingAccessibilityRequired": "Tilgjengelighetstillatelse kreves for å oppdage nettlesermøter.",
   "onboardingAccessibilityStatusCheckPrefs": "Tilgjengelighetstillatelsestatus: {status}. Sjekk Systemvalg.",
-  "onboardingFailedCheckAccessibility": "Kunne ikke sjekke tilgjengelighetstillatelse: {error}"
+  "onboardingFailedCheckAccessibility": "Kunne ikke sjekke tilgjengelighetstillatelse: {error}",
+  "msgCameraNotAvailable": "Kamerafangst er ikke tilgjengelig på denne plattformen",
+  "msgCameraPermissionDenied": "Kameratillatelse avslått. Vennligst tillat tilgang til kameraet",
+  "msgCameraAccessError": "Feil ved tilgang til kamera: {error}",
+  "msgPhotoError": "Feil ved å ta bilde. Vennligst prøv igjen.",
+  "msgMaxImagesLimit": "Du kan bare velge opptil 4 bilder",
+  "msgFilePickerError": "Feil ved åpning av filvelger: {error}",
+  "msgSelectImagesError": "Feil ved valg av bilder: {error}",
+  "msgPhotosPermissionDenied": "Fototillatelse avslått. Vennligst tillat tilgang til bilder for å velge bilder",
+  "msgSelectImagesGenericError": "Feil ved valg av bilder. Vennligst prøv igjen.",
+  "msgMaxFilesLimit": "Du kan bare velge opptil 4 filer",
+  "msgSelectFilesError": "Feil ved valg av filer: {error}",
+  "msgSelectFilesGenericError": "Feil ved valg av filer. Vennligst prøv igjen.",
+  "msgUploadFileFailed": "Kunne ikke laste opp fil, vennligst prøv igjen senere",
+  "msgReadingMemories": "Leser minnene dine...",
+  "msgLearningMemories": "Lærer fra minnene dine...",
+  "msgUploadAttachedFileFailed": "Kunne ikke laste opp vedlagt fil."
 }

@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Không thể kiểm tra quyền chụp màn hình: {error}",
   "onboardingAccessibilityRequired": "Cần quyền trợ năng để phát hiện cuộc họp trình duyệt.",
   "onboardingAccessibilityStatusCheckPrefs": "Trạng thái quyền trợ năng: {status}. Vui lòng kiểm tra Tùy chọn Hệ thống.",
-  "onboardingFailedCheckAccessibility": "Không thể kiểm tra quyền trợ năng: {error}"
+  "onboardingFailedCheckAccessibility": "Không thể kiểm tra quyền trợ năng: {error}",
+  "msgCameraNotAvailable": "Chụp ảnh bằng camera không khả dụng trên nền tảng này",
+  "msgCameraPermissionDenied": "Quyền truy cập camera bị từ chối. Vui lòng cho phép truy cập camera",
+  "msgCameraAccessError": "Lỗi truy cập camera: {error}",
+  "msgPhotoError": "Lỗi khi chụp ảnh. Vui lòng thử lại.",
+  "msgMaxImagesLimit": "Bạn chỉ có thể chọn tối đa 4 hình ảnh",
+  "msgFilePickerError": "Lỗi mở trình chọn tệp: {error}",
+  "msgSelectImagesError": "Lỗi chọn hình ảnh: {error}",
+  "msgPhotosPermissionDenied": "Quyền truy cập ảnh bị từ chối. Vui lòng cho phép truy cập ảnh để chọn hình ảnh",
+  "msgSelectImagesGenericError": "Lỗi chọn hình ảnh. Vui lòng thử lại.",
+  "msgMaxFilesLimit": "Bạn chỉ có thể chọn tối đa 4 tệp",
+  "msgSelectFilesError": "Lỗi chọn tệp: {error}",
+  "msgSelectFilesGenericError": "Lỗi chọn tệp. Vui lòng thử lại.",
+  "msgUploadFileFailed": "Tải tệp lên thất bại, vui lòng thử lại sau",
+  "msgReadingMemories": "Đang đọc kỷ niệm của bạn...",
+  "msgLearningMemories": "Đang học từ kỷ niệm của bạn...",
+  "msgUploadAttachedFileFailed": "Tải tệp đính kèm lên thất bại."
 }

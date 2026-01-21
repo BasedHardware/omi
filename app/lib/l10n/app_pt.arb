@@ -2390,5 +2390,21 @@
   "onboardingFailedCheckScreenCapture": "Falha ao verificar permissão de captura de tela: {error}",
   "onboardingAccessibilityRequired": "A permissão de acessibilidade é necessária para detectar reuniões do navegador.",
   "onboardingAccessibilityStatusCheckPrefs": "Status da permissão de acessibilidade: {status}. Verifique as Preferências do Sistema.",
-  "onboardingFailedCheckAccessibility": "Falha ao verificar permissão de acessibilidade: {error}"
+  "onboardingFailedCheckAccessibility": "Falha ao verificar permissão de acessibilidade: {error}",
+  "msgCameraNotAvailable": "A captura de câmera não está disponível nesta plataforma",
+  "msgCameraPermissionDenied": "Permissão de câmera negada. Por favor, permita o acesso à câmera",
+  "msgCameraAccessError": "Erro ao acessar a câmera: {error}",
+  "msgPhotoError": "Erro ao tirar foto. Por favor, tente novamente.",
+  "msgMaxImagesLimit": "Você só pode selecionar até 4 imagens",
+  "msgFilePickerError": "Erro ao abrir seletor de arquivos: {error}",
+  "msgSelectImagesError": "Erro ao selecionar imagens: {error}",
+  "msgPhotosPermissionDenied": "Permissão de fotos negada. Por favor, permita o acesso às fotos para selecionar imagens",
+  "msgSelectImagesGenericError": "Erro ao selecionar imagens. Por favor, tente novamente.",
+  "msgMaxFilesLimit": "Você só pode selecionar até 4 arquivos",
+  "msgSelectFilesError": "Erro ao selecionar arquivos: {error}",
+  "msgSelectFilesGenericError": "Erro ao selecionar arquivos. Por favor, tente novamente.",
+  "msgUploadFileFailed": "Falha ao enviar arquivo, por favor tente novamente mais tarde",
+  "msgReadingMemories": "Lendo suas memórias...",
+  "msgLearningMemories": "Aprendendo com suas memórias...",
+  "msgUploadAttachedFileFailed": "Falha ao enviar o arquivo anexado."
 }

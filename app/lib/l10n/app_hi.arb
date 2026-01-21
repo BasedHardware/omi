@@ -2390,5 +2390,21 @@
   "onboardingFailedCheckScreenCapture": "स्क्रीन कैप्चर अनुमति जांचने में विफल: {error}",
   "onboardingAccessibilityRequired": "ब्राउज़र मीटिंग का पता लगाने के लिए एक्सेसिबिलिटी अनुमति आवश्यक है।",
   "onboardingAccessibilityStatusCheckPrefs": "एक्सेसिबिलिटी अनुमति स्थिति: {status}। कृपया सिस्टम प्राथमिकताएं जांचें।",
-  "onboardingFailedCheckAccessibility": "एक्सेसिबिलिटी अनुमति जांचने में विफल: {error}"
+  "onboardingFailedCheckAccessibility": "एक्सेसिबिलिटी अनुमति जांचने में विफल: {error}",
+  "msgCameraNotAvailable": "इस प्लेटफ़ॉर्म पर कैमरा कैप्चर उपलब्ध नहीं है",
+  "msgCameraPermissionDenied": "कैमरा अनुमति अस्वीकृत। कृपया कैमरा एक्सेस की अनुमति दें",
+  "msgCameraAccessError": "कैमरा एक्सेस करने में त्रुटि: {error}",
+  "msgPhotoError": "फोटो लेने में त्रुटि। कृपया पुनः प्रयास करें।",
+  "msgMaxImagesLimit": "आप केवल 4 छवियों का चयन कर सकते हैं",
+  "msgFilePickerError": "फ़ाइल पिकर खोलने में त्रुटि: {error}",
+  "msgSelectImagesError": "छवियों का चयन करने में त्रुटि: {error}",
+  "msgPhotosPermissionDenied": "फोटो अनुमति अस्वीकृत। छवियों का चयन करने के लिए कृपया फ़ोटो एक्सेस की अनुमति दें",
+  "msgSelectImagesGenericError": "छवियों का चयन करने में त्रुटि। कृपया पुनः प्रयास करें।",
+  "msgMaxFilesLimit": "आप केवल 4 फ़ाइलों का चयन कर सकते हैं",
+  "msgSelectFilesError": "फ़ाइलों का चयन करने में त्रुटि: {error}",
+  "msgSelectFilesGenericError": "फ़ाइलों का चयन करने में त्रुटि। कृपया पुनः प्रयास करें।",
+  "msgUploadFileFailed": "फ़ाइल अपलोड विफल, कृपया बाद में पुनः प्रयास करें",
+  "msgReadingMemories": "आपकी यादें पढ़ रहे हैं...",
+  "msgLearningMemories": "आपकी यादों से सीख रहे हैं...",
+  "msgUploadAttachedFileFailed": "संलग्न फ़ाइल अपलोड करने में विफल।"
 }

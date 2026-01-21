@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Ekran yakalama izni kontrol edilemedi: {error}",
   "onboardingAccessibilityRequired": "Tarayıcı toplantılarını algılamak için erişilebilirlik izni gereklidir.",
   "onboardingAccessibilityStatusCheckPrefs": "Erişilebilirlik izin durumu: {status}. Lütfen Sistem Tercihleri'ni kontrol edin.",
-  "onboardingFailedCheckAccessibility": "Erişilebilirlik izni kontrol edilemedi: {error}"
+  "onboardingFailedCheckAccessibility": "Erişilebilirlik izni kontrol edilemedi: {error}",
+  "msgCameraNotAvailable": "Bu platformda kamera çekimi kullanılamıyor",
+  "msgCameraPermissionDenied": "Kamera izni reddedildi. Lütfen kameraya erişime izin verin",
+  "msgCameraAccessError": "Kameraya erişim hatası: {error}",
+  "msgPhotoError": "Fotoğraf çekerken hata oluştu. Lütfen tekrar deneyin.",
+  "msgMaxImagesLimit": "En fazla 4 resim seçebilirsiniz",
+  "msgFilePickerError": "Dosya seçici açılırken hata: {error}",
+  "msgSelectImagesError": "Resim seçerken hata: {error}",
+  "msgPhotosPermissionDenied": "Fotoğraf izni reddedildi. Resim seçmek için lütfen fotoğraflara erişime izin verin",
+  "msgSelectImagesGenericError": "Resim seçerken hata oluştu. Lütfen tekrar deneyin.",
+  "msgMaxFilesLimit": "En fazla 4 dosya seçebilirsiniz",
+  "msgSelectFilesError": "Dosya seçerken hata: {error}",
+  "msgSelectFilesGenericError": "Dosya seçerken hata oluştu. Lütfen tekrar deneyin.",
+  "msgUploadFileFailed": "Dosya yüklenemedi, lütfen daha sonra tekrar deneyin",
+  "msgReadingMemories": "Anılarınız okunuyor...",
+  "msgLearningMemories": "Anılarınızdan öğreniliyor...",
+  "msgUploadAttachedFileFailed": "Ekli dosya yüklenemedi."
 }

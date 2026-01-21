@@ -7530,4 +7530,61 @@ class AppLocalizationsDa extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Kunne ikke kontrollere tilgængelighedstilladelse: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kameraoptagelse er ikke tilgængelig på denne platform';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kameratilladelse nægtet. Tillad venligst adgang til kameraet';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Fejl ved adgang til kamera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Fejl ved at tage foto. Prøv venligst igen.';
+
+  @override
+  String get msgMaxImagesLimit => 'Du kan kun vælge op til 4 billeder';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Fejl ved åbning af filvælger: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Fejl ved valg af billeder: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fototilladelse nægtet. Tillad venligst adgang til fotos for at vælge billeder';
+
+  @override
+  String get msgSelectImagesGenericError => 'Fejl ved valg af billeder. Prøv venligst igen.';
+
+  @override
+  String get msgMaxFilesLimit => 'Du kan kun vælge op til 4 filer';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Fejl ved valg af filer: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Fejl ved valg af filer. Prøv venligst igen.';
+
+  @override
+  String get msgUploadFileFailed => 'Kunne ikke uploade fil, prøv venligst igen senere';
+
+  @override
+  String get msgReadingMemories => 'Læser dine minder...';
+
+  @override
+  String get msgLearningMemories => 'Lærer fra dine minder...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Kunne ikke uploade den vedhæftede fil.';
 }

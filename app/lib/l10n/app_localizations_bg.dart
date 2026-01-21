@@ -7553,4 +7553,61 @@ class AppLocalizationsBg extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Неуспешна проверка на разрешението за достъпност: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Заснемането с камера не е налично на тази платформа';
+
+  @override
+  String get msgCameraPermissionDenied => 'Достъпът до камерата е отказан. Моля, разрешете достъп до камерата';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Грешка при достъп до камерата: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Грешка при заснемане на снимка. Моля, опитайте отново.';
+
+  @override
+  String get msgMaxImagesLimit => 'Можете да изберете най-много 4 изображения';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Грешка при отваряне на избирача на файлове: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Грешка при избиране на изображения: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Достъпът до снимки е отказан. Моля, разрешете достъп до снимки, за да изберете изображения';
+
+  @override
+  String get msgSelectImagesGenericError => 'Грешка при избиране на изображения. Моля, опитайте отново.';
+
+  @override
+  String get msgMaxFilesLimit => 'Можете да изберете най-много 4 файла';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Грешка при избиране на файлове: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Грешка при избиране на файлове. Моля, опитайте отново.';
+
+  @override
+  String get msgUploadFileFailed => 'Качването на файла се провали, моля опитайте отново по-късно';
+
+  @override
+  String get msgReadingMemories => 'Четене на вашите спомени...';
+
+  @override
+  String get msgLearningMemories => 'Учене от вашите спомени...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Качването на прикачения файл се провали.';
 }

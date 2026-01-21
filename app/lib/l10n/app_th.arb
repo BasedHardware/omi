@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "ไม่สามารถตรวจสอบสิทธิ์จับภาพหน้าจอ: {error}",
   "onboardingAccessibilityRequired": "ต้องมีสิทธิ์การเข้าถึงสำหรับการตรวจจับการประชุมในเบราว์เซอร์",
   "onboardingAccessibilityStatusCheckPrefs": "สถานะสิทธิ์การเข้าถึง: {status} กรุณาตรวจสอบการตั้งค่าระบบ",
-  "onboardingFailedCheckAccessibility": "ไม่สามารถตรวจสอบสิทธิ์การเข้าถึง: {error}"
+  "onboardingFailedCheckAccessibility": "ไม่สามารถตรวจสอบสิทธิ์การเข้าถึง: {error}",
+  "msgCameraNotAvailable": "การถ่ายภาพจากกล้องไม่สามารถใช้งานได้บนแพลตฟอร์มนี้",
+  "msgCameraPermissionDenied": "การอนุญาตกล้องถูกปฏิเสธ กรุณาอนุญาตการเข้าถึงกล้อง",
+  "msgCameraAccessError": "เกิดข้อผิดพลาดในการเข้าถึงกล้อง: {error}",
+  "msgPhotoError": "เกิดข้อผิดพลาดในการถ่ายรูป กรุณาลองอีกครั้ง",
+  "msgMaxImagesLimit": "คุณสามารถเลือกได้สูงสุด 4 รูปภาพ",
+  "msgFilePickerError": "เกิดข้อผิดพลาดในการเปิดตัวเลือกไฟล์: {error}",
+  "msgSelectImagesError": "เกิดข้อผิดพลาดในการเลือกรูปภาพ: {error}",
+  "msgPhotosPermissionDenied": "การอนุญาตรูปภาพถูกปฏิเสธ กรุณาอนุญาตการเข้าถึงรูปภาพเพื่อเลือกภาพ",
+  "msgSelectImagesGenericError": "เกิดข้อผิดพลาดในการเลือกรูปภาพ กรุณาลองอีกครั้ง",
+  "msgMaxFilesLimit": "คุณสามารถเลือกได้สูงสุด 4 ไฟล์",
+  "msgSelectFilesError": "เกิดข้อผิดพลาดในการเลือกไฟล์: {error}",
+  "msgSelectFilesGenericError": "เกิดข้อผิดพลาดในการเลือกไฟล์ กรุณาลองอีกครั้ง",
+  "msgUploadFileFailed": "อัปโหลดไฟล์ล้มเหลว กรุณาลองอีกครั้งในภายหลัง",
+  "msgReadingMemories": "กำลังอ่านความทรงจำของคุณ...",
+  "msgLearningMemories": "กำลังเรียนรู้จากความทรงจำของคุณ...",
+  "msgUploadAttachedFileFailed": "อัปโหลดไฟล์แนบล้มเหลว"
 }

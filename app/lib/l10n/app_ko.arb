@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "화면 캡처 권한 확인 실패: {error}",
   "onboardingAccessibilityRequired": "브라우저 회의를 감지하려면 손쉬운 사용 권한이 필요합니다.",
   "onboardingAccessibilityStatusCheckPrefs": "손쉬운 사용 권한 상태: {status}. 시스템 환경설정을 확인해 주세요.",
-  "onboardingFailedCheckAccessibility": "손쉬운 사용 권한 확인 실패: {error}"
+  "onboardingFailedCheckAccessibility": "손쉬운 사용 권한 확인 실패: {error}",
+  "msgCameraNotAvailable": "이 플랫폼에서는 카메라 캡처를 사용할 수 없습니다",
+  "msgCameraPermissionDenied": "카메라 권한이 거부되었습니다. 카메라 접근을 허용해 주세요",
+  "msgCameraAccessError": "카메라 접근 오류: {error}",
+  "msgPhotoError": "사진 촬영 오류. 다시 시도해 주세요.",
+  "msgMaxImagesLimit": "최대 4개의 이미지만 선택할 수 있습니다",
+  "msgFilePickerError": "파일 선택기 열기 오류: {error}",
+  "msgSelectImagesError": "이미지 선택 오류: {error}",
+  "msgPhotosPermissionDenied": "사진 권한이 거부되었습니다. 이미지를 선택하려면 사진 접근을 허용해 주세요",
+  "msgSelectImagesGenericError": "이미지 선택 오류. 다시 시도해 주세요.",
+  "msgMaxFilesLimit": "최대 4개의 파일만 선택할 수 있습니다",
+  "msgSelectFilesError": "파일 선택 오류: {error}",
+  "msgSelectFilesGenericError": "파일 선택 오류. 다시 시도해 주세요.",
+  "msgUploadFileFailed": "파일 업로드 실패, 나중에 다시 시도해 주세요",
+  "msgReadingMemories": "추억을 읽는 중...",
+  "msgLearningMemories": "추억에서 배우는 중...",
+  "msgUploadAttachedFileFailed": "첨부 파일 업로드에 실패했습니다."
 }

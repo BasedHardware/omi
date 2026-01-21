@@ -2371,5 +2371,21 @@
   "onboardingFailedCheckScreenCapture": "Bildschirmaufnahme-Berechtigung konnte nicht überprüft werden: {error}",
   "onboardingAccessibilityRequired": "Bedienungshilfen-Berechtigung ist erforderlich, um Browser-Meetings zu erkennen.",
   "onboardingAccessibilityStatusCheckPrefs": "Bedienungshilfen-Berechtigungsstatus: {status}. Bitte überprüfen Sie die Systemeinstellungen.",
-  "onboardingFailedCheckAccessibility": "Bedienungshilfen-Berechtigung konnte nicht überprüft werden: {error}"
+  "onboardingFailedCheckAccessibility": "Bedienungshilfen-Berechtigung konnte nicht überprüft werden: {error}",
+  "msgCameraNotAvailable": "Kameraaufnahme ist auf dieser Plattform nicht verfügbar",
+  "msgCameraPermissionDenied": "Kameraberechtigung verweigert. Bitte erlauben Sie den Zugriff auf die Kamera",
+  "msgCameraAccessError": "Fehler beim Zugriff auf die Kamera: {error}",
+  "msgPhotoError": "Fehler beim Aufnehmen des Fotos. Bitte versuchen Sie es erneut.",
+  "msgMaxImagesLimit": "Sie können nur bis zu 4 Bilder auswählen",
+  "msgFilePickerError": "Fehler beim Öffnen der Dateiauswahl: {error}",
+  "msgSelectImagesError": "Fehler beim Auswählen von Bildern: {error}",
+  "msgPhotosPermissionDenied": "Fotos-Berechtigung verweigert. Bitte erlauben Sie den Zugriff auf Fotos, um Bilder auszuwählen",
+  "msgSelectImagesGenericError": "Fehler beim Auswählen von Bildern. Bitte versuchen Sie es erneut.",
+  "msgMaxFilesLimit": "Sie können nur bis zu 4 Dateien auswählen",
+  "msgSelectFilesError": "Fehler beim Auswählen von Dateien: {error}",
+  "msgSelectFilesGenericError": "Fehler beim Auswählen von Dateien. Bitte versuchen Sie es erneut.",
+  "msgUploadFileFailed": "Datei-Upload fehlgeschlagen, bitte versuchen Sie es später erneut",
+  "msgReadingMemories": "Lese deine Erinnerungen...",
+  "msgLearningMemories": "Lerne aus deinen Erinnerungen...",
+  "msgUploadAttachedFileFailed": "Hochladen der angehängten Datei fehlgeschlagen."
 }

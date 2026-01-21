@@ -14096,6 +14096,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to check Accessibility permission: {error}'**
   String onboardingFailedCheckAccessibility(String error);
+
+  /// Error when camera is not available on desktop
+  ///
+  /// In en, this message translates to:
+  /// **'Camera capture is not available on this platform'**
+  String get msgCameraNotAvailable;
+
+  /// Error when camera permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission denied. Please allow access to camera'**
+  String get msgCameraPermissionDenied;
+
+  /// Error when camera access fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error accessing camera: {error}'**
+  String msgCameraAccessError(String error);
+
+  /// Generic error when taking photo fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error taking photo. Please try again.'**
+  String get msgPhotoError;
+
+  /// Error when user tries to select more than 4 images
+  ///
+  /// In en, this message translates to:
+  /// **'You can only select up to 4 images'**
+  String get msgMaxImagesLimit;
+
+  /// Error when file picker fails to open
+  ///
+  /// In en, this message translates to:
+  /// **'Error opening file picker: {error}'**
+  String msgFilePickerError(String error);
+
+  /// Error when selecting images fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting images: {error}'**
+  String msgSelectImagesError(String error);
+
+  /// Error when photos permission is denied
+  ///
+  /// In en, this message translates to:
+  /// **'Photos permission denied. Please allow access to photos to select images'**
+  String get msgPhotosPermissionDenied;
+
+  /// Generic error when selecting images fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting images. Please try again.'**
+  String get msgSelectImagesGenericError;
+
+  /// Error when user tries to select more than 4 files
+  ///
+  /// In en, this message translates to:
+  /// **'You can only select up to 4 files'**
+  String get msgMaxFilesLimit;
+
+  /// Error when selecting files fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting files: {error}'**
+  String msgSelectFilesError(String error);
+
+  /// Generic error when selecting files fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error selecting files. Please try again.'**
+  String get msgSelectFilesGenericError;
+
+  /// Error when file upload fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload file, please try again later'**
+  String get msgUploadFileFailed;
+
+  /// Loading text while reading memories
+  ///
+  /// In en, this message translates to:
+  /// **'Reading your memories...'**
+  String get msgReadingMemories;
+
+  /// Loading text while learning from memories
+  ///
+  /// In en, this message translates to:
+  /// **'Learning from your memories...'**
+  String get msgLearningMemories;
+
+  /// Error when attached file upload fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to upload the attached file.'**
+  String get msgUploadAttachedFileFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

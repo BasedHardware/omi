@@ -2390,5 +2390,21 @@
   "onboardingFailedCheckScreenCapture": "画面キャプチャ権限の確認に失敗しました：{error}",
   "onboardingAccessibilityRequired": "ブラウザミーティングを検出するにはアクセシビリティ権限が必要です。",
   "onboardingAccessibilityStatusCheckPrefs": "アクセシビリティ権限の状態：{status}。システム環境設定を確認してください。",
-  "onboardingFailedCheckAccessibility": "アクセシビリティ権限の確認に失敗しました：{error}"
+  "onboardingFailedCheckAccessibility": "アクセシビリティ権限の確認に失敗しました：{error}",
+  "msgCameraNotAvailable": "このプラットフォームではカメラキャプチャは利用できません",
+  "msgCameraPermissionDenied": "カメラの許可が拒否されました。カメラへのアクセスを許可してください",
+  "msgCameraAccessError": "カメラへのアクセスエラー: {error}",
+  "msgPhotoError": "写真の撮影エラー。もう一度お試しください。",
+  "msgMaxImagesLimit": "選択できる画像は最大4枚です",
+  "msgFilePickerError": "ファイルピッカーを開くエラー: {error}",
+  "msgSelectImagesError": "画像の選択エラー: {error}",
+  "msgPhotosPermissionDenied": "写真の許可が拒否されました。画像を選択するには写真へのアクセスを許可してください",
+  "msgSelectImagesGenericError": "画像の選択エラー。もう一度お試しください。",
+  "msgMaxFilesLimit": "選択できるファイルは最大4つです",
+  "msgSelectFilesError": "ファイルの選択エラー: {error}",
+  "msgSelectFilesGenericError": "ファイルの選択エラー。もう一度お試しください。",
+  "msgUploadFileFailed": "ファイルのアップロードに失敗しました。後でもう一度お試しください",
+  "msgReadingMemories": "思い出を読み込んでいます...",
+  "msgLearningMemories": "思い出から学習しています...",
+  "msgUploadAttachedFileFailed": "添付ファイルのアップロードに失敗しました。"
 }

@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Kan schermopnametoestemming niet controleren: {error}",
   "onboardingAccessibilityRequired": "Toegankelijkheidstoestemming is vereist voor het detecteren van browservergaderingen.",
   "onboardingAccessibilityStatusCheckPrefs": "Toegankelijkheidstoestemmingsstatus: {status}. Controleer Systeemvoorkeuren.",
-  "onboardingFailedCheckAccessibility": "Kan toegankelijkheidstoestemming niet controleren: {error}"
+  "onboardingFailedCheckAccessibility": "Kan toegankelijkheidstoestemming niet controleren: {error}",
+  "msgCameraNotAvailable": "Camera-opname is niet beschikbaar op dit platform",
+  "msgCameraPermissionDenied": "Cameratoestemming geweigerd. Geef alstublieft toegang tot de camera",
+  "msgCameraAccessError": "Fout bij toegang tot camera: {error}",
+  "msgPhotoError": "Fout bij het maken van foto. Probeer het opnieuw.",
+  "msgMaxImagesLimit": "U kunt maximaal 4 afbeeldingen selecteren",
+  "msgFilePickerError": "Fout bij openen bestandskiezer: {error}",
+  "msgSelectImagesError": "Fout bij selecteren van afbeeldingen: {error}",
+  "msgPhotosPermissionDenied": "Fototoestemming geweigerd. Geef alstublieft toegang tot foto's om afbeeldingen te selecteren",
+  "msgSelectImagesGenericError": "Fout bij selecteren van afbeeldingen. Probeer het opnieuw.",
+  "msgMaxFilesLimit": "U kunt maximaal 4 bestanden selecteren",
+  "msgSelectFilesError": "Fout bij selecteren van bestanden: {error}",
+  "msgSelectFilesGenericError": "Fout bij selecteren van bestanden. Probeer het opnieuw.",
+  "msgUploadFileFailed": "Bestand uploaden mislukt, probeer het later opnieuw",
+  "msgReadingMemories": "Je herinneringen lezen...",
+  "msgLearningMemories": "Leren van je herinneringen...",
+  "msgUploadAttachedFileFailed": "Uploaden van bijgevoegd bestand mislukt."
 }

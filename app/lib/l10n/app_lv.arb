@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Neizdevās pārbaudīt ekrāna tveršanas atļauju: {error}",
   "onboardingAccessibilityRequired": "Pārlūka sapulču noteikšanai ir nepieciešama pieejamības atļauja.",
   "onboardingAccessibilityStatusCheckPrefs": "Pieejamības atļaujas statuss: {status}. Lūdzu, pārbaudiet Sistēmas iestatījumus.",
-  "onboardingFailedCheckAccessibility": "Neizdevās pārbaudīt pieejamības atļauju: {error}"
+  "onboardingFailedCheckAccessibility": "Neizdevās pārbaudīt pieejamības atļauju: {error}",
+  "msgCameraNotAvailable": "Kameras uzņemšana šajā platformā nav pieejama",
+  "msgCameraPermissionDenied": "Kameras atļauja liegta. Lūdzu, atļaujiet piekļuvi kamerai",
+  "msgCameraAccessError": "Kļūda piekļūstot kamerai: {error}",
+  "msgPhotoError": "Kļūda uzņemot fotoattēlu. Lūdzu, mēģiniet vēlreiz.",
+  "msgMaxImagesLimit": "Varat atlasīt tikai līdz 4 attēliem",
+  "msgFilePickerError": "Kļūda atverot failu izvēlētāju: {error}",
+  "msgSelectImagesError": "Kļūda atlasot attēlus: {error}",
+  "msgPhotosPermissionDenied": "Fotoattēlu atļauja liegta. Lūdzu, atļaujiet piekļuvi fotoattēliem, lai atlasītu attēlus",
+  "msgSelectImagesGenericError": "Kļūda atlasot attēlus. Lūdzu, mēģiniet vēlreiz.",
+  "msgMaxFilesLimit": "Varat atlasīt tikai līdz 4 failiem",
+  "msgSelectFilesError": "Kļūda atlasot failus: {error}",
+  "msgSelectFilesGenericError": "Kļūda atlasot failus. Lūdzu, mēģiniet vēlreiz.",
+  "msgUploadFileFailed": "Faila augšupielāde neizdevās, lūdzu mēģiniet vēlāk",
+  "msgReadingMemories": "Lasa jūsu atmiņas...",
+  "msgLearningMemories": "Mācās no jūsu atmiņām...",
+  "msgUploadAttachedFileFailed": "Neizdevās augšupielādēt pievienoto failu."
 }

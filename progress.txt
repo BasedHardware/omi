@@ -217,23 +217,13 @@ Keys added:
   onboardingScreenCaptureStatusCheckPrefs, onboardingFailedCheckScreenCapture, onboardingAccessibilityRequired,
   onboardingAccessibilityStatusCheckPrefs, onboardingFailedCheckAccessibility
 
-### [ ] providers/message_provider.dart (~12 strings)
-Status: PENDING
+### [x] providers/message_provider.dart (~12 strings)
+Status: COMPLETED
 Description: Camera/photo/file picker error messages
-Strings found:
-- "Camera capture is not available on this platform"
-- "Camera permission denied. Please allow access to camera"
-- "Error accessing camera: ${e.message ?? e.code}"
-- "Error taking photo. Please try again."
-- "You can only select up to 4 images"
-- "Error opening file picker: ${e.message}"
-- "Error selecting images: $e"
-- "Photos permission denied. Please allow access to photos to select images"
-- "Error selecting images. Please try again."
-- "You can only select up to 4 files"
-- "Error selecting files: ${e.message ?? e.code}"
-- "Error selecting files. Please try again."
-- "Failed to upload file, please try again later"
+Keys added: msgCameraNotAvailable, msgCameraPermissionDenied, msgCameraAccessError, msgPhotoError,
+            msgMaxImagesLimit, msgFilePickerError, msgSelectImagesError, msgPhotosPermissionDenied,
+            msgSelectImagesGenericError, msgMaxFilesLimit, msgSelectFilesError, msgSelectFilesGenericError,
+            msgUploadFileFailed, msgReadingMemories, msgLearningMemories, msgUploadAttachedFileFailed
 
 ### [ ] providers/capture_provider.dart (~5 strings)
 Status: PENDING
@@ -376,6 +366,15 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-20] Localized providers/message_provider.dart with 16 l10n keys for 34 languages
+- Added 16 new localization keys for camera/photo/file picker error messages and loading text
+- Keys added: msgCameraNotAvailable, msgCameraPermissionDenied, msgCameraAccessError, msgPhotoError,
+  msgMaxImagesLimit, msgFilePickerError, msgSelectImagesError, msgPhotosPermissionDenied,
+  msgSelectImagesGenericError, msgMaxFilesLimit, msgSelectFilesError, msgSelectFilesGenericError,
+  msgUploadFileFailed, msgReadingMemories, msgLearningMemories, msgUploadAttachedFileFailed
+- Keys with placeholders: msgCameraAccessError, msgFilePickerError, msgSelectImagesError, msgSelectFilesError
+- Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallbacks
 
 [2026-01-20] Localized providers/onboarding_provider.dart with 20 l10n keys for 34 languages
 - Added 20 new localization keys for permission error messages (Bluetooth, Notification, Location, Microphone, Screen Capture, Accessibility)

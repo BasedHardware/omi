@@ -7502,4 +7502,61 @@ class AppLocalizationsHi extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'एक्सेसिबिलिटी अनुमति जांचने में विफल: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'इस प्लेटफ़ॉर्म पर कैमरा कैप्चर उपलब्ध नहीं है';
+
+  @override
+  String get msgCameraPermissionDenied => 'कैमरा अनुमति अस्वीकृत। कृपया कैमरा एक्सेस की अनुमति दें';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'कैमरा एक्सेस करने में त्रुटि: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'फोटो लेने में त्रुटि। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get msgMaxImagesLimit => 'आप केवल 4 छवियों का चयन कर सकते हैं';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'फ़ाइल पिकर खोलने में त्रुटि: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'छवियों का चयन करने में त्रुटि: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'फोटो अनुमति अस्वीकृत। छवियों का चयन करने के लिए कृपया फ़ोटो एक्सेस की अनुमति दें';
+
+  @override
+  String get msgSelectImagesGenericError => 'छवियों का चयन करने में त्रुटि। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get msgMaxFilesLimit => 'आप केवल 4 फ़ाइलों का चयन कर सकते हैं';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'फ़ाइलों का चयन करने में त्रुटि: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'फ़ाइलों का चयन करने में त्रुटि। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get msgUploadFileFailed => 'फ़ाइल अपलोड विफल, कृपया बाद में पुनः प्रयास करें';
+
+  @override
+  String get msgReadingMemories => 'आपकी यादें पढ़ रहे हैं...';
+
+  @override
+  String get msgLearningMemories => 'आपकी यादों से सीख रहे हैं...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'संलग्न फ़ाइल अपलोड करने में विफल।';
 }

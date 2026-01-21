@@ -7536,4 +7536,61 @@ class AppLocalizationsPl extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Nie udało się sprawdzić uprawnienia dostępności: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Przechwytywanie z kamery nie jest dostępne na tej platformie';
+
+  @override
+  String get msgCameraPermissionDenied => 'Odmowa dostępu do kamery. Proszę zezwolić na dostęp do kamery';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Błąd dostępu do kamery: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Błąd podczas robienia zdjęcia. Spróbuj ponownie.';
+
+  @override
+  String get msgMaxImagesLimit => 'Możesz wybrać maksymalnie 4 obrazy';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Błąd podczas otwierania wyboru plików: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Błąd podczas wybierania obrazów: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Odmowa dostępu do zdjęć. Proszę zezwolić na dostęp do zdjęć, aby wybrać obrazy';
+
+  @override
+  String get msgSelectImagesGenericError => 'Błąd podczas wybierania obrazów. Spróbuj ponownie.';
+
+  @override
+  String get msgMaxFilesLimit => 'Możesz wybrać maksymalnie 4 pliki';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Błąd podczas wybierania plików: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Błąd podczas wybierania plików. Spróbuj ponownie.';
+
+  @override
+  String get msgUploadFileFailed => 'Nie udało się przesłać pliku, spróbuj ponownie później';
+
+  @override
+  String get msgReadingMemories => 'Czytanie twoich wspomnień...';
+
+  @override
+  String get msgLearningMemories => 'Uczenie się z twoich wspomnień...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Nie udało się przesłać załączonego pliku.';
 }

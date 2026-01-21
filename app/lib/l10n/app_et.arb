@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Ekraanipildi loa kontrollimine ebaõnnestus: {error}",
   "onboardingAccessibilityRequired": "Brauseri koosolekute tuvastamiseks on vajalik ligipääsetavuse luba.",
   "onboardingAccessibilityStatusCheckPrefs": "Ligipääsetavuse loa olek: {status}. Palun kontrollige Süsteemieelistusi.",
-  "onboardingFailedCheckAccessibility": "Ligipääsetavuse loa kontrollimine ebaõnnestus: {error}"
+  "onboardingFailedCheckAccessibility": "Ligipääsetavuse loa kontrollimine ebaõnnestus: {error}",
+  "msgCameraNotAvailable": "Kaamera jäädvustamine pole sellel platvormil saadaval",
+  "msgCameraPermissionDenied": "Kaamera luba keelatud. Palun lubage juurdepääs kaamerale",
+  "msgCameraAccessError": "Viga kaamerale juurdepääsul: {error}",
+  "msgPhotoError": "Viga foto tegemisel. Palun proovige uuesti.",
+  "msgMaxImagesLimit": "Saate valida kuni 4 pilti",
+  "msgFilePickerError": "Viga failivalija avamisel: {error}",
+  "msgSelectImagesError": "Viga piltide valimisel: {error}",
+  "msgPhotosPermissionDenied": "Fotode luba keelatud. Palun lubage juurdepääs fotodele piltide valimiseks",
+  "msgSelectImagesGenericError": "Viga piltide valimisel. Palun proovige uuesti.",
+  "msgMaxFilesLimit": "Saate valida kuni 4 faili",
+  "msgSelectFilesError": "Viga failide valimisel: {error}",
+  "msgSelectFilesGenericError": "Viga failide valimisel. Palun proovige uuesti.",
+  "msgUploadFileFailed": "Faili üleslaadimine ebaõnnestus, palun proovige hiljem uuesti",
+  "msgReadingMemories": "Loen sinu mälestusi...",
+  "msgLearningMemories": "Õpin sinu mälestustest...",
+  "msgUploadAttachedFileFailed": "Manustatud faili üleslaadimine ebaõnnestus."
 }

@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Échec de la vérification de l'autorisation de capture d'écran : {error}",
   "onboardingAccessibilityRequired": "L'autorisation d'accessibilité est requise pour détecter les réunions du navigateur.",
   "onboardingAccessibilityStatusCheckPrefs": "État de l'autorisation d'accessibilité : {status}. Veuillez vérifier les Préférences Système.",
-  "onboardingFailedCheckAccessibility": "Échec de la vérification de l'autorisation d'accessibilité : {error}"
+  "onboardingFailedCheckAccessibility": "Échec de la vérification de l'autorisation d'accessibilité : {error}",
+  "msgCameraNotAvailable": "La capture par caméra n'est pas disponible sur cette plateforme",
+  "msgCameraPermissionDenied": "Permission de caméra refusée. Veuillez autoriser l'accès à la caméra",
+  "msgCameraAccessError": "Erreur d'accès à la caméra : {error}",
+  "msgPhotoError": "Erreur lors de la prise de photo. Veuillez réessayer.",
+  "msgMaxImagesLimit": "Vous ne pouvez sélectionner que 4 images maximum",
+  "msgFilePickerError": "Erreur d'ouverture du sélecteur de fichiers : {error}",
+  "msgSelectImagesError": "Erreur lors de la sélection d'images : {error}",
+  "msgPhotosPermissionDenied": "Permission photos refusée. Veuillez autoriser l'accès aux photos pour sélectionner des images",
+  "msgSelectImagesGenericError": "Erreur lors de la sélection d'images. Veuillez réessayer.",
+  "msgMaxFilesLimit": "Vous ne pouvez sélectionner que 4 fichiers maximum",
+  "msgSelectFilesError": "Erreur lors de la sélection de fichiers : {error}",
+  "msgSelectFilesGenericError": "Erreur lors de la sélection de fichiers. Veuillez réessayer.",
+  "msgUploadFileFailed": "Échec du téléchargement du fichier, veuillez réessayer plus tard",
+  "msgReadingMemories": "Lecture de vos souvenirs...",
+  "msgLearningMemories": "Apprentissage de vos souvenirs...",
+  "msgUploadAttachedFileFailed": "Échec du téléchargement du fichier joint."
 }

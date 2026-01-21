@@ -2370,5 +2370,21 @@
   "onboardingFailedCheckScreenCapture": "فشل التحقق من إذن التقاط الشاشة: {error}",
   "onboardingAccessibilityRequired": "يتطلب إذن إمكانية الوصول لاكتشاف اجتماعات المتصفح.",
   "onboardingAccessibilityStatusCheckPrefs": "حالة إذن إمكانية الوصول: {status}. يرجى التحقق من تفضيلات النظام.",
-  "onboardingFailedCheckAccessibility": "فشل التحقق من إذن إمكانية الوصول: {error}"
+  "onboardingFailedCheckAccessibility": "فشل التحقق من إذن إمكانية الوصول: {error}",
+  "msgCameraNotAvailable": "التقاط الكاميرا غير متاح على هذه المنصة",
+  "msgCameraPermissionDenied": "تم رفض إذن الكاميرا. يرجى السماح بالوصول إلى الكاميرا",
+  "msgCameraAccessError": "خطأ في الوصول إلى الكاميرا: {error}",
+  "msgPhotoError": "خطأ في التقاط الصورة. يرجى المحاولة مرة أخرى.",
+  "msgMaxImagesLimit": "يمكنك اختيار 4 صور كحد أقصى",
+  "msgFilePickerError": "خطأ في فتح منتقي الملفات: {error}",
+  "msgSelectImagesError": "خطأ في اختيار الصور: {error}",
+  "msgPhotosPermissionDenied": "تم رفض إذن الصور. يرجى السماح بالوصول إلى الصور لاختيار الصور",
+  "msgSelectImagesGenericError": "خطأ في اختيار الصور. يرجى المحاولة مرة أخرى.",
+  "msgMaxFilesLimit": "يمكنك اختيار 4 ملفات كحد أقصى",
+  "msgSelectFilesError": "خطأ في اختيار الملفات: {error}",
+  "msgSelectFilesGenericError": "خطأ في اختيار الملفات. يرجى المحاولة مرة أخرى.",
+  "msgUploadFileFailed": "فشل تحميل الملف، يرجى المحاولة مرة أخرى لاحقاً",
+  "msgReadingMemories": "جارٍ قراءة ذكرياتك...",
+  "msgLearningMemories": "جارٍ التعلم من ذكرياتك...",
+  "msgUploadAttachedFileFailed": "فشل تحميل الملف المرفق."
 }

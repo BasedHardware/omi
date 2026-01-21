@@ -7520,4 +7520,60 @@ class AppLocalizationsFi extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Esteettömyysluvan tarkistus epäonnistui: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kameran tallennus ei ole käytettävissä tällä alustalla';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kameran käyttöoikeus evätty. Salli pääsy kameraan';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Virhe kameraan pääsyssä: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Virhe kuvan ottamisessa. Yritä uudelleen.';
+
+  @override
+  String get msgMaxImagesLimit => 'Voit valita enintään 4 kuvaa';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Virhe tiedostonvalitsimen avaamisessa: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Virhe kuvien valinnassa: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => 'Kuvien käyttöoikeus evätty. Salli pääsy kuviin valitaksesi kuvia';
+
+  @override
+  String get msgSelectImagesGenericError => 'Virhe kuvien valinnassa. Yritä uudelleen.';
+
+  @override
+  String get msgMaxFilesLimit => 'Voit valita enintään 4 tiedostoa';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Virhe tiedostojen valinnassa: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Virhe tiedostojen valinnassa. Yritä uudelleen.';
+
+  @override
+  String get msgUploadFileFailed => 'Tiedoston lataus epäonnistui, yritä myöhemmin uudelleen';
+
+  @override
+  String get msgReadingMemories => 'Luetaan muistojasi...';
+
+  @override
+  String get msgLearningMemories => 'Opitaan muistoistasi...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Liitetiedoston lataus epäonnistui.';
 }

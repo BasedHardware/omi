@@ -7518,4 +7518,61 @@ class AppLocalizationsPt extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Falha ao verificar permissão de acessibilidade: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'A captura de câmera não está disponível nesta plataforma';
+
+  @override
+  String get msgCameraPermissionDenied => 'Permissão de câmera negada. Por favor, permita o acesso à câmera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Erro ao acessar a câmera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Erro ao tirar foto. Por favor, tente novamente.';
+
+  @override
+  String get msgMaxImagesLimit => 'Você só pode selecionar até 4 imagens';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Erro ao abrir seletor de arquivos: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Erro ao selecionar imagens: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Permissão de fotos negada. Por favor, permita o acesso às fotos para selecionar imagens';
+
+  @override
+  String get msgSelectImagesGenericError => 'Erro ao selecionar imagens. Por favor, tente novamente.';
+
+  @override
+  String get msgMaxFilesLimit => 'Você só pode selecionar até 4 arquivos';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Erro ao selecionar arquivos: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Erro ao selecionar arquivos. Por favor, tente novamente.';
+
+  @override
+  String get msgUploadFileFailed => 'Falha ao enviar arquivo, por favor tente novamente mais tarde';
+
+  @override
+  String get msgReadingMemories => 'Lendo suas memórias...';
+
+  @override
+  String get msgLearningMemories => 'Aprendendo com suas memórias...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Falha ao enviar o arquivo anexado.';
 }

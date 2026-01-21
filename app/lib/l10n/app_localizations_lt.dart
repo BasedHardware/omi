@@ -7524,4 +7524,61 @@ class AppLocalizationsLt extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Nepavyko patikrinti prieinamumo leidimo: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kameros fiksavimas šioje platformoje nepasiekiamas';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kameros leidimas atmestas. Leiskite prieigą prie kameros';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Klaida prisijungiant prie kameros: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Klaida fotografuojant. Bandykite dar kartą.';
+
+  @override
+  String get msgMaxImagesLimit => 'Galite pasirinkti tik iki 4 paveikslėlių';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Klaida atidarant failų pasirinkiklį: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Klaida renkantis paveikslėlius: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Nuotraukų leidimas atmestas. Leiskite prieigą prie nuotraukų, kad galėtumėte pasirinkti paveikslėlius';
+
+  @override
+  String get msgSelectImagesGenericError => 'Klaida renkantis paveikslėlius. Bandykite dar kartą.';
+
+  @override
+  String get msgMaxFilesLimit => 'Galite pasirinkti tik iki 4 failų';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Klaida renkantis failus: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Klaida renkantis failus. Bandykite dar kartą.';
+
+  @override
+  String get msgUploadFileFailed => 'Failo įkėlimas nepavyko, bandykite vėliau';
+
+  @override
+  String get msgReadingMemories => 'Skaitomi jūsų prisiminimai...';
+
+  @override
+  String get msgLearningMemories => 'Mokomasi iš jūsų prisiminimų...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Nepavyko įkelti pridėto failo.';
 }

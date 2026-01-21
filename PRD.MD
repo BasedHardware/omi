@@ -114,8 +114,8 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 |------|--------------|-------------|
 | `core/app_shell.dart` | ~25 | COMPLETED - Integration connection success/error messages |
 | `providers/auth_provider.dart` | ~8 | COMPLETED - Authentication error messages (Google, Apple, Firebase) |
-| `providers/onboarding_provider.dart` | ~10 | Permission error messages (Bluetooth, Microphone, Screen Capture, Accessibility, Notification) |
-| `providers/message_provider.dart` | ~12 | Camera/photo/file picker error messages |
+| `providers/onboarding_provider.dart` | ~10 | COMPLETED - Permission error messages (Bluetooth, Microphone, Screen Capture, Accessibility, Notification) |
+| `providers/message_provider.dart` | ~12 | COMPLETED - Camera/photo/file picker error messages |
 | `providers/capture_provider.dart` | ~5 | Recording error messages |
 | `providers/developer_mode_provider.dart` | ~5 | Webhook validation errors |
 | `providers/voice_recorder_provider.dart` | 1 | Transcription error |

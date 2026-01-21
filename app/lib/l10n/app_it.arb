@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Impossibile verificare l'autorizzazione cattura schermo: {error}",
   "onboardingAccessibilityRequired": "È necessaria l'autorizzazione accessibilità per rilevare riunioni del browser.",
   "onboardingAccessibilityStatusCheckPrefs": "Stato autorizzazione accessibilità: {status}. Controlla Preferenze di Sistema.",
-  "onboardingFailedCheckAccessibility": "Impossibile verificare l'autorizzazione accessibilità: {error}"
+  "onboardingFailedCheckAccessibility": "Impossibile verificare l'autorizzazione accessibilità: {error}",
+  "msgCameraNotAvailable": "La cattura della fotocamera non è disponibile su questa piattaforma",
+  "msgCameraPermissionDenied": "Permesso fotocamera negato. Si prega di consentire l'accesso alla fotocamera",
+  "msgCameraAccessError": "Errore nell'accesso alla fotocamera: {error}",
+  "msgPhotoError": "Errore nello scattare la foto. Si prega di riprovare.",
+  "msgMaxImagesLimit": "Puoi selezionare solo fino a 4 immagini",
+  "msgFilePickerError": "Errore nell'apertura del selettore file: {error}",
+  "msgSelectImagesError": "Errore nella selezione delle immagini: {error}",
+  "msgPhotosPermissionDenied": "Permesso foto negato. Si prega di consentire l'accesso alle foto per selezionare le immagini",
+  "msgSelectImagesGenericError": "Errore nella selezione delle immagini. Si prega di riprovare.",
+  "msgMaxFilesLimit": "Puoi selezionare solo fino a 4 file",
+  "msgSelectFilesError": "Errore nella selezione dei file: {error}",
+  "msgSelectFilesGenericError": "Errore nella selezione dei file. Si prega di riprovare.",
+  "msgUploadFileFailed": "Caricamento file fallito, si prega di riprovare più tardi",
+  "msgReadingMemories": "Leggendo i tuoi ricordi...",
+  "msgLearningMemories": "Imparando dai tuoi ricordi...",
+  "msgUploadAttachedFileFailed": "Caricamento del file allegato fallito."
 }

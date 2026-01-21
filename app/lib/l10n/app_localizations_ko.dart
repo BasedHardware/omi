@@ -7400,4 +7400,60 @@ class AppLocalizationsKo extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return '손쉬운 사용 권한 확인 실패: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => '이 플랫폼에서는 카메라 캡처를 사용할 수 없습니다';
+
+  @override
+  String get msgCameraPermissionDenied => '카메라 권한이 거부되었습니다. 카메라 접근을 허용해 주세요';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return '카메라 접근 오류: $error';
+  }
+
+  @override
+  String get msgPhotoError => '사진 촬영 오류. 다시 시도해 주세요.';
+
+  @override
+  String get msgMaxImagesLimit => '최대 4개의 이미지만 선택할 수 있습니다';
+
+  @override
+  String msgFilePickerError(String error) {
+    return '파일 선택기 열기 오류: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return '이미지 선택 오류: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => '사진 권한이 거부되었습니다. 이미지를 선택하려면 사진 접근을 허용해 주세요';
+
+  @override
+  String get msgSelectImagesGenericError => '이미지 선택 오류. 다시 시도해 주세요.';
+
+  @override
+  String get msgMaxFilesLimit => '최대 4개의 파일만 선택할 수 있습니다';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return '파일 선택 오류: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => '파일 선택 오류. 다시 시도해 주세요.';
+
+  @override
+  String get msgUploadFileFailed => '파일 업로드 실패, 나중에 다시 시도해 주세요';
+
+  @override
+  String get msgReadingMemories => '추억을 읽는 중...';
+
+  @override
+  String get msgLearningMemories => '추억에서 배우는 중...';
+
+  @override
+  String get msgUploadAttachedFileFailed => '첨부 파일 업로드에 실패했습니다.';
 }

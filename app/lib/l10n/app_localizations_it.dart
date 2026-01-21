@@ -7565,4 +7565,62 @@ class AppLocalizationsIt extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Impossibile verificare l\'autorizzazione accessibilità: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'La cattura della fotocamera non è disponibile su questa piattaforma';
+
+  @override
+  String get msgCameraPermissionDenied =>
+      'Permesso fotocamera negato. Si prega di consentire l\'accesso alla fotocamera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Errore nell\'accesso alla fotocamera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Errore nello scattare la foto. Si prega di riprovare.';
+
+  @override
+  String get msgMaxImagesLimit => 'Puoi selezionare solo fino a 4 immagini';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Errore nell\'apertura del selettore file: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Errore nella selezione delle immagini: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Permesso foto negato. Si prega di consentire l\'accesso alle foto per selezionare le immagini';
+
+  @override
+  String get msgSelectImagesGenericError => 'Errore nella selezione delle immagini. Si prega di riprovare.';
+
+  @override
+  String get msgMaxFilesLimit => 'Puoi selezionare solo fino a 4 file';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Errore nella selezione dei file: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Errore nella selezione dei file. Si prega di riprovare.';
+
+  @override
+  String get msgUploadFileFailed => 'Caricamento file fallito, si prega di riprovare più tardi';
+
+  @override
+  String get msgReadingMemories => 'Leggendo i tuoi ricordi...';
+
+  @override
+  String get msgLearningMemories => 'Imparando dai tuoi ricordi...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Caricamento del file allegato fallito.';
 }

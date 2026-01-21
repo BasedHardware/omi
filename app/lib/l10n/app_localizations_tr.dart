@@ -7534,4 +7534,61 @@ class AppLocalizationsTr extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Erişilebilirlik izni kontrol edilemedi: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Bu platformda kamera çekimi kullanılamıyor';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kamera izni reddedildi. Lütfen kameraya erişime izin verin';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Kameraya erişim hatası: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Fotoğraf çekerken hata oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get msgMaxImagesLimit => 'En fazla 4 resim seçebilirsiniz';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Dosya seçici açılırken hata: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Resim seçerken hata: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fotoğraf izni reddedildi. Resim seçmek için lütfen fotoğraflara erişime izin verin';
+
+  @override
+  String get msgSelectImagesGenericError => 'Resim seçerken hata oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get msgMaxFilesLimit => 'En fazla 4 dosya seçebilirsiniz';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Dosya seçerken hata: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Dosya seçerken hata oluştu. Lütfen tekrar deneyin.';
+
+  @override
+  String get msgUploadFileFailed => 'Dosya yüklenemedi, lütfen daha sonra tekrar deneyin';
+
+  @override
+  String get msgReadingMemories => 'Anılarınız okunuyor...';
+
+  @override
+  String get msgLearningMemories => 'Anılarınızdan öğreniliyor...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Ekli dosya yüklenemedi.';
 }

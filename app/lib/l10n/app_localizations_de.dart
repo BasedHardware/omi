@@ -7589,4 +7589,62 @@ class AppLocalizationsDe extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Bedienungshilfen-Berechtigung konnte nicht überprüft werden: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kameraaufnahme ist auf dieser Plattform nicht verfügbar';
+
+  @override
+  String get msgCameraPermissionDenied =>
+      'Kameraberechtigung verweigert. Bitte erlauben Sie den Zugriff auf die Kamera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Fehler beim Zugriff auf die Kamera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Fehler beim Aufnehmen des Fotos. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get msgMaxImagesLimit => 'Sie können nur bis zu 4 Bilder auswählen';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Fehler beim Öffnen der Dateiauswahl: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Fehler beim Auswählen von Bildern: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fotos-Berechtigung verweigert. Bitte erlauben Sie den Zugriff auf Fotos, um Bilder auszuwählen';
+
+  @override
+  String get msgSelectImagesGenericError => 'Fehler beim Auswählen von Bildern. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get msgMaxFilesLimit => 'Sie können nur bis zu 4 Dateien auswählen';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Fehler beim Auswählen von Dateien: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Fehler beim Auswählen von Dateien. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get msgUploadFileFailed => 'Datei-Upload fehlgeschlagen, bitte versuchen Sie es später erneut';
+
+  @override
+  String get msgReadingMemories => 'Lese deine Erinnerungen...';
+
+  @override
+  String get msgLearningMemories => 'Lerne aus deinen Erinnerungen...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Hochladen der angehängten Datei fehlgeschlagen.';
 }

@@ -7388,4 +7388,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return '无法检查辅助功能权限：$error';
   }
+
+  @override
+  String get msgCameraNotAvailable => '此平台不支持相机拍摄';
+
+  @override
+  String get msgCameraPermissionDenied => '相机权限被拒绝。请允许访问相机';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return '访问相机错误：$error';
+  }
+
+  @override
+  String get msgPhotoError => '拍照错误。请重试。';
+
+  @override
+  String get msgMaxImagesLimit => '您最多只能选择4张图片';
+
+  @override
+  String msgFilePickerError(String error) {
+    return '打开文件选择器错误：$error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return '选择图片错误：$error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => '照片权限被拒绝。请允许访问照片以选择图片';
+
+  @override
+  String get msgSelectImagesGenericError => '选择图片错误。请重试。';
+
+  @override
+  String get msgMaxFilesLimit => '您最多只能选择4个文件';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return '选择文件错误：$error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => '选择文件错误。请重试。';
+
+  @override
+  String get msgUploadFileFailed => '文件上传失败，请稍后重试';
+
+  @override
+  String get msgReadingMemories => '正在读取您的记忆...';
+
+  @override
+  String get msgLearningMemories => '正在从您的记忆中学习...';
+
+  @override
+  String get msgUploadAttachedFileFailed => '上传附件失败。';
 }

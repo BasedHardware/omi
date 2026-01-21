@@ -7525,4 +7525,61 @@ class AppLocalizationsSk extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Nepodarilo sa skontrolovať povolenie prístupnosti: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Snímanie fotoaparátom nie je na tejto platforme dostupné';
+
+  @override
+  String get msgCameraPermissionDenied => 'Povolenie fotoaparátu bolo zamietnuté. Povoľte prosím prístup k fotoaparátu';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Chyba pri prístupe k fotoaparátu: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Chyba pri fotografovaní. Skúste to znova.';
+
+  @override
+  String get msgMaxImagesLimit => 'Môžete vybrať maximálne 4 obrázky';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Chyba pri otváraní výberu súborov: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Chyba pri výbere obrázkov: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Povolenie pre fotografie bolo zamietnuté. Povoľte prosím prístup k fotografiám pre výber obrázkov';
+
+  @override
+  String get msgSelectImagesGenericError => 'Chyba pri výbere obrázkov. Skúste to znova.';
+
+  @override
+  String get msgMaxFilesLimit => 'Môžete vybrať maximálne 4 súbory';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Chyba pri výbere súborov: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Chyba pri výbere súborov. Skúste to znova.';
+
+  @override
+  String get msgUploadFileFailed => 'Nahrávanie súboru zlyhalo, skúste to neskôr';
+
+  @override
+  String get msgReadingMemories => 'Čítanie vašich spomienok...';
+
+  @override
+  String get msgLearningMemories => 'Učenie sa z vašich spomienok...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Nahratie priloženého súboru zlyhalo.';
 }

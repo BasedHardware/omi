@@ -7543,4 +7543,61 @@ class AppLocalizationsNl extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Kan toegankelijkheidstoestemming niet controleren: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Camera-opname is niet beschikbaar op dit platform';
+
+  @override
+  String get msgCameraPermissionDenied => 'Cameratoestemming geweigerd. Geef alstublieft toegang tot de camera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Fout bij toegang tot camera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Fout bij het maken van foto. Probeer het opnieuw.';
+
+  @override
+  String get msgMaxImagesLimit => 'U kunt maximaal 4 afbeeldingen selecteren';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Fout bij openen bestandskiezer: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Fout bij selecteren van afbeeldingen: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fototoestemming geweigerd. Geef alstublieft toegang tot foto\'s om afbeeldingen te selecteren';
+
+  @override
+  String get msgSelectImagesGenericError => 'Fout bij selecteren van afbeeldingen. Probeer het opnieuw.';
+
+  @override
+  String get msgMaxFilesLimit => 'U kunt maximaal 4 bestanden selecteren';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Fout bij selecteren van bestanden: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Fout bij selecteren van bestanden. Probeer het opnieuw.';
+
+  @override
+  String get msgUploadFileFailed => 'Bestand uploaden mislukt, probeer het later opnieuw';
+
+  @override
+  String get msgReadingMemories => 'Je herinneringen lezen...';
+
+  @override
+  String get msgLearningMemories => 'Leren van je herinneringen...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Uploaden van bijgevoegd bestand mislukt.';
 }

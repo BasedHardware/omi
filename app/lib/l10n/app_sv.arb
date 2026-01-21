@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Kunde inte kontrollera skärminspelningsbehörighet: {error}",
   "onboardingAccessibilityRequired": "Tillgänglighetsbehörighet krävs för att upptäcka webbläsarmöten.",
   "onboardingAccessibilityStatusCheckPrefs": "Tillgänglighetsbehörighetsstatus: {status}. Kontrollera Systeminställningar.",
-  "onboardingFailedCheckAccessibility": "Kunde inte kontrollera tillgänglighetsbehörighet: {error}"
+  "onboardingFailedCheckAccessibility": "Kunde inte kontrollera tillgänglighetsbehörighet: {error}",
+  "msgCameraNotAvailable": "Kamerainspelning är inte tillgänglig på denna plattform",
+  "msgCameraPermissionDenied": "Kameratillstånd nekad. Vänligen tillåt åtkomst till kameran",
+  "msgCameraAccessError": "Fel vid åtkomst till kamera: {error}",
+  "msgPhotoError": "Fel vid fotografering. Försök igen.",
+  "msgMaxImagesLimit": "Du kan bara välja upp till 4 bilder",
+  "msgFilePickerError": "Fel vid öppning av filväljare: {error}",
+  "msgSelectImagesError": "Fel vid val av bilder: {error}",
+  "msgPhotosPermissionDenied": "Fototillstånd nekad. Vänligen tillåt åtkomst till foton för att välja bilder",
+  "msgSelectImagesGenericError": "Fel vid val av bilder. Försök igen.",
+  "msgMaxFilesLimit": "Du kan bara välja upp till 4 filer",
+  "msgSelectFilesError": "Fel vid val av filer: {error}",
+  "msgSelectFilesGenericError": "Fel vid val av filer. Försök igen.",
+  "msgUploadFileFailed": "Kunde inte ladda upp fil, försök igen senare",
+  "msgReadingMemories": "Läser dina minnen...",
+  "msgLearningMemories": "Lär sig från dina minnen...",
+  "msgUploadAttachedFileFailed": "Kunde inte ladda upp bifogad fil."
 }

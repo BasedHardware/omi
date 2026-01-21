@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Näytönkaappausluvan tarkistus epäonnistui: {error}",
   "onboardingAccessibilityRequired": "Esteettömyyslupa vaaditaan selainkokouksten havaitsemiseen.",
   "onboardingAccessibilityStatusCheckPrefs": "Esteettömyysluvan tila: {status}. Tarkista Järjestelmäasetukset.",
-  "onboardingFailedCheckAccessibility": "Esteettömyysluvan tarkistus epäonnistui: {error}"
+  "onboardingFailedCheckAccessibility": "Esteettömyysluvan tarkistus epäonnistui: {error}",
+  "msgCameraNotAvailable": "Kameran tallennus ei ole käytettävissä tällä alustalla",
+  "msgCameraPermissionDenied": "Kameran käyttöoikeus evätty. Salli pääsy kameraan",
+  "msgCameraAccessError": "Virhe kameraan pääsyssä: {error}",
+  "msgPhotoError": "Virhe kuvan ottamisessa. Yritä uudelleen.",
+  "msgMaxImagesLimit": "Voit valita enintään 4 kuvaa",
+  "msgFilePickerError": "Virhe tiedostonvalitsimen avaamisessa: {error}",
+  "msgSelectImagesError": "Virhe kuvien valinnassa: {error}",
+  "msgPhotosPermissionDenied": "Kuvien käyttöoikeus evätty. Salli pääsy kuviin valitaksesi kuvia",
+  "msgSelectImagesGenericError": "Virhe kuvien valinnassa. Yritä uudelleen.",
+  "msgMaxFilesLimit": "Voit valita enintään 4 tiedostoa",
+  "msgSelectFilesError": "Virhe tiedostojen valinnassa: {error}",
+  "msgSelectFilesGenericError": "Virhe tiedostojen valinnassa. Yritä uudelleen.",
+  "msgUploadFileFailed": "Tiedoston lataus epäonnistui, yritä myöhemmin uudelleen",
+  "msgReadingMemories": "Luetaan muistojasi...",
+  "msgLearningMemories": "Opitaan muistoistasi...",
+  "msgUploadAttachedFileFailed": "Liitetiedoston lataus epäonnistui."
 }

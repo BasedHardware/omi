@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Nepodarilo sa skontrolovať povolenie snímania obrazovky: {error}",
   "onboardingAccessibilityRequired": "Na detekciu stretnutí prehliadača je potrebné povolenie prístupnosti.",
   "onboardingAccessibilityStatusCheckPrefs": "Stav povolenia prístupnosti: {status}. Skontrolujte Systémové nastavenia.",
-  "onboardingFailedCheckAccessibility": "Nepodarilo sa skontrolovať povolenie prístupnosti: {error}"
+  "onboardingFailedCheckAccessibility": "Nepodarilo sa skontrolovať povolenie prístupnosti: {error}",
+  "msgCameraNotAvailable": "Snímanie fotoaparátom nie je na tejto platforme dostupné",
+  "msgCameraPermissionDenied": "Povolenie fotoaparátu bolo zamietnuté. Povoľte prosím prístup k fotoaparátu",
+  "msgCameraAccessError": "Chyba pri prístupe k fotoaparátu: {error}",
+  "msgPhotoError": "Chyba pri fotografovaní. Skúste to znova.",
+  "msgMaxImagesLimit": "Môžete vybrať maximálne 4 obrázky",
+  "msgFilePickerError": "Chyba pri otváraní výberu súborov: {error}",
+  "msgSelectImagesError": "Chyba pri výbere obrázkov: {error}",
+  "msgPhotosPermissionDenied": "Povolenie pre fotografie bolo zamietnuté. Povoľte prosím prístup k fotografiám pre výber obrázkov",
+  "msgSelectImagesGenericError": "Chyba pri výbere obrázkov. Skúste to znova.",
+  "msgMaxFilesLimit": "Môžete vybrať maximálne 4 súbory",
+  "msgSelectFilesError": "Chyba pri výbere súborov: {error}",
+  "msgSelectFilesGenericError": "Chyba pri výbere súborov. Skúste to znova.",
+  "msgUploadFileFailed": "Nahrávanie súboru zlyhalo, skúste to neskôr",
+  "msgReadingMemories": "Čítanie vašich spomienok...",
+  "msgLearningMemories": "Učenie sa z vašich spomienok...",
+  "msgUploadAttachedFileFailed": "Nahratie priloženého súboru zlyhalo."
 }

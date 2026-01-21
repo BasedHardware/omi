@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Képernyőrögzítési engedély ellenőrzése sikertelen: {error}",
   "onboardingAccessibilityRequired": "Akadálymentesítési engedély szükséges a böngészőtalálkozók észleléséhez.",
   "onboardingAccessibilityStatusCheckPrefs": "Akadálymentesítési engedély állapota: {status}. Kérjük, ellenőrizze a Rendszerbeállításokat.",
-  "onboardingFailedCheckAccessibility": "Akadálymentesítési engedély ellenőrzése sikertelen: {error}"
+  "onboardingFailedCheckAccessibility": "Akadálymentesítési engedély ellenőrzése sikertelen: {error}",
+  "msgCameraNotAvailable": "A kamerarögzítés nem érhető el ezen a platformon",
+  "msgCameraPermissionDenied": "Kamera engedély megtagadva. Kérjük, engedélyezze a kamerához való hozzáférést",
+  "msgCameraAccessError": "Hiba a kamera elérésekor: {error}",
+  "msgPhotoError": "Hiba a fénykép készítésekor. Kérjük, próbálja újra.",
+  "msgMaxImagesLimit": "Legfeljebb 4 képet választhat ki",
+  "msgFilePickerError": "Hiba a fájlválasztó megnyitásakor: {error}",
+  "msgSelectImagesError": "Hiba a képek kiválasztásakor: {error}",
+  "msgPhotosPermissionDenied": "Fényképek engedély megtagadva. Kérjük, engedélyezze a fényképekhez való hozzáférést a képek kiválasztásához",
+  "msgSelectImagesGenericError": "Hiba a képek kiválasztásakor. Kérjük, próbálja újra.",
+  "msgMaxFilesLimit": "Legfeljebb 4 fájlt választhat ki",
+  "msgSelectFilesError": "Hiba a fájlok kiválasztásakor: {error}",
+  "msgSelectFilesGenericError": "Hiba a fájlok kiválasztásakor. Kérjük, próbálja újra.",
+  "msgUploadFileFailed": "A fájl feltöltése sikertelen, kérjük próbálja újra később",
+  "msgReadingMemories": "Emlékeid olvasása...",
+  "msgLearningMemories": "Tanulás az emlékeidből...",
+  "msgUploadAttachedFileFailed": "A csatolt fájl feltöltése sikertelen."
 }

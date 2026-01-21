@@ -2372,5 +2372,21 @@
   "onboardingFailedCheckScreenCapture": "Error en comprovar el permís de captura de pantalla: {error}",
   "onboardingAccessibilityRequired": "Es requereix permís d'accessibilitat per detectar reunions del navegador.",
   "onboardingAccessibilityStatusCheckPrefs": "Estat del permís d'accessibilitat: {status}. Si us plau, comproveu Preferències del Sistema.",
-  "onboardingFailedCheckAccessibility": "Error en comprovar el permís d'accessibilitat: {error}"
+  "onboardingFailedCheckAccessibility": "Error en comprovar el permís d'accessibilitat: {error}",
+  "msgCameraNotAvailable": "La captura de càmera no està disponible en aquesta plataforma",
+  "msgCameraPermissionDenied": "Permís de càmera denegat. Si us plau, permeteu l'accés a la càmera",
+  "msgCameraAccessError": "Error en accedir a la càmera: {error}",
+  "msgPhotoError": "Error en fer la foto. Si us plau, torneu-ho a provar.",
+  "msgMaxImagesLimit": "Només podeu seleccionar fins a 4 imatges",
+  "msgFilePickerError": "Error en obrir el selector de fitxers: {error}",
+  "msgSelectImagesError": "Error en seleccionar imatges: {error}",
+  "msgPhotosPermissionDenied": "Permís de fotos denegat. Si us plau, permeteu l'accés a les fotos per seleccionar imatges",
+  "msgSelectImagesGenericError": "Error en seleccionar imatges. Si us plau, torneu-ho a provar.",
+  "msgMaxFilesLimit": "Només podeu seleccionar fins a 4 fitxers",
+  "msgSelectFilesError": "Error en seleccionar fitxers: {error}",
+  "msgSelectFilesGenericError": "Error en seleccionar fitxers. Si us plau, torneu-ho a provar.",
+  "msgUploadFileFailed": "No s'ha pogut pujar el fitxer, si us plau torneu-ho a provar més tard",
+  "msgReadingMemories": "Llegint els teus records...",
+  "msgLearningMemories": "Aprenent dels teus records...",
+  "msgUploadAttachedFileFailed": "No s'ha pogut pujar el fitxer adjunt."
 }

@@ -7540,4 +7540,60 @@ class AppLocalizationsId extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Gagal memeriksa izin aksesibilitas: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Pengambilan gambar kamera tidak tersedia di platform ini';
+
+  @override
+  String get msgCameraPermissionDenied => 'Izin kamera ditolak. Harap izinkan akses ke kamera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Kesalahan mengakses kamera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Kesalahan mengambil foto. Silakan coba lagi.';
+
+  @override
+  String get msgMaxImagesLimit => 'Anda hanya dapat memilih hingga 4 gambar';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Kesalahan membuka pemilih file: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Kesalahan memilih gambar: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => 'Izin foto ditolak. Harap izinkan akses ke foto untuk memilih gambar';
+
+  @override
+  String get msgSelectImagesGenericError => 'Kesalahan memilih gambar. Silakan coba lagi.';
+
+  @override
+  String get msgMaxFilesLimit => 'Anda hanya dapat memilih hingga 4 file';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Kesalahan memilih file: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Kesalahan memilih file. Silakan coba lagi.';
+
+  @override
+  String get msgUploadFileFailed => 'Gagal mengunggah file, silakan coba lagi nanti';
+
+  @override
+  String get msgReadingMemories => 'Membaca kenangan Anda...';
+
+  @override
+  String get msgLearningMemories => 'Belajar dari kenangan Anda...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Gagal mengunggah file terlampir.';
 }

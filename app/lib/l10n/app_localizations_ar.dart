@@ -7471,4 +7471,60 @@ class AppLocalizationsAr extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'فشل التحقق من إذن إمكانية الوصول: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'التقاط الكاميرا غير متاح على هذه المنصة';
+
+  @override
+  String get msgCameraPermissionDenied => 'تم رفض إذن الكاميرا. يرجى السماح بالوصول إلى الكاميرا';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'خطأ في الوصول إلى الكاميرا: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'خطأ في التقاط الصورة. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get msgMaxImagesLimit => 'يمكنك اختيار 4 صور كحد أقصى';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'خطأ في فتح منتقي الملفات: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'خطأ في اختيار الصور: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => 'تم رفض إذن الصور. يرجى السماح بالوصول إلى الصور لاختيار الصور';
+
+  @override
+  String get msgSelectImagesGenericError => 'خطأ في اختيار الصور. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get msgMaxFilesLimit => 'يمكنك اختيار 4 ملفات كحد أقصى';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'خطأ في اختيار الملفات: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'خطأ في اختيار الملفات. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get msgUploadFileFailed => 'فشل تحميل الملف، يرجى المحاولة مرة أخرى لاحقاً';
+
+  @override
+  String get msgReadingMemories => 'جارٍ قراءة ذكرياتك...';
+
+  @override
+  String get msgLearningMemories => 'جارٍ التعلم من ذكرياتك...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'فشل تحميل الملف المرفق.';
 }

@@ -7522,4 +7522,60 @@ class AppLocalizationsEt extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Ligipääsetavuse loa kontrollimine ebaõnnestus: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kaamera jäädvustamine pole sellel platvormil saadaval';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kaamera luba keelatud. Palun lubage juurdepääs kaamerale';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Viga kaamerale juurdepääsul: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Viga foto tegemisel. Palun proovige uuesti.';
+
+  @override
+  String get msgMaxImagesLimit => 'Saate valida kuni 4 pilti';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Viga failivalija avamisel: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Viga piltide valimisel: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => 'Fotode luba keelatud. Palun lubage juurdepääs fotodele piltide valimiseks';
+
+  @override
+  String get msgSelectImagesGenericError => 'Viga piltide valimisel. Palun proovige uuesti.';
+
+  @override
+  String get msgMaxFilesLimit => 'Saate valida kuni 4 faili';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Viga failide valimisel: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Viga failide valimisel. Palun proovige uuesti.';
+
+  @override
+  String get msgUploadFileFailed => 'Faili üleslaadimine ebaõnnestus, palun proovige hiljem uuesti';
+
+  @override
+  String get msgReadingMemories => 'Loen sinu mälestusi...';
+
+  @override
+  String get msgLearningMemories => 'Õpin sinu mälestustest...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Manustatud faili üleslaadimine ebaõnnestus.';
 }

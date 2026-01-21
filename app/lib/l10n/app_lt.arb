@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Nepavyko patikrinti ekrano fiksavimo leidimo: {error}",
   "onboardingAccessibilityRequired": "Naršyklės susitikimų aptikimui reikalingas prieinamumo leidimas.",
   "onboardingAccessibilityStatusCheckPrefs": "Prieinamumo leidimo būsena: {status}. Patikrinkite Sistemos nuostatas.",
-  "onboardingFailedCheckAccessibility": "Nepavyko patikrinti prieinamumo leidimo: {error}"
+  "onboardingFailedCheckAccessibility": "Nepavyko patikrinti prieinamumo leidimo: {error}",
+  "msgCameraNotAvailable": "Kameros fiksavimas šioje platformoje nepasiekiamas",
+  "msgCameraPermissionDenied": "Kameros leidimas atmestas. Leiskite prieigą prie kameros",
+  "msgCameraAccessError": "Klaida prisijungiant prie kameros: {error}",
+  "msgPhotoError": "Klaida fotografuojant. Bandykite dar kartą.",
+  "msgMaxImagesLimit": "Galite pasirinkti tik iki 4 paveikslėlių",
+  "msgFilePickerError": "Klaida atidarant failų pasirinkiklį: {error}",
+  "msgSelectImagesError": "Klaida renkantis paveikslėlius: {error}",
+  "msgPhotosPermissionDenied": "Nuotraukų leidimas atmestas. Leiskite prieigą prie nuotraukų, kad galėtumėte pasirinkti paveikslėlius",
+  "msgSelectImagesGenericError": "Klaida renkantis paveikslėlius. Bandykite dar kartą.",
+  "msgMaxFilesLimit": "Galite pasirinkti tik iki 4 failų",
+  "msgSelectFilesError": "Klaida renkantis failus: {error}",
+  "msgSelectFilesGenericError": "Klaida renkantis failus. Bandykite dar kartą.",
+  "msgUploadFileFailed": "Failo įkėlimas nepavyko, bandykite vėliau",
+  "msgReadingMemories": "Skaitomi jūsų prisiminimai...",
+  "msgLearningMemories": "Mokomasi iš jūsų prisiminimų...",
+  "msgUploadAttachedFileFailed": "Nepavyko įkelti pridėto failo."
 }

@@ -7589,4 +7589,61 @@ class AppLocalizationsFr extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Échec de la vérification de l\'autorisation d\'accessibilité : $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'La capture par caméra n\'est pas disponible sur cette plateforme';
+
+  @override
+  String get msgCameraPermissionDenied => 'Permission de caméra refusée. Veuillez autoriser l\'accès à la caméra';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Erreur d\'accès à la caméra : $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Erreur lors de la prise de photo. Veuillez réessayer.';
+
+  @override
+  String get msgMaxImagesLimit => 'Vous ne pouvez sélectionner que 4 images maximum';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Erreur d\'ouverture du sélecteur de fichiers : $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Erreur lors de la sélection d\'images : $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Permission photos refusée. Veuillez autoriser l\'accès aux photos pour sélectionner des images';
+
+  @override
+  String get msgSelectImagesGenericError => 'Erreur lors de la sélection d\'images. Veuillez réessayer.';
+
+  @override
+  String get msgMaxFilesLimit => 'Vous ne pouvez sélectionner que 4 fichiers maximum';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Erreur lors de la sélection de fichiers : $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Erreur lors de la sélection de fichiers. Veuillez réessayer.';
+
+  @override
+  String get msgUploadFileFailed => 'Échec du téléchargement du fichier, veuillez réessayer plus tard';
+
+  @override
+  String get msgReadingMemories => 'Lecture de vos souvenirs...';
+
+  @override
+  String get msgLearningMemories => 'Apprentissage de vos souvenirs...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Échec du téléchargement du fichier joint.';
 }

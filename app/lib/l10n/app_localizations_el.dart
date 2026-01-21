@@ -7572,4 +7572,61 @@ class AppLocalizationsEl extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Αποτυχία ελέγχου άδειας προσβασιμότητας: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Η λήψη κάμερας δεν είναι διαθέσιμη σε αυτήν την πλατφόρμα';
+
+  @override
+  String get msgCameraPermissionDenied => 'Η άδεια κάμερας απορρίφθηκε. Παρακαλώ επιτρέψτε την πρόσβαση στην κάμερα';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Σφάλμα πρόσβασης στην κάμερα: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Σφάλμα λήψης φωτογραφίας. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get msgMaxImagesLimit => 'Μπορείτε να επιλέξετε μέχρι 4 εικόνες';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Σφάλμα ανοίγματος επιλογέα αρχείων: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Σφάλμα επιλογής εικόνων: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Η άδεια φωτογραφιών απορρίφθηκε. Παρακαλώ επιτρέψτε την πρόσβαση στις φωτογραφίες για να επιλέξετε εικόνες';
+
+  @override
+  String get msgSelectImagesGenericError => 'Σφάλμα επιλογής εικόνων. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get msgMaxFilesLimit => 'Μπορείτε να επιλέξετε μέχρι 4 αρχεία';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Σφάλμα επιλογής αρχείων: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Σφάλμα επιλογής αρχείων. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get msgUploadFileFailed => 'Η μεταφόρτωση αρχείου απέτυχε, παρακαλώ δοκιμάστε ξανά αργότερα';
+
+  @override
+  String get msgReadingMemories => 'Διαβάζω τις αναμνήσεις σου...';
+
+  @override
+  String get msgLearningMemories => 'Μαθαίνω από τις αναμνήσεις σου...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Η μεταφόρτωση του συνημμένου αρχείου απέτυχε.';
 }

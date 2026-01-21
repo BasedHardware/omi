@@ -7568,4 +7568,61 @@ class AppLocalizationsCa extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Error en comprovar el permís d\'accessibilitat: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'La captura de càmera no està disponible en aquesta plataforma';
+
+  @override
+  String get msgCameraPermissionDenied => 'Permís de càmera denegat. Si us plau, permeteu l\'accés a la càmera';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Error en accedir a la càmera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Error en fer la foto. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get msgMaxImagesLimit => 'Només podeu seleccionar fins a 4 imatges';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Error en obrir el selector de fitxers: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Error en seleccionar imatges: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Permís de fotos denegat. Si us plau, permeteu l\'accés a les fotos per seleccionar imatges';
+
+  @override
+  String get msgSelectImagesGenericError => 'Error en seleccionar imatges. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get msgMaxFilesLimit => 'Només podeu seleccionar fins a 4 fitxers';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Error en seleccionar fitxers: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Error en seleccionar fitxers. Si us plau, torneu-ho a provar.';
+
+  @override
+  String get msgUploadFileFailed => 'No s\'ha pogut pujar el fitxer, si us plau torneu-ho a provar més tard';
+
+  @override
+  String get msgReadingMemories => 'Llegint els teus records...';
+
+  @override
+  String get msgLearningMemories => 'Aprenent dels teus records...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'No s\'ha pogut pujar el fitxer adjunt.';
 }

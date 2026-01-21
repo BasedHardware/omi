@@ -7558,4 +7558,61 @@ class AppLocalizationsRo extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Nu s-a putut verifica permisiunea de accesibilitate: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Captura camerei nu este disponibilă pe această platformă';
+
+  @override
+  String get msgCameraPermissionDenied => 'Permisiunea camerei refuzată. Vă rugăm să permiteți accesul la cameră';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Eroare la accesarea camerei: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Eroare la realizarea fotografiei. Vă rugăm să încercați din nou.';
+
+  @override
+  String get msgMaxImagesLimit => 'Puteți selecta doar până la 4 imagini';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Eroare la deschiderea selectorului de fișiere: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Eroare la selectarea imaginilor: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Permisiunea pentru fotografii refuzată. Vă rugăm să permiteți accesul la fotografii pentru a selecta imagini';
+
+  @override
+  String get msgSelectImagesGenericError => 'Eroare la selectarea imaginilor. Vă rugăm să încercați din nou.';
+
+  @override
+  String get msgMaxFilesLimit => 'Puteți selecta doar până la 4 fișiere';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Eroare la selectarea fișierelor: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Eroare la selectarea fișierelor. Vă rugăm să încercați din nou.';
+
+  @override
+  String get msgUploadFileFailed => 'Încărcarea fișierului a eșuat, vă rugăm să încercați din nou mai târziu';
+
+  @override
+  String get msgReadingMemories => 'Se citesc amintirile tale...';
+
+  @override
+  String get msgLearningMemories => 'Se învață din amintirile tale...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Încărcarea fișierului atașat a eșuat.';
 }

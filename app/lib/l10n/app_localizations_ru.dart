@@ -7542,4 +7542,61 @@ class AppLocalizationsRu extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Не удалось проверить разрешение на специальные возможности: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Захват камеры недоступен на этой платформе';
+
+  @override
+  String get msgCameraPermissionDenied => 'Разрешение на камеру отклонено. Пожалуйста, разрешите доступ к камере';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Ошибка доступа к камере: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Ошибка при съёмке фото. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get msgMaxImagesLimit => 'Вы можете выбрать только до 4 изображений';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Ошибка открытия выбора файлов: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Ошибка выбора изображений: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Разрешение на фото отклонено. Пожалуйста, разрешите доступ к фото для выбора изображений';
+
+  @override
+  String get msgSelectImagesGenericError => 'Ошибка выбора изображений. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get msgMaxFilesLimit => 'Вы можете выбрать только до 4 файлов';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Ошибка выбора файлов: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Ошибка выбора файлов. Пожалуйста, попробуйте снова.';
+
+  @override
+  String get msgUploadFileFailed => 'Не удалось загрузить файл, попробуйте позже';
+
+  @override
+  String get msgReadingMemories => 'Читаем ваши воспоминания...';
+
+  @override
+  String get msgLearningMemories => 'Учимся на ваших воспоминаниях...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Не удалось загрузить прикреплённый файл.';
 }

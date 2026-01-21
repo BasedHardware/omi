@@ -7557,4 +7557,62 @@ class AppLocalizationsHu extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Akadálymentesítési engedély ellenőrzése sikertelen: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'A kamerarögzítés nem érhető el ezen a platformon';
+
+  @override
+  String get msgCameraPermissionDenied =>
+      'Kamera engedély megtagadva. Kérjük, engedélyezze a kamerához való hozzáférést';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Hiba a kamera elérésekor: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Hiba a fénykép készítésekor. Kérjük, próbálja újra.';
+
+  @override
+  String get msgMaxImagesLimit => 'Legfeljebb 4 képet választhat ki';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Hiba a fájlválasztó megnyitásakor: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Hiba a képek kiválasztásakor: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fényképek engedély megtagadva. Kérjük, engedélyezze a fényképekhez való hozzáférést a képek kiválasztásához';
+
+  @override
+  String get msgSelectImagesGenericError => 'Hiba a képek kiválasztásakor. Kérjük, próbálja újra.';
+
+  @override
+  String get msgMaxFilesLimit => 'Legfeljebb 4 fájlt választhat ki';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Hiba a fájlok kiválasztásakor: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Hiba a fájlok kiválasztásakor. Kérjük, próbálja újra.';
+
+  @override
+  String get msgUploadFileFailed => 'A fájl feltöltése sikertelen, kérjük próbálja újra később';
+
+  @override
+  String get msgReadingMemories => 'Emlékeid olvasása...';
+
+  @override
+  String get msgLearningMemories => 'Tanulás az emlékeidből...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'A csatolt fájl feltöltése sikertelen.';
 }

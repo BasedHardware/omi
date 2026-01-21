@@ -7526,4 +7526,61 @@ class AppLocalizationsSv extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Kunde inte kontrollera tillgänglighetsbehörighet: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kamerainspelning är inte tillgänglig på denna plattform';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kameratillstånd nekad. Vänligen tillåt åtkomst till kameran';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Fel vid åtkomst till kamera: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Fel vid fotografering. Försök igen.';
+
+  @override
+  String get msgMaxImagesLimit => 'Du kan bara välja upp till 4 bilder';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Fel vid öppning av filväljare: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Fel vid val av bilder: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fototillstånd nekad. Vänligen tillåt åtkomst till foton för att välja bilder';
+
+  @override
+  String get msgSelectImagesGenericError => 'Fel vid val av bilder. Försök igen.';
+
+  @override
+  String get msgMaxFilesLimit => 'Du kan bara välja upp till 4 filer';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Fel vid val av filer: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Fel vid val av filer. Försök igen.';
+
+  @override
+  String get msgUploadFileFailed => 'Kunde inte ladda upp fil, försök igen senare';
+
+  @override
+  String get msgReadingMemories => 'Läser dina minnen...';
+
+  @override
+  String get msgLearningMemories => 'Lär sig från dina minnen...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Kunde inte ladda upp bifogad fil.';
 }

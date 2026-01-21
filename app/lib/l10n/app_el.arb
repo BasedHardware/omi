@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Αποτυχία ελέγχου άδειας καταγραφής οθόνης: {error}",
   "onboardingAccessibilityRequired": "Απαιτείται άδεια προσβασιμότητας για ανίχνευση συναντήσεων προγράμματος περιήγησης.",
   "onboardingAccessibilityStatusCheckPrefs": "Κατάσταση άδειας προσβασιμότητας: {status}. Παρακαλώ ελέγξτε τις Προτιμήσεις Συστήματος.",
-  "onboardingFailedCheckAccessibility": "Αποτυχία ελέγχου άδειας προσβασιμότητας: {error}"
+  "onboardingFailedCheckAccessibility": "Αποτυχία ελέγχου άδειας προσβασιμότητας: {error}",
+  "msgCameraNotAvailable": "Η λήψη κάμερας δεν είναι διαθέσιμη σε αυτήν την πλατφόρμα",
+  "msgCameraPermissionDenied": "Η άδεια κάμερας απορρίφθηκε. Παρακαλώ επιτρέψτε την πρόσβαση στην κάμερα",
+  "msgCameraAccessError": "Σφάλμα πρόσβασης στην κάμερα: {error}",
+  "msgPhotoError": "Σφάλμα λήψης φωτογραφίας. Παρακαλώ δοκιμάστε ξανά.",
+  "msgMaxImagesLimit": "Μπορείτε να επιλέξετε μέχρι 4 εικόνες",
+  "msgFilePickerError": "Σφάλμα ανοίγματος επιλογέα αρχείων: {error}",
+  "msgSelectImagesError": "Σφάλμα επιλογής εικόνων: {error}",
+  "msgPhotosPermissionDenied": "Η άδεια φωτογραφιών απορρίφθηκε. Παρακαλώ επιτρέψτε την πρόσβαση στις φωτογραφίες για να επιλέξετε εικόνες",
+  "msgSelectImagesGenericError": "Σφάλμα επιλογής εικόνων. Παρακαλώ δοκιμάστε ξανά.",
+  "msgMaxFilesLimit": "Μπορείτε να επιλέξετε μέχρι 4 αρχεία",
+  "msgSelectFilesError": "Σφάλμα επιλογής αρχείων: {error}",
+  "msgSelectFilesGenericError": "Σφάλμα επιλογής αρχείων. Παρακαλώ δοκιμάστε ξανά.",
+  "msgUploadFileFailed": "Η μεταφόρτωση αρχείου απέτυχε, παρακαλώ δοκιμάστε ξανά αργότερα",
+  "msgReadingMemories": "Διαβάζω τις αναμνήσεις σου...",
+  "msgLearningMemories": "Μαθαίνω από τις αναμνήσεις σου...",
+  "msgUploadAttachedFileFailed": "Η μεταφόρτωση του συνημμένου αρχείου απέτυχε."
 }

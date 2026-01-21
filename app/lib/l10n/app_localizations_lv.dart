@@ -7538,4 +7538,61 @@ class AppLocalizationsLv extends AppLocalizations {
   String onboardingFailedCheckAccessibility(String error) {
     return 'Neizdevās pārbaudīt pieejamības atļauju: $error';
   }
+
+  @override
+  String get msgCameraNotAvailable => 'Kameras uzņemšana šajā platformā nav pieejama';
+
+  @override
+  String get msgCameraPermissionDenied => 'Kameras atļauja liegta. Lūdzu, atļaujiet piekļuvi kamerai';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Kļūda piekļūstot kamerai: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Kļūda uzņemot fotoattēlu. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get msgMaxImagesLimit => 'Varat atlasīt tikai līdz 4 attēliem';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Kļūda atverot failu izvēlētāju: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Kļūda atlasot attēlus: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied =>
+      'Fotoattēlu atļauja liegta. Lūdzu, atļaujiet piekļuvi fotoattēliem, lai atlasītu attēlus';
+
+  @override
+  String get msgSelectImagesGenericError => 'Kļūda atlasot attēlus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get msgMaxFilesLimit => 'Varat atlasīt tikai līdz 4 failiem';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Kļūda atlasot failus: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Kļūda atlasot failus. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get msgUploadFileFailed => 'Faila augšupielāde neizdevās, lūdzu mēģiniet vēlāk';
+
+  @override
+  String get msgReadingMemories => 'Lasa jūsu atmiņas...';
+
+  @override
+  String get msgLearningMemories => 'Mācās no jūsu atmiņām...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Neizdevās augšupielādēt pievienoto failu.';
 }

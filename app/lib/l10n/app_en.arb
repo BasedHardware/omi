@@ -9362,5 +9362,89 @@
         "type": "String"
       }
     }
+  },
+  "msgCameraNotAvailable": "Camera capture is not available on this platform",
+  "@msgCameraNotAvailable": {
+    "description": "Error when camera is not available on desktop"
+  },
+  "msgCameraPermissionDenied": "Camera permission denied. Please allow access to camera",
+  "@msgCameraPermissionDenied": {
+    "description": "Error when camera permission is denied"
+  },
+  "msgCameraAccessError": "Error accessing camera: {error}",
+  "@msgCameraAccessError": {
+    "description": "Error when camera access fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "msgPhotoError": "Error taking photo. Please try again.",
+  "@msgPhotoError": {
+    "description": "Generic error when taking photo fails"
+  },
+  "msgMaxImagesLimit": "You can only select up to 4 images",
+  "@msgMaxImagesLimit": {
+    "description": "Error when user tries to select more than 4 images"
+  },
+  "msgFilePickerError": "Error opening file picker: {error}",
+  "@msgFilePickerError": {
+    "description": "Error when file picker fails to open",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "msgSelectImagesError": "Error selecting images: {error}",
+  "@msgSelectImagesError": {
+    "description": "Error when selecting images fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "msgPhotosPermissionDenied": "Photos permission denied. Please allow access to photos to select images",
+  "@msgPhotosPermissionDenied": {
+    "description": "Error when photos permission is denied"
+  },
+  "msgSelectImagesGenericError": "Error selecting images. Please try again.",
+  "@msgSelectImagesGenericError": {
+    "description": "Generic error when selecting images fails"
+  },
+  "msgMaxFilesLimit": "You can only select up to 4 files",
+  "@msgMaxFilesLimit": {
+    "description": "Error when user tries to select more than 4 files"
+  },
+  "msgSelectFilesError": "Error selecting files: {error}",
+  "@msgSelectFilesError": {
+    "description": "Error when selecting files fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "msgSelectFilesGenericError": "Error selecting files. Please try again.",
+  "@msgSelectFilesGenericError": {
+    "description": "Generic error when selecting files fails"
+  },
+  "msgUploadFileFailed": "Failed to upload file, please try again later",
+  "@msgUploadFileFailed": {
+    "description": "Error when file upload fails"
+  },
+  "msgReadingMemories": "Reading your memories...",
+  "@msgReadingMemories": {
+    "description": "Loading text while reading memories"
+  },
+  "msgLearningMemories": "Learning from your memories...",
+  "@msgLearningMemories": {
+    "description": "Loading text while learning from memories"
+  },
+  "msgUploadAttachedFileFailed": "Failed to upload the attached file.",
+  "@msgUploadAttachedFileFailed": {
+    "description": "Error when attached file upload fails"
   }
 }

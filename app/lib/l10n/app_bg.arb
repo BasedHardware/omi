@@ -2372,5 +2372,21 @@
   "onboardingFailedCheckScreenCapture": "Неуспешна проверка на разрешението за заснемане на екран: {error}",
   "onboardingAccessibilityRequired": "За откриване на срещи в браузъра е необходимо разрешение за достъпност.",
   "onboardingAccessibilityStatusCheckPrefs": "Състояние на разрешението за достъпност: {status}. Моля, проверете Системни настройки.",
-  "onboardingFailedCheckAccessibility": "Неуспешна проверка на разрешението за достъпност: {error}"
+  "onboardingFailedCheckAccessibility": "Неуспешна проверка на разрешението за достъпност: {error}",
+  "msgCameraNotAvailable": "Заснемането с камера не е налично на тази платформа",
+  "msgCameraPermissionDenied": "Достъпът до камерата е отказан. Моля, разрешете достъп до камерата",
+  "msgCameraAccessError": "Грешка при достъп до камерата: {error}",
+  "msgPhotoError": "Грешка при заснемане на снимка. Моля, опитайте отново.",
+  "msgMaxImagesLimit": "Можете да изберете най-много 4 изображения",
+  "msgFilePickerError": "Грешка при отваряне на избирача на файлове: {error}",
+  "msgSelectImagesError": "Грешка при избиране на изображения: {error}",
+  "msgPhotosPermissionDenied": "Достъпът до снимки е отказан. Моля, разрешете достъп до снимки, за да изберете изображения",
+  "msgSelectImagesGenericError": "Грешка при избиране на изображения. Моля, опитайте отново.",
+  "msgMaxFilesLimit": "Можете да изберете най-много 4 файла",
+  "msgSelectFilesError": "Грешка при избиране на файлове: {error}",
+  "msgSelectFilesGenericError": "Грешка при избиране на файлове. Моля, опитайте отново.",
+  "msgUploadFileFailed": "Качването на файла се провали, моля опитайте отново по-късно",
+  "msgReadingMemories": "Четене на вашите спомени...",
+  "msgLearningMemories": "Учене от вашите спомени...",
+  "msgUploadAttachedFileFailed": "Качването на прикачения файл се провали."
 }

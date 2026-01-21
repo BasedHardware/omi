@@ -2390,5 +2390,21 @@
   "onboardingFailedCheckScreenCapture": "Error al comprobar el permiso de captura de pantalla: {error}",
   "onboardingAccessibilityRequired": "Se requiere permiso de accesibilidad para detectar reuniones del navegador.",
   "onboardingAccessibilityStatusCheckPrefs": "Estado del permiso de accesibilidad: {status}. Por favor, compruebe Preferencias del Sistema.",
-  "onboardingFailedCheckAccessibility": "Error al comprobar el permiso de accesibilidad: {error}"
+  "onboardingFailedCheckAccessibility": "Error al comprobar el permiso de accesibilidad: {error}",
+  "msgCameraNotAvailable": "La captura de cámara no está disponible en esta plataforma",
+  "msgCameraPermissionDenied": "Permiso de cámara denegado. Por favor, permita el acceso a la cámara",
+  "msgCameraAccessError": "Error al acceder a la cámara: {error}",
+  "msgPhotoError": "Error al tomar la foto. Por favor, inténtelo de nuevo.",
+  "msgMaxImagesLimit": "Solo puede seleccionar hasta 4 imágenes",
+  "msgFilePickerError": "Error al abrir el selector de archivos: {error}",
+  "msgSelectImagesError": "Error al seleccionar imágenes: {error}",
+  "msgPhotosPermissionDenied": "Permiso de fotos denegado. Por favor, permita el acceso a las fotos para seleccionar imágenes",
+  "msgSelectImagesGenericError": "Error al seleccionar imágenes. Por favor, inténtelo de nuevo.",
+  "msgMaxFilesLimit": "Solo puede seleccionar hasta 4 archivos",
+  "msgSelectFilesError": "Error al seleccionar archivos: {error}",
+  "msgSelectFilesGenericError": "Error al seleccionar archivos. Por favor, inténtelo de nuevo.",
+  "msgUploadFileFailed": "Error al subir el archivo, por favor inténtelo más tarde",
+  "msgReadingMemories": "Leyendo tus recuerdos...",
+  "msgLearningMemories": "Aprendiendo de tus recuerdos...",
+  "msgUploadAttachedFileFailed": "Error al subir el archivo adjunto."
 }

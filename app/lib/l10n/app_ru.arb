@@ -2389,5 +2389,21 @@
   "onboardingFailedCheckScreenCapture": "Не удалось проверить разрешение на захват экрана: {error}",
   "onboardingAccessibilityRequired": "Для обнаружения встреч в браузере требуется разрешение на специальные возможности.",
   "onboardingAccessibilityStatusCheckPrefs": "Статус разрешения на специальные возможности: {status}. Проверьте Системные настройки.",
-  "onboardingFailedCheckAccessibility": "Не удалось проверить разрешение на специальные возможности: {error}"
+  "onboardingFailedCheckAccessibility": "Не удалось проверить разрешение на специальные возможности: {error}",
+  "msgCameraNotAvailable": "Захват камеры недоступен на этой платформе",
+  "msgCameraPermissionDenied": "Разрешение на камеру отклонено. Пожалуйста, разрешите доступ к камере",
+  "msgCameraAccessError": "Ошибка доступа к камере: {error}",
+  "msgPhotoError": "Ошибка при съёмке фото. Пожалуйста, попробуйте снова.",
+  "msgMaxImagesLimit": "Вы можете выбрать только до 4 изображений",
+  "msgFilePickerError": "Ошибка открытия выбора файлов: {error}",
+  "msgSelectImagesError": "Ошибка выбора изображений: {error}",
+  "msgPhotosPermissionDenied": "Разрешение на фото отклонено. Пожалуйста, разрешите доступ к фото для выбора изображений",
+  "msgSelectImagesGenericError": "Ошибка выбора изображений. Пожалуйста, попробуйте снова.",
+  "msgMaxFilesLimit": "Вы можете выбрать только до 4 файлов",
+  "msgSelectFilesError": "Ошибка выбора файлов: {error}",
+  "msgSelectFilesGenericError": "Ошибка выбора файлов. Пожалуйста, попробуйте снова.",
+  "msgUploadFileFailed": "Не удалось загрузить файл, попробуйте позже",
+  "msgReadingMemories": "Читаем ваши воспоминания...",
+  "msgLearningMemories": "Учимся на ваших воспоминаниях...",
+  "msgUploadAttachedFileFailed": "Не удалось загрузить прикреплённый файл."
 }
