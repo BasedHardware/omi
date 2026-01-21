@@ -31,7 +31,7 @@ Total languages with missing translations: **31**
 | French | fr | 0 | ✅ DONE |
 | Hindi | hi | 0 | ✅ DONE |
 | Hungarian | hu | 0 | ✅ DONE |
-| Indonesian | id | 22 | HIGH |
+| Indonesian | id | 0 | ✅ DONE |
 | Italian | it | 22 | HIGH |
 | Japanese | ja | 22 | HIGH |
 | Korean | ko | 22 | HIGH |

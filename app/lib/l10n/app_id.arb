@@ -2462,5 +2462,62 @@
   "assistanceCreativeWriting": "Penulisan Kreatif",
   "assistanceResearch": "Riset",
   "assistanceLearning": "Pembelajaran",
-  "assistanceOther": "Lainnya"
+  "assistanceOther": "Lainnya",
+  "availableSpace": "Ruang Tersedia: {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "Penggunaan baterai akan meningkat secara signifikan.",
+  "deviceRequirements": "Perangkat Anda tidak memenuhi persyaratan untuk transkripsi di perangkat.",
+  "downloadError": "Error unduhan: {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editReply": "Edit Balasan",
+  "estimatedSize": "Perkiraan Ukuran: ~{size} MB",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Gagal mengirim balasan: {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Model ini besar dan mungkin menyebabkan aplikasi crash atau berjalan sangat lambat di perangkat seluler.\n\n\"small\" atau \"base\" disarankan.",
+  "localProcessingInfo": "Audio diproses secara lokal. Bekerja offline, lebih privat, tetapi menggunakan lebih banyak baterai.",
+  "model": "Model",
+  "modelReady": "Model Siap",
+  "noModelDownloadRequired": "Mesin ucapan bawaan perangkat Anda akan digunakan. Tidak perlu mengunduh model.",
+  "noReviewsFound": "Tidak Ada Ulasan Ditemukan",
+  "onDeviceIntensive": "Transkripsi di perangkat membutuhkan komputasi intensif.",
+  "onDeviceSlower": "Transkripsi di perangkat mungkin lebih lambat di perangkat ini.",
+  "premiumMinutesInfo": "1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.",
+  "redownload": "Unduh Ulang",
+  "reply": "Balas",
+  "replySentSuccessfully": "Balasan berhasil dikirim",
+  "send": "Kirim",
+  "starFilter": "{count} Bintang",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Tulis balasan Anda..."
 }
