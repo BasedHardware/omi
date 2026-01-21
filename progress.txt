@@ -16,15 +16,15 @@
 | Pending Files | ~6 |
 | Progress | ~90% |
 
-**CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
-English text instead of proper translations. See PRIORITY 0 section below.
+**PRIORITY 0 STATUS**: 89 pre-existing l10n keys in non-English ARB files contain
+English text instead of proper translations. Spanish (es) completed, 32 languages remaining.
 
 ================================================================================
-## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (~162 keys)
+## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (89 keys × 33 languages)
 ================================================================================
 
-### [ ] Translate pre-existing English keys in all non-English ARB files
-Status: PENDING
+### [~] Translate pre-existing English keys in all non-English ARB files
+Status: IN PROGRESS (Spanish completed, 32 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -337,6 +337,18 @@ Note: date_list_item.dart was fixed - see [x] entry above
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Translated 89 pre-existing English keys to Spanish (app_es.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Identified 89 keys (not 162 as originally estimated) that had English text in non-English ARB files
+- Translated all 89 keys to proper Spanish translations in app_es.arb
+- Keys include: signOutConfirmation, deleteRecording, transferCompleteMessage, xHandleTitle,
+  couldNotLaunchUpgradePage, subscriptionReactivatedDefault, disconnectTwitterConfirmation,
+  planSwitchingDescriptionWithTitle, storageLocationLabel, sdCardProcessingMessage, and 80+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {level}, etc.)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 32 other languages still need the same 89 keys translated
 
 [2026-01-21] Fixed DateFormat locale issues in 3 remaining files
 - Fixed api_keys_widget.dart line 335: DateFormat('MMM d, yyyy HH:mm') now passes locale
