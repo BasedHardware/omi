@@ -43,13 +43,13 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
 
 ### Frontend (Flutter)
 
-- [ ] 6. Update Person model
+- [x] 6. Update Person model
       File: app/lib/backend/schema/person.dart
-      - [ ] Add speechSampleTranscripts: List<String>? field
-      - [ ] Add speechSamplesVersion: int field (default 1)
-      - [ ] Update fromJson() to parse speech_sample_transcripts
-      - [ ] Update fromJson() to parse speech_samples_version
-      - [ ] Update toJson() if needed
+      - [x] Add speechSampleTranscripts: List<String>? field
+      - [x] Add speechSamplesVersion: int field (default 1)
+      - [x] Update fromJson() to parse speech_sample_transcripts
+      - [x] Update fromJson() to parse speech_samples_version
+      - [x] Update toJson() if needed
 
 - [ ] 7. Update People UI
       File: app/lib/pages/settings/people.dart
