@@ -326,7 +326,7 @@ Status: IN PROGRESS
 Description: DateFormat calls not passing locale - dates display in English format regardless of user locale
 Files affected:
 - desktop/pages/settings/desktop_settings_modal.dart (lines 1641, 1646) - COMPLETED
-- pages/settings/calendar_settings_page.dart (lines 539, 544)
+- pages/settings/calendar_settings_page.dart (lines 539, 544) - COMPLETED
 - pages/settings/usage_page.dart (lines 839, 845)
 - pages/conversations/widgets/score_widget.dart (line 704)
 - pages/apps/widgets/api_keys_widget.dart (line 335)
@@ -343,6 +343,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Fixed calendar_settings_page.dart DateFormat calls to pass locale
+- Fixed 2 DateFormat calls that were missing locale parameter
+- Line 539: DateFormat('EEEE, MMMM d') now passes Localizations.localeOf(context).languageCode
+- Line 544: DateFormat('h:mm a') now passes locale from context
+- Calendar meeting dates and times now display in the user's language format instead of always English
+- No new ARB keys needed - just fixed existing code to use locale
+- All tests passed
 
 [2026-01-21] Fixed desktop_settings_modal.dart DateFormat calls to pass locale
 - Fixed 2 DateFormat calls that were missing locale parameter

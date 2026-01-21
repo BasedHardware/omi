@@ -536,12 +536,12 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       return context.l10n.tomorrow;
     } else {
       // Show full date for other days
-      return DateFormat('EEEE, MMMM d').format(date);
+      return DateFormat('EEEE, MMMM d', Localizations.localeOf(context).languageCode).format(date);
     }
   }
 
   Widget _buildMeetingCard(CalendarMeeting meeting) {
-    final dateFormat = DateFormat('h:mm a');
+    final dateFormat = DateFormat('h:mm a', Localizations.localeOf(context).languageCode);
     final duration = meeting.endTime.difference(meeting.startTime);
     final durationString = '${duration.inMinutes} min';
 
