@@ -527,7 +527,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unpairDialogTitle => 'デバイスのペアリング解除';
 
   @override
-  String get unpairDialogMessage => 'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。プロセスを完了するには、設定 > Bluetoothに移動してデバイスを忘れる必要があります。';
+  String get unpairDialogMessage =>
+      'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。プロセスを完了するには、設定 > Bluetoothに移動してデバイスを忘れる必要があります。';
 
   @override
   String get deviceNotConnected => 'デバイスが接続されていません';
@@ -825,7 +826,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => 'ナレッジグラフを削除しますか？';
 
   @override
-  String get deleteKnowledgeGraphMessage => 'これにより、派生したすべてのナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全なままです。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
+  String get deleteKnowledgeGraphMessage =>
+      'これにより、派生したすべてのナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全なままです。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
 
   @override
   String get knowledgeGraphDeleted => 'ナレッジグラフを削除しました';
@@ -1872,7 +1874,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionGrantedNow => '許可されました！次は：\n\nApple WatchでOmiアプリを開き、下の「続ける」をタップしてください';
 
   @override
-  String get needMicrophonePermission => 'マイクの許可が必要です。\n\n1. 「許可する」をタップ\n2. iPhoneで許可を選択\n3. Watchアプリが閉じます\n4. 再度開いて「続ける」をタップ';
+  String get needMicrophonePermission =>
+      'マイクの許可が必要です。\n\n1. 「許可する」をタップ\n2. iPhoneで許可を選択\n3. Watchアプリが閉じます\n4. 再度開いて「続ける」をタップ';
 
   @override
   String get grantPermissionButton => '許可する';
@@ -1881,7 +1884,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get needHelp => 'ヘルプ';
 
   @override
-  String get troubleshootingSteps => 'トラブルシューティング：\n\n1. WatchにOmiがインストールされているか確認\n2. WatchでOmiアプリを開く\n3. 許可のポップアップを探す\n4. 「許可」をタップ\n5. Watchアプリが閉じたら再度開く\n6. iPhoneに戻り「続ける」をタップ';
+  String get troubleshootingSteps =>
+      'トラブルシューティング：\n\n1. WatchにOmiがインストールされているか確認\n2. WatchでOmiアプリを開く\n3. 許可のポップアップを探す\n4. 「許可」をタップ\n5. Watchアプリが閉じたら再度開く\n6. iPhoneに戻り「続ける」をタップ';
 
   @override
   String get recordingStartedSuccessfully => '録音が正常に開始されました！';
@@ -2338,7 +2342,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'デバイスのペアリング解除';
 
   @override
-  String get unpairDeviceDialogMessage => 'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。設定 > Bluetoothに移動し、デバイスを削除してプロセスを完了する必要があります。';
+  String get unpairDeviceDialogMessage =>
+      'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。設定 > Bluetoothに移動し、デバイスを削除してプロセスを完了する必要があります。';
 
   @override
   String get unpair => 'ペアリング解除';
@@ -4276,7 +4281,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get maximumSecurityE2ee => '最大セキュリティ（E2EE）';
 
   @override
-  String get e2eeDescription => 'エンドツーエンド暗号化はプライバシーの最高基準です。有効にすると、データはサーバーに送信される前にデバイス上で暗号化されます。これは、Omiを含め、誰もあなたのコンテンツにアクセスできないことを意味します。';
+  String get e2eeDescription =>
+      'エンドツーエンド暗号化はプライバシーの最高基準です。有効にすると、データはサーバーに送信される前にデバイス上で暗号化されます。これは、Omiを含め、誰もあなたのコンテンツにアクセスできないことを意味します。';
 
   @override
   String get importantTradeoffs => '重要なトレードオフ：';
@@ -4310,7 +4316,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get secureEncryption => '安全な暗号化';
 
   @override
-  String get secureEncryptionDescription => 'あなたのデータは、Google Cloudでホストされている当社のサーバー上で、あなた固有の鍵で暗号化されています。これは、生のコンテンツがOmiスタッフやGoogleを含む誰にも、データベースから直接アクセスできないことを意味します。';
+  String get secureEncryptionDescription =>
+      'あなたのデータは、Google Cloudでホストされている当社のサーバー上で、あなた固有の鍵で暗号化されています。これは、生のコンテンツがOmiスタッフやGoogleを含む誰にも、データベースから直接アクセスできないことを意味します。';
 
   @override
   String get endToEndEncryption => 'エンドツーエンド暗号化';
@@ -4639,7 +4646,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => 'エクスポートを開始しました。数秒かかる場合があります...';
 
   @override
-  String get knowledgeGraphDeleteDescription => 'これにより、すべての派生ナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全に保たれます。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
+  String get knowledgeGraphDeleteDescription =>
+      'これにより、すべての派生ナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全に保たれます。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。';
 
   @override
   String get configureDailySummaryDigest => '毎日のタスクダイジェストを設定する';
@@ -5022,7 +5030,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '追加の音声サンプルを削除しました';
 
   @override
-  String get consentDataMessage => '続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。';
+  String get consentDataMessage =>
+      '続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
   String get tasksEmptyStateMessage => '会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。';
@@ -5076,7 +5085,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => 'アプリをインストールして開きました';
 
   @override
-  String get unableToOpenWatchApp => 'Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。';
+  String get unableToOpenWatchApp =>
+      'Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watchが正常に接続されました！';
@@ -5528,7 +5538,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get howToTakeGoodSample => '良いサンプルの取り方は？';
 
   @override
-  String get goodSampleInstructions => '1. 静かな場所にいることを確認してください。\n2. 明確に自然に話してください。\n3. デバイスが首の自然な位置にあることを確認してください。\n\n作成後、いつでも改善したり、やり直したりできます。';
+  String get goodSampleInstructions =>
+      '1. 静かな場所にいることを確認してください。\n2. 明確に自然に話してください。\n3. デバイスが首の自然な位置にあることを確認してください。\n\n作成後、いつでも改善したり、やり直したりできます。';
 
   @override
   String get noDeviceConnectedUseMic => '接続されているデバイスがありません。電話のマイクを使用します。';
@@ -5986,7 +5997,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get performanceWarning => 'パフォーマンス警告';
 
   @override
-  String get largeModelWarning => 'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
 
   @override
   String get usingNativeIosSpeech => 'iOSネイティブ音声認識を使用';
@@ -6415,7 +6427,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get disconnectTwitter => 'Disconnect Twitter';
 
   @override
-  String get disconnectTwitterConfirmation => 'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+  String get disconnectTwitterConfirmation =>
+      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
 
   @override
   String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
@@ -6640,7 +6653,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
 
   @override
-  String get transferRequiredDescription => 'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription =>
+      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
 
   @override
   String get cancelTransfer => 'Cancel Transfer';
@@ -6661,7 +6675,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shareRecording => 'Share Recording';
 
   @override
-  String get deleteRecordingConfirmation => 'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+  String get deleteRecordingConfirmation =>
+      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
 
   @override
   String get recordingIdLabel => 'Recording ID';
@@ -7110,16 +7125,19 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get planUpgradeScheduledMessage => 'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
 
   @override
   String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
 
   @override
-  String get subscriptionReactivatedDefault => 'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
 
   @override
-  String get subscriptionSuccessfulCharged => 'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
 
   @override
   String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
