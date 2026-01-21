@@ -149,17 +149,17 @@ Total Hardcoded Strings: **~30**
 | 53 | `'Move to Folder'` | `moveToFolder` | YES (added) | ✅ |
 | 78 | `'No folders available'` | `noFoldersAvailable` | YES (added) | ✅ |
 
-#### 3. create_folder_sheet.dart
+#### 3. create_folder_sheet.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/widgets/create_folder_sheet.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 164 | `'Edit Folder'` | `editFolder` | YES |
-| 164 | `'New Folder'` | `newFolder` | CHECK |
-| 185 | `'Save'` | `save` | YES |
-| 185 | `'Create'` | `create` | YES |
-| 262 | `'Icon'` | `icon` | CHECK |
-| 264 | `'Color'` | `color` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 164 | `'Edit Folder'` | `editFolder` | YES | ✅ |
+| 164 | `'New Folder'` | `newFolder` | YES (added) | ✅ |
+| 185 | `'Save'` | `save` | YES | ✅ |
+| 185 | `'Create'` | `create` | YES | ✅ |
+| 262 | `'Icon'` | `icon` | YES | ✅ |
+| 264 | `'Color'` | `color` | YES (added) | ✅ |
 
 #### 4. processing_capture.dart
 **Path:** `app/lib/pages/conversations/widgets/processing_capture.dart`

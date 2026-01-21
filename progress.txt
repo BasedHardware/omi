@@ -90,7 +90,7 @@ Total Strings: ~30
       - 'Move to Folder'
       - 'No folders available'
 
-  [ ] create_folder_sheet.dart (6 strings)
+  [x] create_folder_sheet.dart (6 strings)
       - 'Edit Folder'
       - 'New Folder'
       - 'Save'
@@ -140,8 +140,8 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 31/31 languages completed
-Part 2 Progress: 2/7 files completed
-Overall Progress: ~55%
+Part 2 Progress: 3/7 files completed
+Overall Progress: ~60%
 
 ================================================================================
 
@@ -405,6 +405,18 @@ Overall Progress: ~55%
   - Replaced hardcoded 'Move to Folder' with context.l10n.moveToFolder
   - Replaced hardcoded 'No folders available' with context.l10n.noFoldersAvailable
   - Added import for l10n_extensions.dart
+  - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Localized hardcoded strings in create_folder_sheet.dart
+  - Added new keys to app_en.arb: newFolder, color
+  - Added translations to all 33 language ARB files
+  - Replaced hardcoded 'Edit Folder' with context.l10n.editFolder
+  - Replaced hardcoded 'New Folder' with context.l10n.newFolder
+  - Replaced hardcoded 'Save' with context.l10n.save
+  - Replaced hardcoded 'Create' with context.l10n.create
+  - Replaced hardcoded 'Icon' with context.l10n.icon
+  - Replaced hardcoded 'Color' with context.l10n.color
   - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
 

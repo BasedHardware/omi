@@ -2514,5 +2514,7 @@
   },
   "writeYourReply": "Напишите ваш ответ...",
   "moveToFolder": "Переместить в папку",
-  "noFoldersAvailable": "Нет доступных папок"
+  "noFoldersAvailable": "Нет доступных папок",
+  "newFolder": "Новая папка",
+  "color": "Цвет"
 }

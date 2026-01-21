@@ -7596,4 +7596,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Δεν υπάρχουν διαθέσιμοι φάκελοι';
+
+  @override
+  String get newFolder => 'Νέος φάκελος';
+
+  @override
+  String get color => 'Χρώμα';
 }

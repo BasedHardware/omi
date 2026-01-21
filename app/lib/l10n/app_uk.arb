@@ -2479,5 +2479,7 @@
   "editReply": "Редагувати відповідь",
   "reply": "Відповісти",
   "moveToFolder": "Перемістити до папки",
-  "noFoldersAvailable": "Немає доступних папок"
+  "noFoldersAvailable": "Немає доступних папок",
+  "newFolder": "Нова папка",
+  "color": "Колір"
 }

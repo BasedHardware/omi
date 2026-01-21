@@ -2479,5 +2479,7 @@
   "starFilter": "{count}점",
   "writeYourReply": "답글을 작성하세요...",
   "moveToFolder": "폴더로 이동",
-  "noFoldersAvailable": "사용 가능한 폴더가 없습니다"
+  "noFoldersAvailable": "사용 가능한 폴더가 없습니다",
+  "newFolder": "새 폴더",
+  "color": "색상"
 }

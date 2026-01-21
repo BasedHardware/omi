@@ -2575,5 +2575,7 @@
     "description": "Hint text for reply input field"
   },
   "moveToFolder": "Áthelyezés mappába",
-  "noFoldersAvailable": "Nincsenek elérhető mappák"
+  "noFoldersAvailable": "Nincsenek elérhető mappák",
+  "newFolder": "Új mappa",
+  "color": "Szín"
 }

@@ -7590,4 +7590,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => '没有可用的文件夹';
+
+  @override
+  String get newFolder => '新建文件夹';
+
+  @override
+  String get color => '颜色';
 }

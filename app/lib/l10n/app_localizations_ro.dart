@@ -7596,4 +7596,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nu există dosare disponibile';
+
+  @override
+  String get newFolder => 'Dosar nou';
+
+  @override
+  String get color => 'Culoare';
 }

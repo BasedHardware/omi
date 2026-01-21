@@ -2480,5 +2480,7 @@
   "starFilter": "{count} स्टार",
   "writeYourReply": "अपना जवाब लिखें...",
   "moveToFolder": "फ़ोल्डर में ले जाएं",
-  "noFoldersAvailable": "कोई फ़ोल्डर उपलब्ध नहीं"
+  "noFoldersAvailable": "कोई फ़ोल्डर उपलब्ध नहीं",
+  "newFolder": "नया फ़ोल्डर",
+  "color": "रंग"
 }

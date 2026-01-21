@@ -2479,5 +2479,7 @@
   "starFilter": "{count} stele",
   "writeYourReply": "Scrie răspunsul tău...",
   "moveToFolder": "Mutați în dosar",
-  "noFoldersAvailable": "Nu există dosare disponibile"
+  "noFoldersAvailable": "Nu există dosare disponibile",
+  "newFolder": "Dosar nou",
+  "color": "Culoare"
 }

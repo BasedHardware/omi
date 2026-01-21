@@ -2479,5 +2479,7 @@
   "starFilter": "{count} stjärna",
   "writeYourReply": "Skriv ditt svar...",
   "moveToFolder": "Flytta till mapp",
-  "noFoldersAvailable": "Inga mappar tillgängliga"
+  "noFoldersAvailable": "Inga mappar tillgängliga",
+  "newFolder": "Ny mapp",
+  "color": "Färg"
 }

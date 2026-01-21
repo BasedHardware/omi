@@ -7596,4 +7596,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Žádné složky nejsou k dispozici';
+
+  @override
+  String get newFolder => 'Nová složka';
+
+  @override
+  String get color => 'Barva';
 }

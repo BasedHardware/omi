@@ -7596,4 +7596,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nėra pasiekiamų aplankų';
+
+  @override
+  String get newFolder => 'Naujas aplankas';
+
+  @override
+  String get color => 'Spalva';
 }

@@ -7596,4 +7596,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Không có thư mục nào';
+
+  @override
+  String get newFolder => 'Thư mục mới';
+
+  @override
+  String get color => 'Màu sắc';
 }

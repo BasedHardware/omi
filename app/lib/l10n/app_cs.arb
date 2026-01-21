@@ -2448,5 +2448,7 @@
   "starFilter": "{count} hvězda",
   "writeYourReply": "Napište svou odpověď...",
   "moveToFolder": "Přesunout do složky",
-  "noFoldersAvailable": "Žádné složky nejsou k dispozici"
+  "noFoldersAvailable": "Žádné složky nejsou k dispozici",
+  "newFolder": "Nová složka",
+  "color": "Barva"
 }

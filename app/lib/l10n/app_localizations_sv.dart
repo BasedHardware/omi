@@ -7596,4 +7596,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Inga mappar tillgängliga';
+
+  @override
+  String get newFolder => 'Ny mapp';
+
+  @override
+  String get color => 'Färg';
 }

@@ -2479,5 +2479,7 @@
   "starFilter": "{count} zvaigzne",
   "writeYourReply": "Rakstiet savu atbildi...",
   "moveToFolder": "Pārvietot uz mapi",
-  "noFoldersAvailable": "Nav pieejamu mapju"
+  "noFoldersAvailable": "Nav pieejamu mapju",
+  "newFolder": "Jauna mape",
+  "color": "Krāsa"
 }

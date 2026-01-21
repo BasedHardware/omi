@@ -7590,4 +7590,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => '사용 가능한 폴더가 없습니다';
+
+  @override
+  String get newFolder => '새 폴더';
+
+  @override
+  String get color => '색상';
 }

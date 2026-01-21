@@ -2446,5 +2446,7 @@
   "starFilter": "{count} نجمة",
   "writeYourReply": "اكتب ردك...",
   "moveToFolder": "نقل إلى المجلد",
-  "noFoldersAvailable": "لا توجد مجلدات متاحة"
+  "noFoldersAvailable": "لا توجد مجلدات متاحة",
+  "newFolder": "مجلد جديد",
+  "color": "اللون"
 }

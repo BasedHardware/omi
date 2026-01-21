@@ -7596,4 +7596,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Žiadne priečinky nie sú k dispozícii';
+
+  @override
+  String get newFolder => 'Nový priečinok';
+
+  @override
+  String get color => 'Farba';
 }

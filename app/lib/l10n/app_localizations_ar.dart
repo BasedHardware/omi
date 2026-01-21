@@ -7596,4 +7596,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'لا توجد مجلدات متاحة';
+
+  @override
+  String get newFolder => 'مجلد جديد';
+
+  @override
+  String get color => 'اللون';
 }

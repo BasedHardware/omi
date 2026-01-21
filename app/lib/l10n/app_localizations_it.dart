@@ -7596,4 +7596,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nessuna cartella disponibile';
+
+  @override
+  String get newFolder => 'Nuova cartella';
+
+  @override
+  String get color => 'Colore';
 }

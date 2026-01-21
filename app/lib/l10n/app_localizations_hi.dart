@@ -7590,4 +7590,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'कोई फ़ोल्डर उपलब्ध नहीं';
+
+  @override
+  String get newFolder => 'नया फ़ोल्डर';
+
+  @override
+  String get color => 'रंग';
 }

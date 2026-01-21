@@ -7596,4 +7596,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Ei kansioita saatavilla';
+
+  @override
+  String get newFolder => 'Uusi kansio';
+
+  @override
+  String get color => 'Väri';
 }

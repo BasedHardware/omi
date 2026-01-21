@@ -14420,6 +14420,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No folders available'**
   String get noFoldersAvailable;
+
+  /// No description provided for @newFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'New Folder'**
+  String get newFolder;
+
+  /// No description provided for @color.
+  ///
+  /// In en, this message translates to:
+  /// **'Color'**
+  String get color;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

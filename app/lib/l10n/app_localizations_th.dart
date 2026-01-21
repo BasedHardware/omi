@@ -7596,4 +7596,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'ไม่มีโฟลเดอร์ที่พร้อมใช้งาน';
+
+  @override
+  String get newFolder => 'โฟลเดอร์ใหม่';
+
+  @override
+  String get color => 'สี';
 }

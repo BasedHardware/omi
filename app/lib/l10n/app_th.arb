@@ -2479,5 +2479,7 @@
   "starFilter": "{count} ดาว",
   "writeYourReply": "เขียนการตอบกลับของคุณ...",
   "moveToFolder": "ย้ายไปยังโฟลเดอร์",
-  "noFoldersAvailable": "ไม่มีโฟลเดอร์ที่พร้อมใช้งาน"
+  "noFoldersAvailable": "ไม่มีโฟลเดอร์ที่พร้อมใช้งาน",
+  "newFolder": "โฟลเดอร์ใหม่",
+  "color": "สี"
 }

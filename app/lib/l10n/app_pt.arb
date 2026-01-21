@@ -2515,5 +2515,7 @@
   },
   "writeYourReply": "Escreva sua resposta...",
   "moveToFolder": "Mover para pasta",
-  "noFoldersAvailable": "Nenhuma pasta disponível"
+  "noFoldersAvailable": "Nenhuma pasta disponível",
+  "newFolder": "Nova pasta",
+  "color": "Cor"
 }

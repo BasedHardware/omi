@@ -7596,4 +7596,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nincsenek elérhető mappák';
+
+  @override
+  String get newFolder => 'Új mappa';
+
+  @override
+  String get color => 'Szín';
 }

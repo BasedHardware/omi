@@ -7590,4 +7590,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Ingen mapper tilgængelige';
+
+  @override
+  String get newFolder => 'Ny mappe';
+
+  @override
+  String get color => 'Farve';
 }

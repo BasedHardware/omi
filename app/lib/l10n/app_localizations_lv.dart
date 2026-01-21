@@ -7596,4 +7596,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nav pieejamu mapju';
+
+  @override
+  String get newFolder => 'Jauna mape';
+
+  @override
+  String get color => 'Krāsa';
 }

@@ -2488,5 +2488,7 @@
   },
   "writeYourReply": "Skriv dit svar...",
   "moveToFolder": "Flyt til mappe",
-  "noFoldersAvailable": "Ingen mapper tilgængelige"
+  "noFoldersAvailable": "Ingen mapper tilgængelige",
+  "newFolder": "Ny mappe",
+  "color": "Farve"
 }

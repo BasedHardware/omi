@@ -2514,5 +2514,7 @@
   },
   "writeYourReply": "Napisz swoją odpowiedź...",
   "moveToFolder": "Przenieś do folderu",
-  "noFoldersAvailable": "Brak dostępnych folderów"
+  "noFoldersAvailable": "Brak dostępnych folderów",
+  "newFolder": "Nowy folder",
+  "color": "Kolor"
 }

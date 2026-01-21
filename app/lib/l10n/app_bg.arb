@@ -2448,5 +2448,7 @@
   "starFilter": "{count} звезда",
   "writeYourReply": "Напишете вашия отговор...",
   "moveToFolder": "Преместване в папка",
-  "noFoldersAvailable": "Няма налични папки"
+  "noFoldersAvailable": "Няма налични папки",
+  "newFolder": "Нова папка",
+  "color": "Цвят"
 }

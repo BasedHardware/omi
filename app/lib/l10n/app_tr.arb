@@ -2514,5 +2514,7 @@
   },
   "writeYourReply": "Yanıtınızı yazın...",
   "moveToFolder": "Klasöre Taşı",
-  "noFoldersAvailable": "Kullanılabilir klasör yok"
+  "noFoldersAvailable": "Kullanılabilir klasör yok",
+  "newFolder": "Yeni Klasör",
+  "color": "Renk"
 }

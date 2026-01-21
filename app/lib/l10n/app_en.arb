@@ -9700,5 +9700,7 @@
   "noFoldersAvailable": "No folders available",
   "@noFoldersAvailable": {
     "description": "Message shown when there are no folders to move a conversation to"
-  }
+  },
+  "newFolder": "New Folder",
+  "color": "Color"
 }

@@ -7596,4 +7596,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'No hi ha carpetes disponibles';
+
+  @override
+  String get newFolder => 'Carpeta nova';
+
+  @override
+  String get color => 'Color';
 }

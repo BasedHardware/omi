@@ -2521,5 +2521,7 @@
   },
   "writeYourReply": "Tulis balasan Anda...",
   "moveToFolder": "Pindahkan ke Folder",
-  "noFoldersAvailable": "Tidak ada folder tersedia"
+  "noFoldersAvailable": "Tidak ada folder tersedia",
+  "newFolder": "Folder Baru",
+  "color": "Warna"
 }

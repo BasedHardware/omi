@@ -7596,4 +7596,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Tidak ada folder tersedia';
+
+  @override
+  String get newFolder => 'Folder Baru';
+
+  @override
+  String get color => 'Warna';
 }

@@ -7596,4 +7596,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Немає доступних папок';
+
+  @override
+  String get newFolder => 'Нова папка';
+
+  @override
+  String get color => 'Колір';
 }

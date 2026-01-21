@@ -2479,5 +2479,7 @@
   "starFilter": "{count} žvaigždė",
   "writeYourReply": "Rašykite savo atsakymą...",
   "moveToFolder": "Perkelti į aplanką",
-  "noFoldersAvailable": "Nėra pasiekiamų aplankų"
+  "noFoldersAvailable": "Nėra pasiekiamų aplankų",
+  "newFolder": "Naujas aplankas",
+  "color": "Spalva"
 }

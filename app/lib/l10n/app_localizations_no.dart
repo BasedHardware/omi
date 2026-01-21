@@ -7596,4 +7596,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Ingen mapper tilgjengelig';
+
+  @override
+  String get newFolder => 'Ny mappe';
+
+  @override
+  String get color => 'Farge';
 }

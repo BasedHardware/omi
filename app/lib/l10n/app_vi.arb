@@ -2484,5 +2484,7 @@
   "editReply": "Sửa phản hồi",
   "reply": "Phản hồi",
   "moveToFolder": "Di chuyển đến thư mục",
-  "noFoldersAvailable": "Không có thư mục nào"
+  "noFoldersAvailable": "Không có thư mục nào",
+  "newFolder": "Thư mục mới",
+  "color": "Màu sắc"
 }

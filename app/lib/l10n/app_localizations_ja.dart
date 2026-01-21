@@ -7590,4 +7590,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => '利用可能なフォルダがありません';
+
+  @override
+  String get newFolder => '新しいフォルダ';
+
+  @override
+  String get color => '色';
 }

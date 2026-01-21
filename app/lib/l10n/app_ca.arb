@@ -2448,5 +2448,7 @@
   "starFilter": "{count} Estrella",
   "writeYourReply": "Escriu la teva resposta...",
   "moveToFolder": "Moure a la carpeta",
-  "noFoldersAvailable": "No hi ha carpetes disponibles"
+  "noFoldersAvailable": "No hi ha carpetes disponibles",
+  "newFolder": "Carpeta nova",
+  "color": "Color"
 }

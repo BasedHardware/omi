@@ -7590,4 +7590,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Nenhuma pasta disponível';
+
+  @override
+  String get newFolder => 'Nova pasta';
+
+  @override
+  String get color => 'Cor';
 }

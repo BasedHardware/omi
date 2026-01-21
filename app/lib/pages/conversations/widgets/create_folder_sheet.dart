@@ -161,7 +161,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isEditing ? 'Edit Folder' : 'New Folder',
+                  isEditing ? context.l10n.editFolder : context.l10n.newFolder,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -182,7 +182,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                           ),
                         )
                       : Text(
-                          isEditing ? 'Save' : 'Create',
+                          isEditing ? context.l10n.save : context.l10n.create,
                           style: const TextStyle(
                             color: ResponsiveHelper.purplePrimary,
                             fontSize: 16,
@@ -259,9 +259,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             const SizedBox(height: 20),
 
             // Icon selection
-            const Text(
-              'Icon',
-              style: TextStyle(
+            Text(
+              context.l10n.icon,
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: ResponsiveHelper.textTertiary,
@@ -277,9 +277,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             const SizedBox(height: 16),
 
             // Color selection
-            const Text(
-              'Color',
-              style: TextStyle(
+            Text(
+              context.l10n.color,
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: ResponsiveHelper.textTertiary,

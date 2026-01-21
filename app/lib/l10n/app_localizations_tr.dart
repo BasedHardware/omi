@@ -7596,4 +7596,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Kullanılabilir klasör yok';
+
+  @override
+  String get newFolder => 'Yeni Klasör';
+
+  @override
+  String get color => 'Renk';
 }

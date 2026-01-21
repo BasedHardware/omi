@@ -2479,5 +2479,7 @@
   "starFilter": "{count} ster",
   "writeYourReply": "Schrijf je reactie...",
   "moveToFolder": "Verplaatsen naar map",
-  "noFoldersAvailable": "Geen mappen beschikbaar"
+  "noFoldersAvailable": "Geen mappen beschikbaar",
+  "newFolder": "Nieuwe map",
+  "color": "Kleur"
 }

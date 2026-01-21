@@ -7596,4 +7596,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Geen mappen beschikbaar';
+
+  @override
+  String get newFolder => 'Nieuwe map';
+
+  @override
+  String get color => 'Kleur';
 }

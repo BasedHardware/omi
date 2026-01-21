@@ -2479,5 +2479,7 @@
   "starFilter": "{count} Αστέρι",
   "writeYourReply": "Γράψτε την απάντησή σας...",
   "moveToFolder": "Μετακίνηση σε φάκελο",
-  "noFoldersAvailable": "Δεν υπάρχουν διαθέσιμοι φάκελοι"
+  "noFoldersAvailable": "Δεν υπάρχουν διαθέσιμοι φάκελοι",
+  "newFolder": "Νέος φάκελος",
+  "color": "Χρώμα"
 }

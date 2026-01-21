@@ -7596,4 +7596,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Няма налични папки';
+
+  @override
+  String get newFolder => 'Нова папка';
+
+  @override
+  String get color => 'Цвят';
 }

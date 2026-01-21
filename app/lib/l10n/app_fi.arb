@@ -2479,5 +2479,7 @@
   "starFilter": "{count} tähteä",
   "writeYourReply": "Kirjoita vastauksesi...",
   "moveToFolder": "Siirrä kansioon",
-  "noFoldersAvailable": "Ei kansioita saatavilla"
+  "noFoldersAvailable": "Ei kansioita saatavilla",
+  "newFolder": "Uusi kansio",
+  "color": "Väri"
 }

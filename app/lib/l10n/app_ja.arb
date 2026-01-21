@@ -2480,5 +2480,7 @@
   "starFilter": "{count}つ星",
   "writeYourReply": "返信を入力...",
   "moveToFolder": "フォルダに移動",
-  "noFoldersAvailable": "利用可能なフォルダがありません"
+  "noFoldersAvailable": "利用可能なフォルダがありません",
+  "newFolder": "新しいフォルダ",
+  "color": "色"
 }

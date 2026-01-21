@@ -7603,4 +7603,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'No folders available';
+
+  @override
+  String get newFolder => 'New Folder';
+
+  @override
+  String get color => 'Color';
 }

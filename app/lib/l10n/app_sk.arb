@@ -2484,5 +2484,7 @@
   "starFilter": "{count} hviezdička",
   "writeYourReply": "Napíšte svoju odpoveď...",
   "moveToFolder": "Presunúť do priečinka",
-  "noFoldersAvailable": "Žiadne priečinky nie sú k dispozícii"
+  "noFoldersAvailable": "Žiadne priečinky nie sú k dispozícii",
+  "newFolder": "Nový priečinok",
+  "color": "Farba"
 }

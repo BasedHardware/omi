@@ -2480,5 +2480,7 @@
   "starFilter": "{count} Estrella",
   "writeYourReply": "Escribe tu respuesta...",
   "moveToFolder": "Mover a carpeta",
-  "noFoldersAvailable": "No hay carpetas disponibles"
+  "noFoldersAvailable": "No hay carpetas disponibles",
+  "newFolder": "Nueva carpeta",
+  "color": "Color"
 }

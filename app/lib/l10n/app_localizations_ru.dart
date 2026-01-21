@@ -7597,4 +7597,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Нет доступных папок';
+
+  @override
+  String get newFolder => 'Новая папка';
+
+  @override
+  String get color => 'Цвет';
 }

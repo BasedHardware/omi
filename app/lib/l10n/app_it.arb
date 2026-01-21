@@ -2479,5 +2479,7 @@
   "starFilter": "{count} Stelle",
   "writeYourReply": "Scrivi la tua risposta...",
   "moveToFolder": "Sposta nella cartella",
-  "noFoldersAvailable": "Nessuna cartella disponibile"
+  "noFoldersAvailable": "Nessuna cartella disponibile",
+  "newFolder": "Nuova cartella",
+  "color": "Colore"
 }

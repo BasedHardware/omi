@@ -7596,4 +7596,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noFoldersAvailable => 'Kaustad pole saadaval';
+
+  @override
+  String get newFolder => 'Uus kaust';
+
+  @override
+  String get color => 'Värv';
 }

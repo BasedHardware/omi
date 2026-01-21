@@ -2514,5 +2514,7 @@
   },
   "writeYourReply": "Écrivez votre réponse...",
   "moveToFolder": "Déplacer vers le dossier",
-  "noFoldersAvailable": "Aucun dossier disponible"
+  "noFoldersAvailable": "Aucun dossier disponible",
+  "newFolder": "Nouveau dossier",
+  "color": "Couleur"
 }

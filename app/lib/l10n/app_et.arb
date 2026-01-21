@@ -2479,5 +2479,7 @@
   "starFilter": "{count} tärni",
   "writeYourReply": "Kirjuta oma vastus...",
   "moveToFolder": "Teisalda kausta",
-  "noFoldersAvailable": "Kaustad pole saadaval"
+  "noFoldersAvailable": "Kaustad pole saadaval",
+  "newFolder": "Uus kaust",
+  "color": "Värv"
 }
