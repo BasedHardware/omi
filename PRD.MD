@@ -26,7 +26,7 @@ Total languages with missing translations: **31**
 | German | de | 8 | MEDIUM |
 | Greek | el | 0 | ✅ DONE |
 | Spanish | es | 0 | ✅ DONE |
-| Estonian | et | 22 | HIGH |
+| Estonian | et | 0 | ✅ DONE |
 | Finnish | fi | 22 | HIGH |
 | French | fr | 22 | HIGH |
 | Hindi | hi | 22 | HIGH |

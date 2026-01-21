@@ -6047,7 +6047,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceNotCompatible => 'Sinu seade ei ühildu seadmes transkriptsiooniga';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Teie seade ei vasta seadmesisese transkriptsiooni nõuetele.';
 
   @override
   String get willLikelyCrash => 'Selle lubamine põhjustab tõenäoliselt rakenduse krahhi või hangumise.';
@@ -6062,7 +6062,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get olderDeviceDetected => 'Tuvastati vanem seade';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Seadmesisene transkriptsioon võib sellel seadmel olla aeglasem.';
 
   @override
   String get batteryUsageHigher => 'Akukasutus on suurem kui pilves transkriptsiooni puhul.';
@@ -6074,10 +6074,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get highResourceUsage => 'Suur ressursikasutus';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Seadmesisene transkriptsioon on arvutuslikult intensiivne.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Aku tarbimine suureneb märkimisväärselt.';
 
   @override
   String get deviceMayWarmUp => 'Seade võib pikaajalisel kasutamisel soojeneda.';
@@ -6089,35 +6089,38 @@ class AppLocalizationsEt extends AppLocalizations {
   String get cloudProvider => 'Pilveteenuse pakkuja';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo =>
+      '1200 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'Heli töödeldakse kohapeal. Töötab võrguühenduseta, on privaatsem, kuid kasutab rohkem akut.';
 
   @override
-  String get model => 'Model';
+  String get model => 'Mudel';
 
   @override
   String get performanceWarning => 'Jõudluse hoiatus';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'See mudel on suur ja võib põhjustada rakenduse krahhi või väga aeglase töö mobiilseadmetes.\n\nSoovitatav on kasutada \"small\" või \"base\" mudelit.';
 
   @override
   String get usingNativeIosSpeech => 'Kasutatakse iOS-i natiivset kõnetuvastust';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Kasutatakse teie seadme algset kõnemootorit. Mudeli allalaadimine pole vajalik.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Mudel on valmis';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Laadi uuesti alla';
 
   @override
   String get doNotCloseApp => 'Palun ärge sulgege rakendust.';
@@ -6130,12 +6133,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Hinnanguline suurus: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Saadaval ruumi: $space';
   }
 
   @override
@@ -6146,7 +6149,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Allalaadimise viga: $error';
   }
 
   @override
@@ -6492,32 +6495,32 @@ class AppLocalizationsEt extends AppLocalizations {
   String get moneyEarned => 'Teenitud raha';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Kirjuta oma vastus...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Vastus saadeti edukalt';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Vastuse saatmine ebaõnnestus: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Saada';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count tärni';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Arvustusi ei leitud';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Muuda vastust';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Vasta';
 
   @override
   String starFilterLabel(int count) {
