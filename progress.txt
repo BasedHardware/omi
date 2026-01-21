@@ -16,15 +16,14 @@
 | Pending Files | ~6 |
 | Progress | ~90% |
 
-**PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), Hindi (hi), Hungarian (hu), Indonesian (id), Lithuanian (lt), Latvian (lv), Norwegian (no), Malay (ms), Romanian (ro), Slovak (sk), and Swedish (sv) completed, 3 languages remaining.
+**PRIORITY 0 STATUS**: COMPLETED - All 33 languages have been translated. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), Hindi (hi), Hungarian (hu), Indonesian (id), Lithuanian (lt), Latvian (lv), Norwegian (no), Malay (ms), Romanian (ro), Slovak (sk), Swedish (sv), Thai (th), Ukrainian (uk), and Vietnamese (vi) all completed.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
-### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi, Hungarian, Indonesian, Lithuanian, Latvian, Norwegian, Malay, Romanian, Slovak, Swedish completed, 3 languages remaining)
+### [x] Translate pre-existing English keys in all non-English ARB files
+Status: COMPLETED (All 33 languages translated: Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi, Hungarian, Indonesian, Lithuanian, Latvian, Norwegian, Malay, Romanian, Slovak, Swedish, Thai, Ukrainian, Vietnamese)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -1140,3 +1139,21 @@ Legend:
 - flutter gen-l10n completed successfully
 - All tests passed
 - Remaining: 1 other language still needs the same keys translated (vi)
+
+[2026-01-21] Translated 174 pre-existing English keys to Vietnamese (app_vi.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 174 keys to proper Vietnamese translations in app_vi.arb
+- Keys include: cancel, signOutConfirmation, deleteRecording, thisCannotBeUndone,
+  storeAudioOnPhone, storeAudioOnCloud, configureAiPersona, trackYourGoalsOnHomepage,
+  cancelSync, cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring,
+  transferRequired, downloadingAudioFromSdCard, recordingDetails, storageLocationLabel,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, xHandleTitle, planSwitchingDescriptionWithTitle,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, onboardingSignIn,
+  authFailedToSignInWithGoogle, msgCameraNotAvailable, captureRecordingError, voiceFailedToTranscribe,
+  devModeSettingsSaved, cancelSubscription, locationPermissionRequired, timeSecsSingular, and 135+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {time}, {level}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Stripe, GitHub)
+- flutter gen-l10n completed successfully
+- All tests passed
+- PRIORITY 0 COMPLETE: All 33 non-English languages now have proper translations

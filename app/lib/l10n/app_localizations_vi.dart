@@ -31,7 +31,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get confirm => 'Xác nhận';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Hủy';
 
   @override
   String get ok => 'Ok';
@@ -420,7 +420,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get planAndUsage => 'Gói & Mức sử dụng';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Đồng bộ Ngoại tuyến';
 
   @override
   String get deviceSettings => 'Cài đặt thiết bị';
@@ -586,7 +586,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get starOngoing => 'Gắn sao cuộc trò chuyện đang diễn ra';
 
   @override
-  String get off => 'Off';
+  String get off => 'Tắt';
 
   @override
   String get max => 'Tối đa';
@@ -876,7 +876,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get apiKeyAuth => 'Xác thực API Key';
 
   @override
-  String get header => 'Header';
+  String get header => 'Tiêu đề';
 
   @override
   String get authorizationBearer => 'Authorization: Bearer <key>';
@@ -885,10 +885,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get oauth => 'OAuth';
 
   @override
-  String get clientId => 'Client ID';
+  String get clientId => 'Mã Khách hàng';
 
   @override
-  String get clientSecret => 'Client Secret';
+  String get clientSecret => 'Mã Bí mật';
 
   @override
   String get useMcpApiKey => 'Sử dụng API key MCP của bạn';
@@ -1150,7 +1150,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get yes => 'Có';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Sửa Tên';
 
   @override
   String get howShouldOmiCallYou => 'Omi nên gọi bạn như thế nào?';
@@ -1177,7 +1177,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get connectMacOsCalendar => 'Kết nối lịch macOS cục bộ của bạn';
 
   @override
-  String get googleCalendar => 'Google Calendar';
+  String get googleCalendar => 'Lịch Google';
 
   @override
   String get syncGoogleAccount => 'Đồng bộ với tài khoản Google của bạn';
@@ -1552,10 +1552,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get storedLocallyNeverShared => 'Lưu trữ cục bộ, không bao giờ chia sẻ';
 
   @override
-  String get host => 'Host';
+  String get host => 'Máy chủ';
 
   @override
-  String get port => 'Port';
+  String get port => 'Cổng';
 
   @override
   String get advanced => 'Nâng cao';
@@ -1754,13 +1754,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get grantPermissions => 'Cấp quyền';
 
   @override
-  String get backgroundActivity => 'Hoạt động nền';
+  String get backgroundActivity => 'Hoạt động Nền';
 
   @override
   String get backgroundActivityDesc => 'Cho phép Omi chạy trong nền để ổn định hơn';
 
   @override
-  String get locationAccess => 'Truy cập vị trí';
+  String get locationAccess => 'Truy cập Vị trí';
 
   @override
   String get locationAccessDesc => 'Bật vị trí nền để có trải nghiệm đầy đủ';
@@ -1821,10 +1821,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get skipThisQuestion => 'Bỏ qua câu hỏi này';
 
   @override
-  String get skipForNow => 'Bỏ qua bây giờ';
+  String get skipForNow => 'Bỏ qua';
 
   @override
-  String get connectionError => 'Lỗi kết nối';
+  String get connectionError => 'Lỗi Kết nối';
 
   @override
   String get connectionErrorDesc => 'Không thể kết nối với máy chủ. Vui lòng kiểm tra kết nối internet và thử lại.';
@@ -1964,7 +1964,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get actionItemsTitle => 'Việc cần làm';
 
   @override
-  String get actionItemsDescription => 'Nhấn để sửa • Nhấn giữ để chọn • Vuốt để thực hiện hành động';
+  String get actionItemsDescription => 'Các mục hành động từ cuộc trò chuyện của bạn';
 
   @override
   String get tabToDo => 'Cần làm';
@@ -2146,7 +2146,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get saveMemory => 'Lưu ký ức';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Thử lại';
 
   @override
   String get createActionItem => 'Tạo mục hành động';
@@ -2397,7 +2397,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get unpairAndForgetDevice => 'Hủy ghép nối và quên thiết bị';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Không xác định';
 
   @override
   String get unknown => 'Không xác định';
@@ -2429,7 +2429,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get createKeyToGetStarted => 'Tạo khóa để bắt đầu';
 
   @override
-  String get persona => 'Persona';
+  String get persona => 'Nhân cách';
 
   @override
   String get configureYourAiPersona => 'Cấu hình nhân vật AI của bạn';
@@ -2799,7 +2799,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get browseInstallCreateApps => 'Duyệt, cài đặt và tạo ứng dụng';
 
   @override
-  String get all => 'All';
+  String get all => 'Tất cả';
 
   @override
   String get open => 'Mở';
@@ -3270,7 +3270,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get upgradeToPro => 'Nâng cấp lên Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Nhận Thiết bị Omi';
 
   @override
   String get wearableAiCompanion => 'Trợ lý AI đeo được';
@@ -3836,7 +3836,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get signOutQuestion => 'Đăng xuất?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Bạn có chắc chắn muốn đăng xuất?';
 
   @override
   String get customVocabularyHeader => 'TỪ VỰNG TÙY CHỈNH';
@@ -4130,7 +4130,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'Ứng dụng này sẽ truy cập dữ liệu của bạn. Omi AI không chịu trách nhiệm về cách dữ liệu của bạn được sử dụng bởi các ứng dụng bên thứ ba.';
 
   @override
   String get copyUrl => 'Sao chép URL';
@@ -4268,7 +4268,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get itemApp => 'Ứng dụng';
 
   @override
-  String get itemPersona => 'Persona';
+  String get itemPersona => 'Nhân cách';
 
   @override
   String keepItemPublic(String item) {
@@ -4470,7 +4470,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Đào tạo Omi';
+  String get omiTraining => 'Huấn luyện Omi';
 
   @override
   String get trainingDataProgram => 'Chương trình dữ liệu huấn luyện';
@@ -4621,7 +4621,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get managePaymentMethod => 'Quản lý phương thức thanh toán';
 
   @override
-  String get cancelSubscription => 'Hủy đăng ký';
+  String get cancelSubscription => 'Hủy Đăng ký';
 
   @override
   String endsOnDate(String date) {
@@ -4903,10 +4903,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enable => 'Bật';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Lưu Âm thanh trên Điện thoại';
 
   @override
-  String get on => 'On';
+  String get on => 'Bật';
 
   @override
   String get storeAudioDescription =>
@@ -4925,7 +4925,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get enableCloudStorage => 'Bật bộ nhớ đám mây';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Lưu Âm thanh trên Đám mây';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5466,7 +5466,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get wrappedFailedToStartGeneration => 'Không thể bắt đầu tạo. Vui lòng thử lại.';
 
   @override
-  String get wrappedStarting => 'Đang khởi động...';
+  String get wrappedStarting => 'Đang bắt đầu...';
 
   @override
   String get wrappedShare => 'Chia sẻ';
@@ -5824,28 +5824,28 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chooseFile => 'Chọn tệp';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Cấu hình nhân cách AI của bạn';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Kết nối trợ lý AI với dữ liệu của bạn';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Theo dõi mục tiêu cá nhân trên trang chủ';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Xóa Bản ghi';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Hành động này không thể hoàn tác.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'Thẻ SD';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'Từ SD';
 
   @override
   String get limitless => 'Limitless';
@@ -5854,117 +5854,117 @@ class AppLocalizationsVi extends AppLocalizations {
   String get fastTransfer => 'Truyền nhanh';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Đang đồng bộ';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Thất bại';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return 'Thời gian còn lại: $time';
   }
 
   @override
   String get transferMethod => 'Phương thức truyền';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Nhanh';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Điện thoại';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Hủy Đồng bộ';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Dữ liệu đã tải xuống sẽ được lưu. Bạn có thể tiếp tục sau.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Đã hủy đồng bộ';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Xóa Tệp Đã Xử lý';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Đã xóa tệp đã xử lý';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Không thể bật WiFi trên thiết bị. Vui lòng thử lại.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Thiết bị của bạn không hỗ trợ Chuyển Nhanh. Sử dụng Bluetooth thay thế.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Vui lòng bật điểm phát sóng trên điện thoại và thử lại.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Không thể bắt đầu chuyển. Vui lòng thử lại.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Thiết bị không phản hồi. Vui lòng thử lại.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Thông tin WiFi không hợp lệ. Kiểm tra cài đặt điểm phát sóng của bạn.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'Kết nối WiFi thất bại. Vui lòng thử lại.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'Đang Xử lý Thẻ SD';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Đang xử lý $count bản ghi. Các tệp sẽ được xóa khỏi thẻ SD sau đó.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Xử lý';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'Đồng bộ WiFi Thất bại';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Xử lý Thất bại';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Đang tải xuống từ Thẻ SD';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Đang xử lý $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return 'Đã tạo $count cuộc trò chuyện';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Cần có kết nối internet';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Xử lý Âm thanh';
 
   @override
-  String get start => 'Start';
+  String get start => 'Bắt đầu';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Không có Bản ghi';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Âm thanh từ thiết bị Omi của bạn sẽ xuất hiện ở đây';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Xóa Đã Xử lý';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Thử bộ lọc khác';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Bản ghi';
 
   @override
   String get enableRemindersAccess => 'Vui lòng bật quyền truy cập Nhắc nhở trong Cài đặt để sử dụng Nhắc nhở Apple';
@@ -6055,7 +6055,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceNotCompatible => 'Thiết bị của bạn không tương thích với phiên âm trên thiết bị';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Yêu cầu Thiết bị';
 
   @override
   String get willLikelyCrash => 'Kích hoạt điều này có thể khiến ứng dụng bị treo hoặc đóng băng.';
@@ -6070,7 +6070,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get olderDeviceDetected => 'Phát hiện thiết bị cũ';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Xử lý trên thiết bị (chậm hơn)';
 
   @override
   String get batteryUsageHigher => 'Mức sử dụng pin sẽ cao hơn phiên âm đám mây.';
@@ -6082,10 +6082,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get highResourceUsage => 'Sử dụng tài nguyên cao';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Xử lý chuyên sâu trên thiết bị';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Tăng tiêu hao pin';
 
   @override
   String get deviceMayWarmUp => 'Thiết bị có thể nóng lên khi sử dụng lâu.';
@@ -6097,35 +6097,34 @@ class AppLocalizationsVi extends AppLocalizations {
   String get cloudProvider => 'Nhà cung cấp đám mây';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => 'Thông tin phút Premium';
 
   @override
   String get viewUsage => 'Xem mức sử dụng';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo => 'Thông tin xử lý cục bộ';
 
   @override
-  String get model => 'Model';
+  String get model => 'Mô hình';
 
   @override
   String get performanceWarning => 'Cảnh báo hiệu suất';
 
   @override
-  String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning => 'Cảnh báo mô hình lớn';
 
   @override
   String get usingNativeIosSpeech => 'Sử dụng Nhận dạng giọng nói iOS gốc';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired => 'Không cần tải mô hình';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Mô hình sẵn sàng';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Tải lại';
 
   @override
   String get doNotCloseApp => 'Vui lòng không đóng ứng dụng.';
@@ -6138,12 +6137,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Kích thước ước tính';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Không gian khả dụng';
   }
 
   @override
@@ -6154,7 +6153,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Lỗi tải xuống';
   }
 
   @override
@@ -6263,7 +6262,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Thiết bị';
 
   @override
   String get chatAssistantsTitle => 'Trợ lý trò chuyện';
@@ -6320,55 +6319,55 @@ class AppLocalizationsVi extends AppLocalizations {
   String get writeReviewOptional => 'Viết đánh giá (tùy chọn)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Giúp chúng tôi cải thiện Omi bằng cách trả lời vài câu hỏi.  🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Bạn làm nghề gì?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Bạn dự định sử dụng Omi ở đâu?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Độ tuổi của bạn?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Bạn chưa trả lời hết các câu hỏi! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Bỏ qua, tôi không muốn giúp :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Doanh nhân';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Kỹ sư Phần mềm';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Quản lý Sản phẩm';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Giám đốc';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Bán hàng';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Sinh viên';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Tại nơi làm việc';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Sự kiện Thực tế';
 
   @override
-  String get usageOnline => 'Online';
+  String get usageOnline => 'Trực tuyến';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Trong Môi trường Xã hội';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Mọi nơi';
 
   @override
   String get customBackendUrlTitle => 'URL máy chủ tùy chỉnh';
@@ -6500,32 +6499,32 @@ class AppLocalizationsVi extends AppLocalizations {
   String get moneyEarned => 'Tiền kiếm được';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Viết phản hồi của bạn';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Đã gửi phản hồi thành công';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Không thể gửi phản hồi';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Gửi';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return 'Lọc theo sao';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Không tìm thấy đánh giá';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Sửa phản hồi';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Phản hồi';
 
   @override
   String starFilterLabel(int count) {
@@ -6533,32 +6532,32 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Chia sẻ Liên kết Công khai';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Công khai Nhân cách';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Dữ liệu Kiến thức Đã Kết nối';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Nhập tên';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Ngắt kết nối Twitter';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Bạn có chắc chắn muốn ngắt kết nối tài khoản Twitter? Nhân cách của bạn sẽ không còn được huấn luyện từ hoạt động Twitter của bạn nữa.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Tạo bản sao chính xác hơn với các cuộc trò chuyện cá nhân của bạn';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Nhận Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Tôi có thiết bị Omi';
 
   @override
   String get goal => 'MỤC TIÊU';
@@ -6633,31 +6632,31 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Gắn thẻ Người nói $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Đã tồn tại một người có tên này.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Để gắn thẻ chính mình, vui lòng chọn \"Bạn\" từ danh sách.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Nhập Tên Người';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Thêm Người';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Gắn thẻ các đoạn khác từ người nói này ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Gắn thẻ các đoạn khác';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Quản lý Người';
 
   @override
   String get shareViaSms => 'Chia sẻ qua SMS';
@@ -6728,124 +6727,124 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Kết nối Thất bại';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Đang kết nối tới $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Bật WiFi của $deviceName';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Kết nối tới $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Chi tiết Bản ghi';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'Thẻ SD';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Điện thoại';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Điện thoại (Bộ nhớ)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Lưu trên $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Đang chuyển...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Cần Chuyển';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Đang tải âm thanh từ thẻ SD của thiết bị';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Bản ghi này được lưu trên thẻ SD của thiết bị. Chuyển nó sang điện thoại để phát.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Hủy Chuyển';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Chuyển sang Điện thoại';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Riêng tư & an toàn trên thiết bị của bạn';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Thông tin Bản ghi';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Đang chuyển...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Chia sẻ Bản ghi';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Bạn có chắc chắn muốn xóa vĩnh viễn bản ghi này? Hành động này không thể hoàn tác.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'ID Bản ghi';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Ngày & Giờ';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Thời lượng';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Định dạng Âm thanh';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Vị trí Lưu trữ';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Kích thước Ước tính';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Mẫu Thiết bị';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'ID Thiết bị';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Trạng thái';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Đã Xử lý';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Chưa Xử lý';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Đã chuyển sang Chuyển Nhanh';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Chuyển hoàn tất! Bạn có thể phát bản ghi này ngay.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Chuyển thất bại: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Đã hủy chuyển';
 
   @override
   String get fastTransferEnabled => 'Đã bật truyền nhanh';
@@ -6933,63 +6932,63 @@ class AppLocalizationsVi extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Đã xảy ra lỗi khi cập nhật trạng thái ứng dụng.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Đang tính...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Còn khoảng $minutes phút';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Còn khoảng một phút';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Gần xong...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'Omi nói';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Đang phân tích dữ liệu của bạn...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Đang di chuyển sang bảo vệ $level...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Không có dữ liệu để di chuyển. Đang hoàn tất...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return 'Đang di chuyển $itemType... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Tất cả đối tượng đã được di chuyển. Đang hoàn tất...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Đã xảy ra lỗi trong quá trình di chuyển. Vui lòng thử lại.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Di chuyển hoàn tất!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Dữ liệu của bạn hiện được bảo vệ với cài đặt $level mới.';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'cuộc trò chuyện';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'dữ liệu';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Ối...';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Bạn bị ngã à?';
 
   @override
   String get importantConversationTitle => 'Cuộc trò chuyện quan trọng';
@@ -7227,54 +7226,54 @@ class AppLocalizationsVi extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Vui lòng tạo ứng dụng trước';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Tên X của bạn là gì?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription =>
+      'Chúng tôi sẽ huấn luyện trước bản sao Omi của bạn\ndựa trên hoạt động tài khoản của bạn';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Vui lòng nhập tên X của bạn';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Vui lòng nhập tên X hợp lệ';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Tiếp';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Kết nối Thiết bị Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Bạn đang chuyển Gói Unlimited sang $title. Bạn có chắc chắn muốn tiếp tục?';
   }
 
   @override
   String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+      'Đã lên lịch nâng cấp! Gói hàng tháng của bạn tiếp tục cho đến cuối kỳ thanh toán.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Không thể lên lịch thay đổi gói. Vui lòng thử lại.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Đăng ký của bạn đã được kích hoạt lại! Không tính phí ngay - bạn sẽ được thanh toán vào đầu kỳ thanh toán tiếp theo.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Đăng ký thành công! Bạn đã được tính phí cho kỳ thanh toán mới.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Không thể xử lý đăng ký. Vui lòng thử lại.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Không thể mở trang nâng cấp. Vui lòng thử lại.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Dán cấu hình JSON của bạn vào đây...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7323,7 +7322,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingSignIn => 'Đăng nhập';
 
   @override
-  String get onboardingYourName => 'Tên của bạn';
+  String get onboardingYourName => 'Tên của Bạn';
 
   @override
   String get onboardingLanguage => 'Ngôn ngữ';
@@ -7341,13 +7340,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingTellUsAboutYourself => 'Hãy cho chúng tôi biết về bạn';
 
   @override
-  String get onboardingChooseYourPreference => 'Chọn tùy chọn của bạn';
+  String get onboardingChooseYourPreference => 'Chọn sở thích của bạn';
 
   @override
   String get onboardingGrantRequiredAccess => 'Cấp quyền truy cập cần thiết';
 
   @override
-  String get onboardingYoureAllSet => 'Bạn đã sẵn sàng';
+  String get onboardingYoureAllSet => 'Bạn đã sẵn sàng!';
 
   @override
   String get searchTranscriptOrSummary => 'Tìm kiếm trong bản ghi hoặc tóm tắt...';
@@ -7356,163 +7355,158 @@ class AppLocalizationsVi extends AppLocalizations {
   String get myGoal => 'Mục tiêu của tôi';
 
   @override
-  String get appNotAvailable => 'Rất tiếc! Có vẻ như ứng dụng bạn đang tìm không khả dụng.';
+  String get appNotAvailable => 'Ứng dụng không khả dụng';
 
   @override
-  String get failedToConnectTodoist => 'Không thể kết nối với Todoist';
+  String get failedToConnectTodoist => 'Không thể kết nối Todoist';
 
   @override
-  String get failedToConnectAsana => 'Không thể kết nối với Asana';
+  String get failedToConnectAsana => 'Không thể kết nối Asana';
 
   @override
-  String get failedToConnectGoogleTasks => 'Không thể kết nối với Google Tasks';
+  String get failedToConnectGoogleTasks => 'Không thể kết nối Google Tasks';
 
   @override
-  String get failedToConnectClickUp => 'Không thể kết nối với ClickUp';
+  String get failedToConnectClickUp => 'Không thể kết nối ClickUp';
 
   @override
   String failedToConnectServiceWithError(String serviceName, String error) {
-    return 'Không thể kết nối với $serviceName: $error';
+    return 'Không thể kết nối $serviceName: $error';
   }
 
   @override
-  String get successfullyConnectedTodoist => 'Đã kết nối thành công với Todoist!';
+  String get successfullyConnectedTodoist => 'Đã kết nối Todoist thành công';
 
   @override
-  String get failedToConnectTodoistRetry => 'Không thể kết nối với Todoist. Vui lòng thử lại.';
+  String get failedToConnectTodoistRetry => 'Không thể kết nối Todoist. Vui lòng thử lại.';
 
   @override
-  String get successfullyConnectedAsana => 'Đã kết nối thành công với Asana!';
+  String get successfullyConnectedAsana => 'Đã kết nối Asana thành công';
 
   @override
-  String get failedToConnectAsanaRetry => 'Không thể kết nối với Asana. Vui lòng thử lại.';
+  String get failedToConnectAsanaRetry => 'Không thể kết nối Asana. Vui lòng thử lại.';
 
   @override
-  String get successfullyConnectedGoogleTasks => 'Đã kết nối thành công với Google Tasks!';
+  String get successfullyConnectedGoogleTasks => 'Đã kết nối Google Tasks thành công';
 
   @override
-  String get failedToConnectGoogleTasksRetry => 'Không thể kết nối với Google Tasks. Vui lòng thử lại.';
+  String get failedToConnectGoogleTasksRetry => 'Không thể kết nối Google Tasks. Vui lòng thử lại.';
 
   @override
-  String get successfullyConnectedClickUp => 'Đã kết nối thành công với ClickUp!';
+  String get successfullyConnectedClickUp => 'Đã kết nối ClickUp thành công';
 
   @override
-  String get failedToConnectClickUpRetry => 'Không thể kết nối với ClickUp. Vui lòng thử lại.';
+  String get failedToConnectClickUpRetry => 'Không thể kết nối ClickUp. Vui lòng thử lại.';
 
   @override
-  String get successfullyConnectedNotion => 'Đã kết nối thành công với Notion!';
+  String get successfullyConnectedNotion => 'Đã kết nối Notion thành công';
 
   @override
-  String get failedToRefreshNotionStatus => 'Không thể làm mới trạng thái kết nối Notion.';
+  String get failedToRefreshNotionStatus => 'Không thể làm mới trạng thái Notion';
 
   @override
-  String get successfullyConnectedGoogle => 'Đã kết nối thành công với Google!';
+  String get successfullyConnectedGoogle => 'Đã kết nối Google thành công';
 
   @override
-  String get failedToRefreshGoogleStatus => 'Không thể làm mới trạng thái kết nối Google.';
+  String get failedToRefreshGoogleStatus => 'Không thể làm mới trạng thái Google';
 
   @override
-  String get successfullyConnectedWhoop => 'Đã kết nối thành công với Whoop!';
+  String get successfullyConnectedWhoop => 'Đã kết nối Whoop thành công';
 
   @override
-  String get failedToRefreshWhoopStatus => 'Không thể làm mới trạng thái kết nối Whoop.';
+  String get failedToRefreshWhoopStatus => 'Không thể làm mới trạng thái Whoop';
 
   @override
-  String get successfullyConnectedGitHub => 'Đã kết nối thành công với GitHub!';
+  String get successfullyConnectedGitHub => 'Đã kết nối GitHub thành công';
 
   @override
-  String get failedToRefreshGitHubStatus => 'Không thể làm mới trạng thái kết nối GitHub.';
+  String get failedToRefreshGitHubStatus => 'Không thể làm mới trạng thái GitHub';
 
   @override
-  String get authFailedToSignInWithGoogle => 'Đăng nhập bằng Google không thành công, vui lòng thử lại.';
+  String get authFailedToSignInWithGoogle => 'Không thể đăng nhập bằng Google';
 
   @override
-  String get authenticationFailed => 'Xác thực không thành công. Vui lòng thử lại.';
+  String get authenticationFailed => 'Xác thực thất bại';
 
   @override
-  String get authFailedToSignInWithApple => 'Đăng nhập bằng Apple không thành công, vui lòng thử lại.';
+  String get authFailedToSignInWithApple => 'Không thể đăng nhập bằng Apple';
 
   @override
-  String get authFailedToRetrieveToken => 'Không thể lấy mã token Firebase, vui lòng thử lại.';
+  String get authFailedToRetrieveToken => 'Không thể lấy mã thông báo';
 
   @override
-  String get authUnexpectedErrorFirebase => 'Lỗi không mong muốn khi đăng nhập, lỗi Firebase, vui lòng thử lại.';
+  String get authUnexpectedErrorFirebase => 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.';
 
   @override
-  String get authUnexpectedError => 'Lỗi không mong muốn khi đăng nhập, vui lòng thử lại';
+  String get authUnexpectedError => 'Lỗi không mong muốn';
 
   @override
-  String get authFailedToLinkGoogle => 'Liên kết với Google không thành công, vui lòng thử lại.';
+  String get authFailedToLinkGoogle => 'Không thể liên kết tài khoản Google';
 
   @override
-  String get authFailedToLinkApple => 'Liên kết với Apple không thành công, vui lòng thử lại.';
+  String get authFailedToLinkApple => 'Không thể liên kết tài khoản Apple';
 
   @override
-  String get onboardingBluetoothRequired => 'Cần quyền Bluetooth để kết nối với thiết bị của bạn.';
+  String get onboardingBluetoothRequired => 'Cần có Bluetooth để kết nối thiết bị Omi của bạn';
 
   @override
-  String get onboardingBluetoothDeniedSystemPrefs =>
-      'Quyền Bluetooth bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống.';
+  String get onboardingBluetoothDeniedSystemPrefs => 'Quyền Bluetooth bị từ chối. Vui lòng bật trong cài đặt hệ thống.';
 
   @override
   String onboardingBluetoothStatusCheckPrefs(String status) {
-    return 'Trạng thái quyền Bluetooth: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+    return 'Trạng thái Bluetooth: $status. Vui lòng kiểm tra trong cài đặt hệ thống.';
   }
 
   @override
   String onboardingFailedCheckBluetooth(String error) {
-    return 'Không thể kiểm tra quyền Bluetooth: $error';
+    return 'Không thể kiểm tra Bluetooth: $error';
   }
 
   @override
   String get onboardingNotificationDeniedSystemPrefs =>
-      'Quyền thông báo bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống.';
+      'Quyền thông báo bị từ chối. Vui lòng bật trong cài đặt hệ thống.';
 
   @override
-  String get onboardingNotificationDeniedNotifications =>
-      'Quyền thông báo bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Thông báo.';
+  String get onboardingNotificationDeniedNotifications => 'Quyền thông báo bị từ chối. Vui lòng bật thông báo.';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
-    return 'Trạng thái quyền thông báo: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+    return 'Trạng thái thông báo: $status. Vui lòng kiểm tra trong cài đặt hệ thống.';
   }
 
   @override
   String onboardingFailedCheckNotification(String error) {
-    return 'Không thể kiểm tra quyền thông báo: $error';
+    return 'Không thể kiểm tra thông báo: $error';
   }
 
   @override
-  String get onboardingLocationGrantInSettings =>
-      'Vui lòng cấp quyền vị trí trong Cài đặt > Quyền riêng tư & Bảo mật > Dịch vụ Vị trí';
+  String get onboardingLocationGrantInSettings => 'Quyền vị trí cần được cấp trong cài đặt.';
 
   @override
-  String get onboardingMicrophoneRequired => 'Cần quyền microphone để ghi âm.';
+  String get onboardingMicrophoneRequired => 'Cần có micrô để ghi âm';
 
   @override
-  String get onboardingMicrophoneDenied =>
-      'Quyền microphone bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Microphone.';
+  String get onboardingMicrophoneDenied => 'Quyền micrô bị từ chối. Vui lòng bật trong cài đặt hệ thống.';
 
   @override
   String onboardingMicrophoneStatusCheckPrefs(String status) {
-    return 'Trạng thái quyền microphone: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+    return 'Trạng thái micrô: $status. Vui lòng kiểm tra trong cài đặt hệ thống.';
   }
 
   @override
   String onboardingFailedCheckMicrophone(String error) {
-    return 'Không thể kiểm tra quyền microphone: $error';
+    return 'Không thể kiểm tra micrô: $error';
   }
 
   @override
-  String get onboardingScreenCaptureRequired => 'Cần quyền chụp màn hình để ghi âm thanh hệ thống.';
+  String get onboardingScreenCaptureRequired => 'Cần có quyền chụp màn hình để quay';
 
   @override
-  String get onboardingScreenCaptureDenied =>
-      'Quyền chụp màn hình bị từ chối. Vui lòng cấp quyền trong Tùy chọn Hệ thống > Quyền riêng tư & Bảo mật > Ghi màn hình.';
+  String get onboardingScreenCaptureDenied => 'Quyền chụp màn hình bị từ chối. Vui lòng bật trong cài đặt hệ thống.';
 
   @override
   String onboardingScreenCaptureStatusCheckPrefs(String status) {
-    return 'Trạng thái quyền chụp màn hình: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+    return 'Trạng thái chụp màn hình: $status. Vui lòng kiểm tra trong cài đặt hệ thống.';
   }
 
   @override
@@ -7521,11 +7515,11 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get onboardingAccessibilityRequired => 'Cần quyền trợ năng để phát hiện cuộc họp trình duyệt.';
+  String get onboardingAccessibilityRequired => 'Cần có quyền trợ năng';
 
   @override
   String onboardingAccessibilityStatusCheckPrefs(String status) {
-    return 'Trạng thái quyền trợ năng: $status. Vui lòng kiểm tra Tùy chọn Hệ thống.';
+    return 'Trạng thái trợ năng: $status. Vui lòng kiểm tra trong cài đặt hệ thống.';
   }
 
   @override
@@ -7534,10 +7528,10 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get msgCameraNotAvailable => 'Chụp ảnh bằng camera không khả dụng trên nền tảng này';
+  String get msgCameraNotAvailable => 'Camera không khả dụng';
 
   @override
-  String get msgCameraPermissionDenied => 'Quyền truy cập camera bị từ chối. Vui lòng cho phép truy cập camera';
+  String get msgCameraPermissionDenied => 'Quyền camera bị từ chối';
 
   @override
   String msgCameraAccessError(String error) {
@@ -7545,30 +7539,29 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get msgPhotoError => 'Lỗi khi chụp ảnh. Vui lòng thử lại.';
+  String get msgPhotoError => 'Lỗi ảnh';
 
   @override
-  String get msgMaxImagesLimit => 'Bạn chỉ có thể chọn tối đa 4 hình ảnh';
+  String get msgMaxImagesLimit => 'Đã đạt giới hạn tối đa số ảnh';
 
   @override
   String msgFilePickerError(String error) {
-    return 'Lỗi mở trình chọn tệp: $error';
+    return 'Lỗi chọn tệp: $error';
   }
 
   @override
   String msgSelectImagesError(String error) {
-    return 'Lỗi chọn hình ảnh: $error';
+    return 'Lỗi chọn ảnh: $error';
   }
 
   @override
-  String get msgPhotosPermissionDenied =>
-      'Quyền truy cập ảnh bị từ chối. Vui lòng cho phép truy cập ảnh để chọn hình ảnh';
+  String get msgPhotosPermissionDenied => 'Quyền truy cập ảnh bị từ chối';
 
   @override
-  String get msgSelectImagesGenericError => 'Lỗi chọn hình ảnh. Vui lòng thử lại.';
+  String get msgSelectImagesGenericError => 'Lỗi chọn ảnh';
 
   @override
-  String get msgMaxFilesLimit => 'Bạn chỉ có thể chọn tối đa 4 tệp';
+  String get msgMaxFilesLimit => 'Đã đạt giới hạn tối đa số tệp';
 
   @override
   String msgSelectFilesError(String error) {
@@ -7576,72 +7569,72 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get msgSelectFilesGenericError => 'Lỗi chọn tệp. Vui lòng thử lại.';
+  String get msgSelectFilesGenericError => 'Lỗi chọn tệp';
 
   @override
-  String get msgUploadFileFailed => 'Tải tệp lên thất bại, vui lòng thử lại sau';
+  String get msgUploadFileFailed => 'Không thể tải lên tệp';
 
   @override
-  String get msgReadingMemories => 'Đang đọc kỷ niệm của bạn...';
+  String get msgReadingMemories => 'Đang đọc ký ức...';
 
   @override
-  String get msgLearningMemories => 'Đang học từ kỷ niệm của bạn...';
+  String get msgLearningMemories => 'Đang học ký ức...';
 
   @override
-  String get msgUploadAttachedFileFailed => 'Tải tệp đính kèm lên thất bại.';
+  String get msgUploadAttachedFileFailed => 'Không thể tải lên tệp đính kèm';
 
   @override
   String captureRecordingError(String error) {
-    return 'Đã xảy ra lỗi trong quá trình ghi: $error';
+    return 'Lỗi ghi âm: $error';
   }
 
   @override
   String captureRecordingStoppedDisplayIssue(String reason) {
-    return 'Ghi hình đã dừng: $reason. Bạn có thể cần kết nối lại màn hình ngoài hoặc bắt đầu ghi lại.';
+    return 'Đã dừng ghi vì vấn đề hiển thị: $reason';
   }
 
   @override
-  String get captureMicrophonePermissionRequired => 'Cần có quyền truy cập micrô';
+  String get captureMicrophonePermissionRequired => 'Cần có quyền micrô để ghi âm';
 
   @override
-  String get captureMicrophonePermissionInSystemPreferences => 'Cấp quyền micrô trong Tùy chọn Hệ thống';
+  String get captureMicrophonePermissionInSystemPreferences => 'Vui lòng cấp quyền micrô trong Tùy chọn Hệ thống';
 
   @override
-  String get captureScreenRecordingPermissionRequired => 'Cần có quyền ghi màn hình';
+  String get captureScreenRecordingPermissionRequired => 'Cần có quyền quay màn hình';
 
   @override
-  String get captureDisplayDetectionFailed => 'Phát hiện màn hình thất bại. Ghi hình đã dừng.';
+  String get captureDisplayDetectionFailed => 'Phát hiện màn hình thất bại';
 
   @override
-  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook byte âm thanh không hợp lệ';
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook Audio Bytes không hợp lệ';
 
   @override
-  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook bản ghi thời gian thực không hợp lệ';
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook Realtime Transcript không hợp lệ';
 
   @override
-  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook cuộc hội thoại được tạo không hợp lệ';
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook Conversation Created không hợp lệ';
 
   @override
-  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook tóm tắt ngày không hợp lệ';
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook Day Summary không hợp lệ';
 
   @override
-  String get devModeSettingsSaved => 'Đã lưu cài đặt!';
+  String get devModeSettingsSaved => 'Đã lưu cài đặt';
 
   @override
-  String get voiceFailedToTranscribe => 'Không thể chuyển đổi giọng nói thành văn bản';
+  String get voiceFailedToTranscribe => 'Không thể phiên âm giọng nói';
 
   @override
-  String get locationPermissionRequired => 'Cần cấp quyền vị trí';
+  String get locationPermissionRequired => 'Cần Quyền Vị trí';
 
   @override
   String get locationPermissionContent =>
-      'Truyền nhanh cần quyền vị trí để xác minh kết nối WiFi. Vui lòng cấp quyền vị trí để tiếp tục.';
+      'Ứng dụng cần quyền truy cập vị trí để hoạt động đúng. Vui lòng cấp quyền trong cài đặt.';
 
   @override
-  String get pdfTranscriptExport => 'Xuất bản ghi';
+  String get pdfTranscriptExport => 'Xuất Bản ghi';
 
   @override
-  String get pdfConversationExport => 'Xuất cuộc trò chuyện';
+  String get pdfConversationExport => 'Xuất Cuộc trò chuyện';
 
   @override
   String pdfTitleLabel(String title) {
@@ -7649,7 +7642,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => 'Mới 🚀';
+  String get conversationNewIndicator => 'Mới';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7657,7 +7650,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => 'Đang hợp nhất...';
+  String get mergingStatus => 'Đang gộp...';
 
   @override
   String timeSecsSingular(int count) {
@@ -7731,11 +7724,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String timeCompactHours(int count) {
-    return '${count}giờ';
+    return '${count}h';
   }
 
   @override
   String timeCompactHoursAndMins(int hours, int mins) {
-    return '${hours}giờ ${mins}p';
+    return '${hours}h ${mins}p';
   }
 }

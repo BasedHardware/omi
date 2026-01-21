@@ -40,7 +40,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 ## Files Requiring Localization
 
 ### PRIORITY 0: Pre-existing Untranslated Keys (~89 keys × 33 languages)
-**Status: IN PROGRESS**
+**Status: COMPLETED**
 
 ~89 keys in non-English ARB files contain English text instead of proper translations. This affects all non-English users.
 
@@ -79,7 +79,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | Swedish (sv) | COMPLETED - 198 keys translated |
 | Thai (th) | COMPLETED - 150 keys translated |
 | Ukrainian (uk) | COMPLETED - 183 keys translated |
-| Other languages (1) | PENDING - Vietnamese (vi) |
+| Vietnamese (vi) | COMPLETED - 174 keys translated |
 
 ---
 
