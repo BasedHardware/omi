@@ -27,11 +27,11 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] Add clear_person_speaker_embedding()
       - [x] Add update_person_speech_samples_version()
 
-- [ ] 4. Update speaker identification
+- [x] 4. Update speaker identification
       File: backend/utils/speaker_identification.py
-      - [ ] Import verify_and_transcribe_sample from migration utility
-      - [ ] Replace inline _verify_sample_quality with centralized function
-      - [ ] Pass transcript to add_person_speech_sample()
+      - [x] Import verify_and_transcribe_sample from migration utility
+      - [x] Replace inline _verify_sample_quality with centralized function
+      - [x] Pass transcript to add_person_speech_sample()
 
 - [ ] 5. Update API routes
       File: backend/routers/users.py
