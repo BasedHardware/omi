@@ -13,9 +13,8 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
-from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+from utils.speaker_sample_migration import verify_and_transcribe_sample
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
-from utils.text_utils import compute_text_similarity
 
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
@@ -237,63 +236,6 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
     return None
 
 
-async def _verify_sample_quality(
-    audio_bytes: bytes,
-    sample_rate: int,
-    expected_text: str,
-    min_words: int = 5,
-    min_similarity: float = 0.6,
-    min_dominant_speaker_ratio: float = 0.7,
-) -> tuple:
-    """
-    Verify audio sample quality using Deepgram transcription.
-
-    Checks:
-    1. Transcription has at least min_words
-    2. Dominant speaker accounts for ≥70% of words (via diarization)
-    3. Transcribed text has ≥60% character trigram similarity with expected text
-
-    Args:
-        audio_bytes: WAV format audio bytes
-        sample_rate: Audio sample rate in Hz
-        expected_text: Expected text from the segment for comparison
-        min_words: Minimum number of words required
-        min_similarity: Minimum text similarity threshold (0.0 to 1.0)
-        min_dominant_speaker_ratio: Minimum ratio of words from dominant speaker
-
-    Returns:
-        (is_valid, reason): Tuple of (bool, str)
-    """
-    # Transcribe audio with diarization
-    words = await asyncio.to_thread(deepgram_prerecorded_from_bytes, audio_bytes, sample_rate, True)
-
-    # Check 1: Minimum word count
-    if len(words) < min_words:
-        return False, f"insufficient_words: {len(words)}/{min_words}"
-
-    # Check 2: Speaker dominance via diarization
-    speaker_counts = {}
-    for word in words:
-        speaker = word.get('speaker', 'SPEAKER_00')
-        speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1
-
-    total_words = len(words)
-    dominant_speaker_count = max(speaker_counts.values()) if speaker_counts else 0
-    dominant_ratio = dominant_speaker_count / total_words if total_words > 0 else 0
-
-    if dominant_ratio < min_dominant_speaker_ratio:
-        return False, f"multi_speaker: dominant_ratio={dominant_ratio:.2f}<{min_dominant_speaker_ratio}"
-
-    # Check 3: Text similarity with expected segment text
-    transcribed_text = ' '.join(w.get('text', '') for w in words)
-    similarity = compute_text_similarity(transcribed_text, expected_text)
-
-    if similarity < min_similarity:
-        return False, f"text_mismatch: similarity={similarity:.2f}<{min_similarity}"
-
-    return True, "ok"
-
-
 async def extract_speaker_samples(
     uid: str,
     person_id: str,
@@ -465,8 +407,10 @@ async def extract_speaker_samples(
             # Convert PCM to WAV for Deepgram
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
-            # Verify sample quality
-            is_valid, reason = await _verify_sample_quality(wav_bytes, sample_rate, expected_text)
+            # Verify sample quality and get transcript using centralized function
+            transcript, is_valid, reason = await verify_and_transcribe_sample(
+                wav_bytes, sample_rate, expected_text
+            )
             if not is_valid:
                 print(f"Sample failed quality check: {reason}", uid, conversation_id)
                 continue  # Try next segment
@@ -476,7 +420,7 @@ async def extract_speaker_samples(
                 upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path)
+            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
