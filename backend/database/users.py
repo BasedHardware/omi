@@ -100,7 +100,9 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
-def add_person_speech_sample(uid: str, person_id: str, sample_path: str, max_samples: int = 5) -> bool:
+def add_person_speech_sample(
+    uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
+) -> bool:
     """
     Append speech sample path to person's speech_samples list.
     Limits to max_samples to prevent unlimited growth.
@@ -109,6 +111,7 @@ def add_person_speech_sample(uid: str, person_id: str, sample_path: str, max_sam
         uid: User ID
         person_id: Person ID
         sample_path: GCS path to the speech sample
+        transcript: Optional transcript text for the sample
         max_samples: Maximum number of samples to keep (default 5)
 
     Returns:
@@ -127,12 +130,20 @@ def add_person_speech_sample(uid: str, person_id: str, sample_path: str, max_sam
     if len(current_samples) >= max_samples:
         return False
 
-    person_ref.update(
-        {
-            'speech_samples': firestore.ArrayUnion([sample_path]),
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
+    update_data = {
+        'speech_samples': firestore.ArrayUnion([sample_path]),
+        'updated_at': datetime.now(timezone.utc),
+    }
+
+    # If transcript provided, append to transcripts array as well
+    if transcript is not None:
+        current_transcripts = person_data.get('speech_sample_transcripts', [])
+        current_transcripts.append(transcript)
+        update_data['speech_sample_transcripts'] = current_transcripts
+        # Mark as v2 when adding samples with transcripts
+        update_data['speech_samples_version'] = 2
+
+    person_ref.update(update_data)
     return True
 
 
@@ -151,6 +162,7 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
     """
     Remove a speech sample path from person's speech_samples list.
+    Also removes the corresponding transcript at the same index to keep arrays in sync.
 
     Args:
         uid: User ID
@@ -158,7 +170,7 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         sample_path: GCS path to remove
 
     Returns:
-        True if removed, False if person not found
+        True if removed, False if person or sample not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
@@ -166,9 +178,25 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
     if not person_doc.exists:
         return False
 
+    person_data = person_doc.to_dict()
+    samples = person_data.get('speech_samples', [])
+    transcripts = person_data.get('speech_sample_transcripts', [])
+
+    # Find index of sample to remove
+    try:
+        idx = samples.index(sample_path)
+    except ValueError:
+        return False  # Sample not found
+
+    # Remove from both arrays by index
+    samples.pop(idx)
+    if idx < len(transcripts):
+        transcripts.pop(idx)
+
     person_ref.update(
         {
-            'speech_samples': firestore.ArrayRemove([sample_path]),
+            'speech_samples': samples,
+            'speech_sample_transcripts': transcripts,
             'updated_at': datetime.now(timezone.utc),
         }
     )
@@ -221,6 +249,148 @@ def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
 
     person_data = person_doc.to_dict()
     return person_data.get('speaker_embedding')
+
+
+def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: int, transcript: str) -> bool:
+    """
+    Update transcript at a specific index in the speech_sample_transcripts array.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        sample_index: Index of the sample/transcript to update
+        transcript: The transcript text to set
+
+    Returns:
+        True if updated successfully, False if person not found or index out of bounds
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_data = person_doc.to_dict()
+    samples = person_data.get('speech_samples', [])
+    transcripts = person_data.get('speech_sample_transcripts', [])
+
+    # Validate index
+    if sample_index < 0 or sample_index >= len(samples):
+        return False
+
+    # Extend transcripts array if needed
+    while len(transcripts) < len(samples):
+        transcripts.append('')
+
+    transcripts[sample_index] = transcript
+
+    person_ref.update(
+        {
+            'speech_sample_transcripts': transcripts,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def update_person_speech_samples_after_migration(
+    uid: str,
+    person_id: str,
+    samples: list,
+    transcripts: list,
+    version: int,
+    speaker_embedding: Optional[list] = None,
+) -> bool:
+    """
+    Replace all samples/transcripts/embedding and set version atomically.
+    Used after v1 to v2 migration to update all related fields together.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        samples: List of sample paths (may have dropped invalid samples)
+        transcripts: List of transcript strings (parallel array with samples)
+        version: Version number to set (typically 2)
+        speaker_embedding: Optional new speaker embedding, or None to clear
+
+    Returns:
+        True if updated successfully, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    update_data = {
+        'speech_samples': samples,
+        'speech_sample_transcripts': transcripts,
+        'speech_samples_version': version,
+        'updated_at': datetime.now(timezone.utc),
+    }
+
+    # Set or clear speaker embedding
+    if speaker_embedding is not None:
+        update_data['speaker_embedding'] = speaker_embedding
+    else:
+        update_data['speaker_embedding'] = firestore.DELETE_FIELD
+
+    person_ref.update(update_data)
+    return True
+
+
+def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
+    """
+    Clear speaker embedding for a person.
+    Used when all samples are dropped during migration.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+
+    Returns:
+        True if cleared successfully, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update(
+        {
+            'speaker_embedding': firestore.DELETE_FIELD,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def update_person_speech_samples_version(uid: str, person_id: str, version: int) -> bool:
+    """
+    Update just the speech_samples_version field.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        version: Version number to set
+
+    Returns:
+        True if updated successfully, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update(
+        {
+            'speech_samples_version': version,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
 
 
 def delete_user_data(uid: str):
