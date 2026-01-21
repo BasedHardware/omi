@@ -31,10 +31,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get confirm => 'Kinnita';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Tühista';
 
   @override
-  String get ok => 'Ok';
+  String get ok => 'OK';
 
   @override
   String get delete => 'Kustuta';
@@ -421,7 +421,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get planAndUsage => 'Plaan ja kasutus';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Võrguühenduseta sünkroonimine';
 
   @override
   String get deviceSettings => 'Seadme seaded';
@@ -586,7 +586,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get starOngoing => 'Märgi käimasolev vestlus tärniga';
 
   @override
-  String get off => 'Off';
+  String get off => 'Väljas';
 
   @override
   String get max => 'Maks';
@@ -878,7 +878,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get header => 'Päis';
 
   @override
-  String get authorizationBearer => 'Authorization: Bearer <key>';
+  String get authorizationBearer => 'Authorization: Bearer <võti>';
 
   @override
   String get oauth => 'OAuth';
@@ -1148,7 +1148,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get yes => 'Jah';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Muuda nime';
 
   @override
   String get howShouldOmiCallYou => 'Kuidas peaks Omi teid kutsuma?';
@@ -1175,7 +1175,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get connectMacOsCalendar => 'Ühendage oma kohalik macOS kalender';
 
   @override
-  String get googleCalendar => 'Google Calendar';
+  String get googleCalendar => 'Google Kalender';
 
   @override
   String get syncGoogleAccount => 'Sünkroonige oma Google\'i kontoga';
@@ -2143,7 +2143,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get saveMemory => 'Salvesta mälestus';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Proovi uuesti';
 
   @override
   String get createActionItem => 'Loo ülesanne';
@@ -2394,7 +2394,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unpairAndForgetDevice => 'Tühista sidumine ja unusta seade';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Tundmatu';
 
   @override
   String get unknown => 'Tundmatu';
@@ -2728,7 +2728,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get monthMar => 'Märts';
 
   @override
-  String get monthApr => 'Apr';
+  String get monthApr => 'apr';
 
   @override
   String get monthMay => 'Mai';
@@ -2740,7 +2740,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get monthJul => 'Juuli';
 
   @override
-  String get monthAug => 'Aug';
+  String get monthAug => 'aug';
 
   @override
   String get monthSep => 'Sept';
@@ -2749,7 +2749,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get monthOct => 'Okt';
 
   @override
-  String get monthNov => 'Nov';
+  String get monthNov => 'nov';
 
   @override
   String get monthDec => 'Dets';
@@ -2795,7 +2795,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get browseInstallCreateApps => 'Sirvi, installi ja loo rakendusi';
 
   @override
-  String get all => 'All';
+  String get all => 'Kõik';
 
   @override
   String get open => 'Ava';
@@ -3266,7 +3266,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get upgradeToPro => 'Uuenda Pro-le';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Hangi Omi seade';
 
   @override
   String get wearableAiCompanion => 'Kantav AI kaaslane';
@@ -3831,7 +3831,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get signOutQuestion => 'Logi välja?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Kas olete kindel, et soovite välja logida?';
 
   @override
   String get customVocabularyHeader => 'KOHANDATUD SÕNAVARA';
@@ -4125,7 +4125,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'See rakendus pääseb ligi teie andmetele. Omi AI ei vastuta selle eest, kuidas teie andmeid kasutatakse.';
 
   @override
   String get copyUrl => 'Kopeeri URL';
@@ -4894,7 +4894,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enable => 'Luba';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Salvesta heli telefoni';
 
   @override
   String get on => 'On';
@@ -4916,7 +4916,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get enableCloudStorage => 'Luba pilvesalvestus';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Salvesta heli pilve';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5817,28 +5817,28 @@ class AppLocalizationsEt extends AppLocalizations {
   String get chooseFile => 'Vali fail';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Seadistage oma AI-persona';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Ühendage AI-assistendid oma andmetega';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Jälgi oma isiklikke eesmärke avalehel';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Kustuta salvestis';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Seda ei saa tagasi võtta.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'SD-kaart';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'SD-lt';
 
   @override
   String get limitless => 'Limitless';
@@ -5847,117 +5847,117 @@ class AppLocalizationsEt extends AppLocalizations {
   String get fastTransfer => 'Kiire edastus';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Sünkroonimine';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Ebaõnnestunud';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return 'Hinnanguline aeg: $time';
   }
 
   @override
   String get transferMethod => 'Edastusmeetod';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Kiire';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Telefon';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Tühista sünkroonimine';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Juba allalaaditud andmed salvestatakse. Võite hiljem jätkata.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Sünkroonimine tühistatud';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Kustuta töödeldud failid';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Töödeldud failid kustutatud';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Seadme WiFi lubamine ebaõnnestus. Palun proovige uuesti.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Teie seade ei toeta kiiret ülekannet. Kasutage selle asemel Bluetooth-i.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Palun lülitage oma telefoni kuumkoht sisse ja proovige uuesti.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Ülekande alustamine ebaõnnestus. Palun proovige uuesti.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Seade ei vastanud. Palun proovige uuesti.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Vigased WiFi andmed. Kontrollige oma kuumkoha seadeid.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'WiFi ühendus ebaõnnestus. Palun proovige uuesti.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'SD-kaardi töötlemine';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Töödeldakse $count salvestis(t). Failid eemaldatakse SD-kaardilt pärast töötlemist.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Töötle';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi sünkroonimine ebaõnnestus';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Töötlemine ebaõnnestus';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Allalaadimine SD-kaardilt';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Töötlemine $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count vestlust loodud';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Internet on vajalik';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Töötle heli';
 
   @override
-  String get start => 'Start';
+  String get start => 'Alusta';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Salvestisi pole';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Teie Omi seadmest pärinev heli ilmub siia';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Kustuta töödeldud';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Proovige teist filtrit';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Salvestised';
 
   @override
   String get enableRemindersAccess => 'Apple meeldetuletuste kasutamiseks lubage meeldetuletuste juurdepääs seadetes';
@@ -6255,7 +6255,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Seade';
 
   @override
   String get chatAssistantsTitle => 'Vestlusassistendid';
@@ -6312,55 +6312,55 @@ class AppLocalizationsEt extends AppLocalizations {
   String get writeReviewOptional => 'Kirjuta arvustus (valikuline)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Aidake meil Omit paremaks muuta, vastates mõnele küsimusele. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Mis on teie amet?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Kus plaanite oma Omit kasutada?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Mis on teie vanuserühm?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Te pole veel kõikidele küsimustele vastanud! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Jäta vahele, ma ei soovi aidata :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Ettevõtja';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Tarkvaraarendaja';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Tootejuht';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Juht';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Müük';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Tudeng';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Tööl';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Päriselus üritustel';
 
   @override
-  String get usageOnline => 'Online';
+  String get usageOnline => 'Internetis';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Sotsiaalsetes olukordades';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Kõikjal';
 
   @override
   String get customBackendUrlTitle => 'Kohandatud serveri URL';
@@ -6525,32 +6525,32 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Jaga avalikku linki';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Tee persona avalikuks';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Ühendatud teadmiste andmed';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Sisesta nimi';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Katkesta Twitteri ühendus';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Kas olete kindel, et soovite oma Twitteri konto ühenduse katkestada? Teie persona ei kasuta enam seda.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Looge täpsem kloon oma isiklike vestluste põhjal';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Hangi Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Mul on Omi seade';
 
   @override
   String get goal => 'EESMÄRK';
@@ -6625,31 +6625,31 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Märgi kõneleja $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Selle nimega isik on juba olemas.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Enda märkimiseks valige nimekirjast \"Sina\".';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Sisesta isiku nimi';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Lisa isik';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Märgi teised segmendid sellelt kõnelejalt ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Märgi teised segmendid';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Halda inimesi';
 
   @override
   String get shareViaSms => 'Jaga SMS-i kaudu';
@@ -6720,124 +6720,124 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Ühendus ebaõnnestus';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Ühendamine seadmega $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Luba $deviceName WiFi';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Ühenda seadmega $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Salvestise üksikasjad';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD-kaart';
 
   @override
-  String get storageLocationLimitlessPendant => 'Limitless Pendant';
+  String get storageLocationLimitlessPendant => 'Limitless ripats';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Telefon';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefon (mälu)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Salvestatud seadmesse $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Ülekandmine...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Ülekanne vajalik';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Heli allalaadimine seadme SD-kaardilt';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'See salvestis on salvestatud teie seadme SD-kaardile. Kandke see oma telefoni, et seda esitada.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Tühista ülekanne';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Kanna telefoni';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Privaatne ja turvaline teie seadmes';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Salvestise teave';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Ülekanne käib...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Jaga salvestist';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Kas olete kindel, et soovite selle salvestise jäädavalt kustutada? Seda ei saa tagasi võtta.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'Salvestise ID';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Kuupäev ja kellaaeg';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Kestus';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Helivorming';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Salvestuskoht';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Eeldatav suurus';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Seadme mudel';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'Seadme ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Olek';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Töödeldud';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Töötlemata';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Lülitatud kiirele ülekandele';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Ülekanne lõpetatud! Nüüd saate seda salvestist esitada.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Ülekanne ebaõnnestus: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Ülekanne tühistatud';
 
   @override
   String get fastTransferEnabled => 'Kiire edastus lubatud';
@@ -6925,63 +6925,63 @@ class AppLocalizationsEt extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Rakenduse oleku uuendamisel ilmnes viga.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Arvutamine...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Umbes $minutes minutit jäänud';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Umbes minut jäänud';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Peaaegu valmis...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'omi ütleb';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Teie andmete analüüsimine...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return '$level kaitsele migreerimine...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Andmeid migreerida pole. Lõpetamine...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return '$itemType migreerimine... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Kõik objektid migreeritud. Lõpetamine...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Migreerimise ajal tekkis viga. Palun proovige uuesti.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Migratsioon lõpetatud!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Teie andmed on nüüd kaitstud uute $level seadistustega.';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'vestlused';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'andmed';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Oih';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Kas te kukkusite?';
 
   @override
   String get importantConversationTitle => 'Oluline vestlus';
@@ -7218,54 +7218,52 @@ class AppLocalizationsEt extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Palun genereeri kõigepealt rakendus';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Mis on teie X kasutajanimi?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => 'Me eelkoolitame teie Omi klooni\nteie konto tegevuse põhjal';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Palun sisestage oma X kasutajanimi';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Palun sisestage kehtiv X kasutajanimi';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Järgmine';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Ühenda Omi seade';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Te lähete üle oma Unlimited paketilt $title paketile. Kas olete kindel, et soovite jätkata?';
   }
 
   @override
-  String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage => 'Uuendamine on ajastatud! Teie kuupakett jätkub arveldusperioodi lõpuni.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Paketi muutmist ei õnnestunud ajastada. Palun proovige uuesti.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Teie tellimus on taastatud! Praegu tasu ei võeta - arve esitatakse järgmisel arveldusperioodil.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Tellimus õnnestus! Teilt on uue arveldusperioodi eest tasu võetud.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Tellimust ei õnnestunud töödelda. Palun proovige uuesti.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Uuenduse lehte ei õnnestunud avada. Palun proovige uuesti.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Kleepige oma JSON konfiguratsioon siia...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
