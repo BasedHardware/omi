@@ -7596,4 +7596,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Skjermgjenkjenning mislyktes. Opptak stoppet.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Ugyldig webhook-URL for lydbyter';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Ugyldig webhook-URL for sanntidstranskripsjon';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Ugyldig webhook-URL for opprettet samtale';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Ugyldig webhook-URL for daglig oppsummering';
+
+  @override
+  String get devModeSettingsSaved => 'Innstillinger lagret!';
 }

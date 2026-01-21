@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofonin käyttöoikeus vaaditaan",
   "captureMicrophonePermissionInSystemPreferences": "Myönnä mikrofonin käyttöoikeus Järjestelmäasetuksissa",
   "captureScreenRecordingPermissionRequired": "Näytön tallennusoikeus vaaditaan",
-  "captureDisplayDetectionFailed": "Näytön tunnistus epäonnistui. Tallennus pysäytetty."
+  "captureDisplayDetectionFailed": "Näytön tunnistus epäonnistui. Tallennus pysäytetty.",
+  "devModeInvalidAudioBytesWebhookUrl": "Virheellinen äänitavujen webhook-URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Virheellinen reaaliaikaisen transkription webhook-URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "Virheellinen luodun keskustelun webhook-URL",
+  "devModeInvalidDaySummaryWebhookUrl": "Virheellinen päiväyhteenvedon webhook-URL",
+  "devModeSettingsSaved": "Asetukset tallennettu!"
 }

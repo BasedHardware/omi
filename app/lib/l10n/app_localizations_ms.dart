@@ -7622,4 +7622,19 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Pengesanan paparan gagal. Rakaman dihentikan.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook bait audio tidak sah';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook transkripsi masa nyata tidak sah';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook perbualan dicipta tidak sah';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook ringkasan harian tidak sah';
+
+  @override
+  String get devModeSettingsSaved => 'Tetapan disimpan!';
 }

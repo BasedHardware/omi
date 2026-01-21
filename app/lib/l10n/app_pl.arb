@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Wymagane pozwolenie na mikrofon",
   "captureMicrophonePermissionInSystemPreferences": "Udziel pozwolenia na mikrofon w Preferencjach systemowych",
   "captureScreenRecordingPermissionRequired": "Wymagane pozwolenie na nagrywanie ekranu",
-  "captureDisplayDetectionFailed": "Wykrywanie wyświetlacza nie powiodło się. Nagrywanie zatrzymane."
+  "captureDisplayDetectionFailed": "Wykrywanie wyświetlacza nie powiodło się. Nagrywanie zatrzymane.",
+  "devModeInvalidAudioBytesWebhookUrl": "Nieprawidłowy URL webhooka bajtów audio",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Nieprawidłowy URL webhooka transkrypcji w czasie rzeczywistym",
+  "devModeInvalidConversationCreatedWebhookUrl": "Nieprawidłowy URL webhooka utworzonej konwersacji",
+  "devModeInvalidDaySummaryWebhookUrl": "Nieprawidłowy URL webhooka dziennego podsumowania",
+  "devModeSettingsSaved": "Ustawienia zapisane!"
 }

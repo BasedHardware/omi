@@ -2426,5 +2426,10 @@
   "captureMicrophonePermissionRequired": "マイクの許可が必要です",
   "captureMicrophonePermissionInSystemPreferences": "システム環境設定でマイクの許可を与えてください",
   "captureScreenRecordingPermissionRequired": "画面録画の許可が必要です",
-  "captureDisplayDetectionFailed": "ディスプレイの検出に失敗しました。録画を停止しました。"
+  "captureDisplayDetectionFailed": "ディスプレイの検出に失敗しました。録画を停止しました。",
+  "devModeInvalidAudioBytesWebhookUrl": "オーディオバイトのWebhook URLが無効です",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "リアルタイム文字起こしのWebhook URLが無効です",
+  "devModeInvalidConversationCreatedWebhookUrl": "会話作成のWebhook URLが無効です",
+  "devModeInvalidDaySummaryWebhookUrl": "日次サマリーのWebhook URLが無効です",
+  "devModeSettingsSaved": "設定を保存しました！"
 }

@@ -2406,5 +2406,10 @@
   "captureMicrophonePermissionRequired": "إذن الميكروفون مطلوب",
   "captureMicrophonePermissionInSystemPreferences": "منح إذن الميكروفون في تفضيلات النظام",
   "captureScreenRecordingPermissionRequired": "إذن تسجيل الشاشة مطلوب",
-  "captureDisplayDetectionFailed": "فشل اكتشاف الشاشة. توقف التسجيل."
+  "captureDisplayDetectionFailed": "فشل اكتشاف الشاشة. توقف التسجيل.",
+  "devModeInvalidAudioBytesWebhookUrl": "عنوان URL للويب هوك لبايتات الصوت غير صالح",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "عنوان URL للويب هوك للنص الفوري غير صالح",
+  "devModeInvalidConversationCreatedWebhookUrl": "عنوان URL للويب هوك لإنشاء المحادثة غير صالح",
+  "devModeInvalidDaySummaryWebhookUrl": "عنوان URL للويب هوك لملخص اليوم غير صالح",
+  "devModeSettingsSaved": "تم حفظ الإعدادات!"
 }

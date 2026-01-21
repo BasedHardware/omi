@@ -7637,4 +7637,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Detectarea ecranului a eșuat. Înregistrarea s-a oprit.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook pentru octeți audio invalidă';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook pentru transcriere în timp real invalidă';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook pentru conversație creată invalidă';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook pentru rezumatul zilnic invalidă';
+
+  @override
+  String get devModeSettingsSaved => 'Setări salvate!';
 }

@@ -7648,4 +7648,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Ha fallat la detecció de pantalla. Enregistrament aturat.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL del webhook de bytes d\'àudio no vàlida';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL del webhook de transcripció en temps real no vàlida';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL del webhook de conversa creada no vàlida';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL del webhook de resum del dia no vàlida';
+
+  @override
+  String get devModeSettingsSaved => 'Configuració desada!';
 }

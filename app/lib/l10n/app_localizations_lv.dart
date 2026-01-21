@@ -7617,4 +7617,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Displeja noteikšana neizdevās. Ierakstīšana apturēta.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Nederīgs audio baitu webhook URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Nederīgs reāllaika transkripcijas webhook URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Nederīgs izveidotās sarunas webhook URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Nederīgs dienas kopsavilkuma webhook URL';
+
+  @override
+  String get devModeSettingsSaved => 'Iestatījumi saglabāti!';
 }

@@ -7622,4 +7622,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Schermdetectie mislukt. Opname gestopt.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Ongeldige webhook-URL voor audiobytes';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Ongeldige webhook-URL voor realtime-transcriptie';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Ongeldige webhook-URL voor aangemaakte conversatie';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Ongeldige webhook-URL voor dagsamenvatting';
+
+  @override
+  String get devModeSettingsSaved => 'Instellingen opgeslagen!';
 }

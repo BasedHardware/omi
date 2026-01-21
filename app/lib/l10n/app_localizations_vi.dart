@@ -7611,4 +7611,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Phát hiện màn hình thất bại. Ghi hình đã dừng.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook byte âm thanh không hợp lệ';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook bản ghi thời gian thực không hợp lệ';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook cuộc hội thoại được tạo không hợp lệ';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook tóm tắt ngày không hợp lệ';
+
+  @override
+  String get devModeSettingsSaved => 'Đã lưu cài đặt!';
 }

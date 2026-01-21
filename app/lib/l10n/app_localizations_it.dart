@@ -7646,4 +7646,19 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Rilevamento schermo non riuscito. Registrazione interrotta.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook byte audio non valido';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook trascrizione in tempo reale non valido';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook conversazione creata non valido';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook riepilogo giornaliero non valido';
+
+  @override
+  String get devModeSettingsSaved => 'Impostazioni salvate!';
 }

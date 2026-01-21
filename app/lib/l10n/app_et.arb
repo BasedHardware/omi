@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofoni luba on vajalik",
   "captureMicrophonePermissionInSystemPreferences": "Andke mikrofoni luba Süsteemieelistustes",
   "captureScreenRecordingPermissionRequired": "Ekraani salvestamise luba on vajalik",
-  "captureDisplayDetectionFailed": "Ekraani tuvastamine ebaõnnestus. Salvestamine peatatud."
+  "captureDisplayDetectionFailed": "Ekraani tuvastamine ebaõnnestus. Salvestamine peatatud.",
+  "devModeInvalidAudioBytesWebhookUrl": "Kehtetu helibaitide veebihaagi URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Kehtetu reaalajas transkriptsiooni veebihaagi URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "Kehtetu loodud vestluse veebihaagi URL",
+  "devModeInvalidDaySummaryWebhookUrl": "Kehtetu päeva kokkuvõtte veebihaagi URL",
+  "devModeSettingsSaved": "Seaded salvestatud!"
 }

@@ -7478,4 +7478,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => '디스플레이 감지 실패. 녹화가 중지되었습니다.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => '잘못된 오디오 바이트 웹훅 URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => '잘못된 실시간 기록 웹훅 URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => '잘못된 대화 생성 웹훅 URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => '잘못된 일일 요약 웹훅 URL';
+
+  @override
+  String get devModeSettingsSaved => '설정이 저장되었습니다!';
 }

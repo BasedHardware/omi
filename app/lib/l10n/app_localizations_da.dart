@@ -7609,4 +7609,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Skærmregistrering mislykkedes. Optagelse stoppet.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Ugyldig webhook-URL til lydbytes';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Ugyldig webhook-URL til realtidstransskription';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Ugyldig webhook-URL til oprettet samtale';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Ugyldig webhook-URL til daglig opsummering';
+
+  @override
+  String get devModeSettingsSaved => 'Indstillinger gemt!';
 }

@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Reikalingas mikrofono leidimas",
   "captureMicrophonePermissionInSystemPreferences": "Suteikite mikrofono leidimą Sistemos nuostatose",
   "captureScreenRecordingPermissionRequired": "Reikalingas ekrano įrašymo leidimas",
-  "captureDisplayDetectionFailed": "Ekrano aptikimas nepavyko. Įrašymas sustabdytas."
+  "captureDisplayDetectionFailed": "Ekrano aptikimas nepavyko. Įrašymas sustabdytas.",
+  "devModeInvalidAudioBytesWebhookUrl": "Neteisingas garso baitų webhook URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Neteisingas realaus laiko transkripcijos webhook URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "Neteisingas sukurto pokalbio webhook URL",
+  "devModeInvalidDaySummaryWebhookUrl": "Neteisingas dienos santraukos webhook URL",
+  "devModeSettingsSaved": "Nustatymai išsaugoti!"
 }

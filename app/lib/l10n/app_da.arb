@@ -2383,5 +2383,10 @@
   "captureMicrophonePermissionRequired": "Mikrofontilladelse påkrævet",
   "captureMicrophonePermissionInSystemPreferences": "Giv mikrofontilladelse i Systemindstillinger",
   "captureScreenRecordingPermissionRequired": "Skærmoptagelsestilladelse påkrævet",
-  "captureDisplayDetectionFailed": "Skærmregistrering mislykkedes. Optagelse stoppet."
+  "captureDisplayDetectionFailed": "Skærmregistrering mislykkedes. Optagelse stoppet.",
+  "devModeInvalidAudioBytesWebhookUrl": "Ugyldig webhook-URL til lydbytes",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Ugyldig webhook-URL til realtidstransskription",
+  "devModeInvalidConversationCreatedWebhookUrl": "Ugyldig webhook-URL til oprettet samtale",
+  "devModeInvalidDaySummaryWebhookUrl": "Ugyldig webhook-URL til daglig opsummering",
+  "devModeSettingsSaved": "Indstillinger gemt!"
 }

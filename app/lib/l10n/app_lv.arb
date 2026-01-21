@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Nepieciešama mikrofona atļauja",
   "captureMicrophonePermissionInSystemPreferences": "Piešķiriet mikrofona atļauju Sistēmas iestatījumos",
   "captureScreenRecordingPermissionRequired": "Nepieciešama ekrāna ierakstīšanas atļauja",
-  "captureDisplayDetectionFailed": "Displeja noteikšana neizdevās. Ierakstīšana apturēta."
+  "captureDisplayDetectionFailed": "Displeja noteikšana neizdevās. Ierakstīšana apturēta.",
+  "devModeInvalidAudioBytesWebhookUrl": "Nederīgs audio baitu webhook URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Nederīgs reāllaika transkripcijas webhook URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "Nederīgs izveidotās sarunas webhook URL",
+  "devModeInvalidDaySummaryWebhookUrl": "Nederīgs dienas kopsavilkuma webhook URL",
+  "devModeSettingsSaved": "Iestatījumi saglabāti!"
 }

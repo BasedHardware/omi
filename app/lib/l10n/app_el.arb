@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Απαιτείται άδεια μικροφώνου",
   "captureMicrophonePermissionInSystemPreferences": "Χορηγήστε άδεια μικροφώνου στις Προτιμήσεις Συστήματος",
   "captureScreenRecordingPermissionRequired": "Απαιτείται άδεια εγγραφής οθόνης",
-  "captureDisplayDetectionFailed": "Η ανίχνευση οθόνης απέτυχε. Η εγγραφή σταμάτησε."
+  "captureDisplayDetectionFailed": "Η ανίχνευση οθόνης απέτυχε. Η εγγραφή σταμάτησε.",
+  "devModeInvalidAudioBytesWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για bytes ήχου",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για μεταγραφή σε πραγματικό χρόνο",
+  "devModeInvalidConversationCreatedWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για δημιουργημένη συνομιλία",
+  "devModeInvalidDaySummaryWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για ημερήσια σύνοψη",
+  "devModeSettingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν!"
 }

@@ -9466,5 +9466,25 @@
   "captureMicrophonePermissionRequired": "Microphone permission required",
   "captureMicrophonePermissionInSystemPreferences": "Grant microphone permission in System Preferences",
   "captureScreenRecordingPermissionRequired": "Screen recording permission required",
-  "captureDisplayDetectionFailed": "Display detection failed. Recording stopped."
+  "captureDisplayDetectionFailed": "Display detection failed. Recording stopped.",
+  "devModeInvalidAudioBytesWebhookUrl": "Invalid audio bytes webhook URL",
+  "@devModeInvalidAudioBytesWebhookUrl": {
+    "description": "Error message when audio bytes webhook URL is invalid in developer settings"
+  },
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Invalid realtime transcript webhook URL",
+  "@devModeInvalidRealtimeTranscriptWebhookUrl": {
+    "description": "Error message when realtime transcript webhook URL is invalid in developer settings"
+  },
+  "devModeInvalidConversationCreatedWebhookUrl": "Invalid conversation created webhook URL",
+  "@devModeInvalidConversationCreatedWebhookUrl": {
+    "description": "Error message when conversation created webhook URL is invalid in developer settings"
+  },
+  "devModeInvalidDaySummaryWebhookUrl": "Invalid day summary webhook URL",
+  "@devModeInvalidDaySummaryWebhookUrl": {
+    "description": "Error message when day summary webhook URL is invalid in developer settings"
+  },
+  "devModeSettingsSaved": "Settings saved!",
+  "@devModeSettingsSaved": {
+    "description": "Success message shown when developer mode settings are saved"
+  }
 }

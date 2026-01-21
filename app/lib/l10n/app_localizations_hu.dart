@@ -7637,4 +7637,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'A kijelző észlelése sikertelen. A felvétel leállt.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Érvénytelen hangbájtok webhook URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Érvénytelen valós idejű átírat webhook URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Érvénytelen létrehozott beszélgetés webhook URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Érvénytelen napi összefoglaló webhook URL';
+
+  @override
+  String get devModeSettingsSaved => 'Beállítások mentve!';
 }

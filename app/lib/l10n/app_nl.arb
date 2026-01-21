@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Microfoontoestemming vereist",
   "captureMicrophonePermissionInSystemPreferences": "Geef microfoontoestemming in Systeemvoorkeuren",
   "captureScreenRecordingPermissionRequired": "Schermopnametoestemming vereist",
-  "captureDisplayDetectionFailed": "Schermdetectie mislukt. Opname gestopt."
+  "captureDisplayDetectionFailed": "Schermdetectie mislukt. Opname gestopt.",
+  "devModeInvalidAudioBytesWebhookUrl": "Ongeldige webhook-URL voor audiobytes",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Ongeldige webhook-URL voor realtime-transcriptie",
+  "devModeInvalidConversationCreatedWebhookUrl": "Ongeldige webhook-URL voor aangemaakte conversatie",
+  "devModeInvalidDaySummaryWebhookUrl": "Ongeldige webhook-URL voor dagsamenvatting",
+  "devModeSettingsSaved": "Instellingen opgeslagen!"
 }

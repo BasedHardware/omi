@@ -7600,4 +7600,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Ekraani tuvastamine ebaõnnestus. Salvestamine peatatud.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Kehtetu helibaitide veebihaagi URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Kehtetu reaalajas transkriptsiooni veebihaagi URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Kehtetu loodud vestluse veebihaagi URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Kehtetu päeva kokkuvõtte veebihaagi URL';
+
+  @override
+  String get devModeSettingsSaved => 'Seaded salvestatud!';
 }

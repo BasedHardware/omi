@@ -7564,4 +7564,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'การตรวจจับจอภาพล้มเหลว การบันทึกหยุดลง';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL เว็บฮุคไบต์เสียงไม่ถูกต้อง';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL เว็บฮุคการถอดเสียงแบบเรียลไทม์ไม่ถูกต้อง';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL เว็บฮุคการสร้างการสนทนาไม่ถูกต้อง';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL เว็บฮุคสรุปรายวันไม่ถูกต้อง';
+
+  @override
+  String get devModeSettingsSaved => 'บันทึกการตั้งค่าแล้ว!';
 }

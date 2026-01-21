@@ -7581,4 +7581,19 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'डिस्प्ले पहचान विफल। रिकॉर्डिंग रुकी।';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'अमान्य ऑडियो बाइट्स वेबहुक URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'अमान्य रीयलटाइम ट्रांसक्रिप्ट वेबहुक URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'अमान्य वार्तालाप निर्मित वेबहुक URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'अमान्य दैनिक सारांश वेबहुक URL';
+
+  @override
+  String get devModeSettingsSaved => 'सेटिंग्स सहेजी गईं!';
 }

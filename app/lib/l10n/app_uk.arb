@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Потрібен дозвіл на мікрофон",
   "captureMicrophonePermissionInSystemPreferences": "Надайте дозвіл на мікрофон у Системних налаштуваннях",
   "captureScreenRecordingPermissionRequired": "Потрібен дозвіл на запис екрану",
-  "captureDisplayDetectionFailed": "Виявлення дисплея не вдалося. Запис зупинено."
+  "captureDisplayDetectionFailed": "Виявлення дисплея не вдалося. Запис зупинено.",
+  "devModeInvalidAudioBytesWebhookUrl": "Недійсний URL вебхука аудіо-байтів",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Недійсний URL вебхука транскрипції в реальному часі",
+  "devModeInvalidConversationCreatedWebhookUrl": "Недійсний URL вебхука створеної бесіди",
+  "devModeInvalidDaySummaryWebhookUrl": "Недійсний URL вебхука денного звіту",
+  "devModeSettingsSaved": "Налаштування збережено!"
 }

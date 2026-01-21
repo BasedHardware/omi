@@ -7549,4 +7549,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'فشل اكتشاف الشاشة. توقف التسجيل.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'عنوان URL للويب هوك لبايتات الصوت غير صالح';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'عنوان URL للويب هوك للنص الفوري غير صالح';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'عنوان URL للويب هوك لإنشاء المحادثة غير صالح';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'عنوان URL للويب هوك لملخص اليوم غير صالح';
+
+  @override
+  String get devModeSettingsSaved => 'تم حفظ الإعدادات!';
 }

@@ -2426,5 +2426,10 @@
   "captureMicrophonePermissionRequired": "Se requiere permiso de micrófono",
   "captureMicrophonePermissionInSystemPreferences": "Conceda permiso de micrófono en Preferencias del Sistema",
   "captureScreenRecordingPermissionRequired": "Se requiere permiso de grabación de pantalla",
-  "captureDisplayDetectionFailed": "Error en la detección de pantalla. Grabación detenida."
+  "captureDisplayDetectionFailed": "Error en la detección de pantalla. Grabación detenida.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL de webhook de bytes de audio no válida",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL de webhook de transcripción en tiempo real no válida",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL de webhook de conversación creada no válida",
+  "devModeInvalidDaySummaryWebhookUrl": "URL de webhook de resumen diario no válida",
+  "devModeSettingsSaved": "¡Configuración guardada!"
 }

@@ -2,7 +2,7 @@
 
 **Status:** IN PROGRESS
 **Created:** 2026-01-20
-**Last Updated:** 2026-01-20
+**Last Updated:** 2026-01-21
 **Version:** 2.0
 
 ## Overview
@@ -116,8 +116,8 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | `providers/auth_provider.dart` | ~8 | COMPLETED - Authentication error messages (Google, Apple, Firebase) |
 | `providers/onboarding_provider.dart` | ~10 | COMPLETED - Permission error messages (Bluetooth, Microphone, Screen Capture, Accessibility, Notification) |
 | `providers/message_provider.dart` | ~12 | COMPLETED - Camera/photo/file picker error messages |
-| `providers/capture_provider.dart` | ~5 | Recording error messages |
-| `providers/developer_mode_provider.dart` | ~5 | Webhook validation errors |
+| `providers/capture_provider.dart` | ~5 | COMPLETED - Recording error messages |
+| `providers/developer_mode_provider.dart` | ~5 | COMPLETED - Webhook validation errors |
 | `providers/voice_recorder_provider.dart` | 1 | Transcription error |
 
 #### 6.2 UI Components (~15 strings)

@@ -7610,4 +7610,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Виявлення дисплея не вдалося. Запис зупинено.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Недійсний URL вебхука аудіо-байтів';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Недійсний URL вебхука транскрипції в реальному часі';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Недійсний URL вебхука створеної бесіди';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Недійсний URL вебхука денного звіту';
+
+  @override
+  String get devModeSettingsSaved => 'Налаштування збережено!';
 }

@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofon izni gerekli",
   "captureMicrophonePermissionInSystemPreferences": "Sistem Tercihleri'nde mikrofon izni verin",
   "captureScreenRecordingPermissionRequired": "Ekran kaydı izni gerekli",
-  "captureDisplayDetectionFailed": "Ekran algılama başarısız. Kayıt durduruldu."
+  "captureDisplayDetectionFailed": "Ekran algılama başarısız. Kayıt durduruldu.",
+  "devModeInvalidAudioBytesWebhookUrl": "Geçersiz ses baytları webhook URL'si",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Geçersiz gerçek zamanlı transkript webhook URL'si",
+  "devModeInvalidConversationCreatedWebhookUrl": "Geçersiz oluşturulan konuşma webhook URL'si",
+  "devModeInvalidDaySummaryWebhookUrl": "Geçersiz günlük özet webhook URL'si",
+  "devModeSettingsSaved": "Ayarlar kaydedildi!"
 }

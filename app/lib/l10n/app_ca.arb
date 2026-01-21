@@ -2408,5 +2408,10 @@
   "captureMicrophonePermissionRequired": "Es requereix permís de micròfon",
   "captureMicrophonePermissionInSystemPreferences": "Concediu el permís de micròfon a les Preferències del Sistema",
   "captureScreenRecordingPermissionRequired": "Es requereix permís d'enregistrament de pantalla",
-  "captureDisplayDetectionFailed": "Ha fallat la detecció de pantalla. Enregistrament aturat."
+  "captureDisplayDetectionFailed": "Ha fallat la detecció de pantalla. Enregistrament aturat.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL del webhook de bytes d'àudio no vàlida",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL del webhook de transcripció en temps real no vàlida",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL del webhook de conversa creada no vàlida",
+  "devModeInvalidDaySummaryWebhookUrl": "URL del webhook de resum del dia no vàlida",
+  "devModeSettingsSaved": "Configuració desada!"
 }

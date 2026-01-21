@@ -7651,4 +7651,21 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Η ανίχνευση οθόνης απέτυχε. Η εγγραφή σταμάτησε.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Μη έγκυρη διεύθυνση URL webhook για bytes ήχου';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'Μη έγκυρη διεύθυνση URL webhook για μεταγραφή σε πραγματικό χρόνο';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl =>
+      'Μη έγκυρη διεύθυνση URL webhook για δημιουργημένη συνομιλία';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Μη έγκυρη διεύθυνση URL webhook για ημερήσια σύνοψη';
+
+  @override
+  String get devModeSettingsSaved => 'Οι ρυθμίσεις αποθηκεύτηκαν!';
 }

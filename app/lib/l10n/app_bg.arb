@@ -2408,5 +2408,10 @@
   "captureMicrophonePermissionRequired": "Изисква се разрешение за микрофон",
   "captureMicrophonePermissionInSystemPreferences": "Дайте разрешение за микрофон в Системни предпочитания",
   "captureScreenRecordingPermissionRequired": "Изисква се разрешение за запис на екрана",
-  "captureDisplayDetectionFailed": "Откриването на дисплея е неуспешно. Записът е спрян."
+  "captureDisplayDetectionFailed": "Откриването на дисплея е неуспешно. Записът е спрян.",
+  "devModeInvalidAudioBytesWebhookUrl": "Невалиден URL адрес на уебхук за аудио байтове",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Невалиден URL адрес на уебхук за транскрипция в реално време",
+  "devModeInvalidConversationCreatedWebhookUrl": "Невалиден URL адрес на уебхук за създаден разговор",
+  "devModeInvalidDaySummaryWebhookUrl": "Невалиден URL адрес на уебхук за дневно обобщение",
+  "devModeSettingsSaved": "Настройките са запазени!"
 }

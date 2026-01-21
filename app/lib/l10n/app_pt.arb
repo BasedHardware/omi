@@ -2426,5 +2426,10 @@
   "captureMicrophonePermissionRequired": "Permissão de microfone necessária",
   "captureMicrophonePermissionInSystemPreferences": "Conceda permissão de microfone nas Preferências do Sistema",
   "captureScreenRecordingPermissionRequired": "Permissão de gravação de tela necessária",
-  "captureDisplayDetectionFailed": "Detecção de tela falhou. Gravação parada."
+  "captureDisplayDetectionFailed": "Detecção de tela falhou. Gravação parada.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL de webhook de bytes de áudio inválida",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL de webhook de transcrição em tempo real inválida",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL de webhook de conversa criada inválida",
+  "devModeInvalidDaySummaryWebhookUrl": "URL de webhook de resumo diário inválida",
+  "devModeSettingsSaved": "Configurações salvas!"
 }

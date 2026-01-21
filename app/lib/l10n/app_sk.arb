@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Vyžaduje sa povolenie mikrofónu",
   "captureMicrophonePermissionInSystemPreferences": "Udeľte povolenie mikrofónu v Systémových preferenciách",
   "captureScreenRecordingPermissionRequired": "Vyžaduje sa povolenie na nahrávanie obrazovky",
-  "captureDisplayDetectionFailed": "Detekcia displeja zlyhala. Nahrávanie zastavené."
+  "captureDisplayDetectionFailed": "Detekcia displeja zlyhala. Nahrávanie zastavené.",
+  "devModeInvalidAudioBytesWebhookUrl": "Neplatná URL adresa webhooku pre audio bajty",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Neplatná URL adresa webhooku pre prepis v reálnom čase",
+  "devModeInvalidConversationCreatedWebhookUrl": "Neplatná URL adresa webhooku pre vytvorený rozhovor",
+  "devModeInvalidDaySummaryWebhookUrl": "Neplatná URL adresa webhooku pre denný súhrn",
+  "devModeSettingsSaved": "Nastavenia uložené!"
 }

@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "마이크 권한이 필요합니다",
   "captureMicrophonePermissionInSystemPreferences": "시스템 환경설정에서 마이크 권한을 부여하세요",
   "captureScreenRecordingPermissionRequired": "화면 녹화 권한이 필요합니다",
-  "captureDisplayDetectionFailed": "디스플레이 감지 실패. 녹화가 중지되었습니다."
+  "captureDisplayDetectionFailed": "디스플레이 감지 실패. 녹화가 중지되었습니다.",
+  "devModeInvalidAudioBytesWebhookUrl": "잘못된 오디오 바이트 웹훅 URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "잘못된 실시간 기록 웹훅 URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "잘못된 대화 생성 웹훅 URL",
+  "devModeInvalidDaySummaryWebhookUrl": "잘못된 일일 요약 웹훅 URL",
+  "devModeSettingsSaved": "설정이 저장되었습니다!"
 }

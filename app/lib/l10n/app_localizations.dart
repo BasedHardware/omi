@@ -14228,6 +14228,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Display detection failed. Recording stopped.'**
   String get captureDisplayDetectionFailed;
+
+  /// Error message when audio bytes webhook URL is invalid in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid audio bytes webhook URL'**
+  String get devModeInvalidAudioBytesWebhookUrl;
+
+  /// Error message when realtime transcript webhook URL is invalid in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid realtime transcript webhook URL'**
+  String get devModeInvalidRealtimeTranscriptWebhookUrl;
+
+  /// Error message when conversation created webhook URL is invalid in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid conversation created webhook URL'**
+  String get devModeInvalidConversationCreatedWebhookUrl;
+
+  /// Error message when day summary webhook URL is invalid in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid day summary webhook URL'**
+  String get devModeInvalidDaySummaryWebhookUrl;
+
+  /// Success message shown when developer mode settings are saved
+  ///
+  /// In en, this message translates to:
+  /// **'Settings saved!'**
+  String get devModeSettingsSaved;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

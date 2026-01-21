@@ -7622,4 +7622,20 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Ошибка обнаружения дисплея. Запись остановлена.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Недействительный URL вебхука аудио-байтов';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'Недействительный URL вебхука транскрипции в реальном времени';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Недействительный URL вебхука созданной беседы';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Недействительный URL вебхука дневного отчёта';
+
+  @override
+  String get devModeSettingsSaved => 'Настройки сохранены!';
 }

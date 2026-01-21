@@ -7613,4 +7613,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Ekran algılama başarısız. Kayıt durduruldu.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Geçersiz ses baytları webhook URL\'si';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Geçersiz gerçek zamanlı transkript webhook URL\'si';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Geçersiz oluşturulan konuşma webhook URL\'si';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Geçersiz günlük özet webhook URL\'si';
+
+  @override
+  String get devModeSettingsSaved => 'Ayarlar kaydedildi!';
 }

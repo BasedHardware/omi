@@ -7603,4 +7603,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Ekrano aptikimas nepavyko. Įrašymas sustabdytas.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Neteisingas garso baitų webhook URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Neteisingas realaus laiko transkripcijos webhook URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Neteisingas sukurto pokalbio webhook URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Neteisingas dienos santraukos webhook URL';
+
+  @override
+  String get devModeSettingsSaved => 'Nustatymai išsaugoti!';
 }

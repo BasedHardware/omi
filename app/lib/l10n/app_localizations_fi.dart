@@ -7598,4 +7598,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Näytön tunnistus epäonnistui. Tallennus pysäytetty.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Virheellinen äänitavujen webhook-URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Virheellinen reaaliaikaisen transkription webhook-URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Virheellinen luodun keskustelun webhook-URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Virheellinen päiväyhteenvedon webhook-URL';
+
+  @override
+  String get devModeSettingsSaved => 'Asetukset tallennettu!';
 }

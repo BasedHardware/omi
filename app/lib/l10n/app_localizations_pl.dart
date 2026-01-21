@@ -7616,4 +7616,20 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Wykrywanie wyświetlacza nie powiodło się. Nagrywanie zatrzymane.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Nieprawidłowy URL webhooka bajtów audio';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'Nieprawidłowy URL webhooka transkrypcji w czasie rzeczywistym';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Nieprawidłowy URL webhooka utworzonej konwersacji';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Nieprawidłowy URL webhooka dziennego podsumowania';
+
+  @override
+  String get devModeSettingsSaved => 'Ustawienia zapisane!';
 }

@@ -2426,5 +2426,10 @@
   "captureMicrophonePermissionRequired": "需要麦克风权限",
   "captureMicrophonePermissionInSystemPreferences": "在系统偏好设置中授予麦克风权限",
   "captureScreenRecordingPermissionRequired": "需要屏幕录制权限",
-  "captureDisplayDetectionFailed": "显示器检测失败。录制已停止。"
+  "captureDisplayDetectionFailed": "显示器检测失败。录制已停止。",
+  "devModeInvalidAudioBytesWebhookUrl": "无效的音频字节 webhook URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "无效的实时转录 webhook URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "无效的对话创建 webhook URL",
+  "devModeInvalidDaySummaryWebhookUrl": "无效的每日摘要 webhook URL",
+  "devModeSettingsSaved": "设置已保存！"
 }

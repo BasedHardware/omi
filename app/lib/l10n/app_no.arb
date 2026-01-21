@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofontillatelse kreves",
   "captureMicrophonePermissionInSystemPreferences": "Gi mikrofontillatelse i Systemvalg",
   "captureScreenRecordingPermissionRequired": "Skjermopptakstillatelse kreves",
-  "captureDisplayDetectionFailed": "Skjermgjenkjenning mislyktes. Opptak stoppet."
+  "captureDisplayDetectionFailed": "Skjermgjenkjenning mislyktes. Opptak stoppet.",
+  "devModeInvalidAudioBytesWebhookUrl": "Ugyldig webhook-URL for lydbyter",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Ugyldig webhook-URL for sanntidstranskripsjon",
+  "devModeInvalidConversationCreatedWebhookUrl": "Ugyldig webhook-URL for opprettet samtale",
+  "devModeInvalidDaySummaryWebhookUrl": "Ugyldig webhook-URL for daglig oppsummering",
+  "devModeSettingsSaved": "Innstillinger lagret!"
 }

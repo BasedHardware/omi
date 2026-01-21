@@ -7611,4 +7611,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Error en la detección de pantalla. Grabación detenida.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL de webhook de bytes de audio no válida';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL de webhook de transcripción en tiempo real no válida';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL de webhook de conversación creada no válida';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL de webhook de resumen diario no válida';
+
+  @override
+  String get devModeSettingsSaved => '¡Configuración guardada!';
 }

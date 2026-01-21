@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Cần có quyền truy cập micrô",
   "captureMicrophonePermissionInSystemPreferences": "Cấp quyền micrô trong Tùy chọn Hệ thống",
   "captureScreenRecordingPermissionRequired": "Cần có quyền ghi màn hình",
-  "captureDisplayDetectionFailed": "Phát hiện màn hình thất bại. Ghi hình đã dừng."
+  "captureDisplayDetectionFailed": "Phát hiện màn hình thất bại. Ghi hình đã dừng.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL webhook byte âm thanh không hợp lệ",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL webhook bản ghi thời gian thực không hợp lệ",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL webhook cuộc hội thoại được tạo không hợp lệ",
+  "devModeInvalidDaySummaryWebhookUrl": "URL webhook tóm tắt ngày không hợp lệ",
+  "devModeSettingsSaved": "Đã lưu cài đặt!"
 }

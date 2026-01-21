@@ -7598,4 +7598,19 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Detecção de tela falhou. Gravação parada.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL de webhook de bytes de áudio inválida';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL de webhook de transcrição em tempo real inválida';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL de webhook de conversa criada inválida';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL de webhook de resumo diário inválida';
+
+  @override
+  String get devModeSettingsSaved => 'Configurações salvas!';
 }

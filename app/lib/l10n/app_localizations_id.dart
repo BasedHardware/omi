@@ -7618,4 +7618,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Deteksi layar gagal. Perekaman dihentikan.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'URL webhook byte audio tidak valid';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'URL webhook transkrip realtime tidak valid';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'URL webhook percakapan dibuat tidak valid';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'URL webhook ringkasan harian tidak valid';
+
+  @override
+  String get devModeSettingsSaved => 'Pengaturan disimpan!';
 }

@@ -7597,4 +7597,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Detekce displeje selhala. Nahrávání zastaveno.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Neplatná URL adresa webhooku pro audio bajty';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Neplatná URL adresa webhooku pro přepis v reálném čase';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Neplatná URL adresa webhooku pro vytvořenou konverzaci';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Neplatná URL adresa webhooku pro denní shrnutí';
+
+  @override
+  String get devModeSettingsSaved => 'Nastavení uloženo!';
 }

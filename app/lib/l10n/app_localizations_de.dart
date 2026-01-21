@@ -7670,4 +7670,19 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Bildschirmerkennung fehlgeschlagen. Aufnahme gestoppt.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Ungültige Webhook-URL für Audio-Bytes';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Ungültige Webhook-URL für Echtzeit-Transkription';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Ungültige Webhook-URL für erstellte Konversation';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Ungültige Webhook-URL für Tageszusammenfassung';
+
+  @override
+  String get devModeSettingsSaved => 'Einstellungen gespeichert!';
 }

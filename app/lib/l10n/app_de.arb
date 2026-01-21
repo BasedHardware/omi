@@ -2407,5 +2407,10 @@
   "captureMicrophonePermissionRequired": "Mikrofonberechtigung erforderlich",
   "captureMicrophonePermissionInSystemPreferences": "Mikrofonberechtigung in den Systemeinstellungen erteilen",
   "captureScreenRecordingPermissionRequired": "Bildschirmaufnahme-Berechtigung erforderlich",
-  "captureDisplayDetectionFailed": "Bildschirmerkennung fehlgeschlagen. Aufnahme gestoppt."
+  "captureDisplayDetectionFailed": "Bildschirmerkennung fehlgeschlagen. Aufnahme gestoppt.",
+  "devModeInvalidAudioBytesWebhookUrl": "Ungültige Webhook-URL für Audio-Bytes",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Ungültige Webhook-URL für Echtzeit-Transkription",
+  "devModeInvalidConversationCreatedWebhookUrl": "Ungültige Webhook-URL für erstellte Konversation",
+  "devModeInvalidDaySummaryWebhookUrl": "Ungültige Webhook-URL für Tageszusammenfassung",
+  "devModeSettingsSaved": "Einstellungen gespeichert!"
 }

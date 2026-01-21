@@ -7632,4 +7632,20 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Откриването на дисплея е неуспешно. Записът е спрян.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Невалиден URL адрес на уебхук за аудио байтове';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl =>
+      'Невалиден URL адрес на уебхук за транскрипция в реално време';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Невалиден URL адрес на уебхук за създаден разговор';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Невалиден URL адрес на уебхук за дневно обобщение';
+
+  @override
+  String get devModeSettingsSaved => 'Настройките са запазени!';
 }

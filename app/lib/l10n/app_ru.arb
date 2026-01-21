@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Требуется разрешение на использование микрофона",
   "captureMicrophonePermissionInSystemPreferences": "Предоставьте разрешение на микрофон в Системных настройках",
   "captureScreenRecordingPermissionRequired": "Требуется разрешение на запись экрана",
-  "captureDisplayDetectionFailed": "Ошибка обнаружения дисплея. Запись остановлена."
+  "captureDisplayDetectionFailed": "Ошибка обнаружения дисплея. Запись остановлена.",
+  "devModeInvalidAudioBytesWebhookUrl": "Недействительный URL вебхука аудио-байтов",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Недействительный URL вебхука транскрипции в реальном времени",
+  "devModeInvalidConversationCreatedWebhookUrl": "Недействительный URL вебхука созданной беседы",
+  "devModeInvalidDaySummaryWebhookUrl": "Недействительный URL вебхука дневного отчёта",
+  "devModeSettingsSaved": "Настройки сохранены!"
 }

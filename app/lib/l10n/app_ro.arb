@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Este necesară permisiunea microfonului",
   "captureMicrophonePermissionInSystemPreferences": "Acordați permisiunea microfonului în Preferințe Sistem",
   "captureScreenRecordingPermissionRequired": "Este necesară permisiunea de înregistrare a ecranului",
-  "captureDisplayDetectionFailed": "Detectarea ecranului a eșuat. Înregistrarea s-a oprit."
+  "captureDisplayDetectionFailed": "Detectarea ecranului a eșuat. Înregistrarea s-a oprit.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL webhook pentru octeți audio invalidă",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL webhook pentru transcriere în timp real invalidă",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL webhook pentru conversație creată invalidă",
+  "devModeInvalidDaySummaryWebhookUrl": "URL webhook pentru rezumatul zilnic invalidă",
+  "devModeSettingsSaved": "Setări salvate!"
 }

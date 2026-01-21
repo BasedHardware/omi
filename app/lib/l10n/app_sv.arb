@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofonbehörighet krävs",
   "captureMicrophonePermissionInSystemPreferences": "Ge mikrofonbehörighet i Systeminställningar",
   "captureScreenRecordingPermissionRequired": "Skärminspelningsbehörighet krävs",
-  "captureDisplayDetectionFailed": "Skärmigenkänning misslyckades. Inspelningen stoppades."
+  "captureDisplayDetectionFailed": "Skärmigenkänning misslyckades. Inspelningen stoppades.",
+  "devModeInvalidAudioBytesWebhookUrl": "Ogiltig webhook-URL för ljudbytes",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Ogiltig webhook-URL för realtidstranskription",
+  "devModeInvalidConversationCreatedWebhookUrl": "Ogiltig webhook-URL för skapad konversation",
+  "devModeInvalidDaySummaryWebhookUrl": "Ogiltig webhook-URL för daglig sammanfattning",
+  "devModeSettingsSaved": "Inställningar sparade!"
 }

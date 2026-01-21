@@ -7476,4 +7476,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'ディスプレイの検出に失敗しました。録画を停止しました。';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'オーディオバイトのWebhook URLが無効です';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'リアルタイム文字起こしのWebhook URLが無効です';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => '会話作成のWebhook URLが無効です';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => '日次サマリーのWebhook URLが無効です';
+
+  @override
+  String get devModeSettingsSaved => '設定を保存しました！';
 }

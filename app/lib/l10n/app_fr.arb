@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Autorisation du microphone requise",
   "captureMicrophonePermissionInSystemPreferences": "Accordez l'autorisation du microphone dans les Préférences Système",
   "captureScreenRecordingPermissionRequired": "Autorisation d'enregistrement d'écran requise",
-  "captureDisplayDetectionFailed": "La détection d'écran a échoué. Enregistrement arrêté."
+  "captureDisplayDetectionFailed": "La détection d'écran a échoué. Enregistrement arrêté.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL du webhook des octets audio invalide",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL du webhook de transcription en temps réel invalide",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL du webhook de conversation créée invalide",
+  "devModeInvalidDaySummaryWebhookUrl": "URL du webhook du résumé quotidien invalide",
+  "devModeSettingsSaved": "Paramètres enregistrés !"
 }

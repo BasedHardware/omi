@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Kebenaran mikrofon diperlukan",
   "captureMicrophonePermissionInSystemPreferences": "Berikan kebenaran mikrofon dalam Keutamaan Sistem",
   "captureScreenRecordingPermissionRequired": "Kebenaran rakaman skrin diperlukan",
-  "captureDisplayDetectionFailed": "Pengesanan paparan gagal. Rakaman dihentikan."
+  "captureDisplayDetectionFailed": "Pengesanan paparan gagal. Rakaman dihentikan.",
+  "devModeInvalidAudioBytesWebhookUrl": "URL webhook bait audio tidak sah",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "URL webhook transkripsi masa nyata tidak sah",
+  "devModeInvalidConversationCreatedWebhookUrl": "URL webhook perbualan dicipta tidak sah",
+  "devModeInvalidDaySummaryWebhookUrl": "URL webhook ringkasan harian tidak sah",
+  "devModeSettingsSaved": "Tetapan disimpan!"
 }

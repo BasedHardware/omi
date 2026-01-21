@@ -7466,4 +7466,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => '显示器检测失败。录制已停止。';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => '无效的音频字节 webhook URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => '无效的实时转录 webhook URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => '无效的对话创建 webhook URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => '无效的每日摘要 webhook URL';
+
+  @override
+  String get devModeSettingsSaved => '设置已保存！';
 }

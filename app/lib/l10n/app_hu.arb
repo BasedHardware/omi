@@ -2425,5 +2425,10 @@
   "captureMicrophonePermissionRequired": "Mikrofon engedély szükséges",
   "captureMicrophonePermissionInSystemPreferences": "Adja meg a mikrofon engedélyt a Rendszerbeállításokban",
   "captureScreenRecordingPermissionRequired": "Képernyőfelvétel engedély szükséges",
-  "captureDisplayDetectionFailed": "A kijelző észlelése sikertelen. A felvétel leállt."
+  "captureDisplayDetectionFailed": "A kijelző észlelése sikertelen. A felvétel leállt.",
+  "devModeInvalidAudioBytesWebhookUrl": "Érvénytelen hangbájtok webhook URL",
+  "devModeInvalidRealtimeTranscriptWebhookUrl": "Érvénytelen valós idejű átírat webhook URL",
+  "devModeInvalidConversationCreatedWebhookUrl": "Érvénytelen létrehozott beszélgetés webhook URL",
+  "devModeInvalidDaySummaryWebhookUrl": "Érvénytelen napi összefoglaló webhook URL",
+  "devModeSettingsSaved": "Beállítások mentve!"
 }

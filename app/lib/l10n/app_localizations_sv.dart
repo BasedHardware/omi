@@ -7605,4 +7605,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Skärmigenkänning misslyckades. Inspelningen stoppades.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Ogiltig webhook-URL för ljudbytes';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Ogiltig webhook-URL för realtidstranskription';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Ogiltig webhook-URL för skapad konversation';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Ogiltig webhook-URL för daglig sammanfattning';
+
+  @override
+  String get devModeSettingsSaved => 'Inställningar sparade!';
 }

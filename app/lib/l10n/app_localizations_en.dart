@@ -7599,4 +7599,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureDisplayDetectionFailed => 'Display detection failed. Recording stopped.';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Invalid audio bytes webhook URL';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Invalid realtime transcript webhook URL';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Invalid conversation created webhook URL';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Invalid day summary webhook URL';
+
+  @override
+  String get devModeSettingsSaved => 'Settings saved!';
 }
