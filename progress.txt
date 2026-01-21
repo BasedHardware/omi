@@ -935,3 +935,21 @@ Legend:
 - All tests passed
 - Remaining: 7 other languages still need the same keys translated (ms, ro, sk, sv, th, uk, vi)
 
+[2026-01-21] Translated 159 pre-existing English keys to Malay (app_ms.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 159 keys to proper Malay translations in app_ms.arb
+- Keys include: cancel, retry, signOutConfirmation, deleteRecording, thisCannotBeUndone,
+  storeAudioOnPhone, storeAudioOnCloud, configureAiPersona, trackYourGoalsOnHomepage,
+  cancelSync, cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring,
+  transferRequired, downloadingAudioFromSdCard, recordingDetails, storageLocationLabel,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, xHandleTitle, planSwitchingDescriptionWithTitle,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, and 125+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {time}, {level}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Claude Desktop)
+- Technical terms commonly used in Malay tech context kept as-is (Import, Webhooks, Port, Manual, Auto, Status, Model)
+- International abbreviations kept as-is (min, Jan, Feb, Apr, Jun, Jul, Nov, s, m)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 6 other languages still need the same keys translated (ro, sk, sv, th, uk, vi)
+
