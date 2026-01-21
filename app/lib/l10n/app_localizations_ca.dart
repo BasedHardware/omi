@@ -4488,7 +4488,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Entrenament d\'Omi';
+  String get omiTraining => 'Entrenament Omi';
 
   @override
   String get trainingDataProgram => 'Programa de dades d\'entrenament';

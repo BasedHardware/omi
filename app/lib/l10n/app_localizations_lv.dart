@@ -4471,7 +4471,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi apmācība';
+  String get omiTraining => 'Omi Apmācība';
 
   @override
   String get trainingDataProgram => 'Apmācības datu programma';

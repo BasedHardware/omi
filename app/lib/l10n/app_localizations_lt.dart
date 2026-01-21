@@ -4461,7 +4461,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi mokymas';
+  String get omiTraining => 'Omi Mokymai';
 
   @override
   String get trainingDataProgram => 'Mokymo duomenų programa';

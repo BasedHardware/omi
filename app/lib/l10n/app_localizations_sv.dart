@@ -4468,7 +4468,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi-träning';
+  String get omiTraining => 'Omi Träning';
 
   @override
   String get trainingDataProgram => 'Träningsdataprogram';

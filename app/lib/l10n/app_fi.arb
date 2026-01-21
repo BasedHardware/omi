@@ -1369,7 +1369,7 @@
   "developerApi": "Kehittäjän API",
   "createAKeyToGetStarted": "Luo avain aloittaaksesi",
   "errorWithMessage": "Virhe: {error}",
-  "omiTraining": "Omi-koulutus",
+  "omiTraining": "Omi Koulutus",
   "trainingDataProgram": "Koulutustietojen ohjelma",
   "getOmiUnlimitedFree": "Saat Omi Unlimited -tilauksen ilmaiseksi antamalla tietosi AI-mallien kouluttamiseen.",
   "trainingDataBullets": "• Tietosi auttavat parantamaan AI-malleja\n• Vain ei-arkaluonteiset tiedot jaetaan\n• Täysin läpinäkyvä prosessi",

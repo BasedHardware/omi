@@ -5173,7 +5173,7 @@
   },
   "omiTraining": "Omi Training",
   "@omiTraining": {
-    "description": "Title for Omi training program"
+    "description": "Title for the Omi Training page/section"
   },
   "trainingDataProgram": "Training Data Program",
   "@trainingDataProgram": {
@@ -5381,7 +5381,7 @@
   },
   "cancelSubscription": "Cancel Subscription",
   "@cancelSubscription": {
-    "description": "Button to cancel subscription"
+    "description": "Button text to cancel a subscription"
   },
   "endsOnDate": "Ends on {date}",
   "@endsOnDate": {

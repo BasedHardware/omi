@@ -4439,7 +4439,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'ओमी प्रशिक्षण';
+  String get omiTraining => 'Omi प्रशिक्षण';
 
   @override
   String get trainingDataProgram => 'प्रशिक्षण डेटा कार्यक्रम';

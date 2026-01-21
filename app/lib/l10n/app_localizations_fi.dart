@@ -4462,7 +4462,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi-koulutus';
+  String get omiTraining => 'Omi Koulutus';
 
   @override
   String get trainingDataProgram => 'Koulutustietojen ohjelma';

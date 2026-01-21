@@ -4428,7 +4428,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'تدريب أومي';
+  String get omiTraining => 'تدريب Omi';
 
   @override
   String get trainingDataProgram => 'برنامج بيانات التدريب';

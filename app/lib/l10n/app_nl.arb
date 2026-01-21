@@ -1415,7 +1415,7 @@
   "resubscribe": "Opnieuw abonneren",
   "couldNotOpenPaymentSettings": "Kon betalingsinstellingen niet openen. Probeer het opnieuw.",
   "managePaymentMethod": "Betalingsmethode beheren",
-  "cancelSubscription": "Abonnement annuleren",
+  "cancelSubscription": "Abonnement opzeggen",
   "endsOnDate": "Eindigt op {date}",
   "active": "Actief",
   "freePlan": "Gratis abonnement",

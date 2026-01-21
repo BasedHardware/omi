@@ -4463,7 +4463,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi-trening';
+  String get omiTraining => 'Omi Trening';
 
   @override
   String get trainingDataProgram => 'Treningsdataprogram';

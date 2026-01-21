@@ -124,7 +124,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 
 | File | Est. Strings | Description |
 |------|--------------|-------------|
-| `pages/settings/widgets/plans_sheet.dart` | 3 | Remaining: "Cancel Subscription", "Omi Training" (x2) |
+| `pages/settings/widgets/plans_sheet.dart` | 3 | COMPLETED - Cancel Subscription, Omi Training localized |
 | `pages/conversations/sync_widgets/location_permission_dialog.dart` | 4 | COMPLETED - Location permission dialog text |
 | `pages/conversations/widgets/merge_action_bar.dart` | 1 | COMPLETED - Reused existing `ok` key |
 

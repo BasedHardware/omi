@@ -4439,7 +4439,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'การฝึก Omi';
+  String get omiTraining => 'การฝึกอบรม Omi';
 
   @override
   String get trainingDataProgram => 'โปรแกรมข้อมูลการฝึก';
@@ -4588,7 +4588,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get managePaymentMethod => 'จัดการวิธีการชำระเงิน';
 
   @override
-  String get cancelSubscription => 'ยกเลิกการสมัคร';
+  String get cancelSubscription => 'ยกเลิกการสมัครสมาชิก';
 
   @override
   String endsOnDate(String date) {

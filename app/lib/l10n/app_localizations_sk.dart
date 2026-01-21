@@ -4463,7 +4463,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Tréning Omi';
+  String get omiTraining => 'Omi Tréning';
 
   @override
   String get trainingDataProgram => 'Program tréningových dát';

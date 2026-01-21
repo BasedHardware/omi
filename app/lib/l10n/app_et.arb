@@ -1369,7 +1369,7 @@
   "developerApi": "Arendaja API",
   "createAKeyToGetStarted": "Alustamiseks loo võti",
   "errorWithMessage": "Viga: {error}",
-  "omiTraining": "Omi koolitus",
+  "omiTraining": "Omi Koolitus",
   "trainingDataProgram": "Treeningandmete programm",
   "getOmiUnlimitedFree": "Saage Omi Unlimited tasuta, panustades oma andmetega AI mudelite treenimisse.",
   "trainingDataBullets": "• Teie andmed aitavad parandada AI mudeleid\n• Jagatakse ainult mittetundlikke andmeid\n• Täiesti läbipaistev protsess",

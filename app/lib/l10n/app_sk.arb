@@ -1369,7 +1369,7 @@
   "developerApi": "Vývojárske API",
   "createAKeyToGetStarted": "Vytvorte kľúč pre začatie",
   "errorWithMessage": "Chyba: {error}",
-  "omiTraining": "Tréning Omi",
+  "omiTraining": "Omi Tréning",
   "trainingDataProgram": "Program tréningových dát",
   "getOmiUnlimitedFree": "Získajte Omi Unlimited zadarmo prispením vašich dát na trénovanie AI modelov.",
   "trainingDataBullets": "• Vaše dáta pomáhajú zlepšovať AI modely\n• Zdieľajú sa len necitlivé dáta\n• Úplne transparentný proces",

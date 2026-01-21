@@ -1370,7 +1370,7 @@
   "developerApi": "开发者API",
   "createAKeyToGetStarted": "创建密钥以开始",
   "errorWithMessage": "错误：{error}",
-  "omiTraining": "Omi训练",
+  "omiTraining": "Omi 培训",
   "trainingDataProgram": "训练数据计划",
   "getOmiUnlimitedFree": "通过贡献数据来训练AI模型，免费获得Omi无限版。",
   "trainingDataBullets": "• 您的数据有助于改进AI模型\n• 仅共享非敏感数据\n• 完全透明的流程",

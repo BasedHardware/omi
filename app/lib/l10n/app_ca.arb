@@ -1371,7 +1371,7 @@
   "developerApi": "API per a desenvolupadors",
   "createAKeyToGetStarted": "Crea una clau per començar",
   "errorWithMessage": "Error: {error}",
-  "omiTraining": "Entrenament d'Omi",
+  "omiTraining": "Entrenament Omi",
   "trainingDataProgram": "Programa de dades d'entrenament",
   "getOmiUnlimitedFree": "Obtén Omi Il·limitat gratis contribuint les teves dades per entrenar models d'IA.",
   "trainingDataBullets": "• Les teves dades ajuden a millorar els models d'IA\n• Només es comparteixen dades no sensibles\n• Procés totalment transparent",

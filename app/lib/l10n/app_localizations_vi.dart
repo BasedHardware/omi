@@ -4470,7 +4470,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Huấn luyện Omi';
+  String get omiTraining => 'Đào tạo Omi';
 
   @override
   String get trainingDataProgram => 'Chương trình dữ liệu huấn luyện';

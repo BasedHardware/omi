@@ -4487,7 +4487,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi képzés';
+  String get omiTraining => 'Omi Képzés';
 
   @override
   String get trainingDataProgram => 'Képzési adatprogram';

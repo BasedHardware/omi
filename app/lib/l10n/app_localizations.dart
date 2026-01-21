@@ -8481,7 +8481,7 @@ abstract class AppLocalizations {
   /// **'Error: {error}'**
   String errorWithMessage(String error);
 
-  /// Title for Omi training program
+  /// Title for the Omi Training page/section
   ///
   /// In en, this message translates to:
   /// **'Omi Training'**
@@ -8757,7 +8757,7 @@ abstract class AppLocalizations {
   /// **'Manage Payment Method'**
   String get managePaymentMethod;
 
-  /// Button to cancel subscription
+  /// Button text to cancel a subscription
   ///
   /// In en, this message translates to:
   /// **'Cancel Subscription'**

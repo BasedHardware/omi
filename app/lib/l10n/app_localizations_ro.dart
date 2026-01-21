@@ -4486,7 +4486,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Antrenament Omi';
+  String get omiTraining => 'Instruire Omi';
 
   @override
   String get trainingDataProgram => 'Program de date de antrenament';

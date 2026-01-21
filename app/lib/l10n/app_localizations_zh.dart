@@ -4379,7 +4379,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi训练';
+  String get omiTraining => 'Omi 培训';
 
   @override
   String get trainingDataProgram => '训练数据计划';

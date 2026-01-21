@@ -1369,7 +1369,7 @@
   "developerApi": "Fejlesztői API",
   "createAKeyToGetStarted": "Hozzon létre egy kulcsot a kezdéshez",
   "errorWithMessage": "Hiba: {error}",
-  "omiTraining": "Omi képzés",
+  "omiTraining": "Omi Képzés",
   "trainingDataProgram": "Képzési adatprogram",
   "getOmiUnlimitedFree": "Szerezze meg az Omi Unlimited-et ingyen, ha hozzájárul adataival az AI modellek képzéséhez.",
   "trainingDataBullets": "• Az adatai segítenek az AI modellek fejlesztésében\n• Csak nem érzékeny adatok kerülnek megosztásra\n• Teljesen átlátható folyamat",

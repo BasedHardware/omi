@@ -1387,7 +1387,7 @@
   "developerApi": "واجهة برمجة تطبيقات المطور",
   "createAKeyToGetStarted": "أنشئ مفتاحاً للبدء",
   "errorWithMessage": "خطأ: {error}",
-  "omiTraining": "تدريب أومي",
+  "omiTraining": "تدريب Omi",
   "trainingDataProgram": "برنامج بيانات التدريب",
   "getOmiUnlimitedFree": "احصل على Omi غير محدود مجاناً من خلال المساهمة ببياناتك لتدريب نماذج الذكاء الاصطناعي.",
   "trainingDataBullets": "• بياناتك تساعد في تحسين نماذج الذكاء الاصطناعي\n• يتم مشاركة البيانات غير الحساسة فقط\n• عملية شفافة بالكامل",

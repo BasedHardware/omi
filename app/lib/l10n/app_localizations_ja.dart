@@ -4385,7 +4385,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omiトレーニング';
+  String get omiTraining => 'Omi トレーニング';
 
   @override
   String get trainingDataProgram => 'トレーニングデータプログラム';

@@ -1703,7 +1703,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           onPressed: () {
                             _handleCancelSubscription();
                           },
-                          child: const Text('Cancel Subscription', style: TextStyle(color: Colors.red, fontSize: 16)),
+                          child: Text(context.l10n.cancelSubscription, style: const TextStyle(color: Colors.red, fontSize: 16)),
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -2105,7 +2105,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Omi Training'),
+                  title: Text(context.l10n.omiTraining),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(
@@ -2194,7 +2194,7 @@ class _PlansSheetState extends State<PlansSheet> {
             MaterialPageRoute(
               builder: (context) => Scaffold(
                 appBar: AppBar(
-                  title: const Text('Omi Training'),
+                  title: Text(context.l10n.omiTraining),
                   backgroundColor: Colors.black,
                 ),
                 body: WebViewWidget(

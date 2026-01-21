@@ -4458,7 +4458,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Trénink Omi';
+  String get omiTraining => 'Omi Trénink';
 
   @override
   String get trainingDataProgram => 'Program trénovacích dat';

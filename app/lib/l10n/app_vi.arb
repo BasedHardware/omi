@@ -1369,7 +1369,7 @@
   "developerApi": "API nhà phát triển",
   "createAKeyToGetStarted": "Tạo khóa để bắt đầu",
   "errorWithMessage": "Lỗi: {error}",
-  "omiTraining": "Huấn luyện Omi",
+  "omiTraining": "Đào tạo Omi",
   "trainingDataProgram": "Chương trình dữ liệu huấn luyện",
   "getOmiUnlimitedFree": "Nhận Omi Unlimited miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.",
   "trainingDataBullets": "• Dữ liệu của bạn giúp cải thiện các mô hình AI\n• Chỉ chia sẻ dữ liệu không nhạy cảm\n• Quy trình hoàn toàn minh bạch",

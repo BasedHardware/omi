@@ -4627,7 +4627,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get managePaymentMethod => 'Betalingsmethode beheren';
 
   @override
-  String get cancelSubscription => 'Abonnement annuleren';
+  String get cancelSubscription => 'Abonnement opzeggen';
 
   @override
   String endsOnDate(String date) {
