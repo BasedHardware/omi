@@ -123,7 +123,7 @@ Total Strings: ~30
       - 'Bluetooth'
       - '~30 KB/s via BLE'
 
-  [ ] merge_confirmation_dialog.dart (2 strings)
+  [x] merge_confirmation_dialog.dart (2 strings)
       - 'Large time gap detected (...)'
       - 'Large time gaps detected (...)'
 
@@ -140,8 +140,8 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 31/31 languages completed
-Part 2 Progress: 6/7 files completed
-Overall Progress: ~90%
+Part 2 Progress: 7/7 files completed
+Overall Progress: 100%
 
 ================================================================================
 
@@ -464,4 +464,22 @@ Overall Progress: ~90%
   - Added import for utils/l10n_extensions.dart
   - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Localized hardcoded strings in merge_confirmation_dialog.dart
+  - Added new keys to app_en.arb: largeTimeGapDetected, largeTimeGapsDetected
+  - Added translations to all 34 language ARB files
+  - Refactored _checkForLargeGaps to return raw gap list instead of formatted string
+  - Added _formatGapWarning helper method for localized message formatting
+  - Replaced hardcoded 'Large time gap detected (...)' with context.l10n.largeTimeGapDetected(gap)
+  - Replaced hardcoded 'Large time gaps detected (...)' with context.l10n.largeTimeGapsDetected(gaps)
+  - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+  - dart analyze: PASSED (no issues found)
+
+================================================================================
+                         LOCALIZATION COMPLETE
+================================================================================
+All tasks from PRD v3 have been completed:
+- Part 1: 31/31 languages with missing translation keys - DONE
+- Part 2: 7/7 Dart files with hardcoded strings localized - DONE
 

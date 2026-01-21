@@ -2528,5 +2528,7 @@
   "noDailyRecapsYet": "Brak jeszcze dziennych podsumowań",
   "dailyRecapsDescription": "Twoje dzienne podsumowania pojawią się tutaj po wygenerowaniu",
   "chooseTransferMethod": "Wybierz metodę transferu",
-  "fastTransferSpeed": "~150 KB/s przez WiFi"
+  "fastTransferSpeed": "~150 KB/s przez WiFi",
+  "largeTimeGapDetected": "Wykryto dużą przerwę czasową ({gap})",
+  "largeTimeGapsDetected": "Wykryto duże przerwy czasowe ({gaps})"
 }

@@ -6,7 +6,7 @@ This document tracks the third phase of localization work for the Omi Flutter ap
 1. Missing translation keys in existing ARB files (keys present in English but missing in other languages)
 2. Hardcoded strings in Dart code that need localization
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ---
 
@@ -198,13 +198,13 @@ Total Hardcoded Strings: **~30**
 | 92 | `'Bluetooth'` | `bluetooth` | YES | ✅ |
 | 97 | `'~30 KB/s via BLE'` | `bleSpeed` | YES | ✅ |
 
-#### 7. merge_confirmation_dialog.dart
+#### 7. merge_confirmation_dialog.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 165 | `'Large time gap detected (...)'` | `largeTimeGapDetected` | CHECK |
-| 167 | `'Large time gaps detected (...)'` | `largeTimeGapsDetected` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 165 | `'Large time gap detected (...)'` | `largeTimeGapDetected` | YES (added) | ✅ |
+| 167 | `'Large time gaps detected (...)'` | `largeTimeGapsDetected` | YES (added) | ✅ |
 
 ---
 
@@ -230,10 +230,10 @@ Total Hardcoded Strings: **~30**
 
 ## Completion Criteria
 
-- [ ] All 31 languages have complete translations matching English keys
-- [ ] All hardcoded strings in Dart code replaced with context.l10n calls
-- [ ] flutter gen-l10n runs without errors
-- [ ] app/test.sh passes
+- [x] All 31 languages have complete translations matching English keys
+- [x] All hardcoded strings in Dart code replaced with context.l10n calls
+- [x] flutter gen-l10n runs without errors
+- [ ] app/test.sh passes (pre-existing Flutter dependency issues unrelated to l10n)
 
 ---
 

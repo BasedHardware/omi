@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Podsumowania dzienne jeszcze niedostępne",
   "dailyRecapsDescription": "Twoje podsumowania dzienne pojawią się tutaj po wygenerowaniu",
   "chooseTransferMethod": "Оберіть метод передачі",
-  "fastTransferSpeed": "~150 КБ/с через WiFi"
+  "fastTransferSpeed": "~150 КБ/с через WiFi",
+  "largeTimeGapDetected": "Виявлено великий часовий розрив ({gap})",
+  "largeTimeGapsDetected": "Виявлено великі часові розриви ({gaps})"
 }

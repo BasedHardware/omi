@@ -2498,5 +2498,7 @@
   "noDailyRecapsYet": "Zatiaľ žiadne denné súhrny",
   "dailyRecapsDescription": "Vaše denné súhrny sa tu zobrazia po vygenerovaní",
   "chooseTransferMethod": "Vyberte spôsob prenosu",
-  "fastTransferSpeed": "~150 KB/s cez WiFi"
+  "fastTransferSpeed": "~150 KB/s cez WiFi",
+  "largeTimeGapDetected": "Zistená veľká časová medzera ({gap})",
+  "largeTimeGapsDetected": "Zistené veľké časové medzery ({gaps})"
 }

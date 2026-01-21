@@ -7639,4 +7639,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 КБ/с через WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Обнаружен большой временной разрыв ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Обнаружены большие временные разрывы ($gaps)';
+  }
 }

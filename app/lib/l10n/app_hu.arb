@@ -2589,5 +2589,7 @@
   "noDailyRecapsYet": "Még nincsenek napi összefoglalók",
   "dailyRecapsDescription": "A napi összefoglalói itt jelennek meg, amint elkészülnek",
   "chooseTransferMethod": "Válasszon átviteli módot",
-  "fastTransferSpeed": "~150 KB/s WiFi-n keresztül"
+  "fastTransferSpeed": "~150 KB/s WiFi-n keresztül",
+  "largeTimeGapDetected": "Nagy időeltérés észlelve ({gap})",
+  "largeTimeGapsDetected": "Nagy időeltérések észlelve ({gaps})"
 }

@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Päevaseid kokkuvõtteid veel pole",
   "dailyRecapsDescription": "Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist",
   "chooseTransferMethod": "Valige ülekandemeetod",
-  "fastTransferSpeed": "~150 KB/s WiFi kaudu"
+  "fastTransferSpeed": "~150 KB/s WiFi kaudu",
+  "largeTimeGapDetected": "Tuvastati suur ajavahe ({gap})",
+  "largeTimeGapsDetected": "Tuvastati suured ajavahed ({gaps})"
 }

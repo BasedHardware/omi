@@ -7638,4 +7638,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 KB/s přes WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Zjištěna velká časová mezera ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Zjištěny velké časové mezery ($gaps)';
+  }
 }

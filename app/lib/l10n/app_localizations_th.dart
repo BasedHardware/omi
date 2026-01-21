@@ -7638,4 +7638,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 KB/s ผ่าน WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'ตรวจพบช่วงเวลาห่างมาก ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'ตรวจพบช่วงเวลาห่างมากหลายช่วง ($gaps)';
+  }
 }

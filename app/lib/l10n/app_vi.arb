@@ -2498,5 +2498,7 @@
   "noDailyRecapsYet": "Chưa có bản tóm tắt hàng ngày",
   "dailyRecapsDescription": "Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo",
   "chooseTransferMethod": "Chọn phương thức chuyển",
-  "fastTransferSpeed": "~150 KB/s qua WiFi"
+  "fastTransferSpeed": "~150 KB/s qua WiFi",
+  "largeTimeGapDetected": "Phát hiện khoảng cách thời gian lớn ({gap})",
+  "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})"
 }

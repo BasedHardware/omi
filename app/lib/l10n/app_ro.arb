@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Încă nu există rezumate zilnice",
   "dailyRecapsDescription": "Rezumatele zilnice vor apărea aici odată generate",
   "chooseTransferMethod": "Alegeți metoda de transfer",
-  "fastTransferSpeed": "~150 KB/s prin WiFi"
+  "fastTransferSpeed": "~150 KB/s prin WiFi",
+  "largeTimeGapDetected": "A fost detectată o diferență mare de timp ({gap})",
+  "largeTimeGapsDetected": "Au fost detectate diferențe mari de timp ({gaps})"
 }

@@ -9744,5 +9744,23 @@
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "@fastTransferSpeed": {
     "description": "Speed description for fast transfer via WiFi"
+  },
+  "largeTimeGapDetected": "Large time gap detected ({gap})",
+  "@largeTimeGapDetected": {
+    "placeholders": {
+      "gap": {
+        "type": "String",
+        "example": "1.5h"
+      }
+    }
+  },
+  "largeTimeGapsDetected": "Large time gaps detected ({gaps})",
+  "@largeTimeGapsDetected": {
+    "placeholders": {
+      "gaps": {
+        "type": "String",
+        "example": "1.5h, 2.0h"
+      }
+    }
   }
 }

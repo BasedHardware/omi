@@ -7638,4 +7638,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 KB/s WiFi-n keresztül';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Nagy időeltérés észlelve ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Nagy időeltérések észlelve ($gaps)';
+  }
 }

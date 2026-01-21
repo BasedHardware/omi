@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Nog geen dagelijkse samenvattingen",
   "dailyRecapsDescription": "Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd",
   "chooseTransferMethod": "Kies overdrachtsmethode",
-  "fastTransferSpeed": "~150 KB/s via WiFi"
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "largeTimeGapDetected": "Groot tijdsverschil gedetecteerd ({gap})",
+  "largeTimeGapsDetected": "Grote tijdsverschillen gedetecteerd ({gaps})"
 }

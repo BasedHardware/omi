@@ -7632,4 +7632,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => 'WiFi経由で約150 KB/s';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return '大きな時間差が検出されました ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return '大きな時間差が検出されました ($gaps)';
+  }
 }

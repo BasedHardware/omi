@@ -2528,5 +2528,7 @@
   "noDailyRecapsYet": "Henüz günlük özet yok",
   "dailyRecapsDescription": "Günlük özetleriniz oluşturulduktan sonra burada görünecek",
   "chooseTransferMethod": "Aktarım yöntemi seçin",
-  "fastTransferSpeed": "WiFi ile ~150 KB/s"
+  "fastTransferSpeed": "WiFi ile ~150 KB/s",
+  "largeTimeGapDetected": "Büyük zaman farkı tespit edildi ({gap})",
+  "largeTimeGapsDetected": "Büyük zaman farkları tespit edildi ({gaps})"
 }

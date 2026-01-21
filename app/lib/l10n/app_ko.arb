@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "아직 일일 요약이 없습니다",
   "dailyRecapsDescription": "일일 요약이 생성되면 여기에 표시됩니다",
   "chooseTransferMethod": "전송 방법 선택",
-  "fastTransferSpeed": "WiFi를 통해 ~150 KB/s"
+  "fastTransferSpeed": "WiFi를 통해 ~150 KB/s",
+  "largeTimeGapDetected": "큰 시간 간격이 감지되었습니다 ({gap})",
+  "largeTimeGapsDetected": "큰 시간 간격들이 감지되었습니다 ({gaps})"
 }

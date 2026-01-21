@@ -2528,5 +2528,7 @@
   "noDailyRecapsYet": "Pas encore de récapitulatifs quotidiens",
   "dailyRecapsDescription": "Vos récapitulatifs quotidiens apparaîtront ici une fois générés",
   "chooseTransferMethod": "Choisir la méthode de transfert",
-  "fastTransferSpeed": "~150 Ko/s via WiFi"
+  "fastTransferSpeed": "~150 Ko/s via WiFi",
+  "largeTimeGapDetected": "Grand écart de temps détecté ({gap})",
+  "largeTimeGapsDetected": "Grands écarts de temps détectés ({gaps})"
 }

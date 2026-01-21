@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Ei vielä päivittäisiä yhteenvetoja",
   "dailyRecapsDescription": "Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu",
   "chooseTransferMethod": "Valitse siirtotapa",
-  "fastTransferSpeed": "~150 KB/s WiFin kautta"
+  "fastTransferSpeed": "~150 KB/s WiFin kautta",
+  "largeTimeGapDetected": "Havaittu suuri aikaväli ({gap})",
+  "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})"
 }

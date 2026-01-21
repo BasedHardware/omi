@@ -2462,5 +2462,7 @@
   "noDailyRecapsYet": "Все още няма дневни обобщения",
   "dailyRecapsDescription": "Вашите дневни обобщения ще се появят тук, след като бъдат генерирани",
   "chooseTransferMethod": "Изберете метод на прехвърляне",
-  "fastTransferSpeed": "~150 KB/s чрез WiFi"
+  "fastTransferSpeed": "~150 KB/s чрез WiFi",
+  "largeTimeGapDetected": "Открита е голяма времева разлика ({gap})",
+  "largeTimeGapsDetected": "Открити са големи времеви разлики ({gaps})"
 }

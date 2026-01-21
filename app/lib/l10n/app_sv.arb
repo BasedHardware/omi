@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Inga dagliga sammanfattningar ännu",
   "dailyRecapsDescription": "Dina dagliga sammanfattningar visas här när de har skapats",
   "chooseTransferMethod": "Välj överföringsmetod",
-  "fastTransferSpeed": "~150 KB/s via WiFi"
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "largeTimeGapDetected": "Stort tidsgap upptäckt ({gap})",
+  "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})"
 }

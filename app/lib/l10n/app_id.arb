@@ -2535,5 +2535,7 @@
   "noDailyRecapsYet": "Belum ada ringkasan harian",
   "dailyRecapsDescription": "Ringkasan harian Anda akan muncul di sini setelah dibuat",
   "chooseTransferMethod": "Pilih metode transfer",
-  "fastTransferSpeed": "~150 KB/s melalui WiFi"
+  "fastTransferSpeed": "~150 KB/s melalui WiFi",
+  "largeTimeGapDetected": "Terdeteksi jeda waktu besar ({gap})",
+  "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})"
 }

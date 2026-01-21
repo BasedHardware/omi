@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Dar nėra dienos santraukų",
   "dailyRecapsDescription": "Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos",
   "chooseTransferMethod": "Pasirinkite perdavimo būdą",
-  "fastTransferSpeed": "~150 KB/s per WiFi"
+  "fastTransferSpeed": "~150 KB/s per WiFi",
+  "largeTimeGapDetected": "Aptiktas didelis laiko tarpas ({gap})",
+  "largeTimeGapsDetected": "Aptikti dideli laiko tarpai ({gaps})"
 }

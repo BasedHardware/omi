@@ -7639,4 +7639,14 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 KB/s przez WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Wykryto dużą przerwę czasową ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Wykryto duże przerwy czasowe ($gaps)';
+  }
 }

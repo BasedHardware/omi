@@ -14504,6 +14504,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'~150 KB/s via WiFi'**
   String get fastTransferSpeed;
+
+  /// No description provided for @largeTimeGapDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Large time gap detected ({gap})'**
+  String largeTimeGapDetected(String gap);
+
+  /// No description provided for @largeTimeGapsDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Large time gaps detected ({gaps})'**
+  String largeTimeGapsDetected(String gaps);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

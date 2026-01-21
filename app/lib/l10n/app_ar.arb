@@ -2460,5 +2460,7 @@
   "noDailyRecapsYet": "لا توجد ملخصات يومية بعد",
   "dailyRecapsDescription": "ستظهر ملخصاتك اليومية هنا بمجرد إنشائها",
   "chooseTransferMethod": "اختر طريقة النقل",
-  "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi"
+  "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi",
+  "largeTimeGapDetected": "تم اكتشاف فجوة زمنية كبيرة ({gap})",
+  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})"
 }

@@ -2528,5 +2528,7 @@
   "noDailyRecapsYet": "Пока нет ежедневных сводок",
   "dailyRecapsDescription": "Ваши ежедневные сводки появятся здесь после создания",
   "chooseTransferMethod": "Выберите способ передачи",
-  "fastTransferSpeed": "~150 КБ/с через WiFi"
+  "fastTransferSpeed": "~150 КБ/с через WiFi",
+  "largeTimeGapDetected": "Обнаружен большой временной разрыв ({gap})",
+  "largeTimeGapsDetected": "Обнаружены большие временные разрывы ({gaps})"
 }

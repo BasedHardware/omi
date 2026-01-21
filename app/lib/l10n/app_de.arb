@@ -2461,5 +2461,7 @@
   "noDailyRecapsYet": "Noch keine täglichen Zusammenfassungen",
   "dailyRecapsDescription": "Ihre täglichen Zusammenfassungen erscheinen hier, sobald sie erstellt wurden",
   "chooseTransferMethod": "Übertragungsmethode wählen",
-  "fastTransferSpeed": "~150 KB/s über WiFi"
+  "fastTransferSpeed": "~150 KB/s über WiFi",
+  "largeTimeGapDetected": "Große Zeitlücke erkannt ({gap})",
+  "largeTimeGapsDetected": "Große Zeitlücken erkannt ({gaps})"
 }

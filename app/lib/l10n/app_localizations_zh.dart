@@ -7632,4 +7632,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '通过WiFi ~150 KB/s';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return '检测到较大时间间隔 ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return '检测到多个较大时间间隔 ($gaps)';
+  }
 }

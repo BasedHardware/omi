@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "ยังไม่มีสรุปรายวัน",
   "dailyRecapsDescription": "สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ",
   "chooseTransferMethod": "เลือกวิธีการถ่ายโอน",
-  "fastTransferSpeed": "~150 KB/s ผ่าน WiFi"
+  "fastTransferSpeed": "~150 KB/s ผ่าน WiFi",
+  "largeTimeGapDetected": "ตรวจพบช่วงเวลาห่างมาก ({gap})",
+  "largeTimeGapsDetected": "ตรวจพบช่วงเวลาห่างมากหลายช่วง ({gaps})"
 }

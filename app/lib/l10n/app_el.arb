@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Δεν υπάρχουν ακόμη καθημερινές ανακεφαλαιώσεις",
   "dailyRecapsDescription": "Οι καθημερινές ανακεφαλαιώσεις σας θα εμφανιστούν εδώ μόλις δημιουργηθούν",
   "chooseTransferMethod": "Επιλέξτε μέθοδο μεταφοράς",
-  "fastTransferSpeed": "~150 KB/s μέσω WiFi"
+  "fastTransferSpeed": "~150 KB/s μέσω WiFi",
+  "largeTimeGapDetected": "Εντοπίστηκε μεγάλο χρονικό κενό ({gap})",
+  "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})"
 }

@@ -7638,4 +7638,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => '~150 KB/s μέσω WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Εντοπίστηκε μεγάλο χρονικό κενό ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Εντοπίστηκαν μεγάλα χρονικά κενά ($gaps)';
+  }
 }

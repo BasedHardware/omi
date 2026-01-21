@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Vēl nav ikdienas apkopojumu",
   "dailyRecapsDescription": "Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti",
   "chooseTransferMethod": "Izvēlieties pārsūtīšanas metodi",
-  "fastTransferSpeed": "~150 KB/s caur WiFi"
+  "fastTransferSpeed": "~150 KB/s caur WiFi",
+  "largeTimeGapDetected": "Konstatēta liela laika starpība ({gap})",
+  "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})"
 }

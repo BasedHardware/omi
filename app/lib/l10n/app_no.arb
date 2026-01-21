@@ -2493,5 +2493,7 @@
   "noDailyRecapsYet": "Ingen daglige oppsummeringer ennå",
   "dailyRecapsDescription": "Dine daglige oppsummeringer vil vises her når de er generert",
   "chooseTransferMethod": "Velg overføringsmetode",
-  "fastTransferSpeed": "~150 KB/s via WiFi"
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "largeTimeGapDetected": "Stor tidsluke oppdaget ({gap})",
+  "largeTimeGapsDetected": "Store tidsluker oppdaget ({gaps})"
 }

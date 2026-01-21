@@ -2462,5 +2462,7 @@
   "noDailyRecapsYet": "Encara no hi ha resums diaris",
   "dailyRecapsDescription": "Els teus resums diaris apareixeran aquí un cop generats",
   "chooseTransferMethod": "Tria el mètode de transferència",
-  "fastTransferSpeed": "~150 KB/s via WiFi"
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "largeTimeGapDetected": "S'ha detectat un gran interval de temps ({gap})",
+  "largeTimeGapsDetected": "S'han detectat grans intervals de temps ({gaps})"
 }

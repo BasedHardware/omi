@@ -2529,5 +2529,7 @@
   "noDailyRecapsYet": "Ainda não há resumos diários",
   "dailyRecapsDescription": "Seus resumos diários aparecerão aqui quando forem gerados",
   "chooseTransferMethod": "Escolher método de transferência",
-  "fastTransferSpeed": "~150 KB/s via WiFi"
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "largeTimeGapDetected": "Grande intervalo de tempo detetado ({gap})",
+  "largeTimeGapsDetected": "Grandes intervalos de tempo detetados ({gaps})"
 }

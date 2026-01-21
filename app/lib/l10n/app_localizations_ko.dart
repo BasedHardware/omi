@@ -7632,4 +7632,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get fastTransferSpeed => 'WiFi를 통해 ~150 KB/s';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return '큰 시간 간격이 감지되었습니다 ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return '큰 시간 간격들이 감지되었습니다 ($gaps)';
+  }
 }
