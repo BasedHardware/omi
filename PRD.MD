@@ -69,7 +69,10 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | Finnish (fi) | COMPLETED - 102 keys translated |
 | Hindi (hi) | COMPLETED - 165 keys translated |
 | Hungarian (hu) | COMPLETED - 100 keys translated |
-| Other languages (11) | PENDING |
+| Indonesian (id) | COMPLETED - 150 keys translated |
+| Lithuanian (lt) | COMPLETED - 147 keys translated |
+| Latvian (lv) | COMPLETED - 186 keys translated |
+| Other languages (8) | PENDING |
 
 ---
 
