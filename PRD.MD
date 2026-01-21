@@ -48,7 +48,7 @@ Total languages with missing translations: **31**
 | Swedish | sv | 0 | ✅ DONE |
 | Thai | th | 0 | ✅ DONE |
 | Turkish | tr | 0 | ✅ DONE |
-| Chinese | zh | 22 | HIGH |
+| Chinese | zh | 0 | ✅ DONE |
 
 ### Missing Keys Breakdown
 

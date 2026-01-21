@@ -4310,8 +4310,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get secureEncryption => '安全加密';
 
   @override
-  String get secureEncryptionDescription =>
-      '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
+  String get secureEncryptionDescription => '您的数据使用您独有的密钥在我们托管于Google Cloud的服务器上加密。这意味着包括Omi员工或Google在内的任何人都无法直接从数据库访问您的原始内容。';
 
   @override
   String get endToEndEncryption => '端到端加密';
@@ -5930,7 +5929,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceNotCompatible => '您的设备不兼容设备端转录';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => '您的设备不满足本地转录的要求。';
 
   @override
   String get willLikelyCrash => '启用此功能可能会导致应用崩溃或冻结。';
@@ -5945,7 +5944,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get olderDeviceDetected => '检测到较旧设备';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => '本地转录在此设备上可能较慢。';
 
   @override
   String get batteryUsageHigher => '电池使用量将高于云端转录。';
@@ -5957,10 +5956,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get highResourceUsage => '高资源使用';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => '本地转录需要大量计算资源。';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => '电池消耗将显著增加。';
 
   @override
   String get deviceMayWarmUp => '长时间使用时设备可能会发热。';
@@ -5972,35 +5971,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '每月 1,200 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo => '音频在本地处理。可离线使用，更注重隐私，但电池消耗更多。';
 
   @override
-  String get model => 'Model';
+  String get model => '模型';
 
   @override
   String get performanceWarning => '性能警告';
 
   @override
-  String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning => '此模型较大，可能导致应用崩溃或在移动设备上运行非常缓慢。\n\n建议使用 \"small\" 或 \"base\" 模型。';
 
   @override
   String get usingNativeIosSpeech => '使用原生 iOS 语音识别';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired => '将使用您设备的原生语音引擎。无需下载模型。';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => '模型就绪';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => '重新下载';
 
   @override
   String get doNotCloseApp => '请不要关闭应用。';
@@ -6013,12 +6011,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return '预估大小：约 $size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return '可用空间：$space';
   }
 
   @override
@@ -6029,7 +6027,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return '下载错误：$error';
   }
 
   @override
@@ -6369,32 +6367,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moneyEarned => '收入';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => '写下您的回复...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => '回复发送成功';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return '发送回复失败：$error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => '发送';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count 星';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => '未找到评论';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => '编辑回复';
 
   @override
-  String get reply => 'Reply';
+  String get reply => '回复';
 
   @override
   String starFilterLabel(int count) {
