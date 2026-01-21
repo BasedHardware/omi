@@ -37,14 +37,14 @@ Total languages with missing translations: **31**
 | Korean | ko | 0 | ✅ DONE |
 | Lithuanian | lt | 0 | ✅ DONE |
 | Latvian | lv | 0 | ✅ DONE |
-| Malay | ms | 22 | HIGH |
-| Dutch | nl | 22 | HIGH |
-| Norwegian | no | 22 | HIGH |
+| Malay | ms | 0 | ✅ DONE |
+| Dutch | nl | 0 | ✅ DONE |
+| Norwegian | no | 0 | ✅ DONE |
 | Polish | pl | 0 | ✅ DONE |
 | Portuguese | pt | 0 | ✅ DONE |
 | Romanian | ro | 0 | ✅ DONE |
 | Russian | ru | 0 | ✅ DONE |
-| Slovak | sk | 22 | HIGH |
+| Slovak | sk | 0 | ✅ DONE |
 | Swedish | sv | 0 | ✅ DONE |
 | Thai | th | 0 | ✅ DONE |
 | Turkish | tr | 0 | ✅ DONE |
@@ -134,12 +134,12 @@ writeYourReply
 Total Files: **7**
 Total Hardcoded Strings: **~30**
 
-#### 1. conversations_page.dart
+#### 1. conversations_page.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/conversations_page.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 233 | `'Conversations'` | `conversations` | YES |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 233 | `'Conversations'` | `conversations` | YES | ✅ |
 
 #### 2. move_to_folder_sheet.dart
 **Path:** `app/lib/pages/conversations/widgets/move_to_folder_sheet.dart`
