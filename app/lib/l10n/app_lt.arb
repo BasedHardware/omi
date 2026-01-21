@@ -2491,5 +2491,7 @@
   "pauseRecording": "Pristabdyti įrašymą",
   "resumeRecording": "Tęsti įrašymą",
   "noDailyRecapsYet": "Dar nėra dienos santraukų",
-  "dailyRecapsDescription": "Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos"
+  "dailyRecapsDescription": "Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos",
+  "chooseTransferMethod": "Pasirinkite perdavimo būdą",
+  "fastTransferSpeed": "~150 KB/s per WiFi"
 }

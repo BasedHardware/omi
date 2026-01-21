@@ -7632,4 +7632,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'A napi összefoglalói itt jelennek meg, amint elkészülnek';
+
+  @override
+  String get chooseTransferMethod => 'Válasszon átviteli módot';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s WiFi-n keresztül';
 }

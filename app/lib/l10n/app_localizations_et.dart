@@ -7632,4 +7632,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist';
+
+  @override
+  String get chooseTransferMethod => 'Valige ülekandemeetod';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s WiFi kaudu';
 }

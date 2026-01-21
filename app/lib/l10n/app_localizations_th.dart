@@ -7632,4 +7632,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ';
+
+  @override
+  String get chooseTransferMethod => 'เลือกวิธีการถ่ายโอน';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s ผ่าน WiFi';
 }

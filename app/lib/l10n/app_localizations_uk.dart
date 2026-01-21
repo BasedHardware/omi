@@ -7632,4 +7632,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Twoje podsumowania dzienne pojawią się tutaj po wygenerowaniu';
+
+  @override
+  String get chooseTransferMethod => 'Оберіть метод передачі';
+
+  @override
+  String get fastTransferSpeed => '~150 КБ/с через WiFi';
 }

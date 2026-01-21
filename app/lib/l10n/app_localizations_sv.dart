@@ -7632,4 +7632,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Dina dagliga sammanfattningar visas här när de har skapats';
+
+  @override
+  String get chooseTransferMethod => 'Välj överföringsmetod';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
 }

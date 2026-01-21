@@ -2513,5 +2513,7 @@
   "pauseRecording": "暂停录音",
   "resumeRecording": "继续录音",
   "noDailyRecapsYet": "还没有每日总结",
-  "dailyRecapsDescription": "您的每日总结生成后将显示在这里"
+  "dailyRecapsDescription": "您的每日总结生成后将显示在这里",
+  "chooseTransferMethod": "选择传输方式",
+  "fastTransferSpeed": "通过WiFi ~150 KB/s"
 }

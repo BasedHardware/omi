@@ -2491,5 +2491,7 @@
   "pauseRecording": "Jeda Rakaman",
   "resumeRecording": "Sambung Rakaman",
   "noDailyRecapsYet": "Belum ada ringkasan harian",
-  "dailyRecapsDescription": "Ringkasan harian anda akan muncul di sini setelah dijana"
+  "dailyRecapsDescription": "Ringkasan harian anda akan muncul di sini setelah dijana",
+  "chooseTransferMethod": "Pilih kaedah pemindahan",
+  "fastTransferSpeed": "~150 KB/s melalui WiFi"
 }

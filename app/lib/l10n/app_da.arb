@@ -2500,5 +2500,7 @@
   "pauseRecording": "Pause optagelse",
   "resumeRecording": "Genoptag optagelse",
   "noDailyRecapsYet": "Ingen daglige opsamlinger endnu",
-  "dailyRecapsDescription": "Dine daglige opsamlinger vises her, når de er genereret"
+  "dailyRecapsDescription": "Dine daglige opsamlinger vises her, når de er genereret",
+  "chooseTransferMethod": "Vælg overførselsmetode",
+  "fastTransferSpeed": "~150 KB/s via WiFi"
 }

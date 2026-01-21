@@ -7632,4 +7632,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Els teus resums diaris apareixeran aquí un cop generats';
+
+  @override
+  String get chooseTransferMethod => 'Tria el mètode de transferència';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
 }

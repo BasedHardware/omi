@@ -2491,5 +2491,7 @@
   "pauseRecording": "Opname pauzeren",
   "resumeRecording": "Opname hervatten",
   "noDailyRecapsYet": "Nog geen dagelijkse samenvattingen",
-  "dailyRecapsDescription": "Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd"
+  "dailyRecapsDescription": "Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd",
+  "chooseTransferMethod": "Kies overdrachtsmethode",
+  "fastTransferSpeed": "~150 KB/s via WiFi"
 }

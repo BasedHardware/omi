@@ -2496,5 +2496,7 @@
   "pauseRecording": "Pozastaviť nahrávanie",
   "resumeRecording": "Obnoviť nahrávanie",
   "noDailyRecapsYet": "Zatiaľ žiadne denné súhrny",
-  "dailyRecapsDescription": "Vaše denné súhrny sa tu zobrazia po vygenerovaní"
+  "dailyRecapsDescription": "Vaše denné súhrny sa tu zobrazia po vygenerovaní",
+  "chooseTransferMethod": "Vyberte spôsob prenosu",
+  "fastTransferSpeed": "~150 KB/s cez WiFi"
 }

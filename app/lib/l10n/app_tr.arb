@@ -2526,5 +2526,7 @@
   "pauseRecording": "Kaydı Duraklat",
   "resumeRecording": "Kaydı Sürdür",
   "noDailyRecapsYet": "Henüz günlük özet yok",
-  "dailyRecapsDescription": "Günlük özetleriniz oluşturulduktan sonra burada görünecek"
+  "dailyRecapsDescription": "Günlük özetleriniz oluşturulduktan sonra burada görünecek",
+  "chooseTransferMethod": "Aktarım yöntemi seçin",
+  "fastTransferSpeed": "WiFi ile ~150 KB/s"
 }

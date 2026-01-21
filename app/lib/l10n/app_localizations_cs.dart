@@ -7632,4 +7632,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Vaše denní přehledy se zde zobrazí po vygenerování';
+
+  @override
+  String get chooseTransferMethod => 'Vyberte metodu přenosu';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s přes WiFi';
 }

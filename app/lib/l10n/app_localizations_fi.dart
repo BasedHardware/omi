@@ -7632,4 +7632,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu';
+
+  @override
+  String get chooseTransferMethod => 'Valitse siirtotapa';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s WiFin kautta';
 }

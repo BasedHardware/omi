@@ -7626,4 +7626,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Dine daglige opsamlinger vises her, når de er genereret';
+
+  @override
+  String get chooseTransferMethod => 'Vælg overførselsmetode';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
 }

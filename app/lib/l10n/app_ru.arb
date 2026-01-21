@@ -2526,5 +2526,7 @@
   "pauseRecording": "Приостановить запись",
   "resumeRecording": "Возобновить запись",
   "noDailyRecapsYet": "Пока нет ежедневных сводок",
-  "dailyRecapsDescription": "Ваши ежедневные сводки появятся здесь после создания"
+  "dailyRecapsDescription": "Ваши ежедневные сводки появятся здесь после создания",
+  "chooseTransferMethod": "Выберите способ передачи",
+  "fastTransferSpeed": "~150 КБ/с через WiFi"
 }

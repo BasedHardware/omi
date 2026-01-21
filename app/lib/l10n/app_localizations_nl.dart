@@ -7632,4 +7632,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Uw dagelijkse samenvattingen verschijnen hier zodra ze zijn gegenereerd';
+
+  @override
+  String get chooseTransferMethod => 'Kies overdrachtsmethode';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
 }

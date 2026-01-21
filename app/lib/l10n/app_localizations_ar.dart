@@ -7632,4 +7632,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'ستظهر ملخصاتك اليومية هنا بمجرد إنشائها';
+
+  @override
+  String get chooseTransferMethod => 'اختر طريقة النقل';
+
+  @override
+  String get fastTransferSpeed => '~150 كيلوبايت/ثانية عبر WiFi';
 }

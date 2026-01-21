@@ -2587,5 +2587,7 @@
   "pauseRecording": "Felvétel szüneteltetése",
   "resumeRecording": "Felvétel folytatása",
   "noDailyRecapsYet": "Még nincsenek napi összefoglalók",
-  "dailyRecapsDescription": "A napi összefoglalói itt jelennek meg, amint elkészülnek"
+  "dailyRecapsDescription": "A napi összefoglalói itt jelennek meg, amint elkészülnek",
+  "chooseTransferMethod": "Válasszon átviteli módot",
+  "fastTransferSpeed": "~150 KB/s WiFi-n keresztül"
 }

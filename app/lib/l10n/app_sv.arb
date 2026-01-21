@@ -2491,5 +2491,7 @@
   "pauseRecording": "Pausa inspelning",
   "resumeRecording": "Återuppta inspelning",
   "noDailyRecapsYet": "Inga dagliga sammanfattningar ännu",
-  "dailyRecapsDescription": "Dina dagliga sammanfattningar visas här när de har skapats"
+  "dailyRecapsDescription": "Dina dagliga sammanfattningar visas här när de har skapats",
+  "chooseTransferMethod": "Välj överföringsmetod",
+  "fastTransferSpeed": "~150 KB/s via WiFi"
 }

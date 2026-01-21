@@ -7632,4 +7632,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos';
+
+  @override
+  String get chooseTransferMethod => 'Pasirinkite perdavimo būdą';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s per WiFi';
 }

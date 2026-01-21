@@ -7632,4 +7632,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Rezumatele zilnice vor apărea aici odată generate';
+
+  @override
+  String get chooseTransferMethod => 'Alegeți metoda de transfer';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s prin WiFi';
 }

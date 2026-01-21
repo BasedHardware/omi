@@ -2491,5 +2491,7 @@
   "pauseRecording": "Pause opptak",
   "resumeRecording": "Gjenoppta opptak",
   "noDailyRecapsYet": "Ingen daglige oppsummeringer ennå",
-  "dailyRecapsDescription": "Dine daglige oppsummeringer vil vises her når de er generert"
+  "dailyRecapsDescription": "Dine daglige oppsummeringer vil vises her når de er generert",
+  "chooseTransferMethod": "Velg overføringsmetode",
+  "fastTransferSpeed": "~150 KB/s via WiFi"
 }

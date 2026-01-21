@@ -2496,5 +2496,7 @@
   "pauseRecording": "Tạm dừng ghi âm",
   "resumeRecording": "Tiếp tục ghi âm",
   "noDailyRecapsYet": "Chưa có bản tóm tắt hàng ngày",
-  "dailyRecapsDescription": "Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo"
+  "dailyRecapsDescription": "Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo",
+  "chooseTransferMethod": "Chọn phương thức chuyển",
+  "fastTransferSpeed": "~150 KB/s qua WiFi"
 }

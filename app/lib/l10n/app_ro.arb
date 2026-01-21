@@ -2491,5 +2491,7 @@
   "pauseRecording": "Pauză înregistrare",
   "resumeRecording": "Reia înregistrarea",
   "noDailyRecapsYet": "Încă nu există rezumate zilnice",
-  "dailyRecapsDescription": "Rezumatele zilnice vor apărea aici odată generate"
+  "dailyRecapsDescription": "Rezumatele zilnice vor apărea aici odată generate",
+  "chooseTransferMethod": "Alegeți metoda de transfer",
+  "fastTransferSpeed": "~150 KB/s prin WiFi"
 }

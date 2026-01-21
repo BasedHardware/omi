@@ -2491,5 +2491,7 @@
   "pauseRecording": "Keskeytä nauhoitus",
   "resumeRecording": "Jatka nauhoitusta",
   "noDailyRecapsYet": "Ei vielä päivittäisiä yhteenvetoja",
-  "dailyRecapsDescription": "Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu"
+  "dailyRecapsDescription": "Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu",
+  "chooseTransferMethod": "Valitse siirtotapa",
+  "fastTransferSpeed": "~150 KB/s WiFin kautta"
 }

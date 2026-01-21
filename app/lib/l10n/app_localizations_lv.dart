@@ -7632,4 +7632,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti';
+
+  @override
+  String get chooseTransferMethod => 'Izvēlieties pārsūtīšanas metodi';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s caur WiFi';
 }

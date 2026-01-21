@@ -2492,5 +2492,7 @@
   "pauseRecording": "रिकॉर्डिंग रोकें",
   "resumeRecording": "रिकॉर्डिंग फिर से शुरू करें",
   "noDailyRecapsYet": "अभी तक कोई दैनिक सारांश नहीं",
-  "dailyRecapsDescription": "आपके दैनिक सारांश यहाँ दिखाई देंगे जब वे बन जाएंगे"
+  "dailyRecapsDescription": "आपके दैनिक सारांश यहाँ दिखाई देंगे जब वे बन जाएंगे",
+  "chooseTransferMethod": "स्थानांतरण विधि चुनें",
+  "fastTransferSpeed": "~150 KB/s WiFi के माध्यम से"
 }

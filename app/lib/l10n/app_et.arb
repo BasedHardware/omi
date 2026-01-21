@@ -2491,5 +2491,7 @@
   "pauseRecording": "Peata salvestus",
   "resumeRecording": "Jätka salvestamist",
   "noDailyRecapsYet": "Päevaseid kokkuvõtteid veel pole",
-  "dailyRecapsDescription": "Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist"
+  "dailyRecapsDescription": "Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist",
+  "chooseTransferMethod": "Valige ülekandemeetod",
+  "fastTransferSpeed": "~150 KB/s WiFi kaudu"
 }

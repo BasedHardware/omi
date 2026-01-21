@@ -14492,6 +14492,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your daily recaps will appear here once generated'**
   String get dailyRecapsDescription;
+
+  /// Title for transfer method selection dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Transfer Method'**
+  String get chooseTransferMethod;
+
+  /// Speed description for fast transfer via WiFi
+  ///
+  /// In en, this message translates to:
+  /// **'~150 KB/s via WiFi'**
+  String get fastTransferSpeed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

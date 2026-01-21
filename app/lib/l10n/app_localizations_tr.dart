@@ -7632,4 +7632,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Günlük özetleriniz oluşturulduktan sonra burada görünecek';
+
+  @override
+  String get chooseTransferMethod => 'Aktarım yöntemi seçin';
+
+  @override
+  String get fastTransferSpeed => 'WiFi ile ~150 KB/s';
 }

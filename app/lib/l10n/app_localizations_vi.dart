@@ -7632,4 +7632,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo';
+
+  @override
+  String get chooseTransferMethod => 'Chọn phương thức chuyển';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s qua WiFi';
 }

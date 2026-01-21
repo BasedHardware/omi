@@ -187,16 +187,16 @@ Total Hardcoded Strings: **~30**
 | 164 | `'No daily recaps yet'` | `noDailyRecapsYet` | YES (added) | ✅ |
 | 173 | `'Your daily recaps will appear here once generated'` | `dailyRecapsDescription` | YES (added) | ✅ |
 
-#### 6. fast_transfer_suggestion_dialog.dart
+#### 6. fast_transfer_suggestion_dialog.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 19 | `'Choose Transfer Method'` | `chooseTransferMethod` | CHECK |
-| 50 | `'Fast Transfer'` | `fastTransfer` | CHECK |
-| 55 | `'~150 KB/s via WiFi'` | `fastTransferSpeed` | CHECK |
-| 92 | `'Bluetooth'` | `bluetooth` | CHECK |
-| 97 | `'~30 KB/s via BLE'` | `bluetoothSpeed` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 19 | `'Choose Transfer Method'` | `chooseTransferMethod` | YES (added) | ✅ |
+| 50 | `'Fast Transfer'` | `fastTransfer` | YES | ✅ |
+| 55 | `'~150 KB/s via WiFi'` | `fastTransferSpeed` | YES (added) | ✅ |
+| 92 | `'Bluetooth'` | `bluetooth` | YES | ✅ |
+| 97 | `'~30 KB/s via BLE'` | `bleSpeed` | YES | ✅ |
 
 #### 7. merge_confirmation_dialog.dart
 **Path:** `app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart`

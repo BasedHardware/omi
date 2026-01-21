@@ -2460,5 +2460,7 @@
   "pauseRecording": "Пауза на записа",
   "resumeRecording": "Възобновяване на записа",
   "noDailyRecapsYet": "Все още няма дневни обобщения",
-  "dailyRecapsDescription": "Вашите дневни обобщения ще се появят тук, след като бъдат генерирани"
+  "dailyRecapsDescription": "Вашите дневни обобщения ще се появят тук, след като бъдат генерирани",
+  "chooseTransferMethod": "Изберете метод на прехвърляне",
+  "fastTransferSpeed": "~150 KB/s чрез WiFi"
 }

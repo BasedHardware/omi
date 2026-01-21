@@ -7626,4 +7626,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => '您的每日总结生成后将显示在这里';
+
+  @override
+  String get chooseTransferMethod => '选择传输方式';
+
+  @override
+  String get fastTransferSpeed => '通过WiFi ~150 KB/s';
 }

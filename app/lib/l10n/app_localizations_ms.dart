@@ -7632,4 +7632,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Ringkasan harian anda akan muncul di sini setelah dijana';
+
+  @override
+  String get chooseTransferMethod => 'Pilih kaedah pemindahan';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s melalui WiFi';
 }

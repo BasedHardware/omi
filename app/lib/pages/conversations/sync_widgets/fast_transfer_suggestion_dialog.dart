@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Shows a dialog suggesting Fast Transfer when user has BLE selected but device supports WiFi.
 /// Returns 'switch' to switch to Fast Transfer, 'continue' to proceed with BLE, or null if cancelled.
@@ -15,9 +16,9 @@ class FastTransferSuggestionDialog {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Choose Transfer Method',
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              Text(
+                context.l10n.chooseTransferMethod,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
               // Fast Transfer option (recommended)
@@ -46,13 +47,13 @@ class FastTransferSuggestionDialog {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Fast Transfer',
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                            Text(
+                              context.l10n.fastTransfer,
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '~150 KB/s via WiFi',
+                              context.l10n.fastTransferSpeed,
                               style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                             ),
                           ],
@@ -88,13 +89,13 @@ class FastTransferSuggestionDialog {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Bluetooth',
-                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                            Text(
+                              context.l10n.bluetooth,
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '~30 KB/s via BLE',
+                              context.l10n.bleSpeed,
                               style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                             ),
                           ],

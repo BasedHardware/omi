@@ -7632,4 +7632,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'I tuoi riepiloghi giornalieri appariranno qui una volta generati';
+
+  @override
+  String get chooseTransferMethod => 'Scegli metodo di trasferimento';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s tramite WiFi';
 }

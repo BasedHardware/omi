@@ -2491,5 +2491,7 @@
   "pauseRecording": "Pauzēt ierakstu",
   "resumeRecording": "Atsākt ierakstu",
   "noDailyRecapsYet": "Vēl nav ikdienas apkopojumu",
-  "dailyRecapsDescription": "Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti"
+  "dailyRecapsDescription": "Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti",
+  "chooseTransferMethod": "Izvēlieties pārsūtīšanas metodi",
+  "fastTransferSpeed": "~150 KB/s caur WiFi"
 }

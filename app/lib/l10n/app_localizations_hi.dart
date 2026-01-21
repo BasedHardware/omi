@@ -7626,4 +7626,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'आपके दैनिक सारांश यहाँ दिखाई देंगे जब वे बन जाएंगे';
+
+  @override
+  String get chooseTransferMethod => 'स्थानांतरण विधि चुनें';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s WiFi के माध्यम से';
 }

@@ -7632,4 +7632,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Οι καθημερινές ανακεφαλαιώσεις σας θα εμφανιστούν εδώ μόλις δημιουργηθούν';
+
+  @override
+  String get chooseTransferMethod => 'Επιλέξτε μέθοδο μεταφοράς';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s μέσω WiFi';
 }

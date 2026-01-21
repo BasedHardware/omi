@@ -7633,4 +7633,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Ваши ежедневные сводки появятся здесь после создания';
+
+  @override
+  String get chooseTransferMethod => 'Выберите способ передачи';
+
+  @override
+  String get fastTransferSpeed => '~150 КБ/с через WiFi';
 }

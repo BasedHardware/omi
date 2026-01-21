@@ -2459,5 +2459,7 @@
   "pauseRecording": "Aufnahme pausieren",
   "resumeRecording": "Aufnahme fortsetzen",
   "noDailyRecapsYet": "Noch keine täglichen Zusammenfassungen",
-  "dailyRecapsDescription": "Ihre täglichen Zusammenfassungen erscheinen hier, sobald sie erstellt wurden"
+  "dailyRecapsDescription": "Ihre täglichen Zusammenfassungen erscheinen hier, sobald sie erstellt wurden",
+  "chooseTransferMethod": "Übertragungsmethode wählen",
+  "fastTransferSpeed": "~150 KB/s über WiFi"
 }

@@ -2492,5 +2492,7 @@
   "pauseRecording": "Pausar grabación",
   "resumeRecording": "Reanudar grabación",
   "noDailyRecapsYet": "Aún no hay resúmenes diarios",
-  "dailyRecapsDescription": "Tus resúmenes diarios aparecerán aquí una vez generados"
+  "dailyRecapsDescription": "Tus resúmenes diarios aparecerán aquí una vez generados",
+  "chooseTransferMethod": "Elegir método de transferencia",
+  "fastTransferSpeed": "~150 KB/s vía WiFi"
 }

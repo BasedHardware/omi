@@ -2460,5 +2460,7 @@
   "pauseRecording": "Pausar la gravació",
   "resumeRecording": "Reprendre la gravació",
   "noDailyRecapsYet": "Encara no hi ha resums diaris",
-  "dailyRecapsDescription": "Els teus resums diaris apareixeran aquí un cop generats"
+  "dailyRecapsDescription": "Els teus resums diaris apareixeran aquí un cop generats",
+  "chooseTransferMethod": "Tria el mètode de transferència",
+  "fastTransferSpeed": "~150 KB/s via WiFi"
 }

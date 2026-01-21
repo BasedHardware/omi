@@ -2491,5 +2491,7 @@
   "pauseRecording": "Metti in pausa registrazione",
   "resumeRecording": "Riprendi registrazione",
   "noDailyRecapsYet": "Nessun riepilogo giornaliero ancora",
-  "dailyRecapsDescription": "I tuoi riepiloghi giornalieri appariranno qui una volta generati"
+  "dailyRecapsDescription": "I tuoi riepiloghi giornalieri appariranno qui una volta generati",
+  "chooseTransferMethod": "Scegli metodo di trasferimento",
+  "fastTransferSpeed": "~150 KB/s tramite WiFi"
 }

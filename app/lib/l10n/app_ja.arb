@@ -2492,5 +2492,7 @@
   "pauseRecording": "録音を一時停止",
   "resumeRecording": "録音を再開",
   "noDailyRecapsYet": "まだ日次サマリーはありません",
-  "dailyRecapsDescription": "日次サマリーは生成されるとここに表示されます"
+  "dailyRecapsDescription": "日次サマリーは生成されるとここに表示されます",
+  "chooseTransferMethod": "転送方法を選択",
+  "fastTransferSpeed": "WiFi経由で約150 KB/s"
 }

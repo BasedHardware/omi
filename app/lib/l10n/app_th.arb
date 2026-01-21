@@ -2491,5 +2491,7 @@
   "pauseRecording": "หยุดชั่วคราว",
   "resumeRecording": "บันทึกต่อ",
   "noDailyRecapsYet": "ยังไม่มีสรุปรายวัน",
-  "dailyRecapsDescription": "สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ"
+  "dailyRecapsDescription": "สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ",
+  "chooseTransferMethod": "เลือกวิธีการถ่ายโอน",
+  "fastTransferSpeed": "~150 KB/s ผ่าน WiFi"
 }

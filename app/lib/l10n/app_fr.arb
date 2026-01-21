@@ -2526,5 +2526,7 @@
   "pauseRecording": "Mettre en pause l'enregistrement",
   "resumeRecording": "Reprendre l'enregistrement",
   "noDailyRecapsYet": "Pas encore de récapitulatifs quotidiens",
-  "dailyRecapsDescription": "Vos récapitulatifs quotidiens apparaîtront ici une fois générés"
+  "dailyRecapsDescription": "Vos récapitulatifs quotidiens apparaîtront ici une fois générés",
+  "chooseTransferMethod": "Choisir la méthode de transfert",
+  "fastTransferSpeed": "~150 Ko/s via WiFi"
 }

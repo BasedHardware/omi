@@ -2460,5 +2460,7 @@
   "pauseRecording": "Pozastavit nahrávání",
   "resumeRecording": "Obnovit nahrávání",
   "noDailyRecapsYet": "Zatím žádné denní přehledy",
-  "dailyRecapsDescription": "Vaše denní přehledy se zde zobrazí po vygenerování"
+  "dailyRecapsDescription": "Vaše denní přehledy se zde zobrazí po vygenerování",
+  "chooseTransferMethod": "Vyberte metodu přenosu",
+  "fastTransferSpeed": "~150 KB/s přes WiFi"
 }

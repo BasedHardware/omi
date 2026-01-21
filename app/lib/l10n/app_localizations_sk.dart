@@ -7632,4 +7632,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Vaše denné súhrny sa tu zobrazia po vygenerovaní';
+
+  @override
+  String get chooseTransferMethod => 'Vyberte spôsob prenosu';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s cez WiFi';
 }

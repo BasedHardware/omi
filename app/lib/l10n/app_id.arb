@@ -2533,5 +2533,7 @@
   "pauseRecording": "Jeda Perekaman",
   "resumeRecording": "Lanjutkan Perekaman",
   "noDailyRecapsYet": "Belum ada ringkasan harian",
-  "dailyRecapsDescription": "Ringkasan harian Anda akan muncul di sini setelah dibuat"
+  "dailyRecapsDescription": "Ringkasan harian Anda akan muncul di sini setelah dibuat",
+  "chooseTransferMethod": "Pilih metode transfer",
+  "fastTransferSpeed": "~150 KB/s melalui WiFi"
 }

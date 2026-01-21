@@ -7626,4 +7626,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => '일일 요약이 생성되면 여기에 표시됩니다';
+
+  @override
+  String get chooseTransferMethod => '전송 방법 선택';
+
+  @override
+  String get fastTransferSpeed => 'WiFi를 통해 ~150 KB/s';
 }

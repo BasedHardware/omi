@@ -9736,5 +9736,13 @@
     "description": "Button label to resume recording"
   },
   "noDailyRecapsYet": "No daily recaps yet",
-  "dailyRecapsDescription": "Your daily recaps will appear here once generated"
+  "dailyRecapsDescription": "Your daily recaps will appear here once generated",
+  "chooseTransferMethod": "Choose Transfer Method",
+  "@chooseTransferMethod": {
+    "description": "Title for transfer method selection dialog"
+  },
+  "fastTransferSpeed": "~150 KB/s via WiFi",
+  "@fastTransferSpeed": {
+    "description": "Speed description for fast transfer via WiFi"
+  }
 }

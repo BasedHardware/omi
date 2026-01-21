@@ -7632,4 +7632,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => 'Вашите дневни обобщения ще се появят тук, след като бъдат генерирани';
+
+  @override
+  String get chooseTransferMethod => 'Изберете метод на прехвърляне';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s чрез WiFi';
 }

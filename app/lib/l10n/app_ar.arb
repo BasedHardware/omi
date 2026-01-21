@@ -2458,5 +2458,7 @@
   "pauseRecording": "إيقاف التسجيل مؤقتاً",
   "resumeRecording": "استئناف التسجيل",
   "noDailyRecapsYet": "لا توجد ملخصات يومية بعد",
-  "dailyRecapsDescription": "ستظهر ملخصاتك اليومية هنا بمجرد إنشائها"
+  "dailyRecapsDescription": "ستظهر ملخصاتك اليومية هنا بمجرد إنشائها",
+  "chooseTransferMethod": "اختر طريقة النقل",
+  "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi"
 }

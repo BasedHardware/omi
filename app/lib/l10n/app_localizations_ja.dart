@@ -7626,4 +7626,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dailyRecapsDescription => '日次サマリーは生成されるとここに表示されます';
+
+  @override
+  String get chooseTransferMethod => '転送方法を選択';
+
+  @override
+  String get fastTransferSpeed => 'WiFi経由で約150 KB/s';
 }
