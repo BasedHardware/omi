@@ -31,7 +31,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get confirm => 'Επιβεβαίωση';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Ακύρωση';
 
   @override
   String get ok => 'Εντάξει';
@@ -423,7 +423,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get planAndUsage => 'Πρόγραμμα & Χρήση';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Συγχρονισμός εκτός σύνδεσης';
 
   @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
@@ -453,7 +453,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get appAndDeviceCopied => 'Τα στοιχεία εφαρμογής και συσκευής αντιγράφηκαν';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Ανασκόπηση 2025';
 
   @override
   String get yourPrivacyYourControl => 'Το Απόρρητό σας, ο Έλεγχός σας';
@@ -1155,7 +1155,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get yes => 'Ναι';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Επεξεργασία ονόματος';
 
   @override
   String get howShouldOmiCallYou => 'Πώς θα πρέπει να σας αποκαλεί το Omi;';
@@ -2160,7 +2160,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get saveMemory => 'Αποθήκευση Ανάμνησης';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Επανάληψη';
 
   @override
   String get createActionItem => 'Δημιουργία εργασίας';
@@ -2412,7 +2412,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get unpairAndForgetDevice => 'Αποσύζευξη και λήθη συσκευής';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Άγνωστο';
 
   @override
   String get unknown => 'Άγνωστο';
@@ -2444,7 +2444,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get createKeyToGetStarted => 'Δημιουργήστε ένα κλειδί για να ξεκινήσετε';
 
   @override
-  String get persona => 'Persona';
+  String get persona => 'Περσόνα';
 
   @override
   String get configureYourAiPersona => 'Διαμορφώστε την AI περσόνα σας';
@@ -3289,7 +3289,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get upgradeToPro => 'Αναβάθμιση σε Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Αποκτήστε συσκευή Omi';
 
   @override
   String get wearableAiCompanion => 'Φορετός σύντροφος AI';
@@ -3858,7 +3858,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get signOutQuestion => 'Αποσύνδεση;';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Είστε βέβαιοι ότι θέλετε να αποσυνδεθείτε;';
 
   @override
   String get customVocabularyHeader => 'ΠΡΟΣΑΡΜΟΣΜΕΝΟ ΛΕΞΙΛΟΓΙΟ';
@@ -4155,7 +4155,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'Αυτή η εφαρμογή θα έχει πρόσβαση στα δεδομένα σας. Η Omi AI δεν είναι υπεύθυνη για τον τρόπο χρήσης των δεδομένων σας από τρίτους.';
 
   @override
   String get copyUrl => 'Αντιγραφή URL';
@@ -4933,7 +4933,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get enable => 'Ενεργοποίηση';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Αποθήκευση ήχου στο τηλέφωνο';
 
   @override
   String get on => 'On';
@@ -4955,7 +4955,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get enableCloudStorage => 'Ενεργοποίηση αποθήκευσης στο cloud';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Αποθήκευση ήχου στο Cloud';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5861,28 +5861,28 @@ class AppLocalizationsEl extends AppLocalizations {
   String get chooseFile => 'Επιλογή αρχείου';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Διαμορφώστε την AI περσόνα σας';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Συνδέστε βοηθούς AI με τα δεδομένα σας';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Διαγραφή εγγραφής';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'Κάρτα SD';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'Από SD';
 
   @override
   String get limitless => 'Limitless';
@@ -5891,117 +5891,117 @@ class AppLocalizationsEl extends AppLocalizations {
   String get fastTransfer => 'Γρήγορη μεταφορά';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Συγχρονισμός...';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Απέτυχε';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return 'Εκτιμώμενος χρόνος: $time';
   }
 
   @override
   String get transferMethod => 'Μέθοδος μεταφοράς';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Γρήγορο';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Τηλέφωνο';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Ακύρωση συγχρονισμού';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Τα δεδομένα που έχουν ήδη ληφθεί θα αποθηκευτούν. Μπορείτε να συνεχίσετε αργότερα.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Ο συγχρονισμός ακυρώθηκε';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Διαγραφή επεξεργασμένων αρχείων';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Τα επεξεργασμένα αρχεία διαγράφηκαν';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Η ενεργοποίηση WiFi στη συσκευή απέτυχε. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Η συσκευή σας δεν υποστηρίζει γρήγορη μεταφορά. Χρησιμοποιήστε Bluetooth.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Παρακαλώ ενεργοποιήστε το hotspot του τηλεφώνου σας και δοκιμάστε ξανά.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Η εκκίνηση της μεταφοράς απέτυχε. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Η συσκευή δεν ανταποκρίθηκε. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Μη έγκυρα διαπιστευτήρια WiFi. Ελέγξτε τις ρυθμίσεις του hotspot.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'Η σύνδεση WiFi απέτυχε. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'Επεξεργασία κάρτας SD';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Επεξεργασία $count εγγραφής/εγγραφών. Τα αρχεία θα αφαιρεθούν από την κάρτα SD μετά.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Επεξεργασία';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'Ο συγχρονισμός WiFi απέτυχε';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Η επεξεργασία απέτυχε';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Λήψη από κάρτα SD';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Επεξεργασία $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count συνομιλίες δημιουργήθηκαν';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Απαιτείται σύνδεση στο διαδίκτυο';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Επεξεργασία ήχου';
 
   @override
-  String get start => 'Start';
+  String get start => 'Έναρξη';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Δεν υπάρχουν εγγραφές';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Ο ήχος από τη συσκευή Omi θα εμφανιστεί εδώ';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Διαγραφή επεξεργασμένων';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Δοκιμάστε διαφορετικό φίλτρο';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Εγγραφές';
 
   @override
   String get enableRemindersAccess =>
@@ -6300,7 +6300,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Συσκευή';
 
   @override
   String get chatAssistantsTitle => 'Βοηθοί συνομιλίας';
@@ -6357,55 +6357,55 @@ class AppLocalizationsEl extends AppLocalizations {
   String get writeReviewOptional => 'Γράψτε μια κριτική (προαιρετικό)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Βοηθήστε μας να βελτιώσουμε το Omi απαντώντας σε μερικές ερωτήσεις. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Τι κάνετε;';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Πού σκοπεύετε να χρησιμοποιήσετε το Omi;';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Ποια είναι η ηλικιακή σας ομάδα;';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Δεν έχετε απαντήσει σε όλες τις ερωτήσεις ακόμα! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Παράλειψη, δεν θέλω να βοηθήσω :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Επιχειρηματίας';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Μηχανικός λογισμικού';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Διαχειριστής προϊόντος';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Διευθυντικό στέλεχος';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Πωλήσεις';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Φοιτητής';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Στην εργασία';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Σε εκδηλώσεις';
 
   @override
-  String get usageOnline => 'Online';
+  String get usageOnline => 'Διαδικτυακά';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Σε κοινωνικές συγκεντρώσεις';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Παντού';
 
   @override
   String get customBackendUrlTitle => 'Προσαρμοσμένο URL διακομιστή';
@@ -6570,32 +6570,32 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Κοινοποίηση δημόσιου συνδέσμου';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Δημοσίευση περσόνας';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Συνδεδεμένα δεδομένα γνώσης';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Εισαγωγή ονόματος';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Αποσύνδεση Twitter';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Είστε βέβαιοι ότι θέλετε να αποσυνδέσετε τον λογαριασμό σας στο Twitter; Η περσόνα σας δεν θα χρησιμοποιεί πλέον τα δεδομένα του X.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Δημιουργήστε έναν πιο ακριβή κλώνο με τις προσωπικές σας συνομιλίες';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Αποκτήστε Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Έχω συσκευή Omi';
 
   @override
   String get goal => 'ΣΤΟΧΟΣ';
@@ -6670,31 +6670,31 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Επισήμανση ομιλητή $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Υπάρχει ήδη άτομο με αυτό το όνομα.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Για να επισημάνετε τον εαυτό σας, επιλέξτε \"Εσείς\" από τη λίστα.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Εισαγωγή ονόματος ατόμου';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Προσθήκη ατόμου';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Επισήμανση άλλων τμημάτων από αυτόν τον ομιλητή ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Επισήμανση άλλων τμημάτων';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Διαχείριση ατόμων';
 
   @override
   String get shareViaSms => 'Κοινοποίηση μέσω SMS';
@@ -6765,124 +6765,124 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Η σύνδεση απέτυχε';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Σύνδεση σε $deviceName...';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Ενεργοποίηση WiFi της $deviceName';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Σύνδεση σε $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Λεπτομέρειες εγγραφής';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'Κάρτα SD';
 
   @override
-  String get storageLocationLimitlessPendant => 'Limitless Pendant';
+  String get storageLocationLimitlessPendant => 'Κρεμαστό Limitless';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Τηλέφωνο';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Τηλέφωνο (Μνήμη)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Αποθηκευμένο σε $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Μεταφορά...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Απαιτείται μεταφορά';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Λήψη ήχου από την κάρτα SD της συσκευής σας';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Αυτή η εγγραφή είναι αποθηκευμένη στην κάρτα SD της συσκευής σας. Μεταφέρετέ την στο τηλέφωνό σας για αναπαραγωγή.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Ακύρωση μεταφοράς';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Μεταφορά στο τηλέφωνο';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Ιδιωτικό και ασφαλές στη συσκευή σας';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Πληροφορίες εγγραφής';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Μεταφορά σε εξέλιξη...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Κοινοποίηση εγγραφής';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά αυτήν την εγγραφή; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'Αναγνωριστικό εγγραφής';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Ημερομηνία & Ώρα';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Διάρκεια';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Μορφή ήχου';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Τοποθεσία αποθήκευσης';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Εκτιμώμενο μέγεθος';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Μοντέλο συσκευής';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'Αναγνωριστικό συσκευής';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Κατάσταση';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Επεξεργασμένο';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Ανεπεξέργαστο';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Μεταβάσατε σε γρήγορη μεταφορά';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Η μεταφορά ολοκληρώθηκε! Μπορείτε τώρα να αναπαράγετε αυτήν την εγγραφή.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Η μεταφορά απέτυχε: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Η μεταφορά ακυρώθηκε';
 
   @override
   String get fastTransferEnabled => 'Η γρήγορη μεταφορά ενεργοποιήθηκε';
@@ -6972,63 +6972,63 @@ class AppLocalizationsEl extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Παρουσιάστηκε σφάλμα κατά την ενημέρωση της κατάστασης της εφαρμογής.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Υπολογισμός...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Απομένουν περίπου $minutes λεπτά';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Απομένει περίπου ένα λεπτό';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Σχεδόν έτοιμο...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'το omi λέει';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Ανάλυση των δεδομένων σας...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Μεταφορά σε προστασία $level...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Δεν υπάρχουν δεδομένα προς μεταφορά. Ολοκλήρωση...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return 'Μεταφορά $itemType... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Όλα τα αντικείμενα μεταφέρθηκαν. Ολοκλήρωση...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Παρουσιάστηκε σφάλμα κατά τη μεταφορά. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Η μεταφορά ολοκληρώθηκε!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Τα δεδομένα σας προστατεύονται πλέον με τις νέες ρυθμίσεις $level.';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'συνομιλίες';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'δεδομένα';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Αχ';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Πέσατε;';
 
   @override
   String get importantConversationTitle => 'Σημαντική συνομιλία';
@@ -7265,54 +7265,56 @@ class AppLocalizationsEl extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Παρακαλώ δημιουργήστε πρώτα μια εφαρμογή';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Ποιο είναι το X handle σας;';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription =>
+      'Θα προεκπαιδεύσουμε τον κλώνο Omi σας\nβάσει της δραστηριότητας του λογαριασμού σας';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Παρακαλώ εισάγετε το X handle σας';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Παρακαλώ εισάγετε ένα έγκυρο X handle';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Επόμενο';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Σύνδεση συσκευής Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Αλλάζετε το Απεριόριστο Πλάνο σας σε $title. Είστε βέβαιοι ότι θέλετε να προχωρήσετε;';
   }
 
   @override
   String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+      'Η αναβάθμιση προγραμματίστηκε! Το μηνιαίο πλάνο σας συνεχίζεται μέχρι το τέλος της περιόδου χρέωσης.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange =>
+      'Δεν ήταν δυνατός ο προγραμματισμός αλλαγής πλάνου. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Η συνδρομή σας επανενεργοποιήθηκε! Χωρίς χρέωση τώρα - θα χρεωθείτε στο τέλος της τρέχουσας περιόδου.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Επιτυχής συνδρομή! Χρεωθήκατε για τη νέα περίοδο χρέωσης.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Δεν ήταν δυνατή η επεξεργασία της συνδρομής. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage =>
+      'Δεν ήταν δυνατή η εκκίνηση της σελίδας αναβάθμισης. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Επικολλήστε τη διαμόρφωση JSON εδώ...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
