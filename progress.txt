@@ -953,3 +953,21 @@ Legend:
 - All tests passed
 - Remaining: 6 other languages still need the same keys translated (ro, sk, sv, th, uk, vi)
 
+[2026-01-21] Translated 275 pre-existing English keys to Romanian (app_ro.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 275 keys to proper Romanian translations in app_ro.arb
+- Keys include: cancel, retry, signOutConfirmation, deleteRecording, thisCannotBeUndone,
+  storeAudioOnPhone, storeAudioOnCloud, configureAiPersona, trackYourGoalsOnHomepage,
+  cancelSync, cancelSyncMessage, deviceNotResponding, transferring, transferRequired,
+  downloadingAudioFromSdCard, recordingDetails, storageLocationLabel, setupQuestionsIntro,
+  professionEntrepreneur, usageAtWork, xHandleTitle, planSwitchingDescriptionWithTitle,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, actionItemsTitle,
+  actionItemsDescription, addPerson, enterPersonsName, selectYouFromList, backgroundActivity,
+  locationAccess, connectionError, getStarted, skipForNow, offlineSync, and 235+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {time}, {level}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Stripe)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 5 other languages still need the same keys translated (sk, sv, th, uk, vi)
+
