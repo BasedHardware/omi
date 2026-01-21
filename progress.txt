@@ -6,12 +6,12 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
 
 ### Backend
 
-- [ ] 1. Create centralized migration utility
+- [x] 1. Create centralized migration utility
       File: backend/utils/speaker_sample_migration.py (NEW)
-      - [ ] verify_and_transcribe_sample() function
-      - [ ] migrate_person_samples_v1_to_v2() function
-      - [ ] download_sample_audio() helper
-      - [ ] delete_sample_from_storage() helper
+      - [x] verify_and_transcribe_sample() function
+      - [x] migrate_person_samples_v1_to_v2() function
+      - [x] download_sample_audio() helper
+      - [x] delete_sample_from_storage() helper
 
 - [ ] 2. Update backend models
       File: backend/models/other.py
