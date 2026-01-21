@@ -17,14 +17,14 @@
 | Progress | ~90% |
 
 **PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), Hindi (hi), Hungarian (hu), Indonesian (id), Lithuanian (lt), Latvian (lv), Norwegian (no), Malay (ms), Romanian (ro), and Slovak (sk) completed, 4 languages remaining.
+English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), Portuguese (pt), Japanese (ja), Korean (ko), Chinese (zh), Russian (ru), Polish (pl), Turkish (tr), Dutch (nl), Bulgarian (bg), Catalan (ca), Czech (cs), Danish (da), Greek (el), Estonian (et), Finnish (fi), Hindi (hi), Hungarian (hu), Indonesian (id), Lithuanian (lt), Latvian (lv), Norwegian (no), Malay (ms), Romanian (ro), Slovak (sk), and Swedish (sv) completed, 3 languages remaining.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
 ### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi, Hungarian, Indonesian, Lithuanian, Latvian, Norwegian, Malay, Romanian, Slovak completed, 4 languages remaining)
+Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese, Japanese, Korean, Chinese, Russian, Polish, Turkish, Dutch, Bulgarian, Catalan, Czech, Danish, Greek, Estonian, Finnish, Hindi, Hungarian, Indonesian, Lithuanian, Latvian, Norwegian, Malay, Romanian, Slovak, Swedish completed, 3 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -1044,3 +1044,41 @@ Legend:
 - All tests passed
 - Remaining: 4 other languages still need the same keys translated (sv, th, uk, vi)
 
+
+[2026-01-21] Translated 198 pre-existing English keys to Swedish (app_sv.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 198 keys to proper Swedish translations in app_sv.arb
+- Keys include: cancel, ok, on, off, retry, start, phone, device, recordings, offline,
+  editName, offlineSync, storeAudioOnPhone, storeAudioOnCloud, configureAiPersona,
+  connectAiAssistantsToYourData, trackYourGoalsOnHomepage, deleteRecording, fromSd,
+  syncingStatus, failedStatus, fast, cancelSync, syncCancelled, deleteProcessedFiles,
+  processedFilesDeleted, process, processingFailed, downloadingFromSdCard, internetRequired,
+  processAudio, noRecordings, audioFromOmiWillAppearHere, deleteProcessed, tryDifferentFilter,
+  getOmi, getOmiDevice, getOmiDeviceDescription, addPerson, managePeople, tagOtherSegments,
+  enterName, disconnectTwitter, sharePublicLink, makePersonaPublic, connectedKnowledgeData,
+  wifiConnectionFailedTitle, recordingDetails, storageLocationPhone, transferRequired,
+  cancelTransfer, transferToPhone, recordingInfo, shareRecording, recordingIdLabel,
+  durationLabel, audioFormatLabel, storageLocationLabel, estimatedSizeLabel, deviceModelLabel,
+  deviceIdLabel, statusLabel, statusProcessed, statusUnprocessed, switchedToFastTransfer,
+  transferCancelled, aboutAMinuteRemaining, xHandlePleaseEnter, xHandlePleaseEnterValid,
+  nextButton, connectOmiDevice, professionEntrepreneur, professionSoftwareEngineer,
+  professionProductManager, professionExecutive, professionSales, professionStudent,
+  usageAtWork, usageOnline, usageSocialSettings, usageEverywhere, signOutConfirmation,
+  deleteRecordingConfirmation, disconnectTwitterConfirmation, thisCannotBeUndone,
+  cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring, transferInProgress,
+  transferFailedMessage, transferStartFailed, deviceNoFastTransfer, invalidWifiCredentials,
+  wifiConnectionFailed, wifiSyncFailed, enableHotspotMessage, transferCompleteMessage,
+  planSwitchingDescriptionWithTitle, planUpgradeScheduledMessage, couldNotSchedulePlanChange,
+  subscriptionReactivatedDefault, subscriptionSuccessfulCharged, couldNotProcessSubscription,
+  couldNotLaunchUpgradePage, setupQuestionsIntro, setupQuestionProfession, setupQuestionUsage,
+  setupQuestionAge, setupAnswerAllQuestions, personNameAlreadyExists, selectYouFromList,
+  tagOtherSegmentsFromSpeaker, iHaveOmiDevice, dataAccessNoticeDescription, migrationComplete,
+  migrationErrorOccurred, dataProtectedWithSettings, analyzingYourData, aboutMinutesRemaining,
+  allObjectsMigratedFinalizing, migratingToProtection, xHandleTitle, xHandleDescription,
+  tagSpeaker, enterPersonsName, fallNotificationBody, transcriptionJsonPlaceholder,
+  storageLocationPhoneMemory, sdCardProcessing, sdCardProcessingMessage, and 95+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {minutes}, {level}, {title}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Stripe, Claude Desktop)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 3 other languages still need the same keys translated (th, uk, vi)

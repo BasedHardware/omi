@@ -76,7 +76,8 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | Malay (ms) | COMPLETED - 159 keys translated |
 | Romanian (ro) | COMPLETED - 275 keys translated |
 | Slovak (sk) | COMPLETED - 220 keys translated |
-| Other languages (4) | PENDING |
+| Swedish (sv) | COMPLETED - 198 keys translated |
+| Other languages (3) | PENDING |
 
 ---
 
