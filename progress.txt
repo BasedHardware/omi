@@ -61,7 +61,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
   [x] ru (Russian) - 22 keys
   [x] sk (Slovak) - 22 keys
   [x] sv (Swedish) - 22 keys
-  [ ] th (Thai) - 22 keys
+  [x] th (Thai) - 22 keys
   [ ] tr (Turkish) - 22 keys
   [ ] zh (Chinese) - 22 keys
 
@@ -139,9 +139,9 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 24/31 languages completed
+Part 1 Progress: 25/31 languages completed
 Part 2 Progress: 0/7 files completed
-Overall Progress: ~38%
+Overall Progress: ~40%
 
 ================================================================================
 
@@ -334,6 +334,15 @@ Overall Progress: ~38%
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
 
 [2026-01-21] Added 22 missing translation keys to Swedish (app_sv.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Added 22 missing translation keys to Thai (app_th.arb)
   - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
     downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
     localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
