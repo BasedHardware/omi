@@ -216,8 +216,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
         nuke_started = 1;
     } else if (command == STOP_COMMAND) // should be no explicit stop command, send heartbeats to keep connection alive
     {
-        remaining_length = 0;
-        stop_started = 1;
+        storage_stop_transfer();
     } else if (command == HEARTBEAT) {
         heartbeat_count = 0;
     } else {
@@ -274,86 +273,64 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
     const uint8_t cmd = ((const uint8_t *) buf)[0];
 
     switch (cmd) {
-    case 0x01: // WIFI_SETUP
-        LOG_INF("WIFI_SETUP: len=%d", len);
-        if (len < 2) {
-            LOG_WRN("WIFI_SETUP: invalid setup length: len=%d", len);
-            result_buffer[0] = 2; // error: invalid setup length
+        case 0x01: // WIFI_SETUP
+            LOG_INF("WIFI_SETUP: len=%d", len);
+            if (len < 2) {
+                LOG_WRN("WIFI_SETUP: invalid setup length: len=%d", len);
+                result_buffer[0] = 2; // error: invalid setup length
+                break;
+            }
+            // Parse SSID
+            // Format: [cmd][ssid_len][ssid][password_len][password]
+            uint8_t idx = 1;
+            uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
+            LOG_INF("WIFI_SETUP: ssid_len=%d, len=%d", ssid_len, len);
+
+            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
+                LOG_WRN("SSID length invalid: ssid_len=%d, len=%d", ssid_len, len);
+                result_buffer[0] = 3; break;
+            }
+            char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
+            memcpy(ssid, &((const uint8_t *)buf)[idx], ssid_len);
+            idx += ssid_len;
+            LOG_INF("WIFI_SETUP: ssid='%s'", ssid);
+
+            uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
+            if (pwd_len < WIFI_MIN_PASSWORD_LEN || pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
+                LOG_WRN("PWD length invalid: pwd_len=%d, len=%d", pwd_len, len);
+                result_buffer[0] = 4; break;
+            }
+            char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
+            if (pwd_len > 0) memcpy(pwd, &((const uint8_t *)buf)[idx], pwd_len);
+            LOG_INF("WIFI_SETUP: pwd='%s' pwd_len=%d, len=%d", pwd, pwd_len, len);
+
+            setup_wifi_credentials(ssid, pwd);
+            result_buffer[0] = 0; // success
             break;
-        }
-        // Parse SSID, PASSWORD, TCP_SERVER_IP, TCP_SERVER_PORT
-        // Format: [cmd][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port(2 bytes)]
-        uint8_t idx = 1;
-        uint8_t ssid_len = ((const uint8_t *) buf)[idx++];
-        LOG_INF("WIFI_SETUP: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
 
-        if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
-            LOG_WRN("SSID length invalid: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
-            result_buffer[0] = 3;
+        case 0x02: // WIFI_START
+            LOG_INF("WIFI_START command received");
+            if (is_wifi_on()) {
+                LOG_INF("Wi-Fi already on - wait for next session");
+                result_buffer[0] = 5; // wait for next session
+                break;
+            }
+            k_work_submit(&wifi_start_work);
+            result_buffer[0] = 0;
             break;
-        }
-        char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
-        memcpy(ssid, &((const uint8_t *) buf)[idx], ssid_len);
-        idx += ssid_len;
-        LOG_INF("WIFI_SETUP: ssid='%s', idx=%d", ssid, idx);
 
-        uint8_t pwd_len = ((const uint8_t *) buf)[idx++];
-        LOG_INF("WIFI_SETUP: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
-        if (pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
-            LOG_WRN("PWD length invalid: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
-            result_buffer[0] = 4;
+        case 0x03: // WIFI_SHUTDOWN
+            LOG_INF("WIFI_SHUTDOWN command received");
+            storage_stop_transfer();
+            wifi_turn_off();
+            mic_resume();
+            result_buffer[0] = 0;
             break;
-        }
-        char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
-        if (pwd_len > 0)
-            memcpy(pwd, &((const uint8_t *) buf)[idx], pwd_len);
-        idx += pwd_len;
-        LOG_INF("WIFI_SETUP: pwd='%s', idx=%d", pwd, idx);
 
-        uint8_t ip_len = ((const uint8_t *) buf)[idx++];
-        LOG_INF("WIFI_SETUP: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
-        if (ip_len == 0 || ip_len > WIFI_MAX_SERVER_ADDR_LEN - 1 || idx + ip_len > len) {
-            LOG_WRN("IP length invalid: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
-            result_buffer[0] = 5;
+        default:
+            LOG_WRN("Unknown WIFI command: %d", cmd);
+            result_buffer[0] = 0xFF; // unknown command
             break;
-        }
-        char ip[WIFI_MAX_SERVER_ADDR_LEN] = {0};
-        memcpy(ip, &((const uint8_t *) buf)[idx], ip_len);
-        idx += ip_len;
-        LOG_INF("WIFI_SETUP: ip='%s', idx=%d", ip, idx);
-
-        if (idx + 2 > len) {
-            LOG_WRN("PORT length invalid: idx=%d, len=%d", idx, len);
-            result_buffer[0] = 6;
-            break;
-        }
-        uint16_t port = ((const uint8_t *) buf)[idx] << 8 | ((const uint8_t *) buf)[idx + 1];
-        idx += 2;
-        LOG_INF("WIFI_SETUP: port=%u, idx=%d", port, idx);
-
-        LOG_INF("WIFI_SETUP: SSID=%s, PWD=%s, IP=%s, PORT=%u", ssid, pwd, ip, port);
-        setup_wifi_credentials(ssid, pwd);
-        setup_tcp_server(ip, port);
-        result_buffer[0] = 0; // success
-        break;
-
-    case 0x02: // WIFI_START
-        LOG_INF("WIFI_START command received");
-        k_work_submit(&wifi_start_work);
-        result_buffer[0] = 0;
-        break;
-
-    case 0x03: // WIFI_SHUTDOWN
-        LOG_INF("WIFI_SHUTDOWN command received");
-        wifi_turn_off();
-        mic_resume();
-        result_buffer[0] = 0;
-        break;
-
-    default:
-        LOG_WRN("Unknown WIFI command: %d", cmd);
-        result_buffer[0] = 0xFF; // unknown command
-        break;
     }
 
     bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
@@ -385,6 +362,7 @@ static void write_to_gatt(struct bt_conn *conn)
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
+    
     uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * 10);
     int ret = read_audio_data(storage_write_buffer, to_read, offset);
     if (ret > 0) {
@@ -408,6 +386,13 @@ static void write_to_tcp()
 }
 #endif
 
+
+void storage_stop_transfer()
+{
+    remaining_length = 0;
+    stop_started = 1;
+}
+
 void storage_write(void)
 {
     static uint8_t tmp_buffer[SD_BLE_SIZE]; // 440 bytes temporary buffer
@@ -430,6 +415,7 @@ void storage_write(void)
             if (err) {
                 LOG_PRINTK("error clearing\n");
             } else {
+                offset = 0;
                 uint8_t result_buffer[1] = {200};
                 if (conn) {
                     bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &result_buffer, 1);
@@ -440,6 +426,7 @@ void storage_write(void)
         }
         if (nuke_started) {
             clear_audio_directory();
+            offset = 0;
             nuke_started = 0;
         }
         if (stop_started) {
