@@ -45,7 +45,7 @@ Total languages with missing translations: **31**
 | Romanian | ro | 0 | ✅ DONE |
 | Russian | ru | 0 | ✅ DONE |
 | Slovak | sk | 22 | HIGH |
-| Swedish | sv | 22 | HIGH |
+| Swedish | sv | 0 | ✅ DONE |
 | Thai | th | 22 | HIGH |
 | Turkish | tr | 22 | HIGH |
 | Chinese | zh | 22 | HIGH |
