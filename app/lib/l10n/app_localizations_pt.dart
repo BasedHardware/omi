@@ -31,7 +31,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get confirm => 'Confirmar';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Cancelar';
 
   @override
   String get ok => 'OK';
@@ -419,7 +419,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get planAndUsage => 'Plano e Uso';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Sincronização Offline';
 
   @override
   String get deviceSettings => 'Configurações do dispositivo';
@@ -881,10 +881,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get oauth => 'OAuth';
 
   @override
-  String get clientId => 'Client ID';
+  String get clientId => 'ID do Cliente';
 
   @override
-  String get clientSecret => 'Client Secret';
+  String get clientSecret => 'Segredo do Cliente';
 
   @override
   String get useMcpApiKey => 'Use sua chave API do MCP';
@@ -1142,7 +1142,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get yes => 'Sim';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Editar Nome';
 
   @override
   String get howShouldOmiCallYou => 'Como o Omi deve te chamar?';
@@ -2116,7 +2116,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get saveMemory => 'Salvar memória';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Tentar Novamente';
 
   @override
   String get createActionItem => 'Criar item de ação';
@@ -2368,7 +2368,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get unpairAndForgetDevice => 'Desvincular e Esquecer Dispositivo';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Desconhecido';
 
   @override
   String get unknown => 'Desconhecido';
@@ -3243,7 +3243,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get upgradeToPro => 'Atualizar para Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Obter Dispositivo Omi';
 
   @override
   String get wearableAiCompanion => 'Companheiro de IA vestível';
@@ -3811,7 +3811,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get signOutQuestion => 'Sair?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Tem certeza de que deseja sair?';
 
   @override
   String get customVocabularyHeader => 'VOCABULÁRIO PERSONALIZADO';
@@ -4880,7 +4880,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get enable => 'Ativar';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Armazenar Áudio no Telefone';
 
   @override
   String get on => 'On';
@@ -4902,7 +4902,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get enableCloudStorage => 'Ativar armazenamento em nuvem';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Armazenar Áudio na Nuvem';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5805,28 +5805,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String get chooseFile => 'Escolher arquivo';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Configure sua persona de IA';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Conecte assistentes de IA aos seus dados';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Acompanhe seus objetivos pessoais na página inicial';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Excluir Gravação';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Isso não pode ser desfeito.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'Cartão SD';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'Do SD';
 
   @override
   String get limitless => 'Limitless';
@@ -5835,117 +5835,117 @@ class AppLocalizationsPt extends AppLocalizations {
   String get fastTransfer => 'Transferência rápida';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Sincronizando';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Falhou';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return 'Tempo estimado: $time';
   }
 
   @override
   String get transferMethod => 'Método de transferência';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Rápido';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Telefone';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Cancelar Sincronização';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Os dados já baixados serão salvos. Você pode continuar mais tarde.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Sincronização cancelada';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Excluir Arquivos Processados';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Arquivos processados excluídos';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'Falha ao ativar WiFi no dispositivo. Tente novamente.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Seu dispositivo não suporta Transferência Rápida. Use Bluetooth.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Por favor, ative o hotspot do seu telefone e tente novamente.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Falha ao iniciar transferência. Tente novamente.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'O dispositivo não respondeu. Tente novamente.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Credenciais WiFi inválidas. Verifique as configurações do hotspot.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'Conexão WiFi falhou. Tente novamente.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'Processamento do Cartão SD';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Processando $count gravação(ões). Os arquivos serão removidos do cartão SD após.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Processar';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'Sincronização WiFi Falhou';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Processamento Falhou';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Baixando do Cartão SD';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Processando $current/$total';
   }
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count conversas criadas';
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Internet necessária';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Processar Áudio';
 
   @override
-  String get start => 'Start';
+  String get start => 'Iniciar';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Sem Gravações';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'O áudio do seu dispositivo Omi aparecerá aqui';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Excluir Processados';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Tente um filtro diferente';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Gravações';
 
   @override
   String get enableRemindersAccess =>
@@ -6245,7 +6245,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Dispositivo';
 
   @override
   String get chatAssistantsTitle => 'Assistentes de chat';
@@ -6302,55 +6302,55 @@ class AppLocalizationsPt extends AppLocalizations {
   String get writeReviewOptional => 'Escreva uma resenha (opcional)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Ajude-nos a melhorar o Omi respondendo algumas perguntas. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. O que você faz?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Onde você planeja usar seu Omi?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Qual é a sua faixa etária?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Você ainda não respondeu todas as perguntas! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Pular, não quero ajudar :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Empreendedor';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Engenheiro de Software';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Gerente de Produto';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Executivo';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Vendas';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Estudante';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'No trabalho';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Eventos Presenciais';
 
   @override
   String get usageOnline => 'Online';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Em Ambientes Sociais';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Em Todo Lugar';
 
   @override
   String get customBackendUrlTitle => 'URL do servidor personalizada';
@@ -6515,32 +6515,32 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Compartilhar Link Público';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Tornar Persona Pública';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Dados de Conhecimento Conectados';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Digite o nome';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Desconectar Twitter';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Tem certeza de que deseja desconectar sua conta do Twitter? Sua persona não terá mais acesso aos seus dados do Twitter.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Crie um clone mais preciso com suas conversas pessoais';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Obter Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Tenho um dispositivo Omi';
 
   @override
   String get goal => 'META';
@@ -6615,31 +6615,31 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Marcar Falante $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Uma pessoa com este nome já existe.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Para se marcar, selecione \"Você\" na lista.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Digite o Nome da Pessoa';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Adicionar Pessoa';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Marcar outros segmentos deste falante ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Marcar outros segmentos';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Gerenciar Pessoas';
 
   @override
   String get shareViaSms => 'Compartilhar por SMS';
@@ -6710,124 +6710,124 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'Conexão Falhou';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Conectando a $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Ativar WiFi de $deviceName';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return 'Conectar a $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Detalhes da Gravação';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'Cartão SD';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Telefone';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefone (Memória)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Armazenado em $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Transferindo...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Transferência Necessária';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Baixando áudio do cartão SD do seu dispositivo';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Esta gravação está armazenada no cartão SD do seu dispositivo. Transfira para o seu telefone para reproduzir ou compartilhar.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Cancelar Transferência';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Transferir para Telefone';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Privado e seguro no seu dispositivo';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Informações da Gravação';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Transferência em andamento...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Compartilhar Gravação';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Tem certeza de que deseja excluir permanentemente esta gravação? Isso não pode ser desfeito.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'ID da Gravação';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Data e Hora';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Duração';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Formato de Áudio';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Local de Armazenamento';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Tamanho Estimado';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Modelo do Dispositivo';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'ID do Dispositivo';
 
   @override
   String get statusLabel => 'Status';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Processado';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Não Processado';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Mudou para Transferência Rápida';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Transferência concluída! Agora você pode reproduzir esta gravação.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Transferência falhou: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Transferência cancelada';
 
   @override
   String get fastTransferEnabled => 'Transferência rápida ativada';
@@ -6916,63 +6916,63 @@ class AppLocalizationsPt extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Ocorreu um erro ao atualizar o status do app.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Calculando...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Cerca de $minutes minutos restantes';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Cerca de um minuto restante';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Quase pronto...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'omi diz';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Analisando seus dados...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Migrando para proteção $level...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Sem dados para migrar. Finalizando...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return 'Migrando $itemType... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Todos os objetos migrados. Finalizando...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Ocorreu um erro durante a migração. Tente novamente.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Migração concluída!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Seus dados agora estão protegidos com as novas configurações de $level.';
   }
 
   @override
   String get chatsLowercase => 'chats';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'dados';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Ai';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Você caiu?';
 
   @override
   String get importantConversationTitle => 'Conversa importante';
@@ -7211,60 +7211,60 @@ class AppLocalizationsPt extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Por favor, gere um aplicativo primeiro';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Qual é o seu usuário do X?';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => 'Vamos pré-treinar seu clone Omi\ncom base na atividade da sua conta';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Por favor, digite seu usuário do X';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Por favor, digite um usuário do X válido';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Próximo';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Conectar Dispositivo Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Você está trocando seu Plano Ilimitado para o $title. Tem certeza de que deseja continuar?';
   }
 
   @override
   String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+      'Upgrade agendado! Seu plano mensal continua até o final do período de cobrança e depois muda automaticamente para anual.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Não foi possível agendar a mudança de plano. Tente novamente.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Sua assinatura foi reativada! Sem cobrança agora - você será cobrado no final do período atual.';
 
   @override
   String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+      'Assinatura bem-sucedida! Você foi cobrado pelo novo período de cobrança.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Não foi possível processar a assinatura. Tente novamente.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Não foi possível abrir a página de upgrade. Tente novamente.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Cole sua configuração JSON aqui...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
 
   @override
-  String get pricePlaceholder => '0.00';
+  String get pricePlaceholder => '0,00';
 
   @override
   String importErrorOpeningFilePicker(String message) {

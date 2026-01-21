@@ -17,14 +17,14 @@
 | Progress | ~90% |
 
 **PRIORITY 0 STATUS**: 110 pre-existing l10n keys in non-English ARB files contain
-English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), and Arabic (ar) completed, 28 languages remaining.
+English text instead of proper translations. Spanish (es), French (fr), German (de), Italian (it), Arabic (ar), and Portuguese (pt) completed, 27 languages remaining.
 
 ================================================================================
 ## PRIORITY 0: CRITICAL - Pre-existing Untranslated Keys (110 keys × 33 languages)
 ================================================================================
 
 ### [~] Translate pre-existing English keys in all non-English ARB files
-Status: IN PROGRESS (Spanish, French, German, Italian, Arabic completed, 28 languages remaining)
+Status: IN PROGRESS (Spanish, French, German, Italian, Arabic, Portuguese completed, 27 languages remaining)
 Priority: CRITICAL - Affects all non-English users
 
 Sample of untranslated keys (showing English values that need translation):
@@ -337,6 +337,18 @@ Note: date_list_item.dart was fixed - see [x] entry above
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Translated 196 pre-existing English keys to Portuguese (app_pt.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 196 keys to proper Portuguese translations in app_pt.arb
+- Keys include: signOutConfirmation, deleteRecording, transferCompleteMessage, xHandleTitle,
+  couldNotLaunchUpgradePage, subscriptionReactivatedDefault, disconnectTwitterConfirmation,
+  planSwitchingDescriptionWithTitle, storageLocationLabel, sdCardProcessingMessage,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, recordingDetails, and 180+ more
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {itemType}, {percentage}, etc.)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 27 other languages still need the same keys translated
 
 [2026-01-21] Translated 139 pre-existing English keys to Arabic (app_ar.arb)
 - PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
