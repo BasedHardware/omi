@@ -2455,5 +2455,62 @@
   "timeCompactMins": "{count}м",
   "timeCompactMinsAndSecs": "{mins}м {secs}с",
   "timeCompactHours": "{count}ч",
-  "timeCompactHoursAndMins": "{hours}ч {mins}м"
+  "timeCompactHoursAndMins": "{hours}ч {mins}м",
+  "availableSpace": "Доступное место: {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "Расход заряда батареи значительно увеличится.",
+  "deviceRequirements": "Ваше устройство не соответствует требованиям для транскрипции на устройстве.",
+  "downloadError": "Ошибка загрузки: {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editReply": "Редактировать ответ",
+  "estimatedSize": "Приблизительный размер: ~{size} МБ",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Не удалось отправить ответ: {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Эта модель большая и может привести к сбою приложения или очень медленной работе на мобильных устройствах.\n\nРекомендуется использовать \"small\" или \"base\".",
+  "localProcessingInfo": "Аудио обрабатывается локально. Работает офлайн, более приватно, но расходует больше заряда батареи.",
+  "model": "Модель",
+  "modelReady": "Модель готова",
+  "noModelDownloadRequired": "Будет использован встроенный механизм распознавания речи вашего устройства. Загрузка модели не требуется.",
+  "noReviewsFound": "Отзывы не найдены",
+  "onDeviceIntensive": "Транскрипция на устройстве требует значительных вычислительных ресурсов.",
+  "onDeviceSlower": "Транскрипция на устройстве может быть медленнее на этом устройстве.",
+  "premiumMinutesInfo": "1 200 премиум-минут в месяц. Вкладка \"На устройстве\" предлагает неограниченную бесплатную транскрипцию.",
+  "redownload": "Загрузить повторно",
+  "reply": "Ответить",
+  "replySentSuccessfully": "Ответ успешно отправлен",
+  "send": "Отправить",
+  "starFilter": "{count} звезд",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Напишите ваш ответ..."
 }

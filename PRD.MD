@@ -43,7 +43,7 @@ Total languages with missing translations: **31**
 | Polish | pl | 0 | ✅ DONE |
 | Portuguese | pt | 0 | ✅ DONE |
 | Romanian | ro | 0 | ✅ DONE |
-| Russian | ru | 22 | HIGH |
+| Russian | ru | 0 | ✅ DONE |
 | Slovak | sk | 22 | HIGH |
 | Swedish | sv | 22 | HIGH |
 | Thai | th | 22 | HIGH |
