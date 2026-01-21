@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
@@ -162,6 +163,39 @@ def patch_conversation_title(conversation_id: str, title: str, uid: str = Depend
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
+
+
+@router.patch("/v1/conversations/{conversation_id}/overview", tags=['conversations'])
+def patch_conversation_overview(
+    conversation_id: str,
+    data: dict = Body(...),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+
+    overview = data.get("overview")
+    if not overview:
+        raise HTTPException(status_code=400, detail="Missing overview")
+
+    conversations_db.update_conversation_overview(uid, conversation_id, overview)
+    return {"status": "Ok"}
+
+
+@router.patch("/v1/conversations/{conversation_id}/segments/{segment_id}/text", tags=['conversations'])
+def patch_segment_text(
+    conversation_id: str,
+    segment_id: str,
+    data: dict = Body(...),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+
+    text = data.get("text")
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing text")
+
+    conversations_db.update_conversation_segment_text(uid, conversation_id, segment_id, text)
+    return {"status": "Ok"}
 
 
 @router.get(

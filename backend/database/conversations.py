@@ -135,6 +135,27 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
     return data
 
 
+def _normalize_apps_results(apps_results: Any) -> list:
+    """
+    Normalize apps_results to ensure it's a valid list with required fields.
+    """
+    if isinstance(apps_results, dict):
+        apps_results = [apps_results[k] for k in sorted(apps_results.keys(), key=int)]
+
+    if not isinstance(apps_results, list):
+        return []
+
+    normalized = []
+    for item in apps_results:
+        if not isinstance(item, dict):
+            continue
+        if not item.get('app_id'):
+            continue
+        normalized.append(item)
+
+    return normalized
+
+
 @prepare_for_read(decrypt_func=_prepare_photo_for_read)
 def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
@@ -168,6 +189,13 @@ def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = conversation_ref.get().to_dict()
+    
+    # Normalize apps_results and filter out invalid entries
+    if conversation_data:
+        conversation_data['apps_results'] = _normalize_apps_results(
+            conversation_data.get('apps_results')
+        )
+    
     return conversation_data
 
 
@@ -213,6 +241,13 @@ def get_conversations(
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    
+    # Normalize apps_results and filter out invalid entries
+    for conversation in conversations:
+        conversation['apps_results'] = _normalize_apps_results(
+            conversation.get('apps_results')
+        )
+    
     return conversations
 
 
@@ -366,6 +401,86 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
         return
 
     conversation_ref.update({'structured.title': title})
+
+
+def update_conversation_overview(uid: str, conversation_id: str, overview: str):
+    """
+    Update the conversation overview and also update the first apps_results content
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    
+    @firestore.transactional
+    def update_in_transaction(transaction):
+        doc_snapshot = conversation_ref.get(transaction=transaction)
+        if not doc_snapshot.exists:
+            return
+        
+        conversation_data = doc_snapshot.to_dict()
+        update_data = {'structured.overview': overview}
+        
+        # Update apps_results[0].content
+        apps_results = conversation_data.get('apps_results', [])
+        if apps_results and len(apps_results) > 0:
+            # Normalize apps_results if it's a dict
+            if isinstance(apps_results, dict):
+                apps_results = [apps_results[k] for k in sorted(apps_results.keys(), key=int)]
+            
+            if len(apps_results) > 0 and isinstance(apps_results[0], dict):
+                apps_results[0]['content'] = overview
+                update_data['apps_results'] = apps_results
+        
+        transaction.update(conversation_ref, update_data)
+    
+    transaction = db.transaction()
+    update_in_transaction(transaction)
+
+
+def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    @firestore.transactional
+    def update_in_transaction(transaction):
+        doc_snapshot = conversation_ref.get(transaction=transaction)
+        if not doc_snapshot.exists:
+            return
+
+        conversation_data = doc_snapshot.to_dict()
+        level = conversation_data.get('data_protection_level', 'standard')
+
+        decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
+        if not decrypted_data:
+            return
+
+        transcript_segments = decrypted_data.get('transcript_segments', [])
+
+        # Find and update the segment
+        updated = False
+        for segment in transcript_segments:
+            if isinstance(segment, dict) and segment.get('id') == segment_id:
+                segment['text'] = text
+                updated = True
+                break
+
+        if not updated:
+            return
+
+        prepared_data = _prepare_conversation_for_write(
+            {'transcript_segments': transcript_segments},
+            uid,
+            level,
+        )
+
+        update_dict = {'transcript_segments': prepared_data['transcript_segments']}
+
+        if 'transcript_segments_compressed' in prepared_data:
+            update_dict['transcript_segments_compressed'] = prepared_data['transcript_segments_compressed']
+
+        transaction.update(conversation_ref, update_dict)
+
+    transaction = db.transaction()
+    update_in_transaction(transaction)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
@@ -820,7 +935,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
+def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
     if not doc_snapshot.exists:
@@ -828,8 +943,6 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
-    if finished_at:
-        update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
     doc_ref.update(prepared_payload)
 
@@ -882,6 +995,10 @@ def get_public_conversations(data: List[Tuple[str, str]]):
         # get_conversation is already decorated to return a fully populated and decrypted conversation
         conversation_data = get_conversation(uid=uid, conversation_id=conversation_id)
         if conversation_data and conversation_data.get('visibility') == 'public':
+            # Normalize apps_results and filter out invalid entries
+            conversation_data['apps_results'] = _normalize_apps_results(
+                conversation_data.get('apps_results')
+            )
             conversations.append(conversation_data)
     return conversations
 
