@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Tytuł: {title}",
   "conversationNewIndicator": "Nowe 🚀",
   "conversationPhotosCount": "{count} zdjęć",
-  "mergingStatus": "Łączenie..."
+  "mergingStatus": "Łączenie...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} godzina",
+  "timeHoursPlural": "{count} godzin",
+  "timeHoursAndMins": "{hours} godzin {mins} min",
+  "timeDaySingular": "{count} dzień",
+  "timeDaysPlural": "{count} dni",
+  "timeDaysAndHours": "{days} dni {hours} godzin",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}g",
+  "timeCompactHoursAndMins": "{hours}g {mins}m"
 }

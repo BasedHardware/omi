@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Cím: {title}",
   "conversationNewIndicator": "Új 🚀",
   "conversationPhotosCount": "{count} fotó",
-  "mergingStatus": "Egyesítés..."
+  "mergingStatus": "Egyesítés...",
+  "timeSecsSingular": "{count} mp",
+  "timeSecsPlural": "{count} mp",
+  "timeMinSingular": "{count} perc",
+  "timeMinsPlural": "{count} perc",
+  "timeMinsAndSecs": "{mins} perc {secs} mp",
+  "timeHourSingular": "{count} óra",
+  "timeHoursPlural": "{count} óra",
+  "timeHoursAndMins": "{hours} óra {mins} perc",
+  "timeDaySingular": "{count} nap",
+  "timeDaysPlural": "{count} nap",
+  "timeDaysAndHours": "{days} nap {hours} óra",
+  "timeCompactSecs": "{count}mp",
+  "timeCompactMins": "{count}p",
+  "timeCompactMinsAndSecs": "{mins}p {secs}mp",
+  "timeCompactHours": "{count}ó",
+  "timeCompactHoursAndMins": "{hours}ó {mins}p"
 }

@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Tiêu đề: {title}",
   "conversationNewIndicator": "Mới 🚀",
   "conversationPhotosCount": "{count} ảnh",
-  "mergingStatus": "Đang hợp nhất..."
+  "mergingStatus": "Đang hợp nhất...",
+  "timeSecsSingular": "{count} giây",
+  "timeSecsPlural": "{count} giây",
+  "timeMinSingular": "{count} phút",
+  "timeMinsPlural": "{count} phút",
+  "timeMinsAndSecs": "{mins} phút {secs} giây",
+  "timeHourSingular": "{count} giờ",
+  "timeHoursPlural": "{count} giờ",
+  "timeHoursAndMins": "{hours} giờ {mins} phút",
+  "timeDaySingular": "{count} ngày",
+  "timeDaysPlural": "{count} ngày",
+  "timeDaysAndHours": "{days} ngày {hours} giờ",
+  "timeCompactSecs": "{count}g",
+  "timeCompactMins": "{count}p",
+  "timeCompactMinsAndSecs": "{mins}p {secs}g",
+  "timeCompactHours": "{count}giờ",
+  "timeCompactHoursAndMins": "{hours}giờ {mins}p"
 }

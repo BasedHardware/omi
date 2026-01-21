@@ -133,7 +133,13 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 
 | File | Est. Strings | Description |
 |------|--------------|-------------|
-| `pages/conversation_detail/share.dart` | ~10 | PDF export labels (Transcript Export, Conversation Export, Title, Overview, Action Items, Summary) |
+| `pages/conversation_detail/share.dart` | ~10 | COMPLETED - PDF export labels (Transcript Export, Conversation Export, Title, Overview, Action Items, Summary) |
+
+#### 6.4 Date/Time Utility Strings (~16 strings)
+
+| File | Est. Strings | Description |
+|------|--------------|-------------|
+| `utils/other/time_utils.dart` | ~16 | COMPLETED - Time duration strings (secs, mins, hours, days) for human-readable and compact formats |
 
 ---
 

@@ -7611,4 +7611,84 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get mergingStatus => 'กำลังรวม...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count วินาที';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count วินาที';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count นาที';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count นาที';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins นาที $secs วินาที';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count ชั่วโมง';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count ชั่วโมง';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours ชั่วโมง $mins นาที';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count วัน';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count วัน';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days วัน $hours ชั่วโมง';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '$countวิ';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '$countน';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '$minsน $secsวิ';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '$countชม';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '$hoursชม $minsน';
+  }
 }

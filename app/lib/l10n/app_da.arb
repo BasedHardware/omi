@@ -2397,5 +2397,21 @@
   "pdfTitleLabel": "Titel: {title}",
   "conversationNewIndicator": "Ny 🚀",
   "conversationPhotosCount": "{count} fotos",
-  "mergingStatus": "Fletter..."
+  "mergingStatus": "Fletter...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} time",
+  "timeHoursPlural": "{count} timer",
+  "timeHoursAndMins": "{hours} timer {mins} min",
+  "timeDaySingular": "{count} dag",
+  "timeDaysPlural": "{count} dage",
+  "timeDaysAndHours": "{days} dage {hours} timer",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}t",
+  "timeCompactHoursAndMins": "{hours}t {mins}m"
 }

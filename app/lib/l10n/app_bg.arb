@@ -2422,5 +2422,21 @@
   "pdfTitleLabel": "Заглавие: {title}",
   "conversationNewIndicator": "Ново 🚀",
   "conversationPhotosCount": "{count} снимки",
-  "mergingStatus": "Обединяване..."
+  "mergingStatus": "Обединяване...",
+  "timeSecsSingular": "{count} сек",
+  "timeSecsPlural": "{count} сек",
+  "timeMinSingular": "{count} мин",
+  "timeMinsPlural": "{count} мин",
+  "timeMinsAndSecs": "{mins} мин {secs} сек",
+  "timeHourSingular": "{count} час",
+  "timeHoursPlural": "{count} часа",
+  "timeHoursAndMins": "{hours} часа {mins} мин",
+  "timeDaySingular": "{count} ден",
+  "timeDaysPlural": "{count} дни",
+  "timeDaysAndHours": "{days} дни {hours} часа",
+  "timeCompactSecs": "{count}с",
+  "timeCompactMins": "{count}м",
+  "timeCompactMinsAndSecs": "{mins}м {secs}с",
+  "timeCompactHours": "{count}ч",
+  "timeCompactHoursAndMins": "{hours}ч {mins}м"
 }

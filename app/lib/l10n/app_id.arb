@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Judul: {title}",
   "conversationNewIndicator": "Baru 🚀",
   "conversationPhotosCount": "{count} foto",
-  "mergingStatus": "Menggabungkan..."
+  "mergingStatus": "Menggabungkan...",
+  "timeSecsSingular": "{count} dtk",
+  "timeSecsPlural": "{count} dtk",
+  "timeMinSingular": "{count} mnt",
+  "timeMinsPlural": "{count} mnt",
+  "timeMinsAndSecs": "{mins} mnt {secs} dtk",
+  "timeHourSingular": "{count} jam",
+  "timeHoursPlural": "{count} jam",
+  "timeHoursAndMins": "{hours} jam {mins} mnt",
+  "timeDaySingular": "{count} hari",
+  "timeDaysPlural": "{count} hari",
+  "timeDaysAndHours": "{days} hari {hours} jam",
+  "timeCompactSecs": "{count}d",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}d",
+  "timeCompactHours": "{count}j",
+  "timeCompactHoursAndMins": "{hours}j {mins}m"
 }

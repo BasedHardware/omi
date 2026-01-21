@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Pealkiri: {title}",
   "conversationNewIndicator": "Uus 🚀",
   "conversationPhotosCount": "{count} fotot",
-  "mergingStatus": "Ühendamine..."
+  "mergingStatus": "Ühendamine...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} tund",
+  "timeHoursPlural": "{count} tundi",
+  "timeHoursAndMins": "{hours} tundi {mins} min",
+  "timeDaySingular": "{count} päev",
+  "timeDaysPlural": "{count} päeva",
+  "timeDaysAndHours": "{days} päeva {hours} tundi",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}t",
+  "timeCompactHoursAndMins": "{hours}t {mins}m"
 }

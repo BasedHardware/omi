@@ -2399,5 +2399,21 @@
   "pdfTitleLabel": "Název: {title}",
   "conversationNewIndicator": "Nové 🚀",
   "conversationPhotosCount": "{count} fotek",
-  "mergingStatus": "Slučování..."
+  "mergingStatus": "Slučování...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} hodina",
+  "timeHoursPlural": "{count} hodin",
+  "timeHoursAndMins": "{hours} hodin {mins} min",
+  "timeDaySingular": "{count} den",
+  "timeDaysPlural": "{count} dní",
+  "timeDaysAndHours": "{days} dní {hours} hodin",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}h",
+  "timeCompactHoursAndMins": "{hours}h {mins}m"
 }

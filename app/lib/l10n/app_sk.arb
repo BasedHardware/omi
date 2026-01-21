@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Názov: {title}",
   "conversationNewIndicator": "Nové 🚀",
   "conversationPhotosCount": "{count} fotiek",
-  "mergingStatus": "Zlučovanie..."
+  "mergingStatus": "Zlučovanie...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} hodina",
+  "timeHoursPlural": "{count} hodín",
+  "timeHoursAndMins": "{hours} hodín {mins} min",
+  "timeDaySingular": "{count} deň",
+  "timeDaysPlural": "{count} dní",
+  "timeDaysAndHours": "{days} dní {hours} hodín",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}h",
+  "timeCompactHoursAndMins": "{hours}h {mins}m"
 }

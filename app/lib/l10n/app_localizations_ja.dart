@@ -7522,4 +7522,84 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get mergingStatus => '統合中...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count秒';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count秒';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count分';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count分';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins分$secs秒';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count時間';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count時間';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours時間$mins分';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count日';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count日';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days日$hours時間';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '$count秒';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '$count分';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '$mins分$secs秒';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '$count時';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '$hours時$mins分';
+  }
 }

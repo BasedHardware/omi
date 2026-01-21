@@ -2440,5 +2440,21 @@
   "pdfTitleLabel": "タイトル: {title}",
   "conversationNewIndicator": "新規 🚀",
   "conversationPhotosCount": "{count}枚の写真",
-  "mergingStatus": "統合中..."
+  "mergingStatus": "統合中...",
+  "timeSecsSingular": "{count}秒",
+  "timeSecsPlural": "{count}秒",
+  "timeMinSingular": "{count}分",
+  "timeMinsPlural": "{count}分",
+  "timeMinsAndSecs": "{mins}分{secs}秒",
+  "timeHourSingular": "{count}時間",
+  "timeHoursPlural": "{count}時間",
+  "timeHoursAndMins": "{hours}時間{mins}分",
+  "timeDaySingular": "{count}日",
+  "timeDaysPlural": "{count}日",
+  "timeDaysAndHours": "{days}日{hours}時間",
+  "timeCompactSecs": "{count}秒",
+  "timeCompactMins": "{count}分",
+  "timeCompactMinsAndSecs": "{mins}分{secs}秒",
+  "timeCompactHours": "{count}時",
+  "timeCompactHoursAndMins": "{hours}時{mins}分"
 }

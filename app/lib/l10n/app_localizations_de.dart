@@ -7717,4 +7717,84 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get mergingStatus => 'Zusammenführen...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count Sek';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count Sek';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count Min';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count Min';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins Min $secs Sek';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count Stunde';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count Stunden';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours Stunden $mins Min';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count Tag';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count Tage';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days Tage $hours Stunden';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '${count}s';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '${count}m';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '${mins}m ${secs}s';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '${count}h';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '${hours}h ${mins}m';
+  }
 }

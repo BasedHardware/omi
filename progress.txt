@@ -277,22 +277,21 @@ All 34 language ARB files updated with proper translations
 --------------------------------------------------------------------------------
 ### 6.4 Date/Time Locale Issues (~20 strings)
 
-### [ ] utils/other/time_utils.dart (~15 strings)
-Status: PENDING
+### [x] utils/other/time_utils.dart (~16 strings)
+Status: COMPLETED
 Priority: HIGH - Affects all date/time displays for non-English users
-Description: Time duration strings not using l10n
-Strings found:
-- Line 3: "secs"
-- Line 9: "min"
-- Line 11: "mins"
-- Line 13: "mins", "secs"
-- Line 19: "hour"
-- Line 21: "hours"
-- Line 24: "hours", "mins"
-- Line 30: "day"
-- Line 32: "days"
-- Line 35: "days", "hours"
-- Compact format: "s", "m", "h" (lines 44, 49, 52, 57, 60)
+Description: Time duration strings localized with 16 new l10n keys
+Keys added:
+- timeSecsSingular, timeSecsPlural: "{count} sec" / "{count} secs"
+- timeMinSingular, timeMinsPlural: "{count} min" / "{count} mins"
+- timeMinsAndSecs: "{mins} mins {secs} secs"
+- timeHourSingular, timeHoursPlural: "{count} hour" / "{count} hours"
+- timeHoursAndMins: "{hours} hours {mins} mins"
+- timeDaySingular, timeDaysPlural: "{count} day" / "{count} days"
+- timeDaysAndHours: "{days} days {hours} hours"
+- timeCompactSecs, timeCompactMins, timeCompactHours: "{count}s" / "{count}m" / "{count}h"
+- timeCompactMinsAndSecs, timeCompactHoursAndMins: "{mins}m {secs}s" / "{hours}h {mins}m"
+All 34 language ARB files updated with proper translations
 
 ### [x] utils/other/temp.dart (1 string)
 Status: COMPLETED
@@ -345,6 +344,17 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized time_utils.dart with 16 l10n keys for 34 languages
+- Added 16 new localization keys for time duration strings
+- Keys for human-readable format: timeSecsSingular, timeSecsPlural, timeMinSingular, timeMinsPlural,
+  timeMinsAndSecs, timeHourSingular, timeHoursPlural, timeHoursAndMins, timeDaySingular, timeDaysPlural, timeDaysAndHours
+- Keys for compact format: timeCompactSecs, timeCompactMins, timeCompactMinsAndSecs, timeCompactHours, timeCompactHoursAndMins
+- Added optional BuildContext parameter to secondsToHumanReadable() and secondsToCompactDuration()
+- Updated 8 call sites to pass context: widgets.dart, conversation_list_item.dart, synced_conversation_list_item.dart,
+  desktop_conversation_card.dart, device.dart, sync_page.dart, wal_item_detail_page.dart
+- All 34 language ARB files updated with proper translations
+- All tests passed
 
 [2026-01-21] Localized conversation_list_item.dart with 3 new l10n keys for 34 languages
 - Added 3 new localization keys: conversationNewIndicator, conversationPhotosCount (with count placeholder), mergingStatus

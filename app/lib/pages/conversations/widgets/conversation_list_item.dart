@@ -320,13 +320,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                   maxLines: 1,
                                 ),
-                                if (_getConversationDuration().isNotEmpty) ...[
+                                if (_getConversationDuration(context).isNotEmpty) ...[
                                   const Text(
                                     ' • ',
                                     style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                   ),
                                   Text(
-                                    _getConversationDuration(),
+                                    _getConversationDuration(context),
                                     style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                     maxLines: 1,
                                   ),
@@ -497,7 +497,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                         maxLines: 1,
                       ),
-                      if (_getConversationDuration().isNotEmpty)
+                      if (_getConversationDuration(context).isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Container(
@@ -507,7 +507,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              _getConversationDuration(),
+                              _getConversationDuration(context),
                               style: const TextStyle(color: Colors.white, fontSize: 11),
                               maxLines: 1,
                             ),
@@ -530,11 +530,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 }
 

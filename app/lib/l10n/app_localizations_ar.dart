@@ -7596,4 +7596,84 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get mergingStatus => 'جارٍ الدمج...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count ثانية';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count ثوانٍ';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count دقيقة';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count دقائق';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins دقائق $secs ثوانٍ';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count ساعة';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count ساعات';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours ساعات $mins دقائق';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count يوم';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count أيام';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days أيام $hours ساعات';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '$countث';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '$countد';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '$minsد $secsث';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '$countس';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '$hoursس $minsد';
+  }
 }

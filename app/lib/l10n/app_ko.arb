@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "제목: {title}",
   "conversationNewIndicator": "새로운 🚀",
   "conversationPhotosCount": "{count}장의 사진",
-  "mergingStatus": "병합 중..."
+  "mergingStatus": "병합 중...",
+  "timeSecsSingular": "{count}초",
+  "timeSecsPlural": "{count}초",
+  "timeMinSingular": "{count}분",
+  "timeMinsPlural": "{count}분",
+  "timeMinsAndSecs": "{mins}분 {secs}초",
+  "timeHourSingular": "{count}시간",
+  "timeHoursPlural": "{count}시간",
+  "timeHoursAndMins": "{hours}시간 {mins}분",
+  "timeDaySingular": "{count}일",
+  "timeDaysPlural": "{count}일",
+  "timeDaysAndHours": "{days}일 {hours}시간",
+  "timeCompactSecs": "{count}초",
+  "timeCompactMins": "{count}분",
+  "timeCompactMinsAndSecs": "{mins}분 {secs}초",
+  "timeCompactHours": "{count}시",
+  "timeCompactHoursAndMins": "{hours}시 {mins}분"
 }

@@ -740,22 +740,26 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
               _buildDetailRow(context.l10n.recordingIdLabel, widget.wal.id),
               _buildDetailRow(context.l10n.dateTimeLabel, dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
-              _buildDetailRow(context.l10n.durationLabel, secondsToHumanReadable(widget.wal.seconds)),
+              _buildDetailRow(context.l10n.durationLabel, secondsToHumanReadable(widget.wal.seconds, context)),
               _buildDetailRow(context.l10n.audioFormatLabel, widget.wal.codec.toFormattedString()),
               _buildDetailRow(context.l10n.storageLocationLabel, _getStorageLocationLabel(widget.wal.storage, context)),
               _buildDetailRow(context.l10n.estimatedSizeLabel, estimatedSize),
               _buildDetailRow(context.l10n.deviceModelLabel, widget.wal.deviceModel ?? context.l10n.unknownDevice),
               if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")
                 _buildDetailRow(context.l10n.deviceIdLabel, widget.wal.device),
-              _buildDetailRow(context.l10n.statusLabel,
-                  widget.wal.status == WalStatus.synced ? context.l10n.statusProcessed : context.l10n.statusUnprocessed),
+              _buildDetailRow(
+                  context.l10n.statusLabel,
+                  widget.wal.status == WalStatus.synced
+                      ? context.l10n.statusProcessed
+                      : context.l10n.statusUnprocessed),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(context.l10n.close, style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary)),
+            child: Text(context.l10n.close,
+                style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary)),
           ),
         ],
       ),

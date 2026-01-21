@@ -92,13 +92,13 @@ class GetSummaryWidgets extends StatelessWidget {
     return startedAt == null ? dateTimeFormat('h:mm a', createdAt) : dateTimeFormat('h:mm a', startedAt);
   }
 
-  String _getDuration(ServerConversation conversation) {
+  String _getDuration(BuildContext context, ServerConversation conversation) {
     if (conversation.transcriptSegments.isEmpty) return '';
 
     int durationSeconds = conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToHumanReadable(durationSeconds);
+    return secondsToHumanReadable(durationSeconds, context);
   }
 
   String _getDateFormat(BuildContext context, DateTime date) {
@@ -140,9 +140,9 @@ class GetSummaryWidgets extends StatelessWidget {
               icon: Icons.access_time,
             ),
             // Duration chip
-            if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
+            if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
               _buildChip(
-                label: _getDuration(conversation),
+                label: _getDuration(context, conversation),
                 icon: Icons.timelapse,
               ),
             // Folder chip
@@ -480,7 +480,9 @@ class ReprocessDiscardedWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Text(
-                  provider.conversation.discarded ? context.l10n.summarizingConversation : context.l10n.resummarizingConversation,
+                  provider.conversation.discarded
+                      ? context.l10n.summarizingConversation
+                      : context.l10n.resummarizingConversation,
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
@@ -577,8 +579,7 @@ class AppResultDetailWidget extends StatelessWidget {
                           },
                           child: RichText(
                             text: TextSpan(
-                                style: const TextStyle(color: Colors.grey),
-                                text: context.l10n.noSummaryForApp),
+                                style: const TextStyle(color: Colors.grey), text: context.l10n.noSummaryForApp),
                           ),
                         ),
                       ),
@@ -934,7 +935,9 @@ class GetSheetTitle extends StatelessWidget {
         children: [
           ListTile(
             title: Text(
-              provider.conversation.discarded ? context.l10n.discardedConversation : provider.conversation.structured.title,
+              provider.conversation.discarded
+                  ? context.l10n.discardedConversation
+                  : provider.conversation.structured.title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
             leading: const Icon(Icons.description),

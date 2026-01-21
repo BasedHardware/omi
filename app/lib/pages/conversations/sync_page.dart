@@ -170,7 +170,7 @@ class WalListItem extends StatelessWidget {
                                 Row(
                                   children: [
                                     Text(
-                                      secondsToHumanReadable(wal.seconds),
+                                      secondsToHumanReadable(wal.seconds, context),
                                       style: TextStyle(
                                         color: Colors.grey.shade500,
                                         fontSize: 13,
@@ -1020,7 +1020,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 3),
                     Text(
-                      secondsToHumanReadable(totalSecondsToProcess),
+                      secondsToHumanReadable(totalSecondsToProcess, context),
                       style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ],

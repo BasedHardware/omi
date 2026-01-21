@@ -2422,5 +2422,21 @@
   "pdfTitleLabel": "Títol: {title}",
   "conversationNewIndicator": "Nou 🚀",
   "conversationPhotosCount": "{count} fotos",
-  "mergingStatus": "Fusionant..."
+  "mergingStatus": "Fusionant...",
+  "timeSecsSingular": "{count} seg",
+  "timeSecsPlural": "{count} segs",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} mins",
+  "timeMinsAndSecs": "{mins} mins {secs} segs",
+  "timeHourSingular": "{count} hora",
+  "timeHoursPlural": "{count} hores",
+  "timeHoursAndMins": "{hours} hores {mins} mins",
+  "timeDaySingular": "{count} dia",
+  "timeDaysPlural": "{count} dies",
+  "timeDaysAndHours": "{days} dies {hours} hores",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}h",
+  "timeCompactHoursAndMins": "{hours}h {mins}m"
 }

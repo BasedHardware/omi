@@ -14312,6 +14312,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Merging...'**
   String get mergingStatus;
+
+  /// Duration in singular second
+  ///
+  /// In en, this message translates to:
+  /// **'{count} sec'**
+  String timeSecsSingular(int count);
+
+  /// Duration in plural seconds
+  ///
+  /// In en, this message translates to:
+  /// **'{count} secs'**
+  String timeSecsPlural(int count);
+
+  /// Duration in singular minute
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min'**
+  String timeMinSingular(int count);
+
+  /// Duration in plural minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{count} mins'**
+  String timeMinsPlural(int count);
+
+  /// Duration in minutes and seconds
+  ///
+  /// In en, this message translates to:
+  /// **'{mins} mins {secs} secs'**
+  String timeMinsAndSecs(int mins, int secs);
+
+  /// Duration in singular hour
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hour'**
+  String timeHourSingular(int count);
+
+  /// Duration in plural hours
+  ///
+  /// In en, this message translates to:
+  /// **'{count} hours'**
+  String timeHoursPlural(int count);
+
+  /// Duration in hours and minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} hours {mins} mins'**
+  String timeHoursAndMins(int hours, int mins);
+
+  /// Duration in singular day
+  ///
+  /// In en, this message translates to:
+  /// **'{count} day'**
+  String timeDaySingular(int count);
+
+  /// Duration in plural days
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days'**
+  String timeDaysPlural(int count);
+
+  /// Duration in days and hours
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days {hours} hours'**
+  String timeDaysAndHours(int days, int hours);
+
+  /// Compact duration in seconds
+  ///
+  /// In en, this message translates to:
+  /// **'{count}s'**
+  String timeCompactSecs(int count);
+
+  /// Compact duration in minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{count}m'**
+  String timeCompactMins(int count);
+
+  /// Compact duration in minutes and seconds
+  ///
+  /// In en, this message translates to:
+  /// **'{mins}m {secs}s'**
+  String timeCompactMinsAndSecs(int mins, int secs);
+
+  /// Compact duration in hours
+  ///
+  /// In en, this message translates to:
+  /// **'{count}h'**
+  String timeCompactHours(int count);
+
+  /// Compact duration in hours and minutes
+  ///
+  /// In en, this message translates to:
+  /// **'{hours}h {mins}m'**
+  String timeCompactHoursAndMins(int hours, int mins);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

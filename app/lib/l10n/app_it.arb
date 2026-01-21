@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Titolo: {title}",
   "conversationNewIndicator": "Nuovo 🚀",
   "conversationPhotosCount": "{count} foto",
-  "mergingStatus": "Unione in corso..."
+  "mergingStatus": "Unione in corso...",
+  "timeSecsSingular": "{count} sec",
+  "timeSecsPlural": "{count} sec",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sec",
+  "timeHourSingular": "{count} ora",
+  "timeHoursPlural": "{count} ore",
+  "timeHoursAndMins": "{hours} ore {mins} min",
+  "timeDaySingular": "{count} giorno",
+  "timeDaysPlural": "{count} giorni",
+  "timeDaysAndHours": "{days} giorni {hours} ore",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}h",
+  "timeCompactHoursAndMins": "{hours}h {mins}m"
 }

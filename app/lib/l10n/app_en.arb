@@ -9533,5 +9533,164 @@
   "mergingStatus": "Merging...",
   "@mergingStatus": {
     "description": "Status indicator shown when conversations are being merged"
+  },
+  "timeSecsSingular": "{count} sec",
+  "@timeSecsSingular": {
+    "description": "Duration in singular second",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeSecsPlural": "{count} secs",
+  "@timeSecsPlural": {
+    "description": "Duration in plural seconds",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeMinSingular": "{count} min",
+  "@timeMinSingular": {
+    "description": "Duration in singular minute",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeMinsPlural": "{count} mins",
+  "@timeMinsPlural": {
+    "description": "Duration in plural minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeMinsAndSecs": "{mins} mins {secs} secs",
+  "@timeMinsAndSecs": {
+    "description": "Duration in minutes and seconds",
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      },
+      "secs": {
+        "type": "int"
+      }
+    }
+  },
+  "timeHourSingular": "{count} hour",
+  "@timeHourSingular": {
+    "description": "Duration in singular hour",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeHoursPlural": "{count} hours",
+  "@timeHoursPlural": {
+    "description": "Duration in plural hours",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeHoursAndMins": "{hours} hours {mins} mins",
+  "@timeHoursAndMins": {
+    "description": "Duration in hours and minutes",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "timeDaySingular": "{count} day",
+  "@timeDaySingular": {
+    "description": "Duration in singular day",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeDaysPlural": "{count} days",
+  "@timeDaysPlural": {
+    "description": "Duration in plural days",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeDaysAndHours": "{days} days {hours} hours",
+  "@timeDaysAndHours": {
+    "description": "Duration in days and hours",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "timeCompactSecs": "{count}s",
+  "@timeCompactSecs": {
+    "description": "Compact duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeCompactMins": "{count}m",
+  "@timeCompactMins": {
+    "description": "Compact duration in minutes",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "@timeCompactMinsAndSecs": {
+    "description": "Compact duration in minutes and seconds",
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      },
+      "secs": {
+        "type": "int"
+      }
+    }
+  },
+  "timeCompactHours": "{count}h",
+  "@timeCompactHours": {
+    "description": "Compact duration in hours",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "timeCompactHoursAndMins": "{hours}h {mins}m",
+  "@timeCompactHoursAndMins": {
+    "description": "Compact duration in hours and minutes",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "mins": {
+        "type": "int"
+      }
+    }
   }
 }

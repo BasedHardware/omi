@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Pavadinimas: {title}",
   "conversationNewIndicator": "Naujas 🚀",
   "conversationPhotosCount": "{count} nuotraukos",
-  "mergingStatus": "Sujungiama..."
+  "mergingStatus": "Sujungiama...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} val",
+  "timeHoursPlural": "{count} val",
+  "timeHoursAndMins": "{hours} val {mins} min",
+  "timeDaySingular": "{count} diena",
+  "timeDaysPlural": "{count} dienos",
+  "timeDaysAndHours": "{days} dienos {hours} val",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}v",
+  "timeCompactHoursAndMins": "{hours}v {mins}m"
 }

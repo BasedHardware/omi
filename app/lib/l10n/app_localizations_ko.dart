@@ -7524,4 +7524,84 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mergingStatus => '병합 중...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count초';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count초';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count분';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count분';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins분 $secs초';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count시간';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count시간';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours시간 $mins분';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count일';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count일';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days일 $hours시간';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '$count초';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '$count분';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '$mins분 $secs초';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '$count시';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '$hours시 $mins분';
+  }
 }

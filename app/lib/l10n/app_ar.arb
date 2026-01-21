@@ -2420,5 +2420,21 @@
   "pdfTitleLabel": "العنوان: {title}",
   "conversationNewIndicator": "جديد 🚀",
   "conversationPhotosCount": "{count} صور",
-  "mergingStatus": "جارٍ الدمج..."
+  "mergingStatus": "جارٍ الدمج...",
+  "timeSecsSingular": "{count} ثانية",
+  "timeSecsPlural": "{count} ثوانٍ",
+  "timeMinSingular": "{count} دقيقة",
+  "timeMinsPlural": "{count} دقائق",
+  "timeMinsAndSecs": "{mins} دقائق {secs} ثوانٍ",
+  "timeHourSingular": "{count} ساعة",
+  "timeHoursPlural": "{count} ساعات",
+  "timeHoursAndMins": "{hours} ساعات {mins} دقائق",
+  "timeDaySingular": "{count} يوم",
+  "timeDaysPlural": "{count} أيام",
+  "timeDaysAndHours": "{days} أيام {hours} ساعات",
+  "timeCompactSecs": "{count}ث",
+  "timeCompactMins": "{count}د",
+  "timeCompactMinsAndSecs": "{mins}د {secs}ث",
+  "timeCompactHours": "{count}س",
+  "timeCompactHoursAndMins": "{hours}س {mins}د"
 }

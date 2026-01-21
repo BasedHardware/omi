@@ -92,7 +92,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
   @override
   Widget build(BuildContext context) {
-    final duration = _getConversationDuration();
+    final duration = _getConversationDuration(context);
     final isStarred = widget.conversation.starred;
 
     return MouseRegion(
@@ -219,13 +219,13 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     return dateTimeFormat('h:mm a', time);
   }
 
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     if (widget.conversation.transcriptSegments.isEmpty) return '';
 
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 
   void _showContextMenu(TapDownDetails details) async {

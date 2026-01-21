@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Otsikko: {title}",
   "conversationNewIndicator": "Uusi 🚀",
   "conversationPhotosCount": "{count} kuvaa",
-  "mergingStatus": "Yhdistetään..."
+  "mergingStatus": "Yhdistetään...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} tunti",
+  "timeHoursPlural": "{count} tuntia",
+  "timeHoursAndMins": "{hours} tuntia {mins} min",
+  "timeDaySingular": "{count} päivä",
+  "timeDaysPlural": "{count} päivää",
+  "timeDaysAndHours": "{days} päivää {hours} tuntia",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}t",
+  "timeCompactHoursAndMins": "{hours}t {mins}m"
 }

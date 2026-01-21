@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "ชื่อเรื่อง: {title}",
   "conversationNewIndicator": "ใหม่ 🚀",
   "conversationPhotosCount": "{count} รูปภาพ",
-  "mergingStatus": "กำลังรวม..."
+  "mergingStatus": "กำลังรวม...",
+  "timeSecsSingular": "{count} วินาที",
+  "timeSecsPlural": "{count} วินาที",
+  "timeMinSingular": "{count} นาที",
+  "timeMinsPlural": "{count} นาที",
+  "timeMinsAndSecs": "{mins} นาที {secs} วินาที",
+  "timeHourSingular": "{count} ชั่วโมง",
+  "timeHoursPlural": "{count} ชั่วโมง",
+  "timeHoursAndMins": "{hours} ชั่วโมง {mins} นาที",
+  "timeDaySingular": "{count} วัน",
+  "timeDaysPlural": "{count} วัน",
+  "timeDaysAndHours": "{days} วัน {hours} ชั่วโมง",
+  "timeCompactSecs": "{count}วิ",
+  "timeCompactMins": "{count}น",
+  "timeCompactMinsAndSecs": "{mins}น {secs}วิ",
+  "timeCompactHours": "{count}ชม",
+  "timeCompactHoursAndMins": "{hours}ชม {mins}น"
 }

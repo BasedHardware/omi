@@ -2440,5 +2440,21 @@
   "pdfTitleLabel": "शीर्षक: {title}",
   "conversationNewIndicator": "नया 🚀",
   "conversationPhotosCount": "{count} तस्वीरें",
-  "mergingStatus": "मर्ज हो रहा है..."
+  "mergingStatus": "मर्ज हो रहा है...",
+  "timeSecsSingular": "{count} सेकंड",
+  "timeSecsPlural": "{count} सेकंड",
+  "timeMinSingular": "{count} मिनट",
+  "timeMinsPlural": "{count} मिनट",
+  "timeMinsAndSecs": "{mins} मिनट {secs} सेकंड",
+  "timeHourSingular": "{count} घंटा",
+  "timeHoursPlural": "{count} घंटे",
+  "timeHoursAndMins": "{hours} घंटे {mins} मिनट",
+  "timeDaySingular": "{count} दिन",
+  "timeDaysPlural": "{count} दिन",
+  "timeDaysAndHours": "{days} दिन {hours} घंटे",
+  "timeCompactSecs": "{count}से",
+  "timeCompactMins": "{count}मि",
+  "timeCompactMinsAndSecs": "{mins}मि {secs}से",
+  "timeCompactHours": "{count}घं",
+  "timeCompactHoursAndMins": "{hours}घं {mins}मि"
 }

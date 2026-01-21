@@ -2440,5 +2440,21 @@
   "pdfTitleLabel": "标题：{title}",
   "conversationNewIndicator": "新的 🚀",
   "conversationPhotosCount": "{count} 张照片",
-  "mergingStatus": "合并中..."
+  "mergingStatus": "合并中...",
+  "timeSecsSingular": "{count}秒",
+  "timeSecsPlural": "{count}秒",
+  "timeMinSingular": "{count}分钟",
+  "timeMinsPlural": "{count}分钟",
+  "timeMinsAndSecs": "{mins}分钟{secs}秒",
+  "timeHourSingular": "{count}小时",
+  "timeHoursPlural": "{count}小时",
+  "timeHoursAndMins": "{hours}小时{mins}分钟",
+  "timeDaySingular": "{count}天",
+  "timeDaysPlural": "{count}天",
+  "timeDaysAndHours": "{days}天{hours}小时",
+  "timeCompactSecs": "{count}秒",
+  "timeCompactMins": "{count}分",
+  "timeCompactMinsAndSecs": "{mins}分{secs}秒",
+  "timeCompactHours": "{count}时",
+  "timeCompactHoursAndMins": "{hours}时{mins}分"
 }

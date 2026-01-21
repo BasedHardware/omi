@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Nosaukums: {title}",
   "conversationNewIndicator": "Jauns 🚀",
   "conversationPhotosCount": "{count} fotoattēli",
-  "mergingStatus": "Apvienošana..."
+  "mergingStatus": "Apvienošana...",
+  "timeSecsSingular": "{count} sek",
+  "timeSecsPlural": "{count} sek",
+  "timeMinSingular": "{count} min",
+  "timeMinsPlural": "{count} min",
+  "timeMinsAndSecs": "{mins} min {secs} sek",
+  "timeHourSingular": "{count} stunda",
+  "timeHoursPlural": "{count} stundas",
+  "timeHoursAndMins": "{hours} stundas {mins} min",
+  "timeDaySingular": "{count} diena",
+  "timeDaysPlural": "{count} dienas",
+  "timeDaysAndHours": "{days} dienas {hours} stundas",
+  "timeCompactSecs": "{count}s",
+  "timeCompactMins": "{count}m",
+  "timeCompactMinsAndSecs": "{mins}m {secs}s",
+  "timeCompactHours": "{count}h",
+  "timeCompactHoursAndMins": "{hours}h {mins}m"
 }

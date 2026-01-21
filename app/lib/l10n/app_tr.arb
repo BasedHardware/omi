@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Başlık: {title}",
   "conversationNewIndicator": "Yeni 🚀",
   "conversationPhotosCount": "{count} fotoğraf",
-  "mergingStatus": "Birleştiriliyor..."
+  "mergingStatus": "Birleştiriliyor...",
+  "timeSecsSingular": "{count} sn",
+  "timeSecsPlural": "{count} sn",
+  "timeMinSingular": "{count} dk",
+  "timeMinsPlural": "{count} dk",
+  "timeMinsAndSecs": "{mins} dk {secs} sn",
+  "timeHourSingular": "{count} saat",
+  "timeHoursPlural": "{count} saat",
+  "timeHoursAndMins": "{hours} saat {mins} dk",
+  "timeDaySingular": "{count} gün",
+  "timeDaysPlural": "{count} gün",
+  "timeDaysAndHours": "{days} gün {hours} saat",
+  "timeCompactSecs": "{count}sn",
+  "timeCompactMins": "{count}dk",
+  "timeCompactMinsAndSecs": "{mins}dk {secs}sn",
+  "timeCompactHours": "{count}sa",
+  "timeCompactHoursAndMins": "{hours}sa {mins}dk"
 }

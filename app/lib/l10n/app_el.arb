@@ -2439,5 +2439,21 @@
   "pdfTitleLabel": "Τίτλος: {title}",
   "conversationNewIndicator": "Νέο 🚀",
   "conversationPhotosCount": "{count} φωτογραφίες",
-  "mergingStatus": "Συγχώνευση..."
+  "mergingStatus": "Συγχώνευση...",
+  "timeSecsSingular": "{count} δευτ",
+  "timeSecsPlural": "{count} δευτ",
+  "timeMinSingular": "{count} λεπτό",
+  "timeMinsPlural": "{count} λεπτά",
+  "timeMinsAndSecs": "{mins} λεπτά {secs} δευτ",
+  "timeHourSingular": "{count} ώρα",
+  "timeHoursPlural": "{count} ώρες",
+  "timeHoursAndMins": "{hours} ώρες {mins} λεπτά",
+  "timeDaySingular": "{count} ημέρα",
+  "timeDaysPlural": "{count} ημέρες",
+  "timeDaysAndHours": "{days} ημέρες {hours} ώρες",
+  "timeCompactSecs": "{count}δ",
+  "timeCompactMins": "{count}λ",
+  "timeCompactMinsAndSecs": "{mins}λ {secs}δ",
+  "timeCompactHours": "{count}ω",
+  "timeCompactHoursAndMins": "{hours}ω {mins}λ"
 }
