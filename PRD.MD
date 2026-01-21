@@ -42,7 +42,7 @@ Total languages with missing translations: **31**
 | Norwegian | no | 22 | HIGH |
 | Polish | pl | 0 | ✅ DONE |
 | Portuguese | pt | 0 | ✅ DONE |
-| Romanian | ro | 22 | HIGH |
+| Romanian | ro | 0 | ✅ DONE |
 | Russian | ru | 22 | HIGH |
 | Slovak | sk | 22 | HIGH |
 | Swedish | sv | 22 | HIGH |
