@@ -59,7 +59,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
   [x] pt (Portuguese) - 22 keys
   [x] ro (Romanian) - 22 keys
   [x] ru (Russian) - 22 keys
-  [ ] sk (Slovak) - 22 keys
+  [x] sk (Slovak) - 22 keys
   [ ] sv (Swedish) - 22 keys
   [ ] th (Thai) - 22 keys
   [ ] tr (Turkish) - 22 keys
@@ -139,7 +139,7 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 22/31 languages completed
+Part 1 Progress: 23/31 languages completed
 Part 2 Progress: 0/7 files completed
 Overall Progress: ~36%
 
@@ -323,3 +323,13 @@ Overall Progress: ~36%
     replySentSuccessfully, send, starFilter, writeYourReply
   - flutter gen-l10n: PASSED
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Added 22 missing translation keys to Slovak (app_sk.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
