@@ -7655,4 +7655,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Nu s-a reușit transcrierea audio';
+
+  @override
+  String get locationPermissionRequired => 'Permisiune de locație necesară';
+
+  @override
+  String get locationPermissionContent =>
+      'Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.';
 }

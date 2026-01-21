@@ -2413,5 +2413,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Ungültige Webhook-URL für erstellte Konversation",
   "devModeInvalidDaySummaryWebhookUrl": "Ungültige Webhook-URL für Tageszusammenfassung",
   "devModeSettingsSaved": "Einstellungen gespeichert!",
-  "voiceFailedToTranscribe": "Audiotranskription fehlgeschlagen"
+  "voiceFailedToTranscribe": "Audiotranskription fehlgeschlagen",
+  "locationPermissionRequired": "Standortberechtigung erforderlich",
+  "locationPermissionContent": "Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren."
 }

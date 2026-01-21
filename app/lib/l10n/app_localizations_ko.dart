@@ -7496,4 +7496,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => '오디오 텍스트 변환 실패';
+
+  @override
+  String get locationPermissionRequired => '위치 권한 필요';
+
+  @override
+  String get locationPermissionContent => '빠른 전송을 위해 WiFi 연결 확인에 위치 권한이 필요합니다. 계속하려면 위치 권한을 부여해 주세요.';
 }

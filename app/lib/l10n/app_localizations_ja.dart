@@ -7494,4 +7494,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => '音声の文字起こしに失敗しました';
+
+  @override
+  String get locationPermissionRequired => '位置情報の許可が必要です';
+
+  @override
+  String get locationPermissionContent => '高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。';
 }

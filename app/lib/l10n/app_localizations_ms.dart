@@ -7640,4 +7640,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Gagal mentranskrip audio';
+
+  @override
+  String get locationPermissionRequired => 'Kebenaran lokasi diperlukan';
+
+  @override
+  String get locationPermissionContent =>
+      'Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan.';
 }

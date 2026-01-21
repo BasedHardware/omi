@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Ongeldige webhook-URL voor aangemaakte conversatie",
   "devModeInvalidDaySummaryWebhookUrl": "Ongeldige webhook-URL voor dagsamenvatting",
   "devModeSettingsSaved": "Instellingen opgeslagen!",
-  "voiceFailedToTranscribe": "Audiotranscriptie mislukt"
+  "voiceFailedToTranscribe": "Audiotranscriptie mislukt",
+  "locationPermissionRequired": "Locatiemachtiging vereist",
+  "locationPermissionContent": "Snelle overdracht vereist locatietoestemming om de WiFi-verbinding te verifiëren. Verleen alstublieft locatietoestemming om door te gaan."
 }

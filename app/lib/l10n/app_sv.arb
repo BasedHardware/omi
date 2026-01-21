@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Ogiltig webhook-URL för skapad konversation",
   "devModeInvalidDaySummaryWebhookUrl": "Ogiltig webhook-URL för daglig sammanfattning",
   "devModeSettingsSaved": "Inställningar sparade!",
-  "voiceFailedToTranscribe": "Kunde inte transkribera ljud"
+  "voiceFailedToTranscribe": "Kunde inte transkribera ljud",
+  "locationPermissionRequired": "Platstillstånd krävs",
+  "locationPermissionContent": "Snabb överföring kräver platstillstånd för att verifiera WiFi-anslutningen. Vänligen ge platstillstånd för att fortsätta."
 }

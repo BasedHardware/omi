@@ -7615,4 +7615,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Nepodařilo se přepsat zvuk';
+
+  @override
+  String get locationPermissionRequired => 'Vyžadováno oprávnění k poloze';
+
+  @override
+  String get locationPermissionContent =>
+      'Rychlý přenos vyžaduje oprávnění k poloze pro ověření WiFi připojení. Prosím, udělte oprávnění k poloze pro pokračování.';
 }

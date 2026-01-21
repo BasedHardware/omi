@@ -7621,4 +7621,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Nepavyko transkribuoti garso';
+
+  @override
+  String get locationPermissionRequired => 'Reikalingas vietos leidimas';
+
+  @override
+  String get locationPermissionContent =>
+      'Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti.';
 }

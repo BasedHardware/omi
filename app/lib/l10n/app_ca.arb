@@ -2414,5 +2414,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "URL del webhook de conversa creada no vàlida",
   "devModeInvalidDaySummaryWebhookUrl": "URL del webhook de resum del dia no vàlida",
   "devModeSettingsSaved": "Configuració desada!",
-  "voiceFailedToTranscribe": "No s'ha pogut transcriure l'àudio"
+  "voiceFailedToTranscribe": "No s'ha pogut transcriure l'àudio",
+  "locationPermissionRequired": "Es requereix permís d'ubicació",
+  "locationPermissionContent": "La transferència ràpida requereix permís d'ubicació per verificar la connexió WiFi. Si us plau, concediu el permís d'ubicació per continuar."
 }

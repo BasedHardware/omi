@@ -7567,4 +7567,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'فشل في نسخ الصوت';
+
+  @override
+  String get locationPermissionRequired => 'إذن الموقع مطلوب';
+
+  @override
+  String get locationPermissionContent =>
+      'يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة.';
 }

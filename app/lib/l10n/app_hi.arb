@@ -2432,5 +2432,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "अमान्य वार्तालाप निर्मित वेबहुक URL",
   "devModeInvalidDaySummaryWebhookUrl": "अमान्य दैनिक सारांश वेबहुक URL",
   "devModeSettingsSaved": "सेटिंग्स सहेजी गईं!",
-  "voiceFailedToTranscribe": "ऑडियो ट्रांसक्राइब करने में विफल"
+  "voiceFailedToTranscribe": "ऑडियो ट्रांसक्राइब करने में विफल",
+  "locationPermissionRequired": "स्थान अनुमति आवश्यक",
+  "locationPermissionContent": "फास्ट ट्रांसफर को WiFi कनेक्शन सत्यापित करने के लिए स्थान अनुमति की आवश्यकता है। कृपया जारी रखने के लिए स्थान अनुमति दें।"
 }

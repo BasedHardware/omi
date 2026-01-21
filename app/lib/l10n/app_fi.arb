@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Virheellinen luodun keskustelun webhook-URL",
   "devModeInvalidDaySummaryWebhookUrl": "Virheellinen päiväyhteenvedon webhook-URL",
   "devModeSettingsSaved": "Asetukset tallennettu!",
-  "voiceFailedToTranscribe": "Äänen litterointi epäonnistui"
+  "voiceFailedToTranscribe": "Äänen litterointi epäonnistui",
+  "locationPermissionRequired": "Sijaintilupa vaaditaan",
+  "locationPermissionContent": "Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi."
 }

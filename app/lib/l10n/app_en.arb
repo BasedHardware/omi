@@ -9490,5 +9490,13 @@
   "voiceFailedToTranscribe": "Failed to transcribe audio",
   "@voiceFailedToTranscribe": {
     "description": "Error message when voice transcription fails"
+  },
+  "locationPermissionRequired": "Location Permission Required",
+  "@locationPermissionRequired": {
+    "description": "Title for dialog requesting location permission"
+  },
+  "locationPermissionContent": "Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.",
+  "@locationPermissionContent": {
+    "description": "Explanation text for location permission dialog"
   }
 }

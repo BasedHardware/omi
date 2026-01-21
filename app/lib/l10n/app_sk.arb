@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Neplatná URL adresa webhooku pre vytvorený rozhovor",
   "devModeInvalidDaySummaryWebhookUrl": "Neplatná URL adresa webhooku pre denný súhrn",
   "devModeSettingsSaved": "Nastavenia uložené!",
-  "voiceFailedToTranscribe": "Nepodarilo sa prepísať zvuk"
+  "voiceFailedToTranscribe": "Nepodarilo sa prepísať zvuk",
+  "locationPermissionRequired": "Vyžaduje sa povolenie polohy",
+  "locationPermissionContent": "Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie."
 }

@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Nieprawidłowy URL webhooka utworzonej konwersacji",
   "devModeInvalidDaySummaryWebhookUrl": "Nieprawidłowy URL webhooka dziennego podsumowania",
   "devModeSettingsSaved": "Ustawienia zapisane!",
-  "voiceFailedToTranscribe": "Nie udało się transkrybować dźwięku"
+  "voiceFailedToTranscribe": "Nie udało się transkrybować dźwięku",
+  "locationPermissionRequired": "Potrzebne uprawnienie do lokalizacji",
+  "locationPermissionContent": "Szybki transfer wymaga uprawnienia do lokalizacji, aby zweryfikować połączenie WiFi. Proszę przyznać uprawnienie do lokalizacji, aby kontynuować."
 }

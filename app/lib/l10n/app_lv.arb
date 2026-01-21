@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Nederīgs izveidotās sarunas webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "Nederīgs dienas kopsavilkuma webhook URL",
   "devModeSettingsSaved": "Iestatījumi saglabāti!",
-  "voiceFailedToTranscribe": "Neizdevās transkribēt audio"
+  "voiceFailedToTranscribe": "Neizdevās transkribēt audio",
+  "locationPermissionRequired": "Nepieciešama atrašanās vietas atļauja",
+  "locationPermissionContent": "Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu."
 }

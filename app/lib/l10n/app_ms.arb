@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "URL webhook perbualan dicipta tidak sah",
   "devModeInvalidDaySummaryWebhookUrl": "URL webhook ringkasan harian tidak sah",
   "devModeSettingsSaved": "Tetapan disimpan!",
-  "voiceFailedToTranscribe": "Gagal mentranskrip audio"
+  "voiceFailedToTranscribe": "Gagal mentranskrip audio",
+  "locationPermissionRequired": "Kebenaran lokasi diperlukan",
+  "locationPermissionContent": "Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan."
 }

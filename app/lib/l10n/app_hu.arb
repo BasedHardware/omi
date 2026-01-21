@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Érvénytelen létrehozott beszélgetés webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "Érvénytelen napi összefoglaló webhook URL",
   "devModeSettingsSaved": "Beállítások mentve!",
-  "voiceFailedToTranscribe": "Nem sikerült átírni a hangot"
+  "voiceFailedToTranscribe": "Nem sikerült átírni a hangot",
+  "locationPermissionRequired": "Helymeghatározási engedély szükséges",
+  "locationPermissionContent": "A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz."
 }

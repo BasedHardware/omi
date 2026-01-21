@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Neteisingas sukurto pokalbio webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "Neteisingas dienos santraukos webhook URL",
   "devModeSettingsSaved": "Nustatymai išsaugoti!",
-  "voiceFailedToTranscribe": "Nepavyko transkribuoti garso"
+  "voiceFailedToTranscribe": "Nepavyko transkribuoti garso",
+  "locationPermissionRequired": "Reikalingas vietos leidimas",
+  "locationPermissionContent": "Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti."
 }

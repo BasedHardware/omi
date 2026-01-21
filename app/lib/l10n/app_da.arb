@@ -2389,5 +2389,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Ugyldig webhook-URL til oprettet samtale",
   "devModeInvalidDaySummaryWebhookUrl": "Ugyldig webhook-URL til daglig opsummering",
   "devModeSettingsSaved": "Indstillinger gemt!",
-  "voiceFailedToTranscribe": "Kunne ikke transskribere lyd"
+  "voiceFailedToTranscribe": "Kunne ikke transskribere lyd",
+  "locationPermissionRequired": "Placeringstilladelse påkrævet",
+  "locationPermissionContent": "Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte."
 }

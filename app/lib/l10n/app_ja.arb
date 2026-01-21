@@ -2432,5 +2432,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "会話作成のWebhook URLが無効です",
   "devModeInvalidDaySummaryWebhookUrl": "日次サマリーのWebhook URLが無効です",
   "devModeSettingsSaved": "設定を保存しました！",
-  "voiceFailedToTranscribe": "音声の文字起こしに失敗しました"
+  "voiceFailedToTranscribe": "音声の文字起こしに失敗しました",
+  "locationPermissionRequired": "位置情報の許可が必要です",
+  "locationPermissionContent": "高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。"
 }

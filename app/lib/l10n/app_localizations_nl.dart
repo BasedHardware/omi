@@ -7640,4 +7640,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Audiotranscriptie mislukt';
+
+  @override
+  String get locationPermissionRequired => 'Locatiemachtiging vereist';
+
+  @override
+  String get locationPermissionContent =>
+      'Snelle overdracht vereist locatietoestemming om de WiFi-verbinding te verifiëren. Verleen alstublieft locatietoestemming om door te gaan.';
 }

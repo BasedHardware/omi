@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Kehtetu loodud vestluse veebihaagi URL",
   "devModeInvalidDaySummaryWebhookUrl": "Kehtetu päeva kokkuvõtte veebihaagi URL",
   "devModeSettingsSaved": "Seaded salvestatud!",
-  "voiceFailedToTranscribe": "Heli transkribeerimine ebaõnnestus"
+  "voiceFailedToTranscribe": "Heli transkribeerimine ebaõnnestus",
+  "locationPermissionRequired": "Asukoha luba nõutav",
+  "locationPermissionContent": "Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba."
 }

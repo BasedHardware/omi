@@ -7623,4 +7623,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Kunde inte transkribera ljud';
+
+  @override
+  String get locationPermissionRequired => 'Platstillstånd krävs';
+
+  @override
+  String get locationPermissionContent =>
+      'Snabb överföring kräver platstillstånd för att verifiera WiFi-anslutningen. Vänligen ge platstillstånd för att fortsätta.';
 }

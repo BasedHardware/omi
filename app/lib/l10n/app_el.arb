@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για δημιουργημένη συνομιλία",
   "devModeInvalidDaySummaryWebhookUrl": "Μη έγκυρη διεύθυνση URL webhook για ημερήσια σύνοψη",
   "devModeSettingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν!",
-  "voiceFailedToTranscribe": "Αποτυχία μεταγραφής ήχου"
+  "voiceFailedToTranscribe": "Αποτυχία μεταγραφής ήχου",
+  "locationPermissionRequired": "Απαιτείται άδεια τοποθεσίας",
+  "locationPermissionContent": "Η γρήγορη μεταφορά απαιτεί άδεια τοποθεσίας για να επαληθεύσει τη σύνδεση WiFi. Παρακαλώ δώστε άδεια τοποθεσίας για να συνεχίσετε."
 }

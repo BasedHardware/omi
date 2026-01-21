@@ -7651,4 +7651,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Неуспешно транскрибиране на аудио';
+
+  @override
+  String get locationPermissionRequired => 'Изисква се разрешение за местоположение';
+
+  @override
+  String get locationPermissionContent =>
+      'Бързият трансфер изисква разрешение за местоположение, за да провери WiFi връзката. Моля, разрешете достъп до местоположението, за да продължите.';
 }

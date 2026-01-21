@@ -7622,4 +7622,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Nepodarilo sa prepísať zvuk';
+
+  @override
+  String get locationPermissionRequired => 'Vyžaduje sa povolenie polohy';
+
+  @override
+  String get locationPermissionContent =>
+      'Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie.';
 }

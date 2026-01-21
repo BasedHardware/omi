@@ -7629,4 +7629,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Không thể chuyển đổi giọng nói thành văn bản';
+
+  @override
+  String get locationPermissionRequired => 'Cần cấp quyền vị trí';
+
+  @override
+  String get locationPermissionContent =>
+      'Truyền nhanh cần quyền vị trí để xác minh kết nối WiFi. Vui lòng cấp quyền vị trí để tiếp tục.';
 }

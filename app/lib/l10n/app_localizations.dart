@@ -14264,6 +14264,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to transcribe audio'**
   String get voiceFailedToTranscribe;
+
+  /// Title for dialog requesting location permission
+  ///
+  /// In en, this message translates to:
+  /// **'Location Permission Required'**
+  String get locationPermissionRequired;
+
+  /// Explanation text for location permission dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.'**
+  String get locationPermissionContent;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

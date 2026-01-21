@@ -7618,4 +7618,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Heli transkribeerimine ebaõnnestus';
+
+  @override
+  String get locationPermissionRequired => 'Asukoha luba nõutav';
+
+  @override
+  String get locationPermissionContent =>
+      'Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.';
 }

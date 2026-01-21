@@ -7631,4 +7631,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Ses metne dönüştürülemedi';
+
+  @override
+  String get locationPermissionRequired => 'Konum izni gerekli';
+
+  @override
+  String get locationPermissionContent =>
+      'Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin.';
 }

@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Недействительный URL вебхука созданной беседы",
   "devModeInvalidDaySummaryWebhookUrl": "Недействительный URL вебхука дневного отчёта",
   "devModeSettingsSaved": "Настройки сохранены!",
-  "voiceFailedToTranscribe": "Не удалось транскрибировать аудио"
+  "voiceFailedToTranscribe": "Не удалось транскрибировать аудио",
+  "locationPermissionRequired": "Требуется разрешение на местоположение",
+  "locationPermissionContent": "Для быстрой передачи требуется разрешение на определение местоположения для проверки WiFi-соединения. Пожалуйста, предоставьте разрешение на местоположение, чтобы продолжить."
 }

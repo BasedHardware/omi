@@ -7627,4 +7627,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Kunne ikke transskribere lyd';
+
+  @override
+  String get locationPermissionRequired => 'Placeringstilladelse påkrævet';
+
+  @override
+  String get locationPermissionContent =>
+      'Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte.';
 }

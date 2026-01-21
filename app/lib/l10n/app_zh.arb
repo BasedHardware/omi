@@ -2432,5 +2432,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "无效的对话创建 webhook URL",
   "devModeInvalidDaySummaryWebhookUrl": "无效的每日摘要 webhook URL",
   "devModeSettingsSaved": "设置已保存！",
-  "voiceFailedToTranscribe": "音频转录失败"
+  "voiceFailedToTranscribe": "音频转录失败",
+  "locationPermissionRequired": "位置权限请求",
+  "locationPermissionContent": "快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。"
 }

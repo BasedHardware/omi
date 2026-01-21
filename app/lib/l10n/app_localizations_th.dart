@@ -7582,4 +7582,11 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'ไม่สามารถถอดเสียงได้';
+
+  @override
+  String get locationPermissionRequired => 'ต้องได้รับอนุญาตตำแหน่ง';
+
+  @override
+  String get locationPermissionContent =>
+      'การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ';
 }

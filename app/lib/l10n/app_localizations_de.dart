@@ -7688,4 +7688,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Audiotranskription fehlgeschlagen';
+
+  @override
+  String get locationPermissionRequired => 'Standortberechtigung erforderlich';
+
+  @override
+  String get locationPermissionContent =>
+      'Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren.';
 }

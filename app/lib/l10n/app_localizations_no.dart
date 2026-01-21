@@ -7614,4 +7614,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Kunne ikke transkribere lyd';
+
+  @override
+  String get locationPermissionRequired => 'Plasseringstillatelse kreves';
+
+  @override
+  String get locationPermissionContent =>
+      'Hurtig overføring krever plasseringstillatelse for å verifisere WiFi-tilkobling. Gi plasseringstillatelse for å fortsette.';
 }

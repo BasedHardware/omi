@@ -7666,4 +7666,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'No s\'ha pogut transcriure l\'àudio';
+
+  @override
+  String get locationPermissionRequired => 'Es requereix permís d\'ubicació';
+
+  @override
+  String get locationPermissionContent =>
+      'La transferència ràpida requereix permís d\'ubicació per verificar la connexió WiFi. Si us plau, concediu el permís d\'ubicació per continuar.';
 }

@@ -7599,4 +7599,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'ऑडियो ट्रांसक्राइब करने में विफल';
+
+  @override
+  String get locationPermissionRequired => 'स्थान अनुमति आवश्यक';
+
+  @override
+  String get locationPermissionContent =>
+      'फास्ट ट्रांसफर को WiFi कनेक्शन सत्यापित करने के लिए स्थान अनुमति की आवश्यकता है। कृपया जारी रखने के लिए स्थान अनुमति दें।';
 }

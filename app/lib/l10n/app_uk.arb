@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Недійсний URL вебхука створеної бесіди",
   "devModeInvalidDaySummaryWebhookUrl": "Недійсний URL вебхука денного звіту",
   "devModeSettingsSaved": "Налаштування збережено!",
-  "voiceFailedToTranscribe": "Не вдалося транскрибувати аудіо"
+  "voiceFailedToTranscribe": "Не вдалося транскрибувати аудіо",
+  "locationPermissionRequired": "Потрібен дозвіл на місцезнаходження",
+  "locationPermissionContent": "Для швидкої передачі потрібен дозвіл на місцезнаходження для перевірки з'єднання WiFi. Будь ласка, надайте дозвіл на місцезнаходження, щоб продовжити."
 }

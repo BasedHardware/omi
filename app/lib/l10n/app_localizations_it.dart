@@ -7664,4 +7664,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Trascrizione audio non riuscita';
+
+  @override
+  String get locationPermissionRequired => 'Autorizzazione posizione richiesta';
+
+  @override
+  String get locationPermissionContent =>
+      'Il trasferimento rapido richiede l\'autorizzazione alla posizione per verificare la connessione WiFi. Concedi l\'autorizzazione alla posizione per continuare.';
 }

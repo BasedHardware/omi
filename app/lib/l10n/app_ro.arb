@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "URL webhook pentru conversație creată invalidă",
   "devModeInvalidDaySummaryWebhookUrl": "URL webhook pentru rezumatul zilnic invalidă",
   "devModeSettingsSaved": "Setări salvate!",
-  "voiceFailedToTranscribe": "Nu s-a reușit transcrierea audio"
+  "voiceFailedToTranscribe": "Nu s-a reușit transcrierea audio",
+  "locationPermissionRequired": "Permisiune de locație necesară",
+  "locationPermissionContent": "Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua."
 }

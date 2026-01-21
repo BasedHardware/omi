@@ -7635,4 +7635,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Neizdevās transkribēt audio';
+
+  @override
+  String get locationPermissionRequired => 'Nepieciešama atrašanās vietas atļauja';
+
+  @override
+  String get locationPermissionContent =>
+      'Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu.';
 }

@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "URL เว็บฮุคการสร้างการสนทนาไม่ถูกต้อง",
   "devModeInvalidDaySummaryWebhookUrl": "URL เว็บฮุคสรุปรายวันไม่ถูกต้อง",
   "devModeSettingsSaved": "บันทึกการตั้งค่าแล้ว!",
-  "voiceFailedToTranscribe": "ไม่สามารถถอดเสียงได้"
+  "voiceFailedToTranscribe": "ไม่สามารถถอดเสียงได้",
+  "locationPermissionRequired": "ต้องได้รับอนุญาตตำแหน่ง",
+  "locationPermissionContent": "การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ"
 }

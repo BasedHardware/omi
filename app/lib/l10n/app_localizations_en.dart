@@ -7617,4 +7617,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Failed to transcribe audio';
+
+  @override
+  String get locationPermissionRequired => 'Location Permission Required';
+
+  @override
+  String get locationPermissionContent =>
+      'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.';
 }

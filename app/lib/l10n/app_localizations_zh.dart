@@ -7484,4 +7484,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => '音频转录失败';
+
+  @override
+  String get locationPermissionRequired => '位置权限请求';
+
+  @override
+  String get locationPermissionContent => '快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。';
 }

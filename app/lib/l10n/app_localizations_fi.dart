@@ -7616,4 +7616,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Äänen litterointi epäonnistui';
+
+  @override
+  String get locationPermissionRequired => 'Sijaintilupa vaaditaan';
+
+  @override
+  String get locationPermissionContent =>
+      'Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi.';
 }

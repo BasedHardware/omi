@@ -7636,4 +7636,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Gagal mentranskripsikan audio';
+
+  @override
+  String get locationPermissionRequired => 'Izin lokasi diperlukan';
+
+  @override
+  String get locationPermissionContent =>
+      'Transfer Cepat memerlukan izin lokasi untuk memverifikasi koneksi WiFi. Harap berikan izin lokasi untuk melanjutkan.';
 }

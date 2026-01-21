@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "URL webhook conversazione creata non valido",
   "devModeInvalidDaySummaryWebhookUrl": "URL webhook riepilogo giornaliero non valido",
   "devModeSettingsSaved": "Impostazioni salvate!",
-  "voiceFailedToTranscribe": "Trascrizione audio non riuscita"
+  "voiceFailedToTranscribe": "Trascrizione audio non riuscita",
+  "locationPermissionRequired": "Autorizzazione posizione richiesta",
+  "locationPermissionContent": "Il trasferimento rapido richiede l'autorizzazione alla posizione per verificare la connessione WiFi. Concedi l'autorizzazione alla posizione per continuare."
 }

@@ -2431,5 +2431,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "Geçersiz oluşturulan konuşma webhook URL'si",
   "devModeInvalidDaySummaryWebhookUrl": "Geçersiz günlük özet webhook URL'si",
   "devModeSettingsSaved": "Ayarlar kaydedildi!",
-  "voiceFailedToTranscribe": "Ses metne dönüştürülemedi"
+  "voiceFailedToTranscribe": "Ses metne dönüştürülemedi",
+  "locationPermissionRequired": "Konum izni gerekli",
+  "locationPermissionContent": "Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin."
 }

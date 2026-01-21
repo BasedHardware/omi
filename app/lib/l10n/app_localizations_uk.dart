@@ -7628,4 +7628,11 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Не вдалося транскрибувати аудіо';
+
+  @override
+  String get locationPermissionRequired => 'Потрібен дозвіл на місцезнаходження';
+
+  @override
+  String get locationPermissionContent =>
+      'Для швидкої передачі потрібен дозвіл на місцезнаходження для перевірки з\'єднання WiFi. Будь ласка, надайте дозвіл на місцезнаходження, щоб продовжити.';
 }

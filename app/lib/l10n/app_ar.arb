@@ -2412,5 +2412,7 @@
   "devModeInvalidConversationCreatedWebhookUrl": "عنوان URL للويب هوك لإنشاء المحادثة غير صالح",
   "devModeInvalidDaySummaryWebhookUrl": "عنوان URL للويب هوك لملخص اليوم غير صالح",
   "devModeSettingsSaved": "تم حفظ الإعدادات!",
-  "voiceFailedToTranscribe": "فشل في نسخ الصوت"
+  "voiceFailedToTranscribe": "فشل في نسخ الصوت",
+  "locationPermissionRequired": "إذن الموقع مطلوب",
+  "locationPermissionContent": "يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة."
 }

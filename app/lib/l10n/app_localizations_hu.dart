@@ -7655,4 +7655,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voiceFailedToTranscribe => 'Nem sikerült átírni a hangot';
+
+  @override
+  String get locationPermissionRequired => 'Helymeghatározási engedély szükséges';
+
+  @override
+  String get locationPermissionContent =>
+      'A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.';
 }
