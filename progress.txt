@@ -18,14 +18,14 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] Add speech_sample_transcripts: Optional[List[str]] = None
       - [x] Add speech_samples_version: int = 1
 
-- [ ] 3. Update database functions
+- [x] 3. Update database functions
       File: backend/database/users.py
-      - [ ] Update add_person_speech_sample() to accept transcript parameter
-      - [ ] Update remove_person_speech_sample() to remove by index (keep arrays in sync)
-      - [ ] Add set_person_speech_sample_transcript()
-      - [ ] Add update_person_speech_samples_after_migration()
-      - [ ] Add clear_person_speaker_embedding()
-      - [ ] Add update_person_speech_samples_version()
+      - [x] Update add_person_speech_sample() to accept transcript parameter
+      - [x] Update remove_person_speech_sample() to remove by index (keep arrays in sync)
+      - [x] Add set_person_speech_sample_transcript()
+      - [x] Add update_person_speech_samples_after_migration()
+      - [x] Add clear_person_speaker_embedding()
+      - [x] Add update_person_speech_samples_version()
 
 - [ ] 4. Update speaker identification
       File: backend/utils/speaker_identification.py
