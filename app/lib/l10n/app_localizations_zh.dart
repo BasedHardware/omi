@@ -30,7 +30,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get confirm => '确认';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => '取消';
 
   @override
   String get ok => '确定';
@@ -413,7 +413,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planAndUsage => '套餐与用量';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => '离线同步';
 
   @override
   String get deviceSettings => '设备设置';
@@ -572,7 +572,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get starOngoing => '星标当前对话';
 
   @override
-  String get off => 'Off';
+  String get off => '关闭';
 
   @override
   String get max => '最大';
@@ -1128,7 +1128,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yes => '是';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => '编辑姓名';
 
   @override
   String get howShouldOmiCallYou => 'Omi 应该怎么称呼您？';
@@ -2099,7 +2099,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get saveMemory => '保存记忆';
 
   @override
-  String get retry => 'Retry';
+  String get retry => '重试';
 
   @override
   String get createActionItem => '创建操作项';
@@ -2347,7 +2347,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unpairAndForgetDevice => '取消配对并忘记设备';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => '未知设备';
 
   @override
   String get unknown => '未知';
@@ -2745,7 +2745,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get browseInstallCreateApps => '浏览、安装和创建应用';
 
   @override
-  String get all => 'All';
+  String get all => '全部';
 
   @override
   String get open => '打开';
@@ -3199,13 +3199,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get help => '帮助';
 
   @override
-  String get pro => 'Pro';
+  String get pro => '专业版';
 
   @override
   String get upgradeToPro => '升级至Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => '获取 Omi 设备';
 
   @override
   String get wearableAiCompanion => '可穿戴AI伴侣';
@@ -3760,7 +3760,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get signOutQuestion => '退出登录？';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => '您确定要退出登录吗？';
 
   @override
   String get customVocabularyHeader => '自定义词汇';
@@ -4798,10 +4798,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enable => '启用';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => '将音频存储在手机上';
 
   @override
-  String get on => 'On';
+  String get on => '开启';
 
   @override
   String get storeAudioDescription => '将所有音频录音存储在手机本地。禁用时，仅保留上传失败的文件以节省存储空间。';
@@ -4819,7 +4819,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get enableCloudStorage => '启用云存储';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => '将音频存储在云端';
 
   @override
   String get cloudStorageDialogMessage => '您的实时录音将在您说话时存储在私有云存储中。';
@@ -5391,7 +5391,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wrappedTasksCompleted => '任务已完成';
 
   @override
-  String get wrappedTopFivePhrases => 'Top 5 短语';
+  String get wrappedTopFivePhrases => '前 5 常用短语';
 
   @override
   String get wrappedAGreatDay => '美好的一天';
@@ -5700,117 +5700,117 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseFile => '选择文件';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => '配置您的 AI 角色';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => '将 AI 助手连接到您的数据';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => '在主页上跟踪您的个人目标';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => '删除录音';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => '此操作无法撤销。';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'SD 卡';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => '来自 SD 卡';
 
   @override
-  String get limitless => 'Limitless';
+  String get limitless => '无限';
 
   @override
   String get fastTransfer => '快速传输';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => '同步中';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => '失败';
 
   @override
   String etaLabel(String time) {
-    return 'ETA: $time';
+    return '预计时间：$time';
   }
 
   @override
   String get transferMethod => '传输方式';
 
   @override
-  String get fast => 'Fast';
+  String get fast => '快速';
 
   @override
-  String get ble => 'BLE';
+  String get ble => '蓝牙低功耗';
 
   @override
-  String get phone => 'Phone';
+  String get phone => '手机';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => '取消同步';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => '已下载的数据将被保存。您可以稍后继续。';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => '同步已取消';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => '删除已处理的文件';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => '已处理的文件已删除';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => '无法在设备上启用 WiFi。请重试。';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => '您的设备不支持快速传输。请改用蓝牙。';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => '请启用您手机的热点并重试。';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => '无法开始传输。请重试。';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => '设备无响应。请重试。';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'WiFi 凭据无效。请检查您的热点设置。';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'WiFi 连接失败。请重试。';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'SD 卡处理中';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return '正在处理 $count 个录音。处理后文件将从 SD 卡中删除。';
   }
 
   @override
-  String get process => 'Process';
+  String get process => '处理';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi 同步失败';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => '处理失败';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => '正在从 SD 卡下载';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return '正在处理 $current/$total';
   }
 
   @override
@@ -5819,28 +5819,28 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => '需要互联网连接';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => '处理音频';
 
   @override
-  String get start => 'Start';
+  String get start => '开始';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => '没有录音';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => '来自 Omi 设备的音频将显示在这里';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => '删除已处理的';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => '尝试其他筛选条件';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => '录音';
 
   @override
   String get enableRemindersAccess => '请在设置中启用提醒事项访问权限以使用 Apple 提醒事项';
@@ -6133,7 +6133,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => '设备';
 
   @override
   String get chatAssistantsTitle => '聊天助手';
@@ -6190,7 +6190,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get writeReviewOptional => '撰写评论（可选）';
 
   @override
-  String get setupQuestionsIntro => '回答几个问题帮助我们改进 Omi。 🫶 💜';
+  String get setupQuestionsIntro => '告诉我们关于您自己的信息。这将帮助 Omi 更好地支持您。';
 
   @override
   String get setupQuestionProfession => '1. 你的职业是什么？';
@@ -6208,7 +6208,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupSkipHelp => '跳过，我不想帮忙 :C';
 
   @override
-  String get professionEntrepreneur => '创业者';
+  String get professionEntrepreneur => '企业家';
 
   @override
   String get professionSoftwareEngineer => '软件工程师';
@@ -6217,10 +6217,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get professionProductManager => '产品经理';
 
   @override
-  String get professionExecutive => '高管';
+  String get professionExecutive => '高管/经理';
 
   @override
-  String get professionSales => '销售';
+  String get professionSales => '销售/市场营销';
 
   @override
   String get professionStudent => '学生';
@@ -6402,32 +6402,31 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => '分享公开链接';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => '公开角色';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => '已连接的知识数据';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => '输入姓名';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => '断开 Twitter 连接';
 
   @override
-  String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+  String get disconnectTwitterConfirmation => '您确定要断开 Twitter 账户连接吗？您的角色将无法再访问您的 Twitter 数据。';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => '通过您的个人对话创建更准确的克隆';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => '获取 Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => '我有 Omi 设备';
 
   @override
   String get goal => '目标';
@@ -6502,31 +6501,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return '标记说话者 $speakerId';
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => '已存在同名的人员。';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => '要标记您自己，请从列表中选择\"您\"。';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => '输入人员姓名';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => '添加人员';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return '标记此说话者的其他片段（$selected/$total）';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => '标记其他片段';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => '管理人员';
 
   @override
   String get shareViaSms => '通过短信分享';
@@ -6596,124 +6595,122 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => '连接失败';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return '正在连接到 $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return '启用 $deviceName 的 WiFi';
   }
 
   @override
   String connectToDeviceName(String deviceName) {
-    return 'Connect to $deviceName';
+    return '连接到 $deviceName';
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => '录音详情';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD 卡';
 
   @override
-  String get storageLocationLimitlessPendant => 'Limitless Pendant';
+  String get storageLocationLimitlessPendant => 'Limitless 挂件';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => '手机';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => '手机（内存）';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return '存储在 $deviceName';
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => '传输中...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => '需要传输';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => '正在从设备 SD 卡下载音频';
 
   @override
-  String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription => '此录音存储在设备的 SD 卡上。将其传输到手机以播放或分享。';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => '取消传输';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => '传输到手机';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => '在您的设备上私密且安全';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => '录音信息';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => '传输进行中...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => '分享录音';
 
   @override
-  String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+  String get deleteRecordingConfirmation => '您确定要永久删除此录音吗？此操作无法撤销。';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => '录音 ID';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => '日期和时间';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => '时长';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => '音频格式';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => '存储位置';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => '估计大小';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => '设备型号';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => '设备 ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => '状态';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => '已处理';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => '未处理';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => '已切换到快速传输';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => '传输完成！您现在可以播放此录音了。';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return '传输失败：$error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => '传输已取消';
 
   @override
   String get fastTransferEnabled => '快速传输已启用';
@@ -6796,63 +6793,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errorUpdatingAppStatus => '更新应用状态时发生错误。';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => '正在计算...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return '大约还需 $minutes 分钟';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => '大约还需一分钟';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => '即将完成...';
 
   @override
-  String get omiSays => 'omi says';
+  String get omiSays => 'omi 说';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => '正在分析您的数据...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return '正在迁移到 $level 保护级别...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => '没有需要迁移的数据。正在完成...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return 'Migrating $itemType... $percentage%';
+    return '正在迁移 $itemType... $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => '所有对象已迁移。正在完成...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => '迁移过程中发生错误。请重试。';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => '迁移完成！';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return '您的数据现已受到新的 $level 设置保护。';
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => '聊天';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => '数据';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => '哎呀';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => '您摔倒了吗？';
 
   @override
   String get importantConversationTitle => '重要对话';
@@ -7089,54 +7086,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => '请先生成一个应用';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => '您的 X 用户名是什么？';
 
   @override
-  String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
+  String get xHandleDescription => '我们将根据您账户的活动\n预训练您的 Omi 克隆';
 
   @override
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => '请输入您的 X 用户名';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => '请输入有效的 X 用户名';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => '下一步';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => '连接 Omi 设备';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return '您正在将无限版计划切换到 $title。您确定要继续吗？';
   }
 
   @override
-  String get planUpgradeScheduledMessage =>
-      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage => '升级已安排！您的月度计划将持续到计费周期结束，届时自动切换为年度计划。';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => '无法安排计划变更。请重试。';
 
   @override
-  String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+  String get subscriptionReactivatedDefault => '您的订阅已重新激活！现在不收费 - 您将在当前周期结束时计费。';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => '订阅成功！您已为新的计费周期付费。';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => '无法处理订阅。请重试。';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => '无法打开升级页面。请重试。';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => '在此粘贴您的 JSON 配置...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7169,7 +7163,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dailyReflectionNotificationBody => '告诉我你今天过得怎么样';
 
   @override
-  String get actionItemReminderTitle => 'Omi提醒';
+  String get actionItemReminderTitle => 'Omi 提醒';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
