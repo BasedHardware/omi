@@ -2438,5 +2438,13 @@
   "timeCompactMins": "{count}м",
   "timeCompactMinsAndSecs": "{mins}м {secs}с",
   "timeCompactHours": "{count}ч",
-  "timeCompactHoursAndMins": "{hours}ч {mins}м"
+  "timeCompactHoursAndMins": "{hours}ч {mins}м",
+  "editReply": "Редактиране на отговор",
+  "failedToSendReply": "Неуспешно изпращане на отговор: {error}",
+  "noReviewsFound": "Няма намерени отзиви",
+  "reply": "Отговор",
+  "replySentSuccessfully": "Отговорът е изпратен успешно",
+  "send": "Изпрати",
+  "starFilter": "{count} звезда",
+  "writeYourReply": "Напишете вашия отговор..."
 }

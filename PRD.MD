@@ -21,7 +21,7 @@ Total languages with missing translations: **31**
 | Czech | cs | 0 | ✅ DONE |
 | Danish | da | 0 | ✅ DONE |
 | Arabic | ar | 0 | ✅ DONE |
-| Bulgarian | bg | 8 | MEDIUM |
+| Bulgarian | bg | 0 | ✅ DONE |
 | Catalan | ca | 8 | MEDIUM |
 | German | de | 8 | MEDIUM |
 | Greek | el | 0 | ✅ DONE |
