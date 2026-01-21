@@ -47,7 +47,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
   [x] hi (Hindi) - 22 keys
   [x] hu (Hungarian) - 22 keys
   [x] id (Indonesian) - 22 keys
-  [ ] it (Italian) - 22 keys
+  [x] it (Italian) - 22 keys
   [ ] ja (Japanese) - 22 keys
   [ ] ko (Korean) - 22 keys
   [ ] lt (Lithuanian) - 22 keys
@@ -139,9 +139,9 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 10/31 languages completed
+Part 1 Progress: 11/31 languages completed
 Part 2 Progress: 0/7 files completed
-Overall Progress: ~23%
+Overall Progress: ~26%
 
 ================================================================================
 
@@ -224,6 +224,15 @@ Overall Progress: ~23%
   - app/test.sh: PASSED (All tests passed!)
 
 [2026-01-21] Added 22 missing translation keys to Indonesian (app_id.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: PASSED (All tests passed!)
+
+[2026-01-21] Added 22 missing translation keys to Italian (app_it.arb)
   - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
     downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
     localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
