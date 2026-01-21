@@ -7590,4 +7590,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}t ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Flytt til mappe';
+
+  @override
+  String get noFoldersAvailable => 'Ingen mapper tilgjengelig';
 }

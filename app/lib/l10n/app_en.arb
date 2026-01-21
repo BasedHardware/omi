@@ -9692,5 +9692,13 @@
         "type": "int"
       }
     }
+  },
+  "moveToFolder": "Move to Folder",
+  "@moveToFolder": {
+    "description": "Title for the move to folder bottom sheet"
+  },
+  "noFoldersAvailable": "No folders available",
+  "@noFoldersAvailable": {
+    "description": "Message shown when there are no folders to move a conversation to"
   }
 }

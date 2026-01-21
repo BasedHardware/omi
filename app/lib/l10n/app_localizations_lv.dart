@@ -7590,4 +7590,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}h ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Pārvietot uz mapi';
+
+  @override
+  String get noFoldersAvailable => 'Nav pieejamu mapju';
 }

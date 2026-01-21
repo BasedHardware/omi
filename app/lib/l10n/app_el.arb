@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Η απάντηση στάλθηκε επιτυχώς",
   "send": "Αποστολή",
   "starFilter": "{count} Αστέρι",
-  "writeYourReply": "Γράψτε την απάντησή σας..."
+  "writeYourReply": "Γράψτε την απάντησή σας...",
+  "moveToFolder": "Μετακίνηση σε φάκελο",
+  "noFoldersAvailable": "Δεν υπάρχουν διαθέσιμοι φάκελοι"
 }

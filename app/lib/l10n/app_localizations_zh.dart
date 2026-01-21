@@ -7584,4 +7584,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '$hours时$mins分';
   }
+
+  @override
+  String get moveToFolder => '移动到文件夹';
+
+  @override
+  String get noFoldersAvailable => '没有可用的文件夹';
 }

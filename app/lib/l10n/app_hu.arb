@@ -2573,5 +2573,7 @@
   "writeYourReply": "Írja meg válaszát...",
   "@writeYourReply": {
     "description": "Hint text for reply input field"
-  }
+  },
+  "moveToFolder": "Áthelyezés mappába",
+  "noFoldersAvailable": "Nincsenek elérhető mappák"
 }

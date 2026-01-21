@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Vastus saadeti edukalt",
   "send": "Saada",
   "starFilter": "{count} tärni",
-  "writeYourReply": "Kirjuta oma vastus..."
+  "writeYourReply": "Kirjuta oma vastus...",
+  "moveToFolder": "Teisalda kausta",
+  "noFoldersAvailable": "Kaustad pole saadaval"
 }

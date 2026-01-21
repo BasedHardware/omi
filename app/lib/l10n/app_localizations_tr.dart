@@ -7590,4 +7590,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}sa ${mins}dk';
   }
+
+  @override
+  String get moveToFolder => 'Klasöre Taşı';
+
+  @override
+  String get noFoldersAvailable => 'Kullanılabilir klasör yok';
 }

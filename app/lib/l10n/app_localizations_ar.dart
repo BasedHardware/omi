@@ -7590,4 +7590,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '$hoursس $minsد';
   }
+
+  @override
+  String get moveToFolder => 'نقل إلى المجلد';
+
+  @override
+  String get noFoldersAvailable => 'لا توجد مجلدات متاحة';
 }

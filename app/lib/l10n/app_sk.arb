@@ -2482,5 +2482,7 @@
   "replySentSuccessfully": "Odpoveď bola úspešne odoslaná",
   "send": "Odoslať",
   "starFilter": "{count} hviezdička",
-  "writeYourReply": "Napíšte svoju odpoveď..."
+  "writeYourReply": "Napíšte svoju odpoveď...",
+  "moveToFolder": "Presunúť do priečinka",
+  "noFoldersAvailable": "Žiadne priečinky nie sú k dispozícii"
 }

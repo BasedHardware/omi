@@ -2477,5 +2477,7 @@
   "starFilter": "{count} Зірок",
   "noReviewsFound": "Відгуків не знайдено",
   "editReply": "Редагувати відповідь",
-  "reply": "Відповісти"
+  "reply": "Відповісти",
+  "moveToFolder": "Перемістити до папки",
+  "noFoldersAvailable": "Немає доступних папок"
 }

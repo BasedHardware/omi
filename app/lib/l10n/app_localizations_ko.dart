@@ -825,8 +825,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteKnowledgeGraphTitle => '지식 그래프를 삭제하시겠습니까?';
 
   @override
-  String get deleteKnowledgeGraphMessage =>
-      '파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.';
+  String get deleteKnowledgeGraphMessage => '파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.';
 
   @override
   String get knowledgeGraphDeleted => '지식 그래프가 삭제되었습니다';
@@ -1093,8 +1092,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get enhanceTranscriptAccuracyDesc => '모델이 개선됨에 따라 녹음에 대한 더 나은 변환 결과를 제공할 수 있습니다.';
 
   @override
-  String get legalNotice =>
-      '법적 고지: 음성 데이터 녹음 및 저장의 합법성은 위치 및 이 기능 사용 방법에 따라 다를 수 있습니다. 현지 법률 및 규정을 준수하는지 확인하는 것은 귀하의 책임입니다.';
+  String get legalNotice => '법적 고지: 음성 데이터 녹음 및 저장의 합법성은 위치 및 이 기능 사용 방법에 따라 다를 수 있습니다. 현지 법률 및 규정을 준수하는지 확인하는 것은 귀하의 책임입니다.';
 
   @override
   String get alreadyAuthorized => '이미 승인됨';
@@ -1874,8 +1872,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get permissionGrantedNow => '권한이 부여되었습니다! 이제:\n\n워치에서 Omi 앱을 열고 아래의 \"계속\"을 탭하세요';
 
   @override
-  String get needMicrophonePermission =>
-      '마이크 권한이 필요합니다.\n\n1. \"권한 부여\" 탭\n2. iPhone에서 허용\n3. 워치 앱이 닫힙니다\n4. 다시 열고 \"계속\" 탭';
+  String get needMicrophonePermission => '마이크 권한이 필요합니다.\n\n1. \"권한 부여\" 탭\n2. iPhone에서 허용\n3. 워치 앱이 닫힙니다\n4. 다시 열고 \"계속\" 탭';
 
   @override
   String get grantPermissionButton => '권한 부여';
@@ -1884,8 +1881,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get needHelp => '도움이 필요하신가요?';
 
   @override
-  String get troubleshootingSteps =>
-      '문제 해결:\n\n1. 워치에 Omi가 설치되어 있는지 확인\n2. 워치에서 Omi 앱 열기\n3. 권한 팝업 찾기\n4. 메시지가 나타나면 \"허용\" 탭\n5. 워치의 앱이 닫힙니다 - 다시 열기\n6. 돌아와서 iPhone에서 \"계속\" 탭';
+  String get troubleshootingSteps => '문제 해결:\n\n1. 워치에 Omi가 설치되어 있는지 확인\n2. 워치에서 Omi 앱 열기\n3. 권한 팝업 찾기\n4. 메시지가 나타나면 \"허용\" 탭\n5. 워치의 앱이 닫힙니다 - 다시 열기\n6. 돌아와서 iPhone에서 \"계속\" 탭';
 
   @override
   String get recordingStartedSuccessfully => '녹음이 성공적으로 시작되었습니다!';
@@ -2342,8 +2338,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get unpairDeviceDialogTitle => '기기 페어링 해제';
 
   @override
-  String get unpairDeviceDialogMessage =>
-      '기기 페어링을 해제하여 다른 전화기에 연결할 수 있도록 합니다. 설정 > Bluetooth로 이동하여 기기를 삭제하여 프로세스를 완료해야 합니다.';
+  String get unpairDeviceDialogMessage => '기기 페어링을 해제하여 다른 전화기에 연결할 수 있도록 합니다. 설정 > Bluetooth로 이동하여 기기를 삭제하여 프로세스를 완료해야 합니다.';
 
   @override
   String get unpair => '페어링 해제';
@@ -4138,8 +4133,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get omiApiKeys => 'Omi API 키';
 
   @override
-  String get apiKeysDescription =>
-      'API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.';
+  String get apiKeysDescription => 'API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.';
 
   @override
   String get aboutOmiApiKeys => 'Omi API 키 정보';
@@ -4282,8 +4276,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get maximumSecurityE2ee => '최대 보안 (E2EE)';
 
   @override
-  String get e2eeDescription =>
-      '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
+  String get e2eeDescription => '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
 
   @override
   String get importantTradeoffs => '중요한 절충 사항:';
@@ -4317,8 +4310,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get secureEncryption => '안전한 암호화';
 
   @override
-  String get secureEncryptionDescription =>
-      '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
+  String get secureEncryptionDescription => '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
 
   @override
   String get endToEndEncryption => '엔드투엔드 암호화';
@@ -4555,8 +4547,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get yourPrivacyMattersToUs => '당신의 개인정보는 우리에게 중요합니다';
 
   @override
-  String get privacyIntroText =>
-      'Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:';
+  String get privacyIntroText => 'Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:';
 
   @override
   String get whatWeTrack => '추적 항목';
@@ -4648,8 +4639,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get exportStartedMayTakeFewSeconds => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...';
 
   @override
-  String get knowledgeGraphDeleteDescription =>
-      '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
+  String get knowledgeGraphDeleteDescription => '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
 
   @override
   String get configureDailySummaryDigest => '일일 작업 요약 구성';
@@ -5032,8 +5022,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '추가 음성 샘플이 삭제되었습니다';
 
   @override
-  String get consentDataMessage =>
-      '계속하면 이 앱과 공유하는 모든 데이터(대화, 녹음, 개인 정보 포함)가 당사 서버에 안전하게 저장되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
+  String get consentDataMessage => '계속하면 이 앱과 공유하는 모든 데이터(대화, 녹음, 개인 정보 포함)가 당사 서버에 안전하게 저장되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
   String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
@@ -5087,8 +5076,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => '앱을 설치하고 열었습니다';
 
   @override
-  String get unableToOpenWatchApp =>
-      'Apple Watch 앱을 열 수 없습니다. Apple Watch에서 Watch 앱을 수동으로 열고 \"사용 가능한 앱\" 섹션에서 Omi를 설치하세요.';
+  String get unableToOpenWatchApp => 'Apple Watch 앱을 열 수 없습니다. Apple Watch에서 Watch 앱을 수동으로 열고 \"사용 가능한 앱\" 섹션에서 Omi를 설치하세요.';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch가 성공적으로 연결되었습니다!';
@@ -5540,8 +5528,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get howToTakeGoodSample => '좋은 샘플을 얻는 방법은?';
 
   @override
-  String get goodSampleInstructions =>
-      '1. 조용한 장소에 있는지 확인하세요.\n2. 명확하고 자연스럽게 말하세요.\n3. 기기가 목에 자연스러운 위치에 있는지 확인하세요.\n\n생성 후에는 언제든지 개선하거나 다시 할 수 있습니다.';
+  String get goodSampleInstructions => '1. 조용한 장소에 있는지 확인하세요.\n2. 명확하고 자연스럽게 말하세요.\n3. 기기가 목에 자연스러운 위치에 있는지 확인하세요.\n\n생성 후에는 언제든지 개선하거나 다시 할 수 있습니다.';
 
   @override
   String get noDeviceConnectedUseMic => '연결된 기기가 없습니다. 휴대폰 마이크를 사용합니다.';
@@ -5942,7 +5929,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceNotCompatible => '귀하의 기기는 온디바이스 전사와 호환되지 않습니다';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => '기기가 온디바이스 음성 인식 요구 사항을 충족하지 않습니다.';
 
   @override
   String get willLikelyCrash => '활성화하면 앱이 충돌하거나 멈출 수 있습니다.';
@@ -5957,7 +5944,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get olderDeviceDetected => '구형 기기 감지됨';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => '이 기기에서는 온디바이스 음성 인식이 느릴 수 있습니다.';
 
   @override
   String get batteryUsageHigher => '배터리 사용량이 클라우드 전사보다 높아집니다.';
@@ -5969,10 +5956,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get highResourceUsage => '높은 리소스 사용량';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => '온디바이스 음성 인식은 많은 컴퓨팅 자원을 사용합니다.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => '배터리 소모가 크게 증가합니다.';
 
   @override
   String get deviceMayWarmUp => '장시간 사용 시 기기가 뜨거워질 수 있습니다.';
@@ -5984,35 +5971,34 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo => '오디오가 로컬에서 처리됩니다. 오프라인에서 작동하고 더 안전하지만 배터리 소모가 많습니다.';
 
   @override
-  String get model => 'Model';
+  String get model => '모델';
 
   @override
   String get performanceWarning => '성능 경고';
 
   @override
-  String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning => '이 모델은 크기가 커서 모바일 기기에서 앱이 충돌하거나 매우 느리게 실행될 수 있습니다.\n\n\"small\" 또는 \"base\"를 권장합니다.';
 
   @override
   String get usingNativeIosSpeech => '기본 iOS 음성 인식 사용';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired => '기기의 기본 음성 엔진이 사용됩니다. 모델 다운로드가 필요하지 않습니다.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => '모델 준비 완료';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => '다시 다운로드';
 
   @override
   String get doNotCloseApp => '앱을 닫지 마세요.';
@@ -6025,12 +6011,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return '예상 크기: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return '사용 가능 공간: $space';
   }
 
   @override
@@ -6041,7 +6027,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return '다운로드 오류: $error';
   }
 
   @override
@@ -6381,32 +6367,32 @@ class AppLocalizationsKo extends AppLocalizations {
   String get moneyEarned => '수익';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => '답글을 작성하세요...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => '답글이 성공적으로 전송되었습니다';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return '답글 전송 실패: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => '보내기';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count점';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => '리뷰를 찾을 수 없습니다';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => '답글 수정';
 
   @override
-  String get reply => 'Reply';
+  String get reply => '답글';
 
   @override
   String starFilterLabel(int count) {
@@ -7598,4 +7584,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '$hours시 $mins분';
   }
+
+  @override
+  String get moveToFolder => '폴더로 이동';
+
+  @override
+  String get noFoldersAvailable => '사용 가능한 폴더가 없습니다';
 }

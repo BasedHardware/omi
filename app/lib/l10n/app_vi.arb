@@ -2482,5 +2482,7 @@
   "starFilter": "Lọc theo sao",
   "noReviewsFound": "Không tìm thấy đánh giá",
   "editReply": "Sửa phản hồi",
-  "reply": "Phản hồi"
+  "reply": "Phản hồi",
+  "moveToFolder": "Di chuyển đến thư mục",
+  "noFoldersAvailable": "Không có thư mục nào"
 }

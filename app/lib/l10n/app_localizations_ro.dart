@@ -7590,4 +7590,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}h ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Mutați în dosar';
+
+  @override
+  String get noFoldersAvailable => 'Nu există dosare disponibile';
 }

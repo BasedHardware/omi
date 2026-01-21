@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Svar sendt",
   "send": "Send",
   "starFilter": "{count} stjerne",
-  "writeYourReply": "Skriv ditt svar..."
+  "writeYourReply": "Skriv ditt svar...",
+  "moveToFolder": "Flytt til mappe",
+  "noFoldersAvailable": "Ingen mapper tilgjengelig"
 }

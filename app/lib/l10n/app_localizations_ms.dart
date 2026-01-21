@@ -7590,4 +7590,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}j ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Pindah ke Folder';
+
+  @override
+  String get noFoldersAvailable => 'Tiada folder tersedia';
 }

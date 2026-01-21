@@ -2446,5 +2446,7 @@
   "replySentSuccessfully": "Отговорът е изпратен успешно",
   "send": "Изпрати",
   "starFilter": "{count} звезда",
-  "writeYourReply": "Напишете вашия отговор..."
+  "writeYourReply": "Напишете вашия отговор...",
+  "moveToFolder": "Преместване в папка",
+  "noFoldersAvailable": "Няма налични папки"
 }

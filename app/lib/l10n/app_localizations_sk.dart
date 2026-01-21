@@ -7590,4 +7590,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}h ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Presunúť do priečinka';
+
+  @override
+  String get noFoldersAvailable => 'Žiadne priečinky nie sú k dispozícii';
 }

@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "ส่งการตอบกลับสำเร็จ",
   "send": "ส่ง",
   "starFilter": "{count} ดาว",
-  "writeYourReply": "เขียนการตอบกลับของคุณ..."
+  "writeYourReply": "เขียนการตอบกลับของคุณ...",
+  "moveToFolder": "ย้ายไปยังโฟลเดอร์",
+  "noFoldersAvailable": "ไม่มีโฟลเดอร์ที่พร้อมใช้งาน"
 }

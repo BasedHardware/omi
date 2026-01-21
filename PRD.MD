@@ -141,13 +141,13 @@ Total Hardcoded Strings: **~30**
 |------|------------------|---------------|---------------|--------|
 | 233 | `'Conversations'` | `conversations` | YES | ✅ |
 
-#### 2. move_to_folder_sheet.dart
+#### 2. move_to_folder_sheet.dart ✅ DONE
 **Path:** `app/lib/pages/conversations/widgets/move_to_folder_sheet.dart`
 
-| Line | Hardcoded String | Suggested Key | Exists in EN? |
-|------|------------------|---------------|---------------|
-| 53 | `'Move to Folder'` | `moveToFolder` | CHECK |
-| 78 | `'No folders available'` | `noFoldersAvailable` | CHECK |
+| Line | Hardcoded String | Suggested Key | Exists in EN? | Status |
+|------|------------------|---------------|---------------|--------|
+| 53 | `'Move to Folder'` | `moveToFolder` | YES (added) | ✅ |
+| 78 | `'No folders available'` | `noFoldersAvailable` | YES (added) | ✅ |
 
 #### 3. create_folder_sheet.dart
 **Path:** `app/lib/pages/conversations/widgets/create_folder_sheet.dart`

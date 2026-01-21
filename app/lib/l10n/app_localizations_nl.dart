@@ -7590,4 +7590,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}u ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Verplaatsen naar map';
+
+  @override
+  String get noFoldersAvailable => 'Geen mappen beschikbaar';
 }

@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Răspuns trimis cu succes",
   "send": "Trimite",
   "starFilter": "{count} stele",
-  "writeYourReply": "Scrie răspunsul tău..."
+  "writeYourReply": "Scrie răspunsul tău...",
+  "moveToFolder": "Mutați în dosar",
+  "noFoldersAvailable": "Nu există dosare disponibile"
 }

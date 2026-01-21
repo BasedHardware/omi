@@ -7591,4 +7591,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}g ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Przenieś do folderu';
+
+  @override
+  String get noFoldersAvailable => 'Brak dostępnych folderów';
 }

@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Risposta inviata con successo",
   "send": "Invia",
   "starFilter": "{count} Stelle",
-  "writeYourReply": "Scrivi la tua risposta..."
+  "writeYourReply": "Scrivi la tua risposta...",
+  "moveToFolder": "Sposta nella cartella",
+  "noFoldersAvailable": "Nessuna cartella disponibile"
 }

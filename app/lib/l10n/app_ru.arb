@@ -2512,5 +2512,7 @@
       }
     }
   },
-  "writeYourReply": "Напишите ваш ответ..."
+  "writeYourReply": "Напишите ваш ответ...",
+  "moveToFolder": "Переместить в папку",
+  "noFoldersAvailable": "Нет доступных папок"
 }

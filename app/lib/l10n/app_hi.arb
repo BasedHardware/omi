@@ -2478,5 +2478,7 @@
   "replySentSuccessfully": "जवाब सफलतापूर्वक भेजा गया",
   "send": "भेजें",
   "starFilter": "{count} स्टार",
-  "writeYourReply": "अपना जवाब लिखें..."
+  "writeYourReply": "अपना जवाब लिखें...",
+  "moveToFolder": "फ़ोल्डर में ले जाएं",
+  "noFoldersAvailable": "कोई फ़ोल्डर उपलब्ध नहीं"
 }

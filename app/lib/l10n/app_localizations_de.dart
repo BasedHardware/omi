@@ -7590,4 +7590,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}h ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'In Ordner verschieben';
+
+  @override
+  String get noFoldersAvailable => 'Keine Ordner verfügbar';
 }

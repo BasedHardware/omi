@@ -2519,5 +2519,7 @@
       }
     }
   },
-  "writeYourReply": "Tulis balasan Anda..."
+  "writeYourReply": "Tulis balasan Anda...",
+  "moveToFolder": "Pindahkan ke Folder",
+  "noFoldersAvailable": "Tidak ada folder tersedia"
 }

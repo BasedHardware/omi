@@ -7590,4 +7590,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}h ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Moure a la carpeta';
+
+  @override
+  String get noFoldersAvailable => 'No hi ha carpetes disponibles';
 }

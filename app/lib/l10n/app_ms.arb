@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Balasan berjaya dihantar",
   "send": "Hantar",
   "starFilter": "{count} Bintang",
-  "writeYourReply": "Tulis balasan anda..."
+  "writeYourReply": "Tulis balasan anda...",
+  "moveToFolder": "Pindah ke Folder",
+  "noFoldersAvailable": "Tiada folder tersedia"
 }

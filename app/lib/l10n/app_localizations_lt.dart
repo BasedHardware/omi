@@ -7590,4 +7590,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}v ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Perkelti į aplanką';
+
+  @override
+  String get noFoldersAvailable => 'Nėra pasiekiamų aplankų';
 }

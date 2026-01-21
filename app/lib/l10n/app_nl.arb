@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Reactie succesvol verzonden",
   "send": "Verzenden",
   "starFilter": "{count} ster",
-  "writeYourReply": "Schrijf je reactie..."
+  "writeYourReply": "Schrijf je reactie...",
+  "moveToFolder": "Verplaatsen naar map",
+  "noFoldersAvailable": "Geen mappen beschikbaar"
 }

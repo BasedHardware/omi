@@ -2445,5 +2445,7 @@
   "replySentSuccessfully": "Antwort erfolgreich gesendet",
   "send": "Senden",
   "starFilter": "{count} Stern",
-  "writeYourReply": "Schreibe deine Antwort..."
+  "writeYourReply": "Schreibe deine Antwort...",
+  "moveToFolder": "In Ordner verschieben",
+  "noFoldersAvailable": "Keine Ordner verfügbar"
 }

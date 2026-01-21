@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Vastaus lähetetty onnistuneesti",
   "send": "Lähetä",
   "starFilter": "{count} tähteä",
-  "writeYourReply": "Kirjoita vastauksesi..."
+  "writeYourReply": "Kirjoita vastauksesi...",
+  "moveToFolder": "Siirrä kansioon",
+  "noFoldersAvailable": "Ei kansioita saatavilla"
 }

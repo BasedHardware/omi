@@ -2446,5 +2446,7 @@
   "replySentSuccessfully": "Resposta enviada correctament",
   "send": "Enviar",
   "starFilter": "{count} Estrella",
-  "writeYourReply": "Escriu la teva resposta..."
+  "writeYourReply": "Escriu la teva resposta...",
+  "moveToFolder": "Moure a la carpeta",
+  "noFoldersAvailable": "No hi ha carpetes disponibles"
 }

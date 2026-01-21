@@ -7590,4 +7590,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '$hoursч $minsм';
   }
+
+  @override
+  String get moveToFolder => 'Преместване в папка';
+
+  @override
+  String get noFoldersAvailable => 'Няма налични папки';
 }

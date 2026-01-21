@@ -7590,4 +7590,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String timeCompactHoursAndMins(int hours, int mins) {
     return '${hours}t ${mins}m';
   }
+
+  @override
+  String get moveToFolder => 'Flytta till mapp';
+
+  @override
+  String get noFoldersAvailable => 'Inga mappar tillgängliga';
 }

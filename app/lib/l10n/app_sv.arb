@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Svaret skickades",
   "send": "Skicka",
   "starFilter": "{count} stjärna",
-  "writeYourReply": "Skriv ditt svar..."
+  "writeYourReply": "Skriv ditt svar...",
+  "moveToFolder": "Flytta till mapp",
+  "noFoldersAvailable": "Inga mappar tillgängliga"
 }

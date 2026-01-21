@@ -2446,5 +2446,7 @@
   "replySentSuccessfully": "Odpověď byla úspěšně odeslána",
   "send": "Odeslat",
   "starFilter": "{count} hvězda",
-  "writeYourReply": "Napište svou odpověď..."
+  "writeYourReply": "Napište svou odpověď...",
+  "moveToFolder": "Přesunout do složky",
+  "noFoldersAvailable": "Žádné složky nejsou k dispozici"
 }

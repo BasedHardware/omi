@@ -2499,5 +2499,7 @@
   "replySentSuccessfully": "回复发送成功",
   "send": "发送",
   "starFilter": "{count} 星",
-  "writeYourReply": "写下您的回复..."
+  "writeYourReply": "写下您的回复...",
+  "moveToFolder": "移动到文件夹",
+  "noFoldersAvailable": "没有可用的文件夹"
 }

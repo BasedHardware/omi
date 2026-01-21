@@ -2477,5 +2477,7 @@
   "replySentSuccessfully": "Atbilde veiksmīgi nosūtīta",
   "send": "Sūtīt",
   "starFilter": "{count} zvaigzne",
-  "writeYourReply": "Rakstiet savu atbildi..."
+  "writeYourReply": "Rakstiet savu atbildi...",
+  "moveToFolder": "Pārvietot uz mapi",
+  "noFoldersAvailable": "Nav pieejamu mapju"
 }

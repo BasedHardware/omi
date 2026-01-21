@@ -2512,5 +2512,7 @@
       }
     }
   },
-  "writeYourReply": "Écrivez votre réponse..."
+  "writeYourReply": "Écrivez votre réponse...",
+  "moveToFolder": "Déplacer vers le dossier",
+  "noFoldersAvailable": "Aucun dossier disponible"
 }

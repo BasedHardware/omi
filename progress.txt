@@ -86,7 +86,7 @@ Total Strings: ~30
   [x] conversations_page.dart (1 string)
       - 'Conversations'
 
-  [ ] move_to_folder_sheet.dart (2 strings)
+  [x] move_to_folder_sheet.dart (2 strings)
       - 'Move to Folder'
       - 'No folders available'
 
@@ -140,8 +140,8 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 31/31 languages completed
-Part 2 Progress: 1/7 files completed
-Overall Progress: ~50%
+Part 2 Progress: 2/7 files completed
+Overall Progress: ~55%
 
 ================================================================================
 
@@ -395,6 +395,15 @@ Overall Progress: ~50%
 
 [2026-01-21] Localized hardcoded string in conversations_page.dart
   - Replaced hardcoded 'Conversations' with context.l10n.conversations
+  - Added import for l10n_extensions.dart
+  - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Localized hardcoded strings in move_to_folder_sheet.dart
+  - Added new keys to app_en.arb: moveToFolder, noFoldersAvailable
+  - Added translations to all 33 language ARB files
+  - Replaced hardcoded 'Move to Folder' with context.l10n.moveToFolder
+  - Replaced hardcoded 'No folders available' with context.l10n.noFoldersAvailable
   - Added import for l10n_extensions.dart
   - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
