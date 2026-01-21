@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
+import { MessageSquare, Search as SearchIcon, CheckSquare, X, FilterX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConversations } from '@/hooks/useConversations';
 import { useConversation } from '@/hooks/useConversation';
@@ -69,6 +69,9 @@ export function ConversationSplitView() {
 
   // Resizable panel width
   const [panelWidth, setPanelWidth] = useLocalStorage('omi-panel-width', DEFAULT_PANEL_WIDTH);
+
+  // Filter state for short conversations
+  const [hideShort, setHideShort] = useLocalStorage('omi-hide-short', true);
 
   // Selection mode state (for merge feature)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -184,6 +187,11 @@ export function ConversationSplitView() {
     if (!isSearching || searchResults.length === 0) return {};
 
     return searchResults.reduce((groups, conversation) => {
+      // Filter out short conversations if enabled
+      if (hideShort && conversation.transcript_segments.length < 5) {
+        return groups;
+      }
+
       const date = new Date(conversation.started_at || conversation.created_at);
       const dateKey = formatRelativeDate(date);
 
@@ -193,23 +201,37 @@ export function ConversationSplitView() {
       groups[dateKey].push(conversation);
       return groups;
     }, {} as Record<string, Conversation[]>);
-  }, [isSearching, searchResults]);
+  }, [isSearching, searchResults, hideShort]);
 
-  // Filter conversations for starred folder
   const displayedGroupedConversations = useMemo(() => {
+    let filteredGroups: Record<string, Conversation[]> = {};
+
     if (selectedFolderId === FOLDER_STARRED) {
       // Filter for starred conversations only
-      const starredGroups: Record<string, Conversation[]> = {};
       for (const [date, convs] of Object.entries(groupedConversations)) {
         const starredConvs = convs.filter(c => c.starred);
         if (starredConvs.length > 0) {
-          starredGroups[date] = starredConvs;
+          filteredGroups[date] = starredConvs;
         }
       }
-      return starredGroups;
+    } else {
+      filteredGroups = groupedConversations;
     }
-    return groupedConversations;
-  }, [selectedFolderId, groupedConversations]);
+
+    // Apply "hide short" filter if enabled
+    if (hideShort) {
+      const shortFiltered: Record<string, Conversation[]> = {};
+      for (const [date, convs] of Object.entries(filteredGroups)) {
+        const keptConvs = convs.filter(c => c.transcript_segments.length >= 5);
+        if (keptConvs.length > 0) {
+          shortFiltered[date] = keptConvs;
+        }
+      }
+      return shortFiltered;
+    }
+
+    return filteredGroups;
+  }, [selectedFolderId, groupedConversations, hideShort]);
 
   // Get the conversations to display (search results or regular list, with folder filtering)
   const displayedConversations = isSearching ? searchGroupedConversations : displayedGroupedConversations;
@@ -568,6 +590,19 @@ export function ConversationSplitView() {
                 placeholder="Search conversations..."
                 className="flex-1"
               />
+              {/* Hide Short Conversations Toggle */}
+              <button
+                onClick={() => setHideShort(!hideShort)}
+                className={cn(
+                  'p-2 rounded-lg flex-shrink-0 transition-colors',
+                  hideShort
+                    ? 'bg-purple-primary/20 text-purple-primary'
+                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                )}
+                title={hideShort ? "Show all conversations" : "Hide short conversations"}
+              >
+                <FilterX className="w-5 h-5" />
+              </button>
               <DateFilter
                 selectedDate={filterDate}
                 onDateChange={handleDateFilterChange}
@@ -666,12 +701,12 @@ export function ConversationSplitView() {
                   {isSearching
                     ? 'No conversations found'
                     : filterDate
-                    ? 'No conversations on this date'
-                    : selectedFolderId === FOLDER_STARRED
-                    ? 'No starred conversations'
-                    : selectedFolderId !== FOLDER_ALL
-                    ? 'No conversations in this folder'
-                    : 'No conversations yet'}
+                      ? 'No conversations on this date'
+                      : selectedFolderId === FOLDER_STARRED
+                        ? 'No starred conversations'
+                        : selectedFolderId !== FOLDER_ALL
+                          ? 'No conversations in this folder'
+                          : 'No conversations yet'}
                 </p>
               </div>
             )}
