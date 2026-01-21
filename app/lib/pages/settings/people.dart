@@ -301,7 +301,28 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                           title:
                                               Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
                                           onTap: () => _confirmDeleteSample(index, person, j, provider),
-                                          subtitle: Text('Tap to delete'),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (person.speechSampleTranscripts != null &&
+                                                  j < person.speechSampleTranscripts!.length &&
+                                                  person.speechSampleTranscripts![j].isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(bottom: 4),
+                                                  child: Text(
+                                                    '"${person.speechSampleTranscripts![j]}"',
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontStyle: FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ),
+                                              const Text(
+                                                'Tap to delete',
+                                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                                              ),
+                                            ],
+                                          ),
                                         )),
                                   ],
                                 ),

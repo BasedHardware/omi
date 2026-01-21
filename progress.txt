@@ -51,11 +51,11 @@ Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
       - [x] Update fromJson() to parse speech_samples_version
       - [x] Update toJson() if needed
 
-- [ ] 7. Update People UI
+- [x] 7. Update People UI
       File: app/lib/pages/settings/people.dart
-      - [ ] Display transcript text below sample title
-      - [ ] Handle null/missing transcripts gracefully
-      - [ ] Style transcript with italic font
+      - [x] Display transcript text below sample title
+      - [x] Handle null/missing transcripts gracefully
+      - [x] Style transcript with italic font
 
 ### Testing
 
