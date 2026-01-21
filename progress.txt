@@ -1,0 +1,112 @@
+# Speech Sample Transcripts Implementation Progress
+
+Branch: speech-sample-transcripts (based on e8w2h_speaker_identification)
+
+## Implementation Checklist
+
+### Backend
+
+- [ ] 1. Create centralized migration utility
+      File: backend/utils/speaker_sample_migration.py (NEW)
+      - [ ] verify_and_transcribe_sample() function
+      - [ ] migrate_person_samples_v1_to_v2() function
+      - [ ] download_sample_audio() helper
+      - [ ] delete_sample_from_storage() helper
+
+- [ ] 2. Update backend models
+      File: backend/models/other.py
+      - [ ] Add speech_sample_transcripts: Optional[List[str]] = None
+      - [ ] Add speech_samples_version: int = 1
+
+- [ ] 3. Update database functions
+      File: backend/database/users.py
+      - [ ] Update add_person_speech_sample() to accept transcript parameter
+      - [ ] Update remove_person_speech_sample() to remove by index (keep arrays in sync)
+      - [ ] Add set_person_speech_sample_transcript()
+      - [ ] Add update_person_speech_samples_after_migration()
+      - [ ] Add clear_person_speaker_embedding()
+      - [ ] Add update_person_speech_samples_version()
+
+- [ ] 4. Update speaker identification
+      File: backend/utils/speaker_identification.py
+      - [ ] Import verify_and_transcribe_sample from migration utility
+      - [ ] Replace inline _verify_sample_quality with centralized function
+      - [ ] Pass transcript to add_person_speech_sample()
+
+- [ ] 5. Update API routes
+      File: backend/routers/users.py
+      - [ ] Import migrate_person_samples_v1_to_v2
+      - [ ] Make get_all_people() async
+      - [ ] Add lazy migration call in get_all_people()
+      - [ ] Make get_single_person() async
+      - [ ] Add lazy migration call in get_single_person()
+
+### Frontend (Flutter)
+
+- [ ] 6. Update Person model
+      File: app/lib/backend/schema/person.dart
+      - [ ] Add speechSampleTranscripts: List<String>? field
+      - [ ] Add speechSamplesVersion: int field (default 1)
+      - [ ] Update fromJson() to parse speech_sample_transcripts
+      - [ ] Update fromJson() to parse speech_samples_version
+      - [ ] Update toJson() if needed
+
+- [ ] 7. Update People UI
+      File: app/lib/pages/settings/people.dart
+      - [ ] Display transcript text below sample title
+      - [ ] Handle null/missing transcripts gracefully
+      - [ ] Style transcript with italic font
+
+### Testing
+
+- [ ] 8. Run backend tests
+      Command: backend/test.sh
+      - [ ] All existing tests pass
+      - [ ] Add unit tests for new migration functions (optional)
+
+- [ ] 9. Run Flutter tests
+      Command: app/test.sh
+      - [ ] All existing tests pass
+
+### Manual Verification
+
+- [ ] 10. New sample flow
+       - [ ] Create new person
+       - [ ] Tag speaker segment in conversation
+       - [ ] Verify transcript stored and displayed
+       - [ ] Verify speech_samples_version = 2
+
+- [ ] 11. Lazy migration (valid sample)
+       - [ ] Use existing v1 sample that passes quality check
+       - [ ] Verify transcript extracted and stored
+       - [ ] Verify version updated to 2
+
+- [ ] 12. Lazy migration (invalid sample)
+       - [ ] Use v1 sample that fails quality check
+       - [ ] Verify sample dropped from speech_samples
+       - [ ] Verify speaker_embedding cleared/re-extracted
+
+- [ ] 13. API response check
+       - [ ] GET /v1/users/people returns speech_sample_transcripts
+       - [ ] GET /v1/users/people returns speech_samples_version
+
+- [ ] 14. Delete sample
+       - [ ] Delete specific sample
+       - [ ] Verify both arrays stay in sync
+
+- [ ] 15. Backwards compatibility
+       - [ ] Test with older app version
+       - [ ] Verify older apps still work (ignore new fields)
+
+- [ ] 16. Audio playback
+       - [ ] Play audio sample
+       - [ ] Verify transcript matches audio content
+
+---
+
+## Notes
+
+- Base branch: e8w2h_speaker_identification (contains verification logic from PR #4291)
+- Key dependencies: deepgram_prerecorded_from_bytes, compute_text_similarity
+- Migration is lazy (on-demand when fetching people)
+- Invalid v1 samples are DROPPED during migration
