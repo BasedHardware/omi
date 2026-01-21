@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Asetukset tallennettu!",
   "voiceFailedToTranscribe": "Äänen litterointi epäonnistui",
   "locationPermissionRequired": "Sijaintilupa vaaditaan",
-  "locationPermissionContent": "Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi."
+  "locationPermissionContent": "Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi.",
+  "pdfTranscriptExport": "Litteraation vienti",
+  "pdfConversationExport": "Keskustelun vienti",
+  "pdfTitleLabel": "Otsikko: {title}"
 }

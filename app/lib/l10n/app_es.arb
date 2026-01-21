@@ -2434,5 +2434,8 @@
   "devModeSettingsSaved": "¡Configuración guardada!",
   "voiceFailedToTranscribe": "Error al transcribir el audio",
   "locationPermissionRequired": "Permiso de ubicación requerido",
-  "locationPermissionContent": "La transferencia rápida requiere permiso de ubicación para verificar la conexión WiFi. Por favor, conceda el permiso de ubicación para continuar."
+  "locationPermissionContent": "La transferencia rápida requiere permiso de ubicación para verificar la conexión WiFi. Por favor, conceda el permiso de ubicación para continuar.",
+  "pdfTranscriptExport": "Exportar transcripción",
+  "pdfConversationExport": "Exportar conversación",
+  "pdfTitleLabel": "Título: {title}"
 }

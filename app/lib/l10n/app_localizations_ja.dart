@@ -7500,4 +7500,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get locationPermissionContent => '高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。';
+
+  @override
+  String get pdfTranscriptExport => '文字起こしエクスポート';
+
+  @override
+  String get pdfConversationExport => '会話エクスポート';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'タイトル: $title';
+  }
 }

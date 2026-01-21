@@ -7606,4 +7606,15 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'फास्ट ट्रांसफर को WiFi कनेक्शन सत्यापित करने के लिए स्थान अनुमति की आवश्यकता है। कृपया जारी रखने के लिए स्थान अनुमति दें।';
+
+  @override
+  String get pdfTranscriptExport => 'ट्रांसक्रिप्ट निर्यात';
+
+  @override
+  String get pdfConversationExport => 'वार्तालाप निर्यात';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'शीर्षक: $title';
+  }
 }

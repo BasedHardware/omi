@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Nastavenia uložené!",
   "voiceFailedToTranscribe": "Nepodarilo sa prepísať zvuk",
   "locationPermissionRequired": "Vyžaduje sa povolenie polohy",
-  "locationPermissionContent": "Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie."
+  "locationPermissionContent": "Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie.",
+  "pdfTranscriptExport": "Export prepisu",
+  "pdfConversationExport": "Export konverzácie",
+  "pdfTitleLabel": "Názov: {title}"
 }

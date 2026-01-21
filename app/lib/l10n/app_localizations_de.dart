@@ -7695,4 +7695,15 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren.';
+
+  @override
+  String get pdfTranscriptExport => 'Transkript-Export';
+
+  @override
+  String get pdfConversationExport => 'Gesprächs-Export';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Titel: $title';
+  }
 }

@@ -7662,4 +7662,15 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.';
+
+  @override
+  String get pdfTranscriptExport => 'Átirat exportálása';
+
+  @override
+  String get pdfConversationExport => 'Beszélgetés exportálása';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Cím: $title';
+  }
 }

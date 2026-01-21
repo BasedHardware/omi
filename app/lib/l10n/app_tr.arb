@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Ayarlar kaydedildi!",
   "voiceFailedToTranscribe": "Ses metne dönüştürülemedi",
   "locationPermissionRequired": "Konum izni gerekli",
-  "locationPermissionContent": "Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin."
+  "locationPermissionContent": "Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin.",
+  "pdfTranscriptExport": "Döküm Dışa Aktar",
+  "pdfConversationExport": "Sohbet Dışa Aktar",
+  "pdfTitleLabel": "Başlık: {title}"
 }

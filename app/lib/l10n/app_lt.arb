@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Nustatymai išsaugoti!",
   "voiceFailedToTranscribe": "Nepavyko transkribuoti garso",
   "locationPermissionRequired": "Reikalingas vietos leidimas",
-  "locationPermissionContent": "Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti."
+  "locationPermissionContent": "Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti.",
+  "pdfTranscriptExport": "Transkripcijos eksportas",
+  "pdfConversationExport": "Pokalbio eksportas",
+  "pdfTitleLabel": "Pavadinimas: {title}"
 }

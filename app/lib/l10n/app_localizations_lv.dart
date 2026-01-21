@@ -7642,4 +7642,15 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu.';
+
+  @override
+  String get pdfTranscriptExport => 'Transkripcijas eksports';
+
+  @override
+  String get pdfConversationExport => 'Sarunas eksports';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Nosaukums: $title';
+  }
 }

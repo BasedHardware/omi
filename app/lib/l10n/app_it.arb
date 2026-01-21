@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Impostazioni salvate!",
   "voiceFailedToTranscribe": "Trascrizione audio non riuscita",
   "locationPermissionRequired": "Autorizzazione posizione richiesta",
-  "locationPermissionContent": "Il trasferimento rapido richiede l'autorizzazione alla posizione per verificare la connessione WiFi. Concedi l'autorizzazione alla posizione per continuare."
+  "locationPermissionContent": "Il trasferimento rapido richiede l'autorizzazione alla posizione per verificare la connessione WiFi. Concedi l'autorizzazione alla posizione per continuare.",
+  "pdfTranscriptExport": "Esportazione trascrizione",
+  "pdfConversationExport": "Esportazione conversazione",
+  "pdfTitleLabel": "Titolo: {title}"
 }

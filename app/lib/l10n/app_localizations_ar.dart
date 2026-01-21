@@ -7574,4 +7574,15 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة.';
+
+  @override
+  String get pdfTranscriptExport => 'تصدير النص';
+
+  @override
+  String get pdfConversationExport => 'تصدير المحادثة';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'العنوان: $title';
+  }
 }

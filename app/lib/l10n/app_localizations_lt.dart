@@ -7628,4 +7628,15 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti.';
+
+  @override
+  String get pdfTranscriptExport => 'Transkripcijos eksportas';
+
+  @override
+  String get pdfConversationExport => 'Pokalbio eksportas';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Pavadinimas: $title';
+  }
 }

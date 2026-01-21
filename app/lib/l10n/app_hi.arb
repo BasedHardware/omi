@@ -2434,5 +2434,8 @@
   "devModeSettingsSaved": "सेटिंग्स सहेजी गईं!",
   "voiceFailedToTranscribe": "ऑडियो ट्रांसक्राइब करने में विफल",
   "locationPermissionRequired": "स्थान अनुमति आवश्यक",
-  "locationPermissionContent": "फास्ट ट्रांसफर को WiFi कनेक्शन सत्यापित करने के लिए स्थान अनुमति की आवश्यकता है। कृपया जारी रखने के लिए स्थान अनुमति दें।"
+  "locationPermissionContent": "फास्ट ट्रांसफर को WiFi कनेक्शन सत्यापित करने के लिए स्थान अनुमति की आवश्यकता है। कृपया जारी रखने के लिए स्थान अनुमति दें।",
+  "pdfTranscriptExport": "ट्रांसक्रिप्ट निर्यात",
+  "pdfConversationExport": "वार्तालाप निर्यात",
+  "pdfTitleLabel": "शीर्षक: {title}"
 }

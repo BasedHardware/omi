@@ -7625,4 +7625,15 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.';
+
+  @override
+  String get pdfTranscriptExport => 'Transkriptsiooni eksport';
+
+  @override
+  String get pdfConversationExport => 'Vestluse eksport';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Pealkiri: $title';
+  }
 }

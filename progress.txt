@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 34 |
+| Completed Files | 35 |
 | In Progress | 0 |
-| Pending Files | ~14 |
-| Progress | ~79% |
+| Pending Files | ~13 |
+| Progress | ~81% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -266,16 +266,13 @@ Keys: Reused existing 'ok' key
 --------------------------------------------------------------------------------
 ### 6.3 PDF Export Strings
 
-### [ ] pages/conversation_detail/share.dart (~10 strings)
-Status: PENDING
+### [x] pages/conversation_detail/share.dart (~10 strings)
+Status: COMPLETED
 Description: PDF export labels (may be special case - pdf package)
-Strings found:
-- "Transcript Export"
-- "Conversation Export"
-- "Title: ${structured.title}"
-- "Overview"
-- "Action Items"
-- "Summary"
+Keys added: pdfTranscriptExport, pdfConversationExport, pdfTitleLabel
+Reused existing keys: overview, actionItems, summary, exportSummary
+Updated _exportPDF and _exportSummaryMarkdown functions to accept localized strings
+All 34 language ARB files updated with proper translations
 
 --------------------------------------------------------------------------------
 ### 6.4 Date/Time Locale Issues (~20 strings)
@@ -357,6 +354,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized share.dart PDF/Markdown export with 3 l10n keys for 34 languages
+- Added 3 new localization keys: pdfTranscriptExport, pdfConversationExport, pdfTitleLabel (with placeholder)
+- Reused existing keys: overview, actionItems, summary, exportSummary
+- Modified _exportPDF and _exportSummaryMarkdown functions to accept localized strings as parameters
+- Updated Dart code to pass localized strings from BuildContext at call sites
+- All 34 language ARB files updated with proper translations
+- All tests passed
 
 [2026-01-21] Localized plans_sheet.dart with 2 l10n keys for 34 languages
 - Added 2 new localization keys: cancelSubscription, omiTraining

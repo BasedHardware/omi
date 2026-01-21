@@ -7658,4 +7658,15 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Бързият трансфер изисква разрешение за местоположение, за да провери WiFi връзката. Моля, разрешете достъп до местоположението, за да продължите.';
+
+  @override
+  String get pdfTranscriptExport => 'Експорт на транскрипция';
+
+  @override
+  String get pdfConversationExport => 'Експорт на разговор';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Заглавие: $title';
+  }
 }

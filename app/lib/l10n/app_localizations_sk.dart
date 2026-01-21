@@ -7629,4 +7629,15 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Rýchly prenos vyžaduje povolenie polohy na overenie WiFi pripojenia. Prosím, udeľte povolenie polohy pre pokračovanie.';
+
+  @override
+  String get pdfTranscriptExport => 'Export prepisu';
+
+  @override
+  String get pdfConversationExport => 'Export konverzácie';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Názov: $title';
+  }
 }

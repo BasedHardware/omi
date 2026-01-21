@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Beállítások mentve!",
   "voiceFailedToTranscribe": "Nem sikerült átírni a hangot",
   "locationPermissionRequired": "Helymeghatározási engedély szükséges",
-  "locationPermissionContent": "A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz."
+  "locationPermissionContent": "A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.",
+  "pdfTranscriptExport": "Átirat exportálása",
+  "pdfConversationExport": "Beszélgetés exportálása",
+  "pdfTitleLabel": "Cím: {title}"
 }

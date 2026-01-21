@@ -2415,5 +2415,8 @@
   "devModeSettingsSaved": "Einstellungen gespeichert!",
   "voiceFailedToTranscribe": "Audiotranskription fehlgeschlagen",
   "locationPermissionRequired": "Standortberechtigung erforderlich",
-  "locationPermissionContent": "Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren."
+  "locationPermissionContent": "Schnelltransfer benötigt die Standortberechtigung, um die WLAN-Verbindung zu überprüfen. Bitte erteilen Sie die Standortberechtigung, um fortzufahren.",
+  "pdfTranscriptExport": "Transkript-Export",
+  "pdfConversationExport": "Gesprächs-Export",
+  "pdfTitleLabel": "Titel: {title}"
 }

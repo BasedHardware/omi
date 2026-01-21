@@ -7634,4 +7634,15 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte.';
+
+  @override
+  String get pdfTranscriptExport => 'Eksport af transskription';
+
+  @override
+  String get pdfConversationExport => 'Eksport af samtale';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Titel: $title';
+  }
 }

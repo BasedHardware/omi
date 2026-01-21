@@ -7589,4 +7589,15 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ';
+
+  @override
+  String get pdfTranscriptExport => 'ส่งออกบทถอดเสียง';
+
+  @override
+  String get pdfConversationExport => 'ส่งออกการสนทนา';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'ชื่อเรื่อง: $title';
+  }
 }

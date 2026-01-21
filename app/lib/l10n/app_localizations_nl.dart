@@ -7647,4 +7647,15 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Snelle overdracht vereist locatietoestemming om de WiFi-verbinding te verifiëren. Verleen alstublieft locatietoestemming om door te gaan.';
+
+  @override
+  String get pdfTranscriptExport => 'Transcript exporteren';
+
+  @override
+  String get pdfConversationExport => 'Gesprek exporteren';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Titel: $title';
+  }
 }

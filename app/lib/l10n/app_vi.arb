@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Đã lưu cài đặt!",
   "voiceFailedToTranscribe": "Không thể chuyển đổi giọng nói thành văn bản",
   "locationPermissionRequired": "Cần cấp quyền vị trí",
-  "locationPermissionContent": "Truyền nhanh cần quyền vị trí để xác minh kết nối WiFi. Vui lòng cấp quyền vị trí để tiếp tục."
+  "locationPermissionContent": "Truyền nhanh cần quyền vị trí để xác minh kết nối WiFi. Vui lòng cấp quyền vị trí để tiếp tục.",
+  "pdfTranscriptExport": "Xuất bản ghi",
+  "pdfConversationExport": "Xuất cuộc trò chuyện",
+  "pdfTitleLabel": "Tiêu đề: {title}"
 }

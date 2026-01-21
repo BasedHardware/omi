@@ -2391,5 +2391,8 @@
   "devModeSettingsSaved": "Indstillinger gemt!",
   "voiceFailedToTranscribe": "Kunne ikke transskribere lyd",
   "locationPermissionRequired": "Placeringstilladelse påkrævet",
-  "locationPermissionContent": "Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte."
+  "locationPermissionContent": "Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte.",
+  "pdfTranscriptExport": "Eksport af transskription",
+  "pdfConversationExport": "Eksport af samtale",
+  "pdfTitleLabel": "Titel: {title}"
 }

@@ -14276,6 +14276,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.'**
   String get locationPermissionContent;
+
+  /// Title for PDF transcript export document
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript Export'**
+  String get pdfTranscriptExport;
+
+  /// Title for PDF conversation export document
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Export'**
+  String get pdfConversationExport;
+
+  /// Label showing the conversation title in PDF export
+  ///
+  /// In en, this message translates to:
+  /// **'Title: {title}'**
+  String pdfTitleLabel(String title);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

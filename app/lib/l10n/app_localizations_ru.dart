@@ -7648,4 +7648,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Для быстрой передачи требуется разрешение на определение местоположения для проверки WiFi-соединения. Пожалуйста, предоставьте разрешение на местоположение, чтобы продолжить.';
+
+  @override
+  String get pdfTranscriptExport => 'Экспорт транскрипции';
+
+  @override
+  String get pdfConversationExport => 'Экспорт беседы';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Заголовок: $title';
+  }
 }

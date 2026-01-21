@@ -7636,4 +7636,15 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'La transferencia rápida requiere permiso de ubicación para verificar la conexión WiFi. Por favor, conceda el permiso de ubicación para continuar.';
+
+  @override
+  String get pdfTranscriptExport => 'Exportar transcripción';
+
+  @override
+  String get pdfConversationExport => 'Exportar conversación';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Título: $title';
+  }
 }

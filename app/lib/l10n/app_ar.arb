@@ -2414,5 +2414,8 @@
   "devModeSettingsSaved": "تم حفظ الإعدادات!",
   "voiceFailedToTranscribe": "فشل في نسخ الصوت",
   "locationPermissionRequired": "إذن الموقع مطلوب",
-  "locationPermissionContent": "يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة."
+  "locationPermissionContent": "يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة.",
+  "pdfTranscriptExport": "تصدير النص",
+  "pdfConversationExport": "تصدير المحادثة",
+  "pdfTitleLabel": "العنوان: {title}"
 }

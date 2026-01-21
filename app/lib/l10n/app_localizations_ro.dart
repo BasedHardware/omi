@@ -7662,4 +7662,15 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.';
+
+  @override
+  String get pdfTranscriptExport => 'Export transcriere';
+
+  @override
+  String get pdfConversationExport => 'Export conversație';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Titlu: $title';
+  }
 }

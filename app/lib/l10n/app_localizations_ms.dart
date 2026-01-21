@@ -7647,4 +7647,15 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan.';
+
+  @override
+  String get pdfTranscriptExport => 'Eksport Transkrip';
+
+  @override
+  String get pdfConversationExport => 'Eksport Perbualan';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Tajuk: $title';
+  }
 }

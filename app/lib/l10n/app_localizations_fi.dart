@@ -7623,4 +7623,15 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi.';
+
+  @override
+  String get pdfTranscriptExport => 'Litteraation vienti';
+
+  @override
+  String get pdfConversationExport => 'Keskustelun vienti';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Otsikko: $title';
+  }
 }

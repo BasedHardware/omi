@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Instellingen opgeslagen!",
   "voiceFailedToTranscribe": "Audiotranscriptie mislukt",
   "locationPermissionRequired": "Locatiemachtiging vereist",
-  "locationPermissionContent": "Snelle overdracht vereist locatietoestemming om de WiFi-verbinding te verifiëren. Verleen alstublieft locatietoestemming om door te gaan."
+  "locationPermissionContent": "Snelle overdracht vereist locatietoestemming om de WiFi-verbinding te verifiëren. Verleen alstublieft locatietoestemming om door te gaan.",
+  "pdfTranscriptExport": "Transcript exporteren",
+  "pdfConversationExport": "Gesprek exporteren",
+  "pdfTitleLabel": "Titel: {title}"
 }

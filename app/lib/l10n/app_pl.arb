@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Ustawienia zapisane!",
   "voiceFailedToTranscribe": "Nie udało się transkrybować dźwięku",
   "locationPermissionRequired": "Potrzebne uprawnienie do lokalizacji",
-  "locationPermissionContent": "Szybki transfer wymaga uprawnienia do lokalizacji, aby zweryfikować połączenie WiFi. Proszę przyznać uprawnienie do lokalizacji, aby kontynuować."
+  "locationPermissionContent": "Szybki transfer wymaga uprawnienia do lokalizacji, aby zweryfikować połączenie WiFi. Proszę przyznać uprawnienie do lokalizacji, aby kontynuować.",
+  "pdfTranscriptExport": "Eksport transkrypcji",
+  "pdfConversationExport": "Eksport rozmowy",
+  "pdfTitleLabel": "Tytuł: {title}"
 }

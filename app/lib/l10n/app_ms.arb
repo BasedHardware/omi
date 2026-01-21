@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Tetapan disimpan!",
   "voiceFailedToTranscribe": "Gagal mentranskrip audio",
   "locationPermissionRequired": "Kebenaran lokasi diperlukan",
-  "locationPermissionContent": "Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan."
+  "locationPermissionContent": "Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan.",
+  "pdfTranscriptExport": "Eksport Transkrip",
+  "pdfConversationExport": "Eksport Perbualan",
+  "pdfTitleLabel": "Tajuk: {title}"
 }

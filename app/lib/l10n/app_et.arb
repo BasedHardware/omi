@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Seaded salvestatud!",
   "voiceFailedToTranscribe": "Heli transkribeerimine ebaõnnestus",
   "locationPermissionRequired": "Asukoha luba nõutav",
-  "locationPermissionContent": "Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba."
+  "locationPermissionContent": "Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.",
+  "pdfTranscriptExport": "Transkriptsiooni eksport",
+  "pdfConversationExport": "Vestluse eksport",
+  "pdfTitleLabel": "Pealkiri: {title}"
 }

@@ -7623,4 +7623,15 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'A Transferência Rápida requer permissão de localização para verificar a conexão WiFi. Por favor, conceda a permissão de localização para continuar.';
+
+  @override
+  String get pdfTranscriptExport => 'Exportar transcrição';
+
+  @override
+  String get pdfConversationExport => 'Exportar conversa';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Título: $title';
+  }
 }

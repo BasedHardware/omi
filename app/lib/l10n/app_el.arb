@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "Οι ρυθμίσεις αποθηκεύτηκαν!",
   "voiceFailedToTranscribe": "Αποτυχία μεταγραφής ήχου",
   "locationPermissionRequired": "Απαιτείται άδεια τοποθεσίας",
-  "locationPermissionContent": "Η γρήγορη μεταφορά απαιτεί άδεια τοποθεσίας για να επαληθεύσει τη σύνδεση WiFi. Παρακαλώ δώστε άδεια τοποθεσίας για να συνεχίσετε."
+  "locationPermissionContent": "Η γρήγορη μεταφορά απαιτεί άδεια τοποθεσίας για να επαληθεύσει τη σύνδεση WiFi. Παρακαλώ δώστε άδεια τοποθεσίας για να συνεχίσετε.",
+  "pdfTranscriptExport": "Εξαγωγή μεταγραφής",
+  "pdfConversationExport": "Εξαγωγή συνομιλίας",
+  "pdfTitleLabel": "Τίτλος: {title}"
 }

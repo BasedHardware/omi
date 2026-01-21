@@ -7490,4 +7490,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get locationPermissionContent => '快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。';
+
+  @override
+  String get pdfTranscriptExport => '导出文字记录';
+
+  @override
+  String get pdfConversationExport => '导出对话';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return '标题：$title';
+  }
 }

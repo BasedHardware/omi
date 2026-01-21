@@ -7636,4 +7636,15 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Truyền nhanh cần quyền vị trí để xác minh kết nối WiFi. Vui lòng cấp quyền vị trí để tiếp tục.';
+
+  @override
+  String get pdfTranscriptExport => 'Xuất bản ghi';
+
+  @override
+  String get pdfConversationExport => 'Xuất cuộc trò chuyện';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Tiêu đề: $title';
+  }
 }

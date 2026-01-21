@@ -9498,5 +9498,23 @@
   "locationPermissionContent": "Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.",
   "@locationPermissionContent": {
     "description": "Explanation text for location permission dialog"
+  },
+  "pdfTranscriptExport": "Transcript Export",
+  "@pdfTranscriptExport": {
+    "description": "Title for PDF transcript export document"
+  },
+  "pdfConversationExport": "Conversation Export",
+  "@pdfConversationExport": {
+    "description": "Title for PDF conversation export document"
+  },
+  "pdfTitleLabel": "Title: {title}",
+  "@pdfTitleLabel": {
+    "description": "Label showing the conversation title in PDF export",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Meeting Notes"
+      }
+    }
   }
 }

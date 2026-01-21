@@ -7643,4 +7643,15 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Transfer Cepat memerlukan izin lokasi untuk memverifikasi koneksi WiFi. Harap berikan izin lokasi untuk melanjutkan.';
+
+  @override
+  String get pdfTranscriptExport => 'Ekspor Transkrip';
+
+  @override
+  String get pdfConversationExport => 'Ekspor Percakapan';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Judul: $title';
+  }
 }

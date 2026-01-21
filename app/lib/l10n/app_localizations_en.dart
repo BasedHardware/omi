@@ -7624,4 +7624,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.';
+
+  @override
+  String get pdfTranscriptExport => 'Transcript Export';
+
+  @override
+  String get pdfConversationExport => 'Conversation Export';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Title: $title';
+  }
 }

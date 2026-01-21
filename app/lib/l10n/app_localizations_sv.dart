@@ -7630,4 +7630,15 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Snabb överföring kräver platstillstånd för att verifiera WiFi-anslutningen. Vänligen ge platstillstånd för att fortsätta.';
+
+  @override
+  String get pdfTranscriptExport => 'Transkriptionsexport';
+
+  @override
+  String get pdfConversationExport => 'Samtalsexport';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Titel: $title';
+  }
 }

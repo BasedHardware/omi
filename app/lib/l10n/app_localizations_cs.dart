@@ -7622,4 +7622,15 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Rychlý přenos vyžaduje oprávnění k poloze pro ověření WiFi připojení. Prosím, udělte oprávnění k poloze pro pokračování.';
+
+  @override
+  String get pdfTranscriptExport => 'Export přepisu';
+
+  @override
+  String get pdfConversationExport => 'Export konverzace';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Název: $title';
+  }
 }

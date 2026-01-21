@@ -7621,4 +7621,15 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Hurtig overføring krever plasseringstillatelse for å verifisere WiFi-tilkobling. Gi plasseringstillatelse for å fortsette.';
+
+  @override
+  String get pdfTranscriptExport => 'Eksporter transkripsjon';
+
+  @override
+  String get pdfConversationExport => 'Eksporter samtale';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Tittel: $title';
+  }
 }

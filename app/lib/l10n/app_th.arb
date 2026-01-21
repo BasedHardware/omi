@@ -2433,5 +2433,8 @@
   "devModeSettingsSaved": "บันทึกการตั้งค่าแล้ว!",
   "voiceFailedToTranscribe": "ไม่สามารถถอดเสียงได้",
   "locationPermissionRequired": "ต้องได้รับอนุญาตตำแหน่ง",
-  "locationPermissionContent": "การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ"
+  "locationPermissionContent": "การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ",
+  "pdfTranscriptExport": "ส่งออกบทถอดเสียง",
+  "pdfConversationExport": "ส่งออกการสนทนา",
+  "pdfTitleLabel": "ชื่อเรื่อง: {title}"
 }

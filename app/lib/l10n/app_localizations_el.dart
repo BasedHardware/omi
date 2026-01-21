@@ -7678,4 +7678,15 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get locationPermissionContent =>
       'Η γρήγορη μεταφορά απαιτεί άδεια τοποθεσίας για να επαληθεύσει τη σύνδεση WiFi. Παρακαλώ δώστε άδεια τοποθεσίας για να συνεχίσετε.';
+
+  @override
+  String get pdfTranscriptExport => 'Εξαγωγή μεταγραφής';
+
+  @override
+  String get pdfConversationExport => 'Εξαγωγή συνομιλίας';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Τίτλος: $title';
+  }
 }
