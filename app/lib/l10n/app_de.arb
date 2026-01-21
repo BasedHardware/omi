@@ -2437,5 +2437,13 @@
   "timeCompactMins": "{count}m",
   "timeCompactMinsAndSecs": "{mins}m {secs}s",
   "timeCompactHours": "{count}h",
-  "timeCompactHoursAndMins": "{hours}h {mins}m"
+  "timeCompactHoursAndMins": "{hours}h {mins}m",
+  "editReply": "Antwort bearbeiten",
+  "failedToSendReply": "Antwort konnte nicht gesendet werden: {error}",
+  "noReviewsFound": "Keine Bewertungen gefunden",
+  "reply": "Antworten",
+  "replySentSuccessfully": "Antwort erfolgreich gesendet",
+  "send": "Senden",
+  "starFilter": "{count} Stern",
+  "writeYourReply": "Schreibe deine Antwort..."
 }
