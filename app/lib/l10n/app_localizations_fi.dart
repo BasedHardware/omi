@@ -30,7 +30,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get confirm => 'Vahvista';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Peruuta';
 
   @override
   String get ok => 'OK';
@@ -1145,7 +1145,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get yes => 'Kyllä';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Muokkaa nimeä';
 
   @override
   String get howShouldOmiCallYou => 'Miten Omin pitäisi kutsua sinua?';
@@ -3262,7 +3262,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get upgradeToPro => 'Päivitä Pro-versioon';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Hanki Omi-laite';
 
   @override
   String get wearableAiCompanion => 'Puettava AI-kumppani';
@@ -3828,7 +3828,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get signOutQuestion => 'Kirjaudu ulos?';
 
   @override
-  String get signOutConfirmation => 'Are you sure you want to sign out?';
+  String get signOutConfirmation => 'Haluatko varmasti kirjautua ulos?';
 
   @override
   String get customVocabularyHeader => 'MUKAUTETTU SANASTO';
@@ -4122,7 +4122,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+      'Tämä sovellus käyttää tietojasi. Omi AI ei ole vastuussa siitä, miten tietojasi käytetään, muokataan tai poistetaan tässä sovelluksessa';
 
   @override
   String get copyUrl => 'Kopioi URL';
@@ -4462,7 +4462,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi Koulutus';
+  String get omiTraining => 'Omi-koulutus';
 
   @override
   String get trainingDataProgram => 'Koulutustietojen ohjelma';
@@ -4894,7 +4894,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get enable => 'Ota käyttöön';
 
   @override
-  String get storeAudioOnPhone => 'Store Audio on Phone';
+  String get storeAudioOnPhone => 'Tallenna ääni puhelimeen';
 
   @override
   String get on => 'On';
@@ -4916,7 +4916,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get enableCloudStorage => 'Ota pilvitallennustila käyttöön';
 
   @override
-  String get storeAudioOnCloud => 'Store Audio on Cloud';
+  String get storeAudioOnCloud => 'Tallenna ääni pilveen';
 
   @override
   String get cloudStorageDialogMessage =>
@@ -5816,28 +5816,28 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chooseFile => 'Valitse tiedosto';
 
   @override
-  String get configureAiPersona => 'Configure your AI persona';
+  String get configureAiPersona => 'Määritä tekoälypersoona';
 
   @override
-  String get connectAiAssistantsToYourData => 'Connect AI assistants to your data';
+  String get connectAiAssistantsToYourData => 'Yhdistä tekoälyavustajat tietoihisi';
 
   @override
   String get oAuth => 'OAuth';
 
   @override
-  String get trackYourGoalsOnHomepage => 'Track your personal goals on homepage';
+  String get trackYourGoalsOnHomepage => 'Seuraa henkilökohtaisia tavoitteitasi etusivulla';
 
   @override
-  String get deleteRecording => 'Delete Recording';
+  String get deleteRecording => 'Poista nauhoitus';
 
   @override
-  String get thisCannotBeUndone => 'This cannot be undone.';
+  String get thisCannotBeUndone => 'Tätä ei voi perua.';
 
   @override
-  String get sdCard => 'SD Card';
+  String get sdCard => 'SD-kortti';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'SD:ltä';
 
   @override
   String get limitless => 'Limitless';
@@ -5846,7 +5846,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get fastTransfer => 'Nopea siirto';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Synkronoidaan';
 
   @override
   String get failedStatus => 'Failed';
@@ -5869,64 +5869,64 @@ class AppLocalizationsFi extends AppLocalizations {
   String get phone => 'Phone';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Peruuta synkronointi';
 
   @override
-  String get cancelSyncMessage => 'Data already downloaded will be saved. You can resume later.';
+  String get cancelSyncMessage => 'Jo ladatut tiedot tallennetaan. Voit jatkaa myöhemmin.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Synkronointi peruutettu';
 
   @override
-  String get deleteProcessedFiles => 'Delete Processed Files';
+  String get deleteProcessedFiles => 'Poista käsitellyt tiedostot';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Käsitellyt tiedostot poistettu';
 
   @override
-  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+  String get wifiEnableFailed => 'WiFin käyttöönotto laitteessa epäonnistui. Yritä uudelleen.';
 
   @override
-  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+  String get deviceNoFastTransfer => 'Laitteesi ei tue nopeaa siirtoa. Käytä Bluetoothia sen sijaan.';
 
   @override
-  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+  String get enableHotspotMessage => 'Ota puhelimesi hotspot käyttöön ja yritä uudelleen.';
 
   @override
-  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+  String get transferStartFailed => 'Siirron aloitus epäonnistui. Yritä uudelleen.';
 
   @override
-  String get deviceNotResponding => 'Device did not respond. Please try again.';
+  String get deviceNotResponding => 'Laite ei vastannut. Yritä uudelleen.';
 
   @override
-  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+  String get invalidWifiCredentials => 'Virheelliset WiFi-tunnukset. Tarkista hotspot-asetuksesi.';
 
   @override
-  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+  String get wifiConnectionFailed => 'WiFi-yhteys epäonnistui. Yritä uudelleen.';
 
   @override
-  String get sdCardProcessing => 'SD Card Processing';
+  String get sdCardProcessing => 'SD-kortin käsittely';
 
   @override
   String sdCardProcessingMessage(int count) {
-    return 'Processing $count recording(s). Files will be removed from SD card after.';
+    return 'Käsitellään $count nauhoitusta. Tiedostot poistetaan SD-kortilta jälkeen.';
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Käsittele';
 
   @override
-  String get wifiSyncFailed => 'WiFi Sync Failed';
+  String get wifiSyncFailed => 'WiFi-synkronointi epäonnistui';
 
   @override
-  String get processingFailed => 'Processing Failed';
+  String get processingFailed => 'Käsittely epäonnistui';
 
   @override
-  String get downloadingFromSdCard => 'Downloading from SD Card';
+  String get downloadingFromSdCard => 'Ladataan SD-kortilta';
 
   @override
   String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
+    return 'Käsitellään $current/$total';
   }
 
   @override
@@ -5935,28 +5935,28 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get internetRequired => 'Internet required';
+  String get internetRequired => 'Internet vaaditaan';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Käsittele ääni';
 
   @override
   String get start => 'Start';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Ei nauhoituksia';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio from your Omi device will appear here';
+  String get audioFromOmiWillAppearHere => 'Omi-laitteesi ääni näkyy täällä';
 
   @override
-  String get deleteProcessed => 'Delete Processed';
+  String get deleteProcessed => 'Poista käsitellyt';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Kokeile eri suodatinta';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Nauhoitukset';
 
   @override
   String get enableRemindersAccess =>
@@ -6254,7 +6254,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Laite';
 
   @override
   String get chatAssistantsTitle => 'Chat-avustajat';
@@ -6311,7 +6311,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get writeReviewOptional => 'Kirjoita arvostelu (valinnainen)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'Auta meitä parantamaan Omia vastaamalla muutamaan kysymykseen. 🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. What do you do?';
@@ -6329,7 +6329,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get setupSkipHelp => 'Skip, I don\'t want to help :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Yrittäjä';
 
   @override
   String get professionSoftwareEngineer => 'Software Engineer';
@@ -6341,13 +6341,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get professionExecutive => 'Executive';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Myynti';
 
   @override
-  String get professionStudent => 'Student';
+  String get professionStudent => 'Opiskelija';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'Työssä';
 
   @override
   String get usageIrlEvents => 'IRL Events';
@@ -6359,7 +6359,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get usageSocialSettings => 'In Social Settings';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Kaikkialla';
 
   @override
   String get customBackendUrlTitle => 'Mukautettu palvelimen URL';
@@ -6524,29 +6524,29 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Jaa julkinen linkki';
 
   @override
   String get makePersonaPublic => 'Make Persona Public';
 
   @override
-  String get connectedKnowledgeData => 'Connected Knowledge Data';
+  String get connectedKnowledgeData => 'Yhdistetty tietolähteisiin';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Syötä nimi';
 
   @override
-  String get disconnectTwitter => 'Disconnect Twitter';
+  String get disconnectTwitter => 'Katkaise Twitter-yhteys';
 
   @override
   String get disconnectTwitterConfirmation =>
-      'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.';
+      'Haluatko varmasti katkaista Twitter-tilisi yhteyden? Persoonallasi ei ole enää pääsyä Twitter-tietoihisi.';
 
   @override
-  String get getOmiDeviceDescription => 'Create a more accurate clone with your personal conversations';
+  String get getOmiDeviceDescription => 'Luo tarkempi klooni henkilökohtaisilla keskusteluillasi';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Hanki Omi';
 
   @override
   String get iHaveOmiDevice => 'I have Omi device';
@@ -6624,31 +6624,31 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String tagSpeaker(int speakerId) {
-    return 'Tag Speaker $speakerId';
+    return 'Merkitse puhuja $speakerId';
   }
 
   @override
   String get personNameAlreadyExists => 'A person with this name already exists.';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Merkitäksesi itsesi, valitse \"Sinä\" luettelosta.';
 
   @override
-  String get enterPersonsName => 'Enter Person\'s Name';
+  String get enterPersonsName => 'Syötä henkilön nimi';
 
   @override
   String get addPerson => 'Add Person';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
-    return 'Tag other segments from this speaker ($selected/$total)';
+    return 'Merkitse muut segmentit tältä puhujalta ($selected/$total)';
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Merkitse muut segmentit';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Hallitse henkilöitä';
 
   @override
   String get shareViaSms => 'Jaa tekstiviestillä';
@@ -6719,16 +6719,16 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
+  String get wifiConnectionFailedTitle => 'WiFi-yhteys epäonnistui';
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Yhdistetään laitteeseen $deviceName';
   }
 
   @override
   String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
+    return 'Ota käyttöön $deviceName-laitteen WiFi';
   }
 
   @override
@@ -6737,10 +6737,10 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get recordingDetails => 'Recording Details';
+  String get recordingDetails => 'Nauhoituksen tiedot';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD-kortti';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
@@ -6757,42 +6757,42 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Siirretään...';
 
   @override
-  String get transferRequired => 'Transfer Required';
+  String get transferRequired => 'Siirto vaaditaan';
 
   @override
-  String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
+  String get downloadingAudioFromSdCard => 'Ladataan ääntä laitteesi SD-kortilta';
 
   @override
   String get transferRequiredDescription =>
-      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+      'Tämä nauhoitus on tallennettu laitteesi SD-kortille. Siirrä se puhelimeesi toistaaksesi tai jakaaksesi.';
 
   @override
-  String get cancelTransfer => 'Cancel Transfer';
+  String get cancelTransfer => 'Peruuta siirto';
 
   @override
-  String get transferToPhone => 'Transfer to Phone';
+  String get transferToPhone => 'Siirrä puhelimeen';
 
   @override
   String get privateAndSecureOnDevice => 'Private & secure on your device';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Nauhoituksen tiedot';
 
   @override
-  String get transferInProgress => 'Transfer in progress...';
+  String get transferInProgress => 'Siirto käynnissä...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Jaa nauhoitus';
 
   @override
   String get deleteRecordingConfirmation =>
-      'Are you sure you want to permanently delete this recording? This can\'t be undone.';
+      'Haluatko varmasti poistaa tämän nauhoituksen pysyvästi? Tätä ei voi perua.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'Nauhoituksen tunnus';
 
   @override
   String get dateTimeLabel => 'Date & Time';
@@ -6801,42 +6801,42 @@ class AppLocalizationsFi extends AppLocalizations {
   String get durationLabel => 'Duration';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Äänimuoto';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Tallennussijainti';
 
   @override
   String get estimatedSizeLabel => 'Estimated Size';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Laitteen malli';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'Laitteen tunnus';
 
   @override
   String get statusLabel => 'Status';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Käsitelty';
 
   @override
   String get statusUnprocessed => 'Unprocessed';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Vaihdettu nopeaan siirtoon';
 
   @override
-  String get transferCompleteMessage => 'Transfer complete! You can now play this recording.';
+  String get transferCompleteMessage => 'Siirto valmis! Voit nyt toistaa tämän nauhoituksen.';
 
   @override
   String transferFailedMessage(String error) {
-    return 'Transfer failed: $error';
+    return 'Siirto epäonnistui: $error';
   }
 
   @override
-  String get transferCancelled => 'Transfer cancelled';
+  String get transferCancelled => 'Siirto peruutettu';
 
   @override
   String get fastTransferEnabled => 'Nopea siirto käytössä';
@@ -6852,7 +6852,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Nopea siirto käyttää WiFiä ~5x nopeampiin nopeuksiin. Puhelimesi yhdistää tilapäisesti Omi-laitteesi WiFi-verkkoon siirron aikana.';
 
   @override
-  String get internetAccessPausedDuringTransfer => 'Internetyhteys keskeytetään siirron ajaksi';
+  String get internetAccessPausedDuringTransfer => 'Internet-yhteys keskeytetään siirron ajaksi';
 
   @override
   String get chooseTransferMethodDescription => 'Valitse, miten tallenteet siirretään Omi-laitteesta puhelimeesi.';
@@ -6960,14 +6960,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
 
   @override
-  String get migrationErrorOccurred => 'An error occurred during migration. Please try again.';
+  String get migrationErrorOccurred => 'Siirron aikana tapahtui virhe. Yritä uudelleen.';
 
   @override
-  String get migrationComplete => 'Migration complete!';
+  String get migrationComplete => 'Siirto valmis!';
 
   @override
   String dataProtectedWithSettings(String level) {
-    return 'Your data is now protected with the new $level settings.';
+    return 'Tietosi on suojattu asetuksillasi';
   }
 
   @override
@@ -7217,7 +7217,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => 'Luo ensin sovellus';
 
   @override
-  String get xHandleTitle => 'What\'s your X handle?';
+  String get xHandleTitle => 'Mikä on X-käyttäjätunnuksesi?';
 
   @override
   String get xHandleDescription => 'We will pre-train your Omi clone\nbased on your account\'s activity';
@@ -7226,20 +7226,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String get xHandleHint => '@nikshevchenko';
 
   @override
-  String get xHandlePleaseEnter => 'Please enter your X handle';
+  String get xHandlePleaseEnter => 'Syötä X-käyttäjätunnuksesi';
 
   @override
-  String get xHandlePleaseEnterValid => 'Please enter a valid X handle';
+  String get xHandlePleaseEnterValid => 'Syötä kelvollinen X-käyttäjätunnus';
 
   @override
   String get nextButton => 'Next';
 
   @override
-  String get connectOmiDevice => 'Connect Omi Device';
+  String get connectOmiDevice => 'Yhdistä Omi-laite';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
-    return 'You\'re switching your Unlimited Plan to the $title. Are you sure you want to proceed?';
+    return 'Olet vaihtamassa Rajoittamaton-pakettisi pakettiin $title. Haluatko varmasti jatkaa?';
   }
 
   @override
@@ -7247,21 +7247,20 @@ class AppLocalizationsFi extends AppLocalizations {
       'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
 
   @override
-  String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
+  String get couldNotSchedulePlanChange => 'Paketin vaihtoa ei voitu ajoittaa. Yritä uudelleen.';
 
   @override
   String get subscriptionReactivatedDefault =>
-      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+      'Tilauksesi on aktivoitu uudelleen! Ei veloitusta nyt - sinut laskutetaan nykyisen jakson lopussa.';
 
   @override
-  String get subscriptionSuccessfulCharged =>
-      'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged => 'Tilaus onnistui! Sinut on veloitettu uudesta laskutusjaksosta.';
 
   @override
-  String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
+  String get couldNotProcessSubscription => 'Tilausta ei voitu käsitellä. Yritä uudelleen.';
 
   @override
-  String get couldNotLaunchUpgradePage => 'Could not launch upgrade page. Please try again.';
+  String get couldNotLaunchUpgradePage => 'Päivityssivua ei voitu avata. Yritä uudelleen.';
 
   @override
   String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
