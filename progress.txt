@@ -1120,3 +1120,23 @@ Legend:
 - flutter gen-l10n completed successfully
 - All tests passed
 - Remaining: 2 other languages still need the same keys translated (uk, vi)
+
+[2026-01-21] Translated 183 pre-existing English keys to Ukrainian (app_uk.arb)
+- PRIORITY 0 task: Translate pre-existing untranslated keys in non-English ARB files
+- Translated 183 keys to proper Ukrainian translations in app_uk.arb
+- Keys include: cancel, signOutConfirmation, deleteRecording, thisCannotBeUndone,
+  storeAudioOnPhone, storeAudioOnCloud, configureAiPersona, trackYourGoalsOnHomepage,
+  cancelSync, cancelSyncMessage, wifiEnableFailed, deviceNotResponding, transferring,
+  transferRequired, downloadingAudioFromSdCard, recordingDetails, storageLocationLabel,
+  setupQuestionsIntro, professionEntrepreneur, usageAtWork, xHandleTitle, planSwitchingDescriptionWithTitle,
+  subscriptionReactivatedDefault, couldNotLaunchUpgradePage, migrationComplete, tagSpeaker,
+  managePeople, disconnectTwitterConfirmation, transferCompleteMessage, and 150+ more
+- Added 22 missing keys: deviceRequirements, onDeviceSlower, onDeviceIntensive, batteryDrainIncrease,
+  premiumMinutesInfo, localProcessingInfo, model, largeModelWarning, noModelDownloadRequired,
+  modelReady, redownload, estimatedSize, availableSpace, downloadError, writeYourReply,
+  replySentSuccessfully, failedToSendReply, send, starFilter, noReviewsFound, editReply, reply
+- Translations preserve ICU message format placeholders ({deviceName}, {count}, {error}, {time}, {level}, etc.)
+- Brand names kept in English where appropriate (Omi, WiFi, Bluetooth, Twitter, SD, PayPal, Stripe, Claude Desktop)
+- flutter gen-l10n completed successfully
+- All tests passed
+- Remaining: 1 other language still needs the same keys translated (vi)
