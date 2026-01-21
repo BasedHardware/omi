@@ -2438,5 +2438,13 @@
   "timeCompactMins": "{count}m",
   "timeCompactMinsAndSecs": "{mins}m {secs}s",
   "timeCompactHours": "{count}h",
-  "timeCompactHoursAndMins": "{hours}h {mins}m"
+  "timeCompactHoursAndMins": "{hours}h {mins}m",
+  "editReply": "Edita la resposta",
+  "failedToSendReply": "No s'ha pogut enviar la resposta: {error}",
+  "noReviewsFound": "No s'han trobat ressenyes",
+  "reply": "Resposta",
+  "replySentSuccessfully": "Resposta enviada correctament",
+  "send": "Enviar",
+  "starFilter": "{count} Estrella",
+  "writeYourReply": "Escriu la teva resposta..."
 }

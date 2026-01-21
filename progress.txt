@@ -73,7 +73,7 @@ Keys: editReply, failedToSendReply, noReviewsFound, reply, replySentSuccessfully
 
   [x] ar (Arabic) - 8 keys
   [x] bg (Bulgarian) - 8 keys
-  [ ] ca (Catalan) - 8 keys
+  [x] ca (Catalan) - 8 keys
   [ ] de (German) - 8 keys
 
 ================================================================================
@@ -139,7 +139,7 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 29/31 languages completed
+Part 1 Progress: 30/31 languages completed
 Part 2 Progress: 0/7 files completed
 Overall Progress: ~45%
 
@@ -376,6 +376,12 @@ Overall Progress: ~45%
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
 
 [2026-01-21] Added 8 missing translation keys to Bulgarian (app_bg.arb)
+  - Keys added: editReply, failedToSendReply, noReviewsFound, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Added 8 missing translation keys to Catalan (app_ca.arb)
   - Keys added: editReply, failedToSendReply, noReviewsFound, reply,
     replySentSuccessfully, send, starFilter, writeYourReply
   - flutter gen-l10n: PASSED
