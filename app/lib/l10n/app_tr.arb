@@ -2455,5 +2455,62 @@
   "timeCompactMins": "{count}dk",
   "timeCompactMinsAndSecs": "{mins}dk {secs}sn",
   "timeCompactHours": "{count}sa",
-  "timeCompactHoursAndMins": "{hours}sa {mins}dk"
+  "timeCompactHoursAndMins": "{hours}sa {mins}dk",
+  "availableSpace": "Kullanılabilir Alan: {space}",
+  "@availableSpace": {
+    "placeholders": {
+      "space": {
+        "type": "String"
+      }
+    }
+  },
+  "batteryDrainIncrease": "Pil tüketimi önemli ölçüde artacaktır.",
+  "deviceRequirements": "Cihazınız Cihaz Üzerinde transkripsiyon gereksinimlerini karşılamıyor.",
+  "downloadError": "İndirme hatası: {error}",
+  "@downloadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editReply": "Yanıtı Düzenle",
+  "estimatedSize": "Tahmini Boyut: ~{size} MB",
+  "@estimatedSize": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSendReply": "Yanıt gönderilemedi: {error}",
+  "@failedToSendReply": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "largeModelWarning": "Bu model büyük ve uygulamanın çökmesine veya mobil cihazlarda çok yavaş çalışmasına neden olabilir.\n\n\"small\" veya \"base\" önerilir.",
+  "localProcessingInfo": "Ses yerel olarak işlenir. Çevrimdışı çalışır, daha güvenlidir, ancak daha fazla pil kullanır.",
+  "model": "Model",
+  "modelReady": "Model Hazır",
+  "noModelDownloadRequired": "Cihazınızın yerel konuşma motoru kullanılacak. Model indirmesi gerekmiyor.",
+  "noReviewsFound": "Yorum Bulunamadı",
+  "onDeviceIntensive": "Cihaz Üzerinde transkripsiyon yoğun hesaplama gerektirir.",
+  "onDeviceSlower": "Bu cihazda cihaz üzerinde transkripsiyon daha yavaş olabilir.",
+  "premiumMinutesInfo": "Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.",
+  "redownload": "Yeniden İndir",
+  "reply": "Yanıtla",
+  "replySentSuccessfully": "Yanıt başarıyla gönderildi",
+  "send": "Gönder",
+  "starFilter": "{count} Yıldız",
+  "@starFilter": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "writeYourReply": "Yanıtınızı yazın..."
 }
