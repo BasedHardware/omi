@@ -32,10 +32,10 @@ Total languages with missing translations: **31**
 | Hindi | hi | 0 | ✅ DONE |
 | Hungarian | hu | 0 | ✅ DONE |
 | Indonesian | id | 0 | ✅ DONE |
-| Italian | it | 22 | HIGH |
-| Japanese | ja | 22 | HIGH |
+| Italian | it | 0 | ✅ DONE |
+| Japanese | ja | 0 | ✅ DONE |
 | Korean | ko | 22 | HIGH |
-| Lithuanian | lt | 22 | HIGH |
+| Lithuanian | lt | 0 | ✅ DONE |
 | Latvian | lv | 22 | HIGH |
 | Malay | ms | 22 | HIGH |
 | Dutch | nl | 22 | HIGH |
