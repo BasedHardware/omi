@@ -2481,5 +2481,13 @@
   "moveToFolder": "Mutați în dosar",
   "noFoldersAvailable": "Nu există dosare disponibile",
   "newFolder": "Dosar nou",
-  "color": "Culoare"
+  "color": "Culoare",
+  "waitingForDevice": "Se așteaptă dispozitivul...",
+  "saySomething": "Spune ceva...",
+  "initialisingSystemAudio": "Se inițializează audio-ul sistemului",
+  "stopRecording": "Oprește înregistrarea",
+  "continueRecording": "Continuă înregistrarea",
+  "initialisingRecorder": "Se inițializează reportofonul",
+  "pauseRecording": "Pauză înregistrare",
+  "resumeRecording": "Reia înregistrarea"
 }

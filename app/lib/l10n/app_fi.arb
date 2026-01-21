@@ -2481,5 +2481,13 @@
   "moveToFolder": "Siirrä kansioon",
   "noFoldersAvailable": "Ei kansioita saatavilla",
   "newFolder": "Uusi kansio",
-  "color": "Väri"
+  "color": "Väri",
+  "waitingForDevice": "Odotetaan laitetta...",
+  "saySomething": "Sano jotain...",
+  "initialisingSystemAudio": "Alustetaan järjestelmän ääntä",
+  "stopRecording": "Lopeta nauhoitus",
+  "continueRecording": "Jatka nauhoitusta",
+  "initialisingRecorder": "Alustetaan tallenninta",
+  "pauseRecording": "Keskeytä nauhoitus",
+  "resumeRecording": "Jatka nauhoitusta"
 }

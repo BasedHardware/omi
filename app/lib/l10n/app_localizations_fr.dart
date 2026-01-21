@@ -7602,4 +7602,28 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get color => 'Couleur';
+
+  @override
+  String get waitingForDevice => 'En attente de l\'appareil...';
+
+  @override
+  String get saySomething => 'Dites quelque chose...';
+
+  @override
+  String get initialisingSystemAudio => 'Initialisation de l\'audio système';
+
+  @override
+  String get stopRecording => 'Arrêter l\'enregistrement';
+
+  @override
+  String get continueRecording => 'Continuer l\'enregistrement';
+
+  @override
+  String get initialisingRecorder => 'Initialisation de l\'enregistreur';
+
+  @override
+  String get pauseRecording => 'Mettre en pause l\'enregistrement';
+
+  @override
+  String get resumeRecording => 'Reprendre l\'enregistrement';
 }

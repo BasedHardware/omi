@@ -7602,4 +7602,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get color => 'اللون';
+
+  @override
+  String get waitingForDevice => 'في انتظار الجهاز...';
+
+  @override
+  String get saySomething => 'قل شيئاً...';
+
+  @override
+  String get initialisingSystemAudio => 'جارٍ تهيئة صوت النظام';
+
+  @override
+  String get stopRecording => 'إيقاف التسجيل';
+
+  @override
+  String get continueRecording => 'متابعة التسجيل';
+
+  @override
+  String get initialisingRecorder => 'جارٍ تهيئة المسجل';
+
+  @override
+  String get pauseRecording => 'إيقاف التسجيل مؤقتاً';
+
+  @override
+  String get resumeRecording => 'استئناف التسجيل';
 }

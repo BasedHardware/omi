@@ -2481,5 +2481,13 @@
   "moveToFolder": "Perkelti į aplanką",
   "noFoldersAvailable": "Nėra pasiekiamų aplankų",
   "newFolder": "Naujas aplankas",
-  "color": "Spalva"
+  "color": "Spalva",
+  "waitingForDevice": "Laukiama įrenginio...",
+  "saySomething": "Pasakykite ką nors...",
+  "initialisingSystemAudio": "Inicijuojamas sistemos garsas",
+  "stopRecording": "Sustabdyti įrašymą",
+  "continueRecording": "Tęsti įrašymą",
+  "initialisingRecorder": "Inicijuojamas diktofonas",
+  "pauseRecording": "Pristabdyti įrašymą",
+  "resumeRecording": "Tęsti įrašymą"
 }

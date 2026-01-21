@@ -7602,4 +7602,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get color => 'Barva';
+
+  @override
+  String get waitingForDevice => 'Čekání na zařízení...';
+
+  @override
+  String get saySomething => 'Řekněte něco...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicializace systémového zvuku';
+
+  @override
+  String get stopRecording => 'Zastavit nahrávání';
+
+  @override
+  String get continueRecording => 'Pokračovat v nahrávání';
+
+  @override
+  String get initialisingRecorder => 'Inicializace záznamníku';
+
+  @override
+  String get pauseRecording => 'Pozastavit nahrávání';
+
+  @override
+  String get resumeRecording => 'Obnovit nahrávání';
 }

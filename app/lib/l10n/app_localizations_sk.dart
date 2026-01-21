@@ -7602,4 +7602,28 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get color => 'Farba';
+
+  @override
+  String get waitingForDevice => 'Čakám na zariadenie...';
+
+  @override
+  String get saySomething => 'Povedzte niečo...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicializácia systémového zvuku';
+
+  @override
+  String get stopRecording => 'Zastaviť nahrávanie';
+
+  @override
+  String get continueRecording => 'Pokračovať v nahrávaní';
+
+  @override
+  String get initialisingRecorder => 'Inicializácia nahrávača';
+
+  @override
+  String get pauseRecording => 'Pozastaviť nahrávanie';
+
+  @override
+  String get resumeRecording => 'Obnoviť nahrávanie';
 }

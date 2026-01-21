@@ -7602,4 +7602,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get color => 'สี';
+
+  @override
+  String get waitingForDevice => 'กำลังรออุปกรณ์...';
+
+  @override
+  String get saySomething => 'พูดอะไรสักอย่าง...';
+
+  @override
+  String get initialisingSystemAudio => 'กำลังเริ่มต้นเสียงระบบ';
+
+  @override
+  String get stopRecording => 'หยุดบันทึก';
+
+  @override
+  String get continueRecording => 'บันทึกต่อ';
+
+  @override
+  String get initialisingRecorder => 'กำลังเริ่มต้นเครื่องบันทึก';
+
+  @override
+  String get pauseRecording => 'หยุดชั่วคราว';
+
+  @override
+  String get resumeRecording => 'บันทึกต่อ';
 }

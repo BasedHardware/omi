@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
@@ -198,7 +199,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              'Waiting for device...',
+              context.l10n.waitingForDevice,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -218,7 +219,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              (isHavingTranscript || isHavingPhotos) ? 'In progress...' : 'Say something...',
+              (isHavingTranscript || isHavingPhotos) ? context.l10n.inProgress : context.l10n.saySomething,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -233,7 +234,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // Always check pause state first with highest priority (both desktop and phone)
     if (captureProvider.isPaused || _isPhoneMicPaused) {
-      stateText = "Paused";
+      stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
@@ -241,7 +242,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
       if (lastEvent is MessageServiceStatusEvent) {
         if (lastEvent.status == "ready") {
-          stateText = "Listening";
+          stateText = context.l10n.listening;
           statusIndicator = const RecordingStatusIndicator();
         } else {
           bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
@@ -323,7 +324,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
+                    isPaused ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused) : context.l10n.listening,
                     style: const TextStyle(
                       color: Color(0xFFC9CBCF),
                       fontSize: 14,
@@ -361,7 +362,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     ),
                     SizedBox(width: 4),
                     Text(
-                      'Starred',
+                      context.l10n.starred,
                       style: TextStyle(
                         color: Colors.amber,
                         fontSize: 12,
@@ -540,7 +541,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
 
   if (isDesktop) {
     if (isLoading) {
-      text = 'Initialising System Audio';
+      text = context.l10n.initialisingSystemAudio;
       icon = const SizedBox(
         height: 8,
         width: 8,
@@ -550,16 +551,16 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.systemAudioRecord) {
-      text = 'Stop Recording';
+      text = context.l10n.stopRecording;
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
     } else {
-      text = 'Continue Recording';
+      text = context.l10n.continueRecording;
       icon = const Icon(Icons.mic, size: 18);
     }
   } else {
     // Phone Mic
     if (isLoading) {
-      text = 'Initialising Recorder';
+      text = context.l10n.initialisingRecorder;
       icon = const SizedBox(
         height: 8,
         width: 8,
@@ -569,7 +570,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.record) {
-      text = 'Pause Recording';
+      text = context.l10n.pauseRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
@@ -583,7 +584,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (isPhoneMicPaused) {
-      text = 'Resume Recording';
+      text = context.l10n.resumeRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
@@ -597,7 +598,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else {
-      text = 'Continue Recording';
+      text = context.l10n.continueRecording;
       icon = const Icon(Icons.mic, size: 18);
     }
   }
@@ -699,9 +700,9 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       child: Shimmer.fromColors(
                         baseColor: Colors.white,
                         highlightColor: Colors.grey,
-                        child: const Text(
-                          'Processing',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.processing,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,

@@ -2481,5 +2481,13 @@
   "moveToFolder": "Pārvietot uz mapi",
   "noFoldersAvailable": "Nav pieejamu mapju",
   "newFolder": "Jauna mape",
-  "color": "Krāsa"
+  "color": "Krāsa",
+  "waitingForDevice": "Gaida ierīci...",
+  "saySomething": "Sakiet kaut ko...",
+  "initialisingSystemAudio": "Sistēmas audio inicializēšana",
+  "stopRecording": "Apturēt ierakstu",
+  "continueRecording": "Turpināt ierakstu",
+  "initialisingRecorder": "Diktofona inicializēšana",
+  "pauseRecording": "Pauzēt ierakstu",
+  "resumeRecording": "Atsākt ierakstu"
 }

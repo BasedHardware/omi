@@ -7603,4 +7603,28 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get color => 'Kolor';
+
+  @override
+  String get waitingForDevice => 'Oczekiwanie na urządzenie...';
+
+  @override
+  String get saySomething => 'Powiedz coś...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicjalizacja dźwięku systemowego';
+
+  @override
+  String get stopRecording => 'Zatrzymaj nagrywanie';
+
+  @override
+  String get continueRecording => 'Kontynuuj nagrywanie';
+
+  @override
+  String get initialisingRecorder => 'Inicjalizacja rejestratora';
+
+  @override
+  String get pauseRecording => 'Wstrzymaj nagrywanie';
+
+  @override
+  String get resumeRecording => 'Wznów nagrywanie';
 }

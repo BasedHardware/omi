@@ -7602,4 +7602,28 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get color => 'Цвят';
+
+  @override
+  String get waitingForDevice => 'Изчаква се устройство...';
+
+  @override
+  String get saySomething => 'Кажете нещо...';
+
+  @override
+  String get initialisingSystemAudio => 'Инициализиране на системното аудио';
+
+  @override
+  String get stopRecording => 'Спиране на записа';
+
+  @override
+  String get continueRecording => 'Продължаване на записа';
+
+  @override
+  String get initialisingRecorder => 'Инициализиране на записващото устройство';
+
+  @override
+  String get pauseRecording => 'Пауза на записа';
+
+  @override
+  String get resumeRecording => 'Възобновяване на записа';
 }

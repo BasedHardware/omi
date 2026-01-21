@@ -7602,4 +7602,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get color => 'Màu sắc';
+
+  @override
+  String get waitingForDevice => 'Đang chờ thiết bị...';
+
+  @override
+  String get saySomething => 'Hãy nói gì đó...';
+
+  @override
+  String get initialisingSystemAudio => 'Đang khởi tạo âm thanh hệ thống';
+
+  @override
+  String get stopRecording => 'Dừng ghi âm';
+
+  @override
+  String get continueRecording => 'Tiếp tục ghi âm';
+
+  @override
+  String get initialisingRecorder => 'Đang khởi tạo máy ghi âm';
+
+  @override
+  String get pauseRecording => 'Tạm dừng ghi âm';
+
+  @override
+  String get resumeRecording => 'Tiếp tục ghi âm';
 }

@@ -2450,5 +2450,13 @@
   "moveToFolder": "Преместване в папка",
   "noFoldersAvailable": "Няма налични папки",
   "newFolder": "Нова папка",
-  "color": "Цвят"
+  "color": "Цвят",
+  "waitingForDevice": "Изчаква се устройство...",
+  "saySomething": "Кажете нещо...",
+  "initialisingSystemAudio": "Инициализиране на системното аудио",
+  "stopRecording": "Спиране на записа",
+  "continueRecording": "Продължаване на записа",
+  "initialisingRecorder": "Инициализиране на записващото устройство",
+  "pauseRecording": "Пауза на записа",
+  "resumeRecording": "Възобновяване на записа"
 }

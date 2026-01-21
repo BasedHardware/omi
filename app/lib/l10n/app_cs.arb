@@ -2450,5 +2450,13 @@
   "moveToFolder": "Přesunout do složky",
   "noFoldersAvailable": "Žádné složky nejsou k dispozici",
   "newFolder": "Nová složka",
-  "color": "Barva"
+  "color": "Barva",
+  "waitingForDevice": "Čekání na zařízení...",
+  "saySomething": "Řekněte něco...",
+  "initialisingSystemAudio": "Inicializace systémového zvuku",
+  "stopRecording": "Zastavit nahrávání",
+  "continueRecording": "Pokračovat v nahrávání",
+  "initialisingRecorder": "Inicializace záznamníku",
+  "pauseRecording": "Pozastavit nahrávání",
+  "resumeRecording": "Obnovit nahrávání"
 }

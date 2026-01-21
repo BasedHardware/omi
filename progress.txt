@@ -98,7 +98,7 @@ Total Strings: ~30
       - 'Icon'
       - 'Color'
 
-  [ ] processing_capture.dart (12 strings)
+  [x] processing_capture.dart (12 strings)
       - 'Waiting for device...'
       - 'In progress...'
       - 'Say something...'
@@ -140,8 +140,8 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 31/31 languages completed
-Part 2 Progress: 3/7 files completed
-Overall Progress: ~60%
+Part 2 Progress: 4/7 files completed
+Overall Progress: ~70%
 
 ================================================================================
 
@@ -417,6 +417,29 @@ Overall Progress: ~60%
   - Replaced hardcoded 'Create' with context.l10n.create
   - Replaced hardcoded 'Icon' with context.l10n.icon
   - Replaced hardcoded 'Color' with context.l10n.color
+  - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
+  - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
+
+[2026-01-21] Localized hardcoded strings in processing_capture.dart
+  - Added new keys to app_en.arb: waitingForDevice, saySomething, initialisingSystemAudio,
+    stopRecording, continueRecording, initialisingRecorder, pauseRecording, resumeRecording
+  - Added translations to all 33 language ARB files
+  - Reused existing keys: inProgress, paused, listening, muted, starred, processing
+  - Replaced hardcoded 'Waiting for device...' with context.l10n.waitingForDevice
+  - Replaced hardcoded 'In progress...' with context.l10n.inProgress
+  - Replaced hardcoded 'Say something...' with context.l10n.saySomething
+  - Replaced hardcoded 'Paused' with context.l10n.paused
+  - Replaced hardcoded 'Listening' with context.l10n.listening
+  - Replaced hardcoded 'Muted' with context.l10n.muted
+  - Replaced hardcoded 'Starred' with context.l10n.starred
+  - Replaced hardcoded 'Processing' with context.l10n.processing
+  - Replaced hardcoded 'Initialising System Audio' with context.l10n.initialisingSystemAudio
+  - Replaced hardcoded 'Stop Recording' with context.l10n.stopRecording
+  - Replaced hardcoded 'Continue Recording' with context.l10n.continueRecording
+  - Replaced hardcoded 'Initialising Recorder' with context.l10n.initialisingRecorder
+  - Replaced hardcoded 'Pause Recording' with context.l10n.pauseRecording
+  - Replaced hardcoded 'Resume Recording' with context.l10n.resumeRecording
+  - Added import for utils/l10n_extensions.dart
   - flutter gen-l10n: PASSED (formatting step has pre-existing environment issue)
   - app/test.sh: Skipped (pre-existing Flutter dependency issues unrelated to l10n)
 

@@ -7602,4 +7602,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get color => 'Färg';
+
+  @override
+  String get waitingForDevice => 'Väntar på enhet...';
+
+  @override
+  String get saySomething => 'Säg något...';
+
+  @override
+  String get initialisingSystemAudio => 'Initierar systemljud';
+
+  @override
+  String get stopRecording => 'Stoppa inspelning';
+
+  @override
+  String get continueRecording => 'Fortsätt inspelning';
+
+  @override
+  String get initialisingRecorder => 'Initierar inspelaren';
+
+  @override
+  String get pauseRecording => 'Pausa inspelning';
+
+  @override
+  String get resumeRecording => 'Återuppta inspelning';
 }

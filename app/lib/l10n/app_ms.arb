@@ -2481,5 +2481,13 @@
   "moveToFolder": "Pindah ke Folder",
   "noFoldersAvailable": "Tiada folder tersedia",
   "newFolder": "Folder Baharu",
-  "color": "Warna"
+  "color": "Warna",
+  "waitingForDevice": "Menunggu peranti...",
+  "saySomething": "Katakan sesuatu...",
+  "initialisingSystemAudio": "Memulakan Audio Sistem",
+  "stopRecording": "Hentikan Rakaman",
+  "continueRecording": "Teruskan Rakaman",
+  "initialisingRecorder": "Memulakan Perakam",
+  "pauseRecording": "Jeda Rakaman",
+  "resumeRecording": "Sambung Rakaman"
 }

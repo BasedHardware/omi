@@ -7602,4 +7602,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get color => 'Renk';
+
+  @override
+  String get waitingForDevice => 'Cihaz bekleniyor...';
+
+  @override
+  String get saySomething => 'Bir şey söyle...';
+
+  @override
+  String get initialisingSystemAudio => 'Sistem Sesi Başlatılıyor';
+
+  @override
+  String get stopRecording => 'Kaydı Durdur';
+
+  @override
+  String get continueRecording => 'Kayda Devam Et';
+
+  @override
+  String get initialisingRecorder => 'Kayıt Cihazı Başlatılıyor';
+
+  @override
+  String get pauseRecording => 'Kaydı Duraklat';
+
+  @override
+  String get resumeRecording => 'Kaydı Sürdür';
 }

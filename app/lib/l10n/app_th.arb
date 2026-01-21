@@ -2481,5 +2481,13 @@
   "moveToFolder": "ย้ายไปยังโฟลเดอร์",
   "noFoldersAvailable": "ไม่มีโฟลเดอร์ที่พร้อมใช้งาน",
   "newFolder": "โฟลเดอร์ใหม่",
-  "color": "สี"
+  "color": "สี",
+  "waitingForDevice": "กำลังรออุปกรณ์...",
+  "saySomething": "พูดอะไรสักอย่าง...",
+  "initialisingSystemAudio": "กำลังเริ่มต้นเสียงระบบ",
+  "stopRecording": "หยุดบันทึก",
+  "continueRecording": "บันทึกต่อ",
+  "initialisingRecorder": "กำลังเริ่มต้นเครื่องบันทึก",
+  "pauseRecording": "หยุดชั่วคราว",
+  "resumeRecording": "บันทึกต่อ"
 }

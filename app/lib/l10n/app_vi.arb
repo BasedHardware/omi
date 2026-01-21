@@ -2486,5 +2486,13 @@
   "moveToFolder": "Di chuyển đến thư mục",
   "noFoldersAvailable": "Không có thư mục nào",
   "newFolder": "Thư mục mới",
-  "color": "Màu sắc"
+  "color": "Màu sắc",
+  "waitingForDevice": "Đang chờ thiết bị...",
+  "saySomething": "Hãy nói gì đó...",
+  "initialisingSystemAudio": "Đang khởi tạo âm thanh hệ thống",
+  "stopRecording": "Dừng ghi âm",
+  "continueRecording": "Tiếp tục ghi âm",
+  "initialisingRecorder": "Đang khởi tạo máy ghi âm",
+  "pauseRecording": "Tạm dừng ghi âm",
+  "resumeRecording": "Tiếp tục ghi âm"
 }

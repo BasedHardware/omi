@@ -7602,4 +7602,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get color => 'Väri';
+
+  @override
+  String get waitingForDevice => 'Odotetaan laitetta...';
+
+  @override
+  String get saySomething => 'Sano jotain...';
+
+  @override
+  String get initialisingSystemAudio => 'Alustetaan järjestelmän ääntä';
+
+  @override
+  String get stopRecording => 'Lopeta nauhoitus';
+
+  @override
+  String get continueRecording => 'Jatka nauhoitusta';
+
+  @override
+  String get initialisingRecorder => 'Alustetaan tallenninta';
+
+  @override
+  String get pauseRecording => 'Keskeytä nauhoitus';
+
+  @override
+  String get resumeRecording => 'Jatka nauhoitusta';
 }

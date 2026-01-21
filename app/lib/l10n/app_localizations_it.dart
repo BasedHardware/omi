@@ -7602,4 +7602,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get color => 'Colore';
+
+  @override
+  String get waitingForDevice => 'In attesa del dispositivo...';
+
+  @override
+  String get saySomething => 'Di\' qualcosa...';
+
+  @override
+  String get initialisingSystemAudio => 'Inizializzazione audio di sistema';
+
+  @override
+  String get stopRecording => 'Interrompi registrazione';
+
+  @override
+  String get continueRecording => 'Continua registrazione';
+
+  @override
+  String get initialisingRecorder => 'Inizializzazione registratore';
+
+  @override
+  String get pauseRecording => 'Metti in pausa registrazione';
+
+  @override
+  String get resumeRecording => 'Riprendi registrazione';
 }

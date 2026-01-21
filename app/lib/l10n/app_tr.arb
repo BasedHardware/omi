@@ -2516,5 +2516,13 @@
   "moveToFolder": "Klasöre Taşı",
   "noFoldersAvailable": "Kullanılabilir klasör yok",
   "newFolder": "Yeni Klasör",
-  "color": "Renk"
+  "color": "Renk",
+  "waitingForDevice": "Cihaz bekleniyor...",
+  "saySomething": "Bir şey söyle...",
+  "initialisingSystemAudio": "Sistem Sesi Başlatılıyor",
+  "stopRecording": "Kaydı Durdur",
+  "continueRecording": "Kayda Devam Et",
+  "initialisingRecorder": "Kayıt Cihazı Başlatılıyor",
+  "pauseRecording": "Kaydı Duraklat",
+  "resumeRecording": "Kaydı Sürdür"
 }

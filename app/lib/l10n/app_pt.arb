@@ -2517,5 +2517,13 @@
   "moveToFolder": "Mover para pasta",
   "noFoldersAvailable": "Nenhuma pasta disponível",
   "newFolder": "Nova pasta",
-  "color": "Cor"
+  "color": "Cor",
+  "waitingForDevice": "Aguardando dispositivo...",
+  "saySomething": "Diga algo...",
+  "initialisingSystemAudio": "Inicializando áudio do sistema",
+  "stopRecording": "Parar gravação",
+  "continueRecording": "Continuar gravação",
+  "initialisingRecorder": "Inicializando gravador",
+  "pauseRecording": "Pausar gravação",
+  "resumeRecording": "Retomar gravação"
 }

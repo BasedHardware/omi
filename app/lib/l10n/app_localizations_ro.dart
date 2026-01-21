@@ -7602,4 +7602,28 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get color => 'Culoare';
+
+  @override
+  String get waitingForDevice => 'Se așteaptă dispozitivul...';
+
+  @override
+  String get saySomething => 'Spune ceva...';
+
+  @override
+  String get initialisingSystemAudio => 'Se inițializează audio-ul sistemului';
+
+  @override
+  String get stopRecording => 'Oprește înregistrarea';
+
+  @override
+  String get continueRecording => 'Continuă înregistrarea';
+
+  @override
+  String get initialisingRecorder => 'Se inițializează reportofonul';
+
+  @override
+  String get pauseRecording => 'Pauză înregistrare';
+
+  @override
+  String get resumeRecording => 'Reia înregistrarea';
 }

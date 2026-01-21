@@ -2481,5 +2481,13 @@
   "moveToFolder": "Teisalda kausta",
   "noFoldersAvailable": "Kaustad pole saadaval",
   "newFolder": "Uus kaust",
-  "color": "Värv"
+  "color": "Värv",
+  "waitingForDevice": "Ootan seadet...",
+  "saySomething": "Ütle midagi...",
+  "initialisingSystemAudio": "Süsteemiheli initsialiseerimine",
+  "stopRecording": "Peata salvestus",
+  "continueRecording": "Jätka salvestamist",
+  "initialisingRecorder": "Salvestaja initsialiseerimine",
+  "pauseRecording": "Peata salvestus",
+  "resumeRecording": "Jätka salvestamist"
 }

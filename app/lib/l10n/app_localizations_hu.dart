@@ -7602,4 +7602,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get color => 'Szín';
+
+  @override
+  String get waitingForDevice => 'Várakozás az eszközre...';
+
+  @override
+  String get saySomething => 'Mondj valamit...';
+
+  @override
+  String get initialisingSystemAudio => 'Rendszerhang inicializálása';
+
+  @override
+  String get stopRecording => 'Felvétel leállítása';
+
+  @override
+  String get continueRecording => 'Felvétel folytatása';
+
+  @override
+  String get initialisingRecorder => 'Felvevő inicializálása';
+
+  @override
+  String get pauseRecording => 'Felvétel szüneteltetése';
+
+  @override
+  String get resumeRecording => 'Felvétel folytatása';
 }

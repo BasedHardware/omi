@@ -7602,4 +7602,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get color => 'Колір';
+
+  @override
+  String get waitingForDevice => 'Очікування пристрою...';
+
+  @override
+  String get saySomething => 'Скажіть щось...';
+
+  @override
+  String get initialisingSystemAudio => 'Ініціалізація системного аудіо';
+
+  @override
+  String get stopRecording => 'Зупинити запис';
+
+  @override
+  String get continueRecording => 'Продовжити запис';
+
+  @override
+  String get initialisingRecorder => 'Ініціалізація диктофона';
+
+  @override
+  String get pauseRecording => 'Призупинити запис';
+
+  @override
+  String get resumeRecording => 'Відновити запис';
 }

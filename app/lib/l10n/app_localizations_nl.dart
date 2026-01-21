@@ -7602,4 +7602,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get color => 'Kleur';
+
+  @override
+  String get waitingForDevice => 'Wachten op apparaat...';
+
+  @override
+  String get saySomething => 'Zeg iets...';
+
+  @override
+  String get initialisingSystemAudio => 'Systeemaudio initialiseren';
+
+  @override
+  String get stopRecording => 'Opname stoppen';
+
+  @override
+  String get continueRecording => 'Opname voortzetten';
+
+  @override
+  String get initialisingRecorder => 'Recorder initialiseren';
+
+  @override
+  String get pauseRecording => 'Opname pauzeren';
+
+  @override
+  String get resumeRecording => 'Opname hervatten';
 }

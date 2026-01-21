@@ -2481,5 +2481,13 @@
   "moveToFolder": "Перемістити до папки",
   "noFoldersAvailable": "Немає доступних папок",
   "newFolder": "Нова папка",
-  "color": "Колір"
+  "color": "Колір",
+  "waitingForDevice": "Очікування пристрою...",
+  "saySomething": "Скажіть щось...",
+  "initialisingSystemAudio": "Ініціалізація системного аудіо",
+  "stopRecording": "Зупинити запис",
+  "continueRecording": "Продовжити запис",
+  "initialisingRecorder": "Ініціалізація диктофона",
+  "pauseRecording": "Призупинити запис",
+  "resumeRecording": "Відновити запис"
 }

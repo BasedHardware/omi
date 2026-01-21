@@ -7596,4 +7596,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get color => '색상';
+
+  @override
+  String get waitingForDevice => '기기 대기 중...';
+
+  @override
+  String get saySomething => '말해보세요...';
+
+  @override
+  String get initialisingSystemAudio => '시스템 오디오 초기화 중';
+
+  @override
+  String get stopRecording => '녹음 중지';
+
+  @override
+  String get continueRecording => '녹음 계속';
+
+  @override
+  String get initialisingRecorder => '녹음기 초기화 중';
+
+  @override
+  String get pauseRecording => '녹음 일시정지';
+
+  @override
+  String get resumeRecording => '녹음 재개';
 }

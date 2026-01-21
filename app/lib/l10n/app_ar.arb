@@ -2448,5 +2448,13 @@
   "moveToFolder": "نقل إلى المجلد",
   "noFoldersAvailable": "لا توجد مجلدات متاحة",
   "newFolder": "مجلد جديد",
-  "color": "اللون"
+  "color": "اللون",
+  "waitingForDevice": "في انتظار الجهاز...",
+  "saySomething": "قل شيئاً...",
+  "initialisingSystemAudio": "جارٍ تهيئة صوت النظام",
+  "stopRecording": "إيقاف التسجيل",
+  "continueRecording": "متابعة التسجيل",
+  "initialisingRecorder": "جارٍ تهيئة المسجل",
+  "pauseRecording": "إيقاف التسجيل مؤقتاً",
+  "resumeRecording": "استئناف التسجيل"
 }

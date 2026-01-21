@@ -2523,5 +2523,13 @@
   "moveToFolder": "Pindahkan ke Folder",
   "noFoldersAvailable": "Tidak ada folder tersedia",
   "newFolder": "Folder Baru",
-  "color": "Warna"
+  "color": "Warna",
+  "waitingForDevice": "Menunggu perangkat...",
+  "saySomething": "Katakan sesuatu...",
+  "initialisingSystemAudio": "Menginisialisasi Audio Sistem",
+  "stopRecording": "Hentikan Perekaman",
+  "continueRecording": "Lanjutkan Perekaman",
+  "initialisingRecorder": "Menginisialisasi Perekam",
+  "pauseRecording": "Jeda Perekaman",
+  "resumeRecording": "Lanjutkan Perekaman"
 }

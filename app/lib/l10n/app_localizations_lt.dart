@@ -7602,4 +7602,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get color => 'Spalva';
+
+  @override
+  String get waitingForDevice => 'Laukiama įrenginio...';
+
+  @override
+  String get saySomething => 'Pasakykite ką nors...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicijuojamas sistemos garsas';
+
+  @override
+  String get stopRecording => 'Sustabdyti įrašymą';
+
+  @override
+  String get continueRecording => 'Tęsti įrašymą';
+
+  @override
+  String get initialisingRecorder => 'Inicijuojamas diktofonas';
+
+  @override
+  String get pauseRecording => 'Pristabdyti įrašymą';
+
+  @override
+  String get resumeRecording => 'Tęsti įrašymą';
 }

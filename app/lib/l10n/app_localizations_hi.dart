@@ -7596,4 +7596,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get color => 'रंग';
+
+  @override
+  String get waitingForDevice => 'डिवाइस की प्रतीक्षा...';
+
+  @override
+  String get saySomething => 'कुछ कहें...';
+
+  @override
+  String get initialisingSystemAudio => 'सिस्टम ऑडियो प्रारंभ हो रहा है';
+
+  @override
+  String get stopRecording => 'रिकॉर्डिंग रोकें';
+
+  @override
+  String get continueRecording => 'रिकॉर्डिंग जारी रखें';
+
+  @override
+  String get initialisingRecorder => 'रिकॉर्डर प्रारंभ हो रहा है';
+
+  @override
+  String get pauseRecording => 'रिकॉर्डिंग रोकें';
+
+  @override
+  String get resumeRecording => 'रिकॉर्डिंग फिर से शुरू करें';
 }

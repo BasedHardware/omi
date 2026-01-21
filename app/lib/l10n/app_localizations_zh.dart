@@ -7596,4 +7596,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get color => '颜色';
+
+  @override
+  String get waitingForDevice => '等待设备...';
+
+  @override
+  String get saySomething => '说点什么...';
+
+  @override
+  String get initialisingSystemAudio => '正在初始化系统音频';
+
+  @override
+  String get stopRecording => '停止录音';
+
+  @override
+  String get continueRecording => '继续录音';
+
+  @override
+  String get initialisingRecorder => '正在初始化录音器';
+
+  @override
+  String get pauseRecording => '暂停录音';
+
+  @override
+  String get resumeRecording => '继续录音';
 }

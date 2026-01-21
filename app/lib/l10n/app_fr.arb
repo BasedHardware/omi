@@ -2516,5 +2516,13 @@
   "moveToFolder": "Déplacer vers le dossier",
   "noFoldersAvailable": "Aucun dossier disponible",
   "newFolder": "Nouveau dossier",
-  "color": "Couleur"
+  "color": "Couleur",
+  "waitingForDevice": "En attente de l'appareil...",
+  "saySomething": "Dites quelque chose...",
+  "initialisingSystemAudio": "Initialisation de l'audio système",
+  "stopRecording": "Arrêter l'enregistrement",
+  "continueRecording": "Continuer l'enregistrement",
+  "initialisingRecorder": "Initialisation de l'enregistreur",
+  "pauseRecording": "Mettre en pause l'enregistrement",
+  "resumeRecording": "Reprendre l'enregistrement"
 }

@@ -2481,5 +2481,13 @@
   "moveToFolder": "폴더로 이동",
   "noFoldersAvailable": "사용 가능한 폴더가 없습니다",
   "newFolder": "새 폴더",
-  "color": "색상"
+  "color": "색상",
+  "waitingForDevice": "기기 대기 중...",
+  "saySomething": "말해보세요...",
+  "initialisingSystemAudio": "시스템 오디오 초기화 중",
+  "stopRecording": "녹음 중지",
+  "continueRecording": "녹음 계속",
+  "initialisingRecorder": "녹음기 초기화 중",
+  "pauseRecording": "녹음 일시정지",
+  "resumeRecording": "녹음 재개"
 }

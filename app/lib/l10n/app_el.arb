@@ -2481,5 +2481,13 @@
   "moveToFolder": "Μετακίνηση σε φάκελο",
   "noFoldersAvailable": "Δεν υπάρχουν διαθέσιμοι φάκελοι",
   "newFolder": "Νέος φάκελος",
-  "color": "Χρώμα"
+  "color": "Χρώμα",
+  "waitingForDevice": "Αναμονή για συσκευή...",
+  "saySomething": "Πείτε κάτι...",
+  "initialisingSystemAudio": "Αρχικοποίηση ήχου συστήματος",
+  "stopRecording": "Διακοπή εγγραφής",
+  "continueRecording": "Συνέχιση εγγραφής",
+  "initialisingRecorder": "Αρχικοποίηση συσκευής εγγραφής",
+  "pauseRecording": "Παύση εγγραφής",
+  "resumeRecording": "Συνέχιση εγγραφής"
 }

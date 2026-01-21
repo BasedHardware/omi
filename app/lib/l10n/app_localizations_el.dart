@@ -7602,4 +7602,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get color => 'Χρώμα';
+
+  @override
+  String get waitingForDevice => 'Αναμονή για συσκευή...';
+
+  @override
+  String get saySomething => 'Πείτε κάτι...';
+
+  @override
+  String get initialisingSystemAudio => 'Αρχικοποίηση ήχου συστήματος';
+
+  @override
+  String get stopRecording => 'Διακοπή εγγραφής';
+
+  @override
+  String get continueRecording => 'Συνέχιση εγγραφής';
+
+  @override
+  String get initialisingRecorder => 'Αρχικοποίηση συσκευής εγγραφής';
+
+  @override
+  String get pauseRecording => 'Παύση εγγραφής';
+
+  @override
+  String get resumeRecording => 'Συνέχιση εγγραφής';
 }

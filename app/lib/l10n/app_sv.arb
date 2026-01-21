@@ -2481,5 +2481,13 @@
   "moveToFolder": "Flytta till mapp",
   "noFoldersAvailable": "Inga mappar tillgängliga",
   "newFolder": "Ny mapp",
-  "color": "Färg"
+  "color": "Färg",
+  "waitingForDevice": "Väntar på enhet...",
+  "saySomething": "Säg något...",
+  "initialisingSystemAudio": "Initierar systemljud",
+  "stopRecording": "Stoppa inspelning",
+  "continueRecording": "Fortsätt inspelning",
+  "initialisingRecorder": "Initierar inspelaren",
+  "pauseRecording": "Pausa inspelning",
+  "resumeRecording": "Återuppta inspelning"
 }

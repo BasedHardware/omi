@@ -2482,5 +2482,13 @@
   "moveToFolder": "フォルダに移動",
   "noFoldersAvailable": "利用可能なフォルダがありません",
   "newFolder": "新しいフォルダ",
-  "color": "色"
+  "color": "色",
+  "waitingForDevice": "デバイスを待機中...",
+  "saySomething": "何か話してください...",
+  "initialisingSystemAudio": "システムオーディオを初期化中",
+  "stopRecording": "録音を停止",
+  "continueRecording": "録音を続ける",
+  "initialisingRecorder": "レコーダーを初期化中",
+  "pauseRecording": "録音を一時停止",
+  "resumeRecording": "録音を再開"
 }

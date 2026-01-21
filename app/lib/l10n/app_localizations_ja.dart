@@ -7596,4 +7596,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get color => '色';
+
+  @override
+  String get waitingForDevice => 'デバイスを待機中...';
+
+  @override
+  String get saySomething => '何か話してください...';
+
+  @override
+  String get initialisingSystemAudio => 'システムオーディオを初期化中';
+
+  @override
+  String get stopRecording => '録音を停止';
+
+  @override
+  String get continueRecording => '録音を続ける';
+
+  @override
+  String get initialisingRecorder => 'レコーダーを初期化中';
+
+  @override
+  String get pauseRecording => '録音を一時停止';
+
+  @override
+  String get resumeRecording => '録音を再開';
 }

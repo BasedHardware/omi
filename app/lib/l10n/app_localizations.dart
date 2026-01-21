@@ -14432,6 +14432,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Color'**
   String get color;
+
+  /// Status message while waiting for device connection
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for device...'**
+  String get waitingForDevice;
+
+  /// Prompt for user to start speaking
+  ///
+  /// In en, this message translates to:
+  /// **'Say something...'**
+  String get saySomething;
+
+  /// Status message during system audio initialization on desktop
+  ///
+  /// In en, this message translates to:
+  /// **'Initialising System Audio'**
+  String get initialisingSystemAudio;
+
+  /// Button label to stop recording
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Recording'**
+  String get stopRecording;
+
+  /// Button label to continue recording
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Recording'**
+  String get continueRecording;
+
+  /// Status message during recorder initialization on mobile
+  ///
+  /// In en, this message translates to:
+  /// **'Initialising Recorder'**
+  String get initialisingRecorder;
+
+  /// Button label to pause recording
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Recording'**
+  String get pauseRecording;
+
+  /// Button label to resume recording
+  ///
+  /// In en, this message translates to:
+  /// **'Resume Recording'**
+  String get resumeRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

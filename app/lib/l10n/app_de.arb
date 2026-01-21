@@ -2449,5 +2449,13 @@
   "moveToFolder": "In Ordner verschieben",
   "noFoldersAvailable": "Keine Ordner verfügbar",
   "newFolder": "Neuer Ordner",
-  "color": "Farbe"
+  "color": "Farbe",
+  "waitingForDevice": "Warte auf Gerät...",
+  "saySomething": "Sag etwas...",
+  "initialisingSystemAudio": "Initialisiere Systemaudio",
+  "stopRecording": "Aufnahme stoppen",
+  "continueRecording": "Aufnahme fortsetzen",
+  "initialisingRecorder": "Initialisiere Aufnahmegerät",
+  "pauseRecording": "Aufnahme pausieren",
+  "resumeRecording": "Aufnahme fortsetzen"
 }

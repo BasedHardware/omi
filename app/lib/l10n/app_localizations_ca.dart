@@ -7602,4 +7602,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get color => 'Color';
+
+  @override
+  String get waitingForDevice => 'Esperant el dispositiu...';
+
+  @override
+  String get saySomething => 'Digues alguna cosa...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicialitzant l\'àudio del sistema';
+
+  @override
+  String get stopRecording => 'Aturar la gravació';
+
+  @override
+  String get continueRecording => 'Continuar la gravació';
+
+  @override
+  String get initialisingRecorder => 'Inicialitzant el gravador';
+
+  @override
+  String get pauseRecording => 'Pausar la gravació';
+
+  @override
+  String get resumeRecording => 'Reprendre la gravació';
 }

@@ -2482,5 +2482,13 @@
   "moveToFolder": "Mover a carpeta",
   "noFoldersAvailable": "No hay carpetas disponibles",
   "newFolder": "Nueva carpeta",
-  "color": "Color"
+  "color": "Color",
+  "waitingForDevice": "Esperando dispositivo...",
+  "saySomething": "Di algo...",
+  "initialisingSystemAudio": "Inicializando audio del sistema",
+  "stopRecording": "Detener grabación",
+  "continueRecording": "Continuar grabación",
+  "initialisingRecorder": "Inicializando grabadora",
+  "pauseRecording": "Pausar grabación",
+  "resumeRecording": "Reanudar grabación"
 }

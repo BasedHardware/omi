@@ -2482,5 +2482,13 @@
   "moveToFolder": "फ़ोल्डर में ले जाएं",
   "noFoldersAvailable": "कोई फ़ोल्डर उपलब्ध नहीं",
   "newFolder": "नया फ़ोल्डर",
-  "color": "रंग"
+  "color": "रंग",
+  "waitingForDevice": "डिवाइस की प्रतीक्षा...",
+  "saySomething": "कुछ कहें...",
+  "initialisingSystemAudio": "सिस्टम ऑडियो प्रारंभ हो रहा है",
+  "stopRecording": "रिकॉर्डिंग रोकें",
+  "continueRecording": "रिकॉर्डिंग जारी रखें",
+  "initialisingRecorder": "रिकॉर्डर प्रारंभ हो रहा है",
+  "pauseRecording": "रिकॉर्डिंग रोकें",
+  "resumeRecording": "रिकॉर्डिंग फिर से शुरू करें"
 }

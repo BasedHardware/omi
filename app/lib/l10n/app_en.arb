@@ -9702,5 +9702,37 @@
     "description": "Message shown when there are no folders to move a conversation to"
   },
   "newFolder": "New Folder",
-  "color": "Color"
+  "color": "Color",
+  "waitingForDevice": "Waiting for device...",
+  "@waitingForDevice": {
+    "description": "Status message while waiting for device connection"
+  },
+  "saySomething": "Say something...",
+  "@saySomething": {
+    "description": "Prompt for user to start speaking"
+  },
+  "initialisingSystemAudio": "Initialising System Audio",
+  "@initialisingSystemAudio": {
+    "description": "Status message during system audio initialization on desktop"
+  },
+  "stopRecording": "Stop Recording",
+  "@stopRecording": {
+    "description": "Button label to stop recording"
+  },
+  "continueRecording": "Continue Recording",
+  "@continueRecording": {
+    "description": "Button label to continue recording"
+  },
+  "initialisingRecorder": "Initialising Recorder",
+  "@initialisingRecorder": {
+    "description": "Status message during recorder initialization on mobile"
+  },
+  "pauseRecording": "Pause Recording",
+  "@pauseRecording": {
+    "description": "Button label to pause recording"
+  },
+  "resumeRecording": "Resume Recording",
+  "@resumeRecording": {
+    "description": "Button label to resume recording"
+  }
 }

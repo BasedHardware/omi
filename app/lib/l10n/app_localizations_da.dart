@@ -7596,4 +7596,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get color => 'Farve';
+
+  @override
+  String get waitingForDevice => 'Venter på enhed...';
+
+  @override
+  String get saySomething => 'Sig noget...';
+
+  @override
+  String get initialisingSystemAudio => 'Initialiserer systemlyd';
+
+  @override
+  String get stopRecording => 'Stop optagelse';
+
+  @override
+  String get continueRecording => 'Fortsæt optagelse';
+
+  @override
+  String get initialisingRecorder => 'Initialiserer optager';
+
+  @override
+  String get pauseRecording => 'Pause optagelse';
+
+  @override
+  String get resumeRecording => 'Genoptag optagelse';
 }

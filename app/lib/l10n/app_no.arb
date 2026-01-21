@@ -2481,5 +2481,13 @@
   "moveToFolder": "Flytt til mappe",
   "noFoldersAvailable": "Ingen mapper tilgjengelig",
   "newFolder": "Ny mappe",
-  "color": "Farge"
+  "color": "Farge",
+  "waitingForDevice": "Venter på enhet...",
+  "saySomething": "Si noe...",
+  "initialisingSystemAudio": "Initialiserer systemlyd",
+  "stopRecording": "Stopp opptak",
+  "continueRecording": "Fortsett opptak",
+  "initialisingRecorder": "Initialiserer opptaker",
+  "pauseRecording": "Pause opptak",
+  "resumeRecording": "Gjenoppta opptak"
 }

@@ -2503,5 +2503,13 @@
   "moveToFolder": "移动到文件夹",
   "noFoldersAvailable": "没有可用的文件夹",
   "newFolder": "新建文件夹",
-  "color": "颜色"
+  "color": "颜色",
+  "waitingForDevice": "等待设备...",
+  "saySomething": "说点什么...",
+  "initialisingSystemAudio": "正在初始化系统音频",
+  "stopRecording": "停止录音",
+  "continueRecording": "继续录音",
+  "initialisingRecorder": "正在初始化录音器",
+  "pauseRecording": "暂停录音",
+  "resumeRecording": "继续录音"
 }

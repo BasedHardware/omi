@@ -7603,4 +7603,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get color => 'Цвет';
+
+  @override
+  String get waitingForDevice => 'Ожидание устройства...';
+
+  @override
+  String get saySomething => 'Скажите что-нибудь...';
+
+  @override
+  String get initialisingSystemAudio => 'Инициализация системного аудио';
+
+  @override
+  String get stopRecording => 'Остановить запись';
+
+  @override
+  String get continueRecording => 'Продолжить запись';
+
+  @override
+  String get initialisingRecorder => 'Инициализация диктофона';
+
+  @override
+  String get pauseRecording => 'Приостановить запись';
+
+  @override
+  String get resumeRecording => 'Возобновить запись';
 }

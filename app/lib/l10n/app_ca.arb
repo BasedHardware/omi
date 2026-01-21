@@ -2450,5 +2450,13 @@
   "moveToFolder": "Moure a la carpeta",
   "noFoldersAvailable": "No hi ha carpetes disponibles",
   "newFolder": "Carpeta nova",
-  "color": "Color"
+  "color": "Color",
+  "waitingForDevice": "Esperant el dispositiu...",
+  "saySomething": "Digues alguna cosa...",
+  "initialisingSystemAudio": "Inicialitzant l'àudio del sistema",
+  "stopRecording": "Aturar la gravació",
+  "continueRecording": "Continuar la gravació",
+  "initialisingRecorder": "Inicialitzant el gravador",
+  "pauseRecording": "Pausar la gravació",
+  "resumeRecording": "Reprendre la gravació"
 }

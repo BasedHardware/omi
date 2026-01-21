@@ -7602,4 +7602,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get color => 'Warna';
+
+  @override
+  String get waitingForDevice => 'Menunggu perangkat...';
+
+  @override
+  String get saySomething => 'Katakan sesuatu...';
+
+  @override
+  String get initialisingSystemAudio => 'Menginisialisasi Audio Sistem';
+
+  @override
+  String get stopRecording => 'Hentikan Perekaman';
+
+  @override
+  String get continueRecording => 'Lanjutkan Perekaman';
+
+  @override
+  String get initialisingRecorder => 'Menginisialisasi Perekam';
+
+  @override
+  String get pauseRecording => 'Jeda Perekaman';
+
+  @override
+  String get resumeRecording => 'Lanjutkan Perekaman';
 }

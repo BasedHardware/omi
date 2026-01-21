@@ -2516,5 +2516,13 @@
   "moveToFolder": "Przenieś do folderu",
   "noFoldersAvailable": "Brak dostępnych folderów",
   "newFolder": "Nowy folder",
-  "color": "Kolor"
+  "color": "Kolor",
+  "waitingForDevice": "Oczekiwanie na urządzenie...",
+  "saySomething": "Powiedz coś...",
+  "initialisingSystemAudio": "Inicjalizacja dźwięku systemowego",
+  "stopRecording": "Zatrzymaj nagrywanie",
+  "continueRecording": "Kontynuuj nagrywanie",
+  "initialisingRecorder": "Inicjalizacja rejestratora",
+  "pauseRecording": "Wstrzymaj nagrywanie",
+  "resumeRecording": "Wznów nagrywanie"
 }

@@ -2516,5 +2516,13 @@
   "moveToFolder": "Переместить в папку",
   "noFoldersAvailable": "Нет доступных папок",
   "newFolder": "Новая папка",
-  "color": "Цвет"
+  "color": "Цвет",
+  "waitingForDevice": "Ожидание устройства...",
+  "saySomething": "Скажите что-нибудь...",
+  "initialisingSystemAudio": "Инициализация системного аудио",
+  "stopRecording": "Остановить запись",
+  "continueRecording": "Продолжить запись",
+  "initialisingRecorder": "Инициализация диктофона",
+  "pauseRecording": "Приостановить запись",
+  "resumeRecording": "Возобновить запись"
 }

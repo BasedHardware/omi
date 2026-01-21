@@ -2577,5 +2577,13 @@
   "moveToFolder": "Áthelyezés mappába",
   "noFoldersAvailable": "Nincsenek elérhető mappák",
   "newFolder": "Új mappa",
-  "color": "Szín"
+  "color": "Szín",
+  "waitingForDevice": "Várakozás az eszközre...",
+  "saySomething": "Mondj valamit...",
+  "initialisingSystemAudio": "Rendszerhang inicializálása",
+  "stopRecording": "Felvétel leállítása",
+  "continueRecording": "Felvétel folytatása",
+  "initialisingRecorder": "Felvevő inicializálása",
+  "pauseRecording": "Felvétel szüneteltetése",
+  "resumeRecording": "Felvétel folytatása"
 }

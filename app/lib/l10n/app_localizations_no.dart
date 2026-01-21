@@ -7602,4 +7602,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get color => 'Farge';
+
+  @override
+  String get waitingForDevice => 'Venter på enhet...';
+
+  @override
+  String get saySomething => 'Si noe...';
+
+  @override
+  String get initialisingSystemAudio => 'Initialiserer systemlyd';
+
+  @override
+  String get stopRecording => 'Stopp opptak';
+
+  @override
+  String get continueRecording => 'Fortsett opptak';
+
+  @override
+  String get initialisingRecorder => 'Initialiserer opptaker';
+
+  @override
+  String get pauseRecording => 'Pause opptak';
+
+  @override
+  String get resumeRecording => 'Gjenoppta opptak';
 }

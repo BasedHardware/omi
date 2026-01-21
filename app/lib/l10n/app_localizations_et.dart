@@ -7602,4 +7602,28 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get color => 'Värv';
+
+  @override
+  String get waitingForDevice => 'Ootan seadet...';
+
+  @override
+  String get saySomething => 'Ütle midagi...';
+
+  @override
+  String get initialisingSystemAudio => 'Süsteemiheli initsialiseerimine';
+
+  @override
+  String get stopRecording => 'Peata salvestus';
+
+  @override
+  String get continueRecording => 'Jätka salvestamist';
+
+  @override
+  String get initialisingRecorder => 'Salvestaja initsialiseerimine';
+
+  @override
+  String get pauseRecording => 'Peata salvestus';
+
+  @override
+  String get resumeRecording => 'Jätka salvestamist';
 }

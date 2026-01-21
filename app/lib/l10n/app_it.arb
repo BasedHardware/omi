@@ -2481,5 +2481,13 @@
   "moveToFolder": "Sposta nella cartella",
   "noFoldersAvailable": "Nessuna cartella disponibile",
   "newFolder": "Nuova cartella",
-  "color": "Colore"
+  "color": "Colore",
+  "waitingForDevice": "In attesa del dispositivo...",
+  "saySomething": "Di' qualcosa...",
+  "initialisingSystemAudio": "Inizializzazione audio di sistema",
+  "stopRecording": "Interrompi registrazione",
+  "continueRecording": "Continua registrazione",
+  "initialisingRecorder": "Inizializzazione registratore",
+  "pauseRecording": "Metti in pausa registrazione",
+  "resumeRecording": "Riprendi registrazione"
 }

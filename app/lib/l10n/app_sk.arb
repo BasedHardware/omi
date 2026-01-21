@@ -2486,5 +2486,13 @@
   "moveToFolder": "Presunúť do priečinka",
   "noFoldersAvailable": "Žiadne priečinky nie sú k dispozícii",
   "newFolder": "Nový priečinok",
-  "color": "Farba"
+  "color": "Farba",
+  "waitingForDevice": "Čakám na zariadenie...",
+  "saySomething": "Povedzte niečo...",
+  "initialisingSystemAudio": "Inicializácia systémového zvuku",
+  "stopRecording": "Zastaviť nahrávanie",
+  "continueRecording": "Pokračovať v nahrávaní",
+  "initialisingRecorder": "Inicializácia nahrávača",
+  "pauseRecording": "Pozastaviť nahrávanie",
+  "resumeRecording": "Obnoviť nahrávanie"
 }

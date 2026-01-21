@@ -7602,4 +7602,28 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get color => 'Warna';
+
+  @override
+  String get waitingForDevice => 'Menunggu peranti...';
+
+  @override
+  String get saySomething => 'Katakan sesuatu...';
+
+  @override
+  String get initialisingSystemAudio => 'Memulakan Audio Sistem';
+
+  @override
+  String get stopRecording => 'Hentikan Rakaman';
+
+  @override
+  String get continueRecording => 'Teruskan Rakaman';
+
+  @override
+  String get initialisingRecorder => 'Memulakan Perakam';
+
+  @override
+  String get pauseRecording => 'Jeda Rakaman';
+
+  @override
+  String get resumeRecording => 'Sambung Rakaman';
 }

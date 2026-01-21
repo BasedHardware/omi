@@ -2481,5 +2481,13 @@
   "moveToFolder": "Verplaatsen naar map",
   "noFoldersAvailable": "Geen mappen beschikbaar",
   "newFolder": "Nieuwe map",
-  "color": "Kleur"
+  "color": "Kleur",
+  "waitingForDevice": "Wachten op apparaat...",
+  "saySomething": "Zeg iets...",
+  "initialisingSystemAudio": "Systeemaudio initialiseren",
+  "stopRecording": "Opname stoppen",
+  "continueRecording": "Opname voortzetten",
+  "initialisingRecorder": "Recorder initialiseren",
+  "pauseRecording": "Opname pauzeren",
+  "resumeRecording": "Opname hervatten"
 }
