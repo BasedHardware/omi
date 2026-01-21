@@ -6046,7 +6046,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceNotCompatible => 'Tu dispositivo no es compatible con la transcripción en el dispositivo';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements =>
+      'Tu dispositivo no cumple con los requisitos para la transcripción en el dispositivo.';
 
   @override
   String get willLikelyCrash => 'Habilitar esto probablemente causará que la aplicación se bloquee o se congele.';
@@ -6061,7 +6062,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get olderDeviceDetected => 'Dispositivo antiguo detectado';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'La transcripción en el dispositivo puede ser más lenta en este dispositivo.';
 
   @override
   String get batteryUsageHigher => 'El uso de batería será mayor que la transcripción en la nube.';
@@ -6073,10 +6074,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get highResourceUsage => 'Alto uso de recursos';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'La transcripción en el dispositivo requiere muchos recursos computacionales.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'El consumo de batería aumentará significativamente.';
 
   @override
   String get deviceMayWarmUp => 'El dispositivo puede calentarse durante el uso prolongado.';
@@ -6088,35 +6089,38 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cloudProvider => 'Proveedor en la nube';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo =>
+      '1.200 minutos premium/mes. La pestaña En el dispositivo ofrece transcripción gratuita ilimitada.';
 
   @override
   String get viewUsage => 'Ver uso';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'El audio se procesa localmente. Funciona sin conexión, más privado, pero consume más batería.';
 
   @override
-  String get model => 'Model';
+  String get model => 'Modelo';
 
   @override
   String get performanceWarning => 'Advertencia de rendimiento';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Este modelo es grande y puede bloquear la aplicación o funcionar muy lento en dispositivos móviles.\n\nSe recomienda \"small\" o \"base\".';
 
   @override
   String get usingNativeIosSpeech => 'Usando reconocimiento de voz nativo de iOS';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Se utilizará el motor de voz nativo de tu dispositivo. No se requiere descarga de modelo.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Modelo listo';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Volver a descargar';
 
   @override
   String get doNotCloseApp => 'Por favor, no cierres la aplicación.';
@@ -6129,12 +6133,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Tamaño estimado: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Espacio disponible: $space';
   }
 
   @override
@@ -6145,7 +6149,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Error de descarga: $error';
   }
 
   @override
@@ -6493,32 +6497,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get moneyEarned => 'Dinero ganado';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Escribe tu respuesta...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Respuesta enviada correctamente';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Error al enviar respuesta: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Enviar';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count Estrella';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'No se encontraron reseñas';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Editar respuesta';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Responder';
 
   @override
   String starFilterLabel(int count) {
