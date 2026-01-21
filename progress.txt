@@ -321,11 +321,11 @@ Description: dateTimeFormat now passes locale
 Solution: Added locale parameter: dateTimeFormat('MMM dd', date, locale: Localizations.localeOf(context).languageCode)
 Note: Correctly uses context.l10n.yesterday for "Yesterday"
 
-### [ ] Multiple files: DateFormat without locale parameter
-Status: PENDING
+### [~] Multiple files: DateFormat without locale parameter
+Status: IN PROGRESS
 Description: DateFormat calls not passing locale - dates display in English format regardless of user locale
 Files affected:
-- desktop/pages/settings/desktop_settings_modal.dart (lines 1641, 1646)
+- desktop/pages/settings/desktop_settings_modal.dart (lines 1641, 1646) - COMPLETED
 - pages/settings/calendar_settings_page.dart (lines 539, 544)
 - pages/settings/usage_page.dart (lines 839, 845)
 - pages/conversations/widgets/score_widget.dart (line 704)
@@ -343,6 +343,14 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Fixed desktop_settings_modal.dart DateFormat calls to pass locale
+- Fixed 2 DateFormat calls that were missing locale parameter
+- Line 1641: DateFormat('EEEE, MMMM d') now passes Localizations.localeOf(context).languageCode
+- Line 1646: DateFormat('h:mm a') now passes locale from context
+- Meeting dates and times now display in the user's language format instead of always English
+- No new ARB keys needed - just fixed existing code to use locale
+- All tests passed
 
 [2026-01-21] Fixed date_list_item.dart to pass locale to dateTimeFormat()
 - Added locale parameter to dateTimeFormat() call on line 30

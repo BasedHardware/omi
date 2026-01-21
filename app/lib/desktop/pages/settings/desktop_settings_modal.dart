@@ -101,7 +101,7 @@ class DesktopSettingsModal extends StatefulWidget {
 
 class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   late SettingsSection _selectedSection;
-  
+
   // Shortcuts state
   ShortcutInfo? _askAIShortcut;
   ShortcutInfo? _toggleControlBarShortcut;
@@ -132,7 +132,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     _loadShortcuts();
     _loadCalendarSettings();
     _loadDailySummarySettings();
-    
+
     // Initialize developer mode provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -204,7 +204,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   void _updateDailyReflectionEnabled(bool value) {
     setState(() => _dailyReflectionEnabled = value);
     SharedPreferencesUtil().dailyReflectionEnabled = value;
-    
+
     // Schedule or cancel the notification based on the setting
     if (value) {
       DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
@@ -310,7 +310,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                     _updateDailySummaryHour(tempHour);
                     Navigator.pop(context);
                   },
-                  child: Text(context.l10n.done, style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.w600)),
+                  child: Text(context.l10n.done,
+                      style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.w600)),
                 ),
               ],
             );
@@ -365,7 +366,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       }
     }
   }
-  
+
   Future<void> _loadShortcuts() async {
     if (!ShortcutService.isSupported) return;
     setState(() => _shortcutsLoading = true);
@@ -383,7 +384,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       if (mounted) setState(() => _shortcutsLoading = false);
     }
   }
-  
+
   void _startRecording(String id) {
     setState(() => _recordingFor = id);
   }
@@ -629,7 +630,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             _buildSettingsRow(
               title: context.l10n.name,
-              subtitle: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
+              subtitle:
+                  SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
                 await showDialog(
@@ -734,7 +736,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             Builder(
               builder: (context) {
                 final uid = SharedPreferencesUtil().uid;
-                final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+                final truncatedUid =
+                    uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                 return _buildSettingsRow(
                   title: context.l10n.userId,
                   subtitle: truncatedUid,
@@ -847,7 +850,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
                             decoration: InputDecoration(
                               hintText: context.l10n.enterWordsCommaSeparated,
-                              hintStyle: TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
+                              hintStyle:
+                                  TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               border: InputBorder.none,
                             ),
@@ -875,7 +879,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                    child:
+                                        CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
                                   )
                                 : const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 14),
                           ),
@@ -921,7 +926,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                 const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
                                 )
                               else
                                 GestureDetector(
@@ -934,7 +940,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                     ),
                                     child: Icon(
                                       Icons.close,
-                                      color: isDisabled ? ResponsiveHelper.textTertiary : ResponsiveHelper.textSecondary,
+                                      color:
+                                          isDisabled ? ResponsiveHelper.textTertiary : ResponsiveHelper.textSecondary,
                                       size: 10,
                                     ),
                                   ),
@@ -1221,9 +1228,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ],
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // Daily Reflection Section
         const Text(
           'DAILY REFLECTION',
@@ -1638,12 +1645,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     } else if (date == tomorrow) {
       return context.l10n.tomorrow;
     } else {
-      return DateFormat('EEEE, MMMM d').format(date);
+      return DateFormat('EEEE, MMMM d', Localizations.localeOf(context).languageCode).format(date);
     }
   }
 
   Widget _buildMeetingCard(CalendarMeeting meeting) {
-    final dateFormat = DateFormat('h:mm a');
+    final locale = Localizations.localeOf(context).languageCode;
+    final dateFormat = DateFormat('h:mm a', locale);
     final duration = meeting.endTime.difference(meeting.startTime);
     final durationString = '${duration.inMinutes} min';
     final platformColor = _getMeetingPlatformColor(meeting.platform);
@@ -1757,9 +1765,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ),
           ],
         ),
-        
         const SizedBox(height: 16),
-
         Text(
           context.l10n.shortcutChangeInstruction,
           style: const TextStyle(
@@ -1807,7 +1813,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'reset',
-                  child: Text(context.l10n.resetToDefault, style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
+                  child: Text(context.l10n.resetToDefault,
+                      style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
                 ),
               ],
             ),
@@ -2005,7 +2012,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5)),
                         ),
-                        title: Text(context.l10n.deleteKnowledgeGraphQuestion, style: const TextStyle(color: ResponsiveHelper.textPrimary)),
+                        title: Text(context.l10n.deleteKnowledgeGraphQuestion,
+                            style: const TextStyle(color: ResponsiveHelper.textPrimary)),
                         content: Text(
                           context.l10n.deleteKnowledgeGraphWarning,
                           style: const TextStyle(color: ResponsiveHelper.textSecondary),
@@ -2013,7 +2021,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            child: Text(context.l10n.cancel, style: const TextStyle(color: ResponsiveHelper.textTertiary)),
+                            child:
+                                Text(context.l10n.cancel, style: const TextStyle(color: ResponsiveHelper.textTertiary)),
                           ),
                           TextButton(
                             onPressed: () async {
@@ -2160,8 +2169,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   value: devProvider.transcriptsToggled,
                   onChanged: devProvider.onTranscriptsToggled,
                 ),
-                if (devProvider.transcriptsToggled)
-                  _buildWebhookUrlField(devProvider.webhookOnTranscriptReceived),
+                if (devProvider.transcriptsToggled) _buildWebhookUrlField(devProvider.webhookOnTranscriptReceived),
                 _buildToggleRow(
                   title: context.l10n.audioBytes,
                   subtitle: context.l10n.audioDataReceived,
@@ -2178,8 +2186,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   value: devProvider.daySummaryToggled,
                   onChanged: devProvider.onDaySummaryToggled,
                 ),
-                if (devProvider.daySummaryToggled)
-                  _buildWebhookUrlField(devProvider.webhookDaySummary),
+                if (devProvider.daySummaryToggled) _buildWebhookUrlField(devProvider.webhookDaySummary),
               ],
             ),
 
@@ -2588,11 +2595,45 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
   static const int controlKey = 0x1000;
 
   static final Map<int, int> _physicalKeyToCarbonKeyCode = {
-    0x04: 0, 0x05: 11, 0x06: 8, 0x07: 2, 0x08: 14, 0x09: 3, 0x0A: 5, 0x0B: 4,
-    0x0C: 34, 0x0D: 38, 0x0E: 40, 0x0F: 37, 0x10: 46, 0x11: 45, 0x12: 31, 0x13: 35,
-    0x14: 12, 0x15: 15, 0x16: 1, 0x17: 17, 0x18: 32, 0x19: 9, 0x1A: 13, 0x1B: 7,
-    0x1C: 16, 0x1D: 6, 0x1E: 18, 0x1F: 19, 0x20: 20, 0x21: 21, 0x22: 23, 0x23: 22,
-    0x24: 26, 0x25: 28, 0x26: 25, 0x27: 29, 0x28: 36, 0x2C: 49, 0x31: 42,
+    0x04: 0,
+    0x05: 11,
+    0x06: 8,
+    0x07: 2,
+    0x08: 14,
+    0x09: 3,
+    0x0A: 5,
+    0x0B: 4,
+    0x0C: 34,
+    0x0D: 38,
+    0x0E: 40,
+    0x0F: 37,
+    0x10: 46,
+    0x11: 45,
+    0x12: 31,
+    0x13: 35,
+    0x14: 12,
+    0x15: 15,
+    0x16: 1,
+    0x17: 17,
+    0x18: 32,
+    0x19: 9,
+    0x1A: 13,
+    0x1B: 7,
+    0x1C: 16,
+    0x1D: 6,
+    0x1E: 18,
+    0x1F: 19,
+    0x20: 20,
+    0x21: 21,
+    0x22: 23,
+    0x23: 22,
+    0x24: 26,
+    0x25: 28,
+    0x26: 25,
+    0x27: 29,
+    0x28: 36,
+    0x2C: 49,
+    0x31: 42,
   };
 
   @override
@@ -2716,4 +2757,3 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     );
   }
 }
-
