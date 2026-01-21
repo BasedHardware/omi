@@ -6018,27 +6018,27 @@ class AppLocalizationsCs extends AppLocalizations {
   String get sendSummary => 'Odeslat shrnutí';
 
   @override
-  String get debugModeDetected => 'Debug Mode Detected';
+  String get debugModeDetected => 'Zjištěn režim ladění';
 
   @override
-  String get performanceReduced => 'Performance reduced 5-10x. Use Release mode.';
+  String get performanceReduced => 'Výkon snížen 5-10x. Použijte režim Release.';
 
   @override
   String autoClosingInSeconds(int seconds) {
-    return 'Auto-closing in ${seconds}s';
+    return 'Automatické zavření za ${seconds}s';
   }
 
   @override
-  String get modelRequired => 'Model Required';
+  String get modelRequired => 'Vyžadován model';
 
   @override
-  String get downloadWhisperModel => 'Please download a Whisper model before saving.';
+  String get downloadWhisperModel => 'Před uložením prosím stáhněte model Whisper.';
 
   @override
-  String get deviceNotCompatible => 'Device Not Compatible';
+  String get deviceNotCompatible => 'Zařízení není kompatibilní';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Vaše zařízení nesplňuje požadavky pro přepis na zařízení.';
 
   @override
   String get willLikelyCrash => 'Povolení pravděpodobně způsobí pád nebo zamrznutí aplikace.';
@@ -6053,7 +6053,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get olderDeviceDetected => 'Zjištěno starší zařízení';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Přepis na zařízení může být na tomto zařízení pomalejší.';
 
   @override
   String get batteryUsageHigher => 'Spotřeba baterie bude vyšší než u cloudového přepisu.';
@@ -6065,10 +6065,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get highResourceUsage => 'Vysoká spotřeba prostředků';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Přepis na zařízení je výpočetně náročný.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Spotřeba baterie se výrazně zvýší.';
 
   @override
   String get deviceMayWarmUp => 'Zařízení se může při delším používání zahřát.';
@@ -6080,13 +6080,14 @@ class AppLocalizationsCs extends AppLocalizations {
   String get cloudProvider => 'Cloudový poskytovatel';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '1 200 prémiových minut/měsíc. Karta Na zařízení nabízí neomezený bezplatný přepis.';
 
   @override
   String get viewUsage => 'Zobrazit využití';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'Zvuk je zpracováván lokálně. Funguje offline, je soukromější, ale spotřebovává více baterie.';
 
   @override
   String get model => 'Model';
@@ -6096,48 +6097,48 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Tento model je velký a může způsobit pád aplikace nebo velmi pomalý běh na mobilních zařízeních.\n\nDoporučuje se \"small\" nebo \"base\".';
 
   @override
   String get usingNativeIosSpeech => 'Používání nativního rozpoznávání řeči iOS';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired => 'Bude použit nativní hlasový modul vašeho zařízení. Není nutné stahovat model.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Model připraven';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Stáhnout znovu';
 
   @override
   String get doNotCloseApp => 'Prosím nezavírejte aplikaci.';
 
   @override
-  String get downloading => 'Downloading...';
+  String get downloading => 'Stahování...';
 
   @override
-  String get downloadModel => 'Download Model';
+  String get downloadModel => 'Stáhnout model';
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Odhadovaná velikost: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Dostupné místo: $space';
   }
 
   @override
   String get notEnoughSpace => 'Varování: Nedostatek místa!';
 
   @override
-  String get download => 'Download';
+  String get download => 'Stáhnout';
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Chyba stahování: $error';
   }
 
   @override
@@ -6482,32 +6483,32 @@ class AppLocalizationsCs extends AppLocalizations {
   String get moneyEarned => 'Vyděláno';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Napište svou odpověď...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Odpověď byla úspěšně odeslána';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Nepodařilo se odeslat odpověď: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Odeslat';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count hvězda';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Nebyly nalezeny žádné recenze';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Upravit odpověď';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Odpověď';
 
   @override
   String starFilterLabel(int count) {

@@ -27,7 +27,7 @@ Keys: autoClosingInSeconds, availableSpace, batteryDrainIncrease,
       onDeviceIntensive, onDeviceSlower, performanceReduced, premiumMinutesInfo,
       redownload, reply, replySentSuccessfully, send, starFilter, writeYourReply
 
-  [ ] cs (Czech) - 31 keys
+  [x] cs (Czech) - 31 keys
   [ ] da (Danish) - 31 keys
 
 --------------------------------------------------------------------------------
@@ -139,8 +139,8 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 0/31 languages completed
+Part 1 Progress: 1/31 languages completed
 Part 2 Progress: 0/7 files completed
-Overall Progress: 0%
+Overall Progress: ~3%
 
 ================================================================================
