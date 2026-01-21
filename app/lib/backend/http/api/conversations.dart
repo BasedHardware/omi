@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
