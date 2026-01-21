@@ -352,18 +352,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   color: Colors.amber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FaIcon(
+                    const FaIcon(
                       FontAwesomeIcons.solidStar,
                       size: 12,
                       color: Colors.amber,
                     ),
-                    SizedBox(width: 4),
+                    const SizedBox(width: 4),
                     Text(
                       context.l10n.starred,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.amber,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
