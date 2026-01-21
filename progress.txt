@@ -80,8 +80,41 @@ Keys: editReply, failedToSendReply, noReviewsFound, reply, replySentSuccessfully
 PART 2: HARDCODED STRINGS IN DART CODE
 ================================================================================
 
-Total Files: 2
-Total Strings: 7
+Total Files: 7
+Total Strings: ~30
+
+  [ ] conversations_page.dart (1 string)
+      - 'Conversations'
+
+  [ ] move_to_folder_sheet.dart (2 strings)
+      - 'Move to Folder'
+      - 'No folders available'
+
+  [ ] create_folder_sheet.dart (6 strings)
+      - 'Edit Folder'
+      - 'New Folder'
+      - 'Save'
+      - 'Create'
+      - 'Icon'
+      - 'Color'
+
+  [ ] processing_capture.dart (12 strings)
+      - 'Waiting for device...'
+      - 'In progress...'
+      - 'Say something...'
+      - 'Paused'
+      - 'Listening'
+      - 'Initialising System Audio'
+      - 'Stop Recording'
+      - 'Continue Recording'
+      - 'Initialising Recorder'
+      - 'Pause Recording'
+      - 'Resume Recording'
+      - 'Processing'
+
+  [ ] daily_summaries_list.dart (2 strings)
+      - 'No daily recaps yet'
+      - 'Your daily recaps will appear here once generated'
 
   [ ] fast_transfer_suggestion_dialog.dart (5 strings)
       - 'Choose Transfer Method'
@@ -107,7 +140,7 @@ SUMMARY
 ================================================================================
 
 Part 1 Progress: 0/31 languages completed
-Part 2 Progress: 0/2 files completed
+Part 2 Progress: 0/7 files completed
 Overall Progress: 0%
 
 ================================================================================

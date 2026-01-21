@@ -131,24 +131,80 @@ writeYourReply
 
 ### Files Requiring Localization
 
-#### 1. fast_transfer_suggestion_dialog.dart
+Total Files: **7**
+Total Hardcoded Strings: **~30**
+
+#### 1. conversations_page.dart
+**Path:** `app/lib/pages/conversations/conversations_page.dart`
+
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 233 | `'Conversations'` | `conversations` | YES |
+
+#### 2. move_to_folder_sheet.dart
+**Path:** `app/lib/pages/conversations/widgets/move_to_folder_sheet.dart`
+
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 53 | `'Move to Folder'` | `moveToFolder` | CHECK |
+| 78 | `'No folders available'` | `noFoldersAvailable` | CHECK |
+
+#### 3. create_folder_sheet.dart
+**Path:** `app/lib/pages/conversations/widgets/create_folder_sheet.dart`
+
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 164 | `'Edit Folder'` | `editFolder` | YES |
+| 164 | `'New Folder'` | `newFolder` | CHECK |
+| 185 | `'Save'` | `save` | YES |
+| 185 | `'Create'` | `create` | YES |
+| 262 | `'Icon'` | `icon` | CHECK |
+| 264 | `'Color'` | `color` | CHECK |
+
+#### 4. processing_capture.dart
+**Path:** `app/lib/pages/conversations/widgets/processing_capture.dart`
+
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 201 | `'Waiting for device...'` | `waitingForDevice` | CHECK |
+| 221 | `'In progress...'` | `inProgress` | CHECK |
+| 221 | `'Say something...'` | `saySomething` | CHECK |
+| 236 | `'Paused'` | `paused` | CHECK |
+| 326 | `'Listening'` | `listening` | CHECK |
+| 364 | `'Initialising System Audio'` | `initialisingSystemAudio` | CHECK |
+| 543 | `'Stop Recording'` | `stopRecording` | CHECK |
+| 556 | `'Continue Recording'` | `continueRecording` | CHECK |
+| 572 | `'Initialising Recorder'` | `initialisingRecorder` | CHECK |
+| 586 | `'Pause Recording'` | `pauseRecording` | CHECK |
+| 600 | `'Resume Recording'` | `resumeRecording` | CHECK |
+| 703 | `'Processing'` | `processing` | CHECK |
+
+#### 5. daily_summaries_list.dart
+**Path:** `app/lib/pages/conversations/widgets/daily_summaries_list.dart`
+
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 164 | `'No daily recaps yet'` | `noDailyRecapsYet` | CHECK |
+| 173 | `'Your daily recaps will appear here once generated'` | `dailyRecapsDescription` | CHECK |
+
+#### 6. fast_transfer_suggestion_dialog.dart
 **Path:** `app/lib/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart`
 
-| Line | Hardcoded String | Suggested Key |
-|------|------------------|---------------|
-| 19 | `'Choose Transfer Method'` | `chooseTransferMethod` |
-| 50 | `'Fast Transfer'` | `fastTransfer` |
-| 55 | `'~150 KB/s via WiFi'` | `fastTransferSpeed` |
-| 92 | `'Bluetooth'` | `bluetooth` |
-| 97 | `'~30 KB/s via BLE'` | `bluetoothSpeed` |
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 19 | `'Choose Transfer Method'` | `chooseTransferMethod` | CHECK |
+| 50 | `'Fast Transfer'` | `fastTransfer` | CHECK |
+| 55 | `'~150 KB/s via WiFi'` | `fastTransferSpeed` | CHECK |
+| 92 | `'Bluetooth'` | `bluetooth` | CHECK |
+| 97 | `'~30 KB/s via BLE'` | `bluetoothSpeed` | CHECK |
 
-#### 2. merge_confirmation_dialog.dart
+#### 7. merge_confirmation_dialog.dart
 **Path:** `app/lib/pages/conversations/widgets/merge_confirmation_dialog.dart`
 
-| Line | Hardcoded String | Suggested Key |
-|------|------------------|---------------|
-| 165 | `'Large time gap detected (${gaps.first})'` | `largeTimeGapDetected` |
-| 167 | `'Large time gaps detected (${gaps.join(", ")})'` | `largeTimeGapsDetected` |
+| Line | Hardcoded String | Suggested Key | Exists in EN? |
+|------|------------------|---------------|---------------|
+| 165 | `'Large time gap detected (...)'` | `largeTimeGapDetected` | CHECK |
+| 167 | `'Large time gaps detected (...)'` | `largeTimeGapsDetected` | CHECK |
 
 ---
 
@@ -160,9 +216,10 @@ writeYourReply
 3. Add 8 keys to ar, bg, ca, de
 
 ### Phase 2: Localize Hardcoded Strings
-1. Add 7 new keys to app_en.arb
-2. Update Dart files to use context.l10n
-3. Add translations to all 33 language ARB files
+1. Check which keys already exist in app_en.arb
+2. Add new keys to app_en.arb for missing ones
+3. Update Dart files to use context.l10n
+4. Add translations to all 33 language ARB files
 
 ### Phase 3: Verification
 1. Run `flutter gen-l10n` to regenerate localization files
