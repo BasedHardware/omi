@@ -6092,7 +6092,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceNotCompatible => 'Η συσκευή σας δεν είναι συμβατή με τη μεταγραφή στη συσκευή';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Η συσκευή σας δεν πληροί τις απαιτήσεις για μεταγραφή στη συσκευή.';
 
   @override
   String get willLikelyCrash => 'Η ενεργοποίηση πιθανότατα θα προκαλέσει κατάρρευση ή πάγωμα της εφαρμογής.';
@@ -6107,7 +6107,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get olderDeviceDetected => 'Εντοπίστηκε παλαιότερη συσκευή';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Η μεταγραφή στη συσκευή μπορεί να είναι πιο αργή σε αυτή τη συσκευή.';
 
   @override
   String get batteryUsageHigher => 'Η χρήση μπαταρίας θα είναι υψηλότερη από τη μεταγραφή στο cloud.';
@@ -6119,10 +6119,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get highResourceUsage => 'Υψηλή χρήση πόρων';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Η μεταγραφή στη συσκευή είναι υπολογιστικά απαιτητική.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Η κατανάλωση μπαταρίας θα αυξηθεί σημαντικά.';
 
   @override
   String get deviceMayWarmUp => 'Η συσκευή μπορεί να ζεσταθεί κατά την παρατεταμένη χρήση.';
@@ -6134,35 +6134,38 @@ class AppLocalizationsEl extends AppLocalizations {
   String get cloudProvider => 'Πάροχος Cloud';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo =>
+      '1.200 premium λεπτά/μήνα. Η καρτέλα Στη Συσκευή προσφέρει απεριόριστη δωρεάν μεταγραφή.';
 
   @override
   String get viewUsage => 'Προβολή χρήσης';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'Ο ήχος επεξεργάζεται τοπικά. Λειτουργεί εκτός σύνδεσης, πιο ιδιωτικό, αλλά καταναλώνει περισσότερη μπαταρία.';
 
   @override
-  String get model => 'Model';
+  String get model => 'Μοντέλο';
 
   @override
   String get performanceWarning => 'Προειδοποίηση απόδοσης';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Αυτό το μοντέλο είναι μεγάλο και μπορεί να προκαλέσει κατάρρευση της εφαρμογής ή να λειτουργεί πολύ αργά σε κινητές συσκευές.\n\nΣυνιστάται το \"small\" ή \"base\".';
 
   @override
   String get usingNativeIosSpeech => 'Χρήση εγγενούς αναγνώρισης ομιλίας iOS';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Θα χρησιμοποιηθεί η εγγενής μηχανή ομιλίας της συσκευής σας. Δεν απαιτείται λήψη μοντέλου.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Μοντέλο Έτοιμο';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Επαναλήψη';
 
   @override
   String get doNotCloseApp => 'Παρακαλώ μην κλείσετε την εφαρμογή.';
@@ -6175,12 +6178,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Εκτιμώμενο Μέγεθος: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Διαθέσιμος Χώρος: $space';
   }
 
   @override
@@ -6191,7 +6194,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Σφάλμα λήψης: $error';
   }
 
   @override
@@ -6537,32 +6540,32 @@ class AppLocalizationsEl extends AppLocalizations {
   String get moneyEarned => 'Κέρδη';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Γράψτε την απάντησή σας...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Η απάντηση στάλθηκε επιτυχώς';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Αποτυχία αποστολής απάντησης: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Αποστολή';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count Αστέρι';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Δεν Βρέθηκαν Κριτικές';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Επεξεργασία Απάντησης';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Απάντηση';
 
   @override
   String starFilterLabel(int count) {

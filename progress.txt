@@ -39,7 +39,7 @@ Keys: availableSpace, batteryDrainIncrease, deviceRequirements, downloadError,
       noReviewsFound, onDeviceIntensive, onDeviceSlower, premiumMinutesInfo,
       redownload, reply, replySentSuccessfully, send, starFilter, writeYourReply
 
-  [ ] el (Greek) - 22 keys
+  [x] el (Greek) - 22 keys
   [ ] es (Spanish) - 22 keys
   [ ] et (Estonian) - 22 keys
   [ ] fi (Finnish) - 22 keys
@@ -139,9 +139,9 @@ VERIFICATION STEPS
 SUMMARY
 ================================================================================
 
-Part 1 Progress: 2/31 languages completed
+Part 1 Progress: 3/31 languages completed
 Part 2 Progress: 0/7 files completed
-Overall Progress: ~6%
+Overall Progress: ~10%
 
 ================================================================================
 
@@ -157,6 +157,15 @@ Overall Progress: ~6%
     model, modelReady, modelRequired, noModelDownloadRequired, noReviewsFound,
     onDeviceIntensive, onDeviceSlower, performanceReduced, premiumMinutesInfo,
     redownload, reply, replySentSuccessfully, send, starFilter, writeYourReply
+  - flutter gen-l10n: PASSED
+  - app/test.sh: PASSED (All tests passed!)
+
+[2026-01-21] Added 22 missing translation keys to Greek (app_el.arb)
+  - Keys added: availableSpace, batteryDrainIncrease, deviceRequirements,
+    downloadError, editReply, estimatedSize, failedToSendReply, largeModelWarning,
+    localProcessingInfo, model, modelReady, noModelDownloadRequired, noReviewsFound,
+    onDeviceIntensive, onDeviceSlower, premiumMinutesInfo, redownload, reply,
+    replySentSuccessfully, send, starFilter, writeYourReply
   - flutter gen-l10n: PASSED
   - app/test.sh: PASSED (All tests passed!)
 
