@@ -6078,7 +6078,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceNotCompatible => 'Az eszközöd nem kompatibilis az eszközön történő átírással';
 
   @override
-  String get deviceRequirements => 'Your device does not meet the requirements for On-Device transcription.';
+  String get deviceRequirements => 'Készüléke nem felel meg az eszközön történő átírás követelményeinek.';
 
   @override
   String get willLikelyCrash => 'Az engedélyezés valószínűleg az alkalmazás összeomlását vagy lefagyását okozza.';
@@ -6093,7 +6093,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get olderDeviceDetected => 'Régebbi eszköz észlelve';
 
   @override
-  String get onDeviceSlower => 'On-device transcription may be slower on this device.';
+  String get onDeviceSlower => 'Az eszközön történő átírás lassabb lehet ezen a készüléken.';
 
   @override
   String get batteryUsageHigher => 'Az akkumulátorhasználat magasabb lesz, mint a felhő átírás esetén.';
@@ -6105,10 +6105,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get highResourceUsage => 'Magas erőforrás-használat';
 
   @override
-  String get onDeviceIntensive => 'On-Device transcription is computationally intensive.';
+  String get onDeviceIntensive => 'Az eszközön történő átírás nagy számítási kapacitást igényel.';
 
   @override
-  String get batteryDrainIncrease => 'Battery drain will increase significantly.';
+  String get batteryDrainIncrease => 'Az akkumulátor-fogyasztás jelentősen megnő.';
 
   @override
   String get deviceMayWarmUp => 'Az eszköz felmelegedhet hosszabb használat során.';
@@ -6120,35 +6120,37 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cloudProvider => 'Felhő szolgáltató';
 
   @override
-  String get premiumMinutesInfo => '1,200 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
 
   @override
-  String get localProcessingInfo => 'Audio is processed locally. Works offline, more private, but uses more battery.';
+  String get localProcessingInfo =>
+      'A hang helyben kerül feldolgozásra. Offline működik, több adatvédelmet biztosít, de több akkumulátort fogyaszt.';
 
   @override
-  String get model => 'Model';
+  String get model => 'Modell';
 
   @override
   String get performanceWarning => 'Teljesítmény figyelmeztetés';
 
   @override
   String get largeModelWarning =>
-      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+      'Ez a modell nagy méretű, és mobileszközökön összeomolhat az alkalmazás, vagy nagyon lassan futhat.\n\nA \"small\" vagy \"base\" ajánlott.';
 
   @override
   String get usingNativeIosSpeech => 'Natív iOS beszédfelismerés használata';
 
   @override
-  String get noModelDownloadRequired => 'Your device\'s native speech engine will be used. No model download required.';
+  String get noModelDownloadRequired =>
+      'Készüléke natív beszédfelismerő motorja lesz használva. Nincs szükség modell letöltésére.';
 
   @override
-  String get modelReady => 'Model Ready';
+  String get modelReady => 'Modell kész';
 
   @override
-  String get redownload => 'Re-download';
+  String get redownload => 'Újratöltés';
 
   @override
   String get doNotCloseApp => 'Kérjük, ne zárd be az alkalmazást.';
@@ -6161,12 +6163,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String estimatedSize(String size) {
-    return 'Estimated Size: ~$size MB';
+    return 'Becsült méret: ~$size MB';
   }
 
   @override
   String availableSpace(String space) {
-    return 'Available Space: $space';
+    return 'Szabad hely: $space';
   }
 
   @override
@@ -6177,7 +6179,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String downloadError(String error) {
-    return 'Download error: $error';
+    return 'Letöltési hiba: $error';
   }
 
   @override
@@ -6522,32 +6524,32 @@ class AppLocalizationsHu extends AppLocalizations {
   String get moneyEarned => 'Keresett pénz';
 
   @override
-  String get writeYourReply => 'Write your reply...';
+  String get writeYourReply => 'Írja meg válaszát...';
 
   @override
-  String get replySentSuccessfully => 'Reply sent successfully';
+  String get replySentSuccessfully => 'Válasz sikeresen elküldve';
 
   @override
   String failedToSendReply(String error) {
-    return 'Failed to send reply: $error';
+    return 'Nem sikerült elküldeni a választ: $error';
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Küldés';
 
   @override
   String starFilter(int count) {
-    return '$count Star';
+    return '$count csillag';
   }
 
   @override
-  String get noReviewsFound => 'No Reviews Found';
+  String get noReviewsFound => 'Nem találhatók értékelések';
 
   @override
-  String get editReply => 'Edit Reply';
+  String get editReply => 'Válasz szerkesztése';
 
   @override
-  String get reply => 'Reply';
+  String get reply => 'Válasz';
 
   @override
   String starFilterLabel(int count) {

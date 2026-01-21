@@ -2455,5 +2455,123 @@
   "timeCompactMins": "{count}p",
   "timeCompactMinsAndSecs": "{mins}p {secs}mp",
   "timeCompactHours": "{count}ó",
-  "timeCompactHoursAndMins": "{hours}ó {mins}p"
+  "timeCompactHoursAndMins": "{hours}ó {mins}p",
+  "availableSpace": "Szabad hely: {space}",
+  "@availableSpace": {
+    "description": "Shows available storage space",
+    "placeholders": {
+      "space": {
+        "type": "String",
+        "example": "2.5 GB"
+      }
+    }
+  },
+  "batteryDrainIncrease": "Az akkumulátor-fogyasztás jelentősen megnő.",
+  "@batteryDrainIncrease": {
+    "description": "Warning about increased battery usage"
+  },
+  "deviceRequirements": "Készüléke nem felel meg az eszközön történő átírás követelményeinek.",
+  "@deviceRequirements": {
+    "description": "Message when device does not meet requirements"
+  },
+  "downloadError": "Letöltési hiba: {error}",
+  "@downloadError": {
+    "description": "Error message for download failure",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Network error"
+      }
+    }
+  },
+  "editReply": "Válasz szerkesztése",
+  "@editReply": {
+    "description": "Button text to edit an existing reply"
+  },
+  "estimatedSize": "Becsült méret: ~{size} MB",
+  "@estimatedSize": {
+    "description": "Estimated download size",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "150"
+      }
+    }
+  },
+  "failedToSendReply": "Nem sikerült elküldeni a választ: {error}",
+  "@failedToSendReply": {
+    "description": "Error message when reply fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Network error"
+      }
+    }
+  },
+  "largeModelWarning": "Ez a modell nagy méretű, és mobileszközökön összeomolhat az alkalmazás, vagy nagyon lassan futhat.\n\nA \"small\" vagy \"base\" ajánlott.",
+  "@largeModelWarning": {
+    "description": "Warning about large model sizes"
+  },
+  "localProcessingInfo": "A hang helyben kerül feldolgozásra. Offline működik, több adatvédelmet biztosít, de több akkumulátort fogyaszt.",
+  "@localProcessingInfo": {
+    "description": "Information about local audio processing"
+  },
+  "model": "Modell",
+  "@model": {
+    "description": "Label for model selector"
+  },
+  "modelReady": "Modell kész",
+  "@modelReady": {
+    "description": "Status when model is downloaded"
+  },
+  "noModelDownloadRequired": "Készüléke natív beszédfelismerő motorja lesz használva. Nincs szükség modell letöltésére.",
+  "@noModelDownloadRequired": {
+    "description": "Message when native speech engine is used"
+  },
+  "noReviewsFound": "Nem találhatók értékelések",
+  "@noReviewsFound": {
+    "description": "Message when no reviews are found"
+  },
+  "onDeviceIntensive": "Az eszközön történő átírás nagy számítási kapacitást igényel.",
+  "@onDeviceIntensive": {
+    "description": "Warning about computational intensity"
+  },
+  "onDeviceSlower": "Az eszközön történő átírás lassabb lehet ezen a készüléken.",
+  "@onDeviceSlower": {
+    "description": "Warning about slower transcription"
+  },
+  "premiumMinutesInfo": "1200 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.",
+  "@premiumMinutesInfo": {
+    "description": "Information about premium minutes"
+  },
+  "redownload": "Újratöltés",
+  "@redownload": {
+    "description": "Button to re-download model"
+  },
+  "reply": "Válasz",
+  "@reply": {
+    "description": "Button text to reply to something"
+  },
+  "replySentSuccessfully": "Válasz sikeresen elküldve",
+  "@replySentSuccessfully": {
+    "description": "Success message after sending a reply"
+  },
+  "send": "Küldés",
+  "@send": {
+    "description": "Button text to send a message or reply"
+  },
+  "starFilter": "{count} csillag",
+  "@starFilter": {
+    "description": "Filter label for star ratings",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "writeYourReply": "Írja meg válaszát...",
+  "@writeYourReply": {
+    "description": "Hint text for reply input field"
+  }
 }
