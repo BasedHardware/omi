@@ -38,14 +38,21 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
     });
 
     try {
-      await BluetoothAdapter.adapterState.where((v) => v == BluetoothAdapterStateHelper.on).first;
+      // Wait for adapter state with timeout - don't hang forever
+      try {
+        await BluetoothAdapter.adapterState
+            .where((v) => v == BluetoothAdapterStateHelper.on)
+            .first
+            .timeout(const Duration(seconds: 5));
+      } catch (e) {
+        return const DeviceDiscoveryResult(devices: []);
+      }
 
-      await BluetoothAdapter.startScan(
+      await Future.delayed(const Duration(seconds: 2));
+
+      await FlutterBluePlus.startScan(
         timeout: Duration(seconds: timeout),
       );
-
-      // Give listener time to receive scan results within timeout
-      await Future.delayed(Duration(seconds: timeout));
 
       final List<BtDevice> devices = bleResults
           .where((r) => BtDevice.isSupportedDevice(r))
