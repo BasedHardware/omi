@@ -140,6 +140,7 @@ The app uses Flutter's ARB-based localization system (`context.l10n.keyName`). W
 | File | Est. Strings | Description |
 |------|--------------|-------------|
 | `utils/other/time_utils.dart` | ~16 | COMPLETED - Time duration strings (secs, mins, hours, days) for human-readable and compact formats |
+| `pages/conversations/widgets/date_list_item.dart` | 1 | COMPLETED - Pass locale to dateTimeFormat() for proper date formatting |
 
 ---
 

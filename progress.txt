@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 38 |
+| Completed Files | 39 |
 | In Progress | 0 |
-| Pending Files | ~10 |
-| Progress | ~85% |
+| Pending Files | ~9 |
+| Progress | ~86% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -315,11 +315,10 @@ Keys reused: deleteConversationTitle, deleteConversationMessage, confirm, unable
 All 34 language ARB files updated with proper translations
 Note: dateTimeFormat and secondsToCompactDuration still use hardcoded locale - tracked separately in Priority 6.4
 
-### [ ] pages/conversations/widgets/date_list_item.dart (1 issue)
-Status: PENDING
-Description: dateTimeFormat without locale
-Issue found:
-- Line 30: dateTimeFormat('MMM dd', date) - no locale passed
+### [x] pages/conversations/widgets/date_list_item.dart (1 issue)
+Status: COMPLETED
+Description: dateTimeFormat now passes locale
+Solution: Added locale parameter: dateTimeFormat('MMM dd', date, locale: Localizations.localeOf(context).languageCode)
 Note: Correctly uses context.l10n.yesterday for "Yesterday"
 
 ### [ ] Multiple files: DateFormat without locale parameter
@@ -333,8 +332,8 @@ Files affected:
 - pages/apps/widgets/api_keys_widget.dart (line 335)
 - desktop/pages/conversations/desktop_conversations_page.dart (lines 597, 748, 785)
 - pages/conversations/widgets/conversation_list_item.dart (lines 316, 493)
-- pages/conversations/widgets/date_list_item.dart (line 30)
 - And ~20+ other files using dateTimeFormat() without locale
+Note: date_list_item.dart was fixed - see [x] entry above
 
 Note: The dateTimeFormat() helper in temp.dart accepts optional locale but NO callers pass it.
 Fix requires either:
@@ -344,6 +343,13 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Fixed date_list_item.dart to pass locale to dateTimeFormat()
+- Added locale parameter to dateTimeFormat() call on line 30
+- Uses Localizations.localeOf(context).languageCode to get current locale
+- Dates now display in the user's language format instead of always English
+- No new ARB keys needed - just fixed existing code to use locale
+- All tests passed
 
 [2026-01-21] Localized time_utils.dart with 16 l10n keys for 34 languages
 - Added 16 new localization keys for time duration strings

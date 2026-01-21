@@ -27,7 +27,9 @@ class DateListItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            isYesterday ? context.l10n.yesterday : dateTimeFormat('MMM dd', date),
+            isYesterday
+                ? context.l10n.yesterday
+                : dateTimeFormat('MMM dd', date, locale: Localizations.localeOf(context).languageCode),
             style: const TextStyle(color: Colors.white, fontSize: 18),
           ),
         ],
