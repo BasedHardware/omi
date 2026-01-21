@@ -2386,5 +2386,25 @@
   "msgUploadFileFailed": "فشل تحميل الملف، يرجى المحاولة مرة أخرى لاحقاً",
   "msgReadingMemories": "جارٍ قراءة ذكرياتك...",
   "msgLearningMemories": "جارٍ التعلم من ذكرياتك...",
-  "msgUploadAttachedFileFailed": "فشل تحميل الملف المرفق."
+  "msgUploadAttachedFileFailed": "فشل تحميل الملف المرفق.",
+  "captureRecordingError": "حدث خطأ أثناء التسجيل: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "توقف التسجيل: {reason}. قد تحتاج إلى إعادة توصيل الشاشات الخارجية أو إعادة بدء التسجيل.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "إذن الميكروفون مطلوب",
+  "captureMicrophonePermissionInSystemPreferences": "منح إذن الميكروفون في تفضيلات النظام",
+  "captureScreenRecordingPermissionRequired": "إذن تسجيل الشاشة مطلوب",
+  "captureDisplayDetectionFailed": "فشل اكتشاف الشاشة. توقف التسجيل."
 }

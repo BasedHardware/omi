@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Kunde inte ladda upp fil, försök igen senare",
   "msgReadingMemories": "Läser dina minnen...",
   "msgLearningMemories": "Lär sig från dina minnen...",
-  "msgUploadAttachedFileFailed": "Kunde inte ladda upp bifogad fil."
+  "msgUploadAttachedFileFailed": "Kunde inte ladda upp bifogad fil.",
+  "captureRecordingError": "Ett fel uppstod under inspelningen: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Inspelningen stoppades: {reason}. Du kan behöva återansluta externa skärmar eller starta om inspelningen.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofonbehörighet krävs",
+  "captureMicrophonePermissionInSystemPreferences": "Ge mikrofonbehörighet i Systeminställningar",
+  "captureScreenRecordingPermissionRequired": "Skärminspelningsbehörighet krävs",
+  "captureDisplayDetectionFailed": "Skärmigenkänning misslyckades. Inspelningen stoppades."
 }

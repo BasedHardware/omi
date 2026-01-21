@@ -7527,4 +7527,26 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'فشل تحميل الملف المرفق.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'حدث خطأ أثناء التسجيل: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'توقف التسجيل: $reason. قد تحتاج إلى إعادة توصيل الشاشات الخارجية أو إعادة بدء التسجيل.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'إذن الميكروفون مطلوب';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'منح إذن الميكروفون في تفضيلات النظام';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'إذن تسجيل الشاشة مطلوب';
+
+  @override
+  String get captureDisplayDetectionFailed => 'فشل اكتشاف الشاشة. توقف التسجيل.';
 }

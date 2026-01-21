@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Faili üleslaadimine ebaõnnestus, palun proovige hiljem uuesti",
   "msgReadingMemories": "Loen sinu mälestusi...",
   "msgLearningMemories": "Õpin sinu mälestustest...",
-  "msgUploadAttachedFileFailed": "Manustatud faili üleslaadimine ebaõnnestus."
+  "msgUploadAttachedFileFailed": "Manustatud faili üleslaadimine ebaõnnestus.",
+  "captureRecordingError": "Salvestamisel ilmnes viga: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Salvestamine peatatud: {reason}. Võimalik, et peate välised ekraanid uuesti ühendama või salvestamise taaskäivitama.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofoni luba on vajalik",
+  "captureMicrophonePermissionInSystemPreferences": "Andke mikrofoni luba Süsteemieelistustes",
+  "captureScreenRecordingPermissionRequired": "Ekraani salvestamise luba on vajalik",
+  "captureDisplayDetectionFailed": "Ekraani tuvastamine ebaõnnestus. Salvestamine peatatud."
 }

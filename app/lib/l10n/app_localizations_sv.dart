@@ -7583,4 +7583,26 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Kunde inte ladda upp bifogad fil.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Ett fel uppstod under inspelningen: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Inspelningen stoppades: $reason. Du kan behöva återansluta externa skärmar eller starta om inspelningen.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofonbehörighet krävs';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Ge mikrofonbehörighet i Systeminställningar';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Skärminspelningsbehörighet krävs';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Skärmigenkänning misslyckades. Inspelningen stoppades.';
 }

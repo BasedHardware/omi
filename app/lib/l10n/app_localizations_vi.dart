@@ -7589,4 +7589,26 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Tải tệp đính kèm lên thất bại.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Đã xảy ra lỗi trong quá trình ghi: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Ghi hình đã dừng: $reason. Bạn có thể cần kết nối lại màn hình ngoài hoặc bắt đầu ghi lại.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Cần có quyền truy cập micrô';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Cấp quyền micrô trong Tùy chọn Hệ thống';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Cần có quyền ghi màn hình';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Phát hiện màn hình thất bại. Ghi hình đã dừng.';
 }

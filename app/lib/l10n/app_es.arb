@@ -2406,5 +2406,25 @@
   "msgUploadFileFailed": "Error al subir el archivo, por favor inténtelo más tarde",
   "msgReadingMemories": "Leyendo tus recuerdos...",
   "msgLearningMemories": "Aprendiendo de tus recuerdos...",
-  "msgUploadAttachedFileFailed": "Error al subir el archivo adjunto."
+  "msgUploadAttachedFileFailed": "Error al subir el archivo adjunto.",
+  "captureRecordingError": "Ocurrió un error durante la grabación: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Grabación detenida: {reason}. Es posible que necesite reconectar las pantallas externas o reiniciar la grabación.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Se requiere permiso de micrófono",
+  "captureMicrophonePermissionInSystemPreferences": "Conceda permiso de micrófono en Preferencias del Sistema",
+  "captureScreenRecordingPermissionRequired": "Se requiere permiso de grabación de pantalla",
+  "captureDisplayDetectionFailed": "Error en la detección de pantalla. Grabación detenida."
 }

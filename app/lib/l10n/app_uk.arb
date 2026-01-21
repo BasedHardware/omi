@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Не вдалося завантажити файл, спробуйте пізніше",
   "msgReadingMemories": "Читаємо ваші спогади...",
   "msgLearningMemories": "Вчимося з ваших спогадів...",
-  "msgUploadAttachedFileFailed": "Не вдалося завантажити прикріплений файл."
+  "msgUploadAttachedFileFailed": "Не вдалося завантажити прикріплений файл.",
+  "captureRecordingError": "Під час запису сталася помилка: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Запис зупинено: {reason}. Можливо, вам потрібно буде повторно підключити зовнішні дисплеї або перезапустити запис.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Потрібен дозвіл на мікрофон",
+  "captureMicrophonePermissionInSystemPreferences": "Надайте дозвіл на мікрофон у Системних налаштуваннях",
+  "captureScreenRecordingPermissionRequired": "Потрібен дозвіл на запис екрану",
+  "captureDisplayDetectionFailed": "Виявлення дисплея не вдалося. Запис зупинено."
 }

@@ -7454,4 +7454,26 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => '添付ファイルのアップロードに失敗しました。';
+
+  @override
+  String captureRecordingError(String error) {
+    return '録音中にエラーが発生しました: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return '録画が停止しました: $reason。外部ディスプレイを再接続するか、録画を再開する必要があるかもしれません。';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'マイクの許可が必要です';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'システム環境設定でマイクの許可を与えてください';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => '画面録画の許可が必要です';
+
+  @override
+  String get captureDisplayDetectionFailed => 'ディスプレイの検出に失敗しました。録画を停止しました。';
 }

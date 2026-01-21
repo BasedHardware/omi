@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Kunne ikke laste opp fil, vennligst prøv igjen senere",
   "msgReadingMemories": "Leser minnene dine...",
   "msgLearningMemories": "Lærer fra minnene dine...",
-  "msgUploadAttachedFileFailed": "Kunne ikke laste opp vedlagt fil."
+  "msgUploadAttachedFileFailed": "Kunne ikke laste opp vedlagt fil.",
+  "captureRecordingError": "Det oppstod en feil under opptaket: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Opptaket stoppet: {reason}. Du må kanskje koble til eksterne skjermer på nytt eller starte opptaket på nytt.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofontillatelse kreves",
+  "captureMicrophonePermissionInSystemPreferences": "Gi mikrofontillatelse i Systemvalg",
+  "captureScreenRecordingPermissionRequired": "Skjermopptakstillatelse kreves",
+  "captureDisplayDetectionFailed": "Skjermgjenkjenning mislyktes. Opptak stoppet."
 }

@@ -2388,5 +2388,25 @@
   "msgUploadFileFailed": "No s'ha pogut pujar el fitxer, si us plau torneu-ho a provar més tard",
   "msgReadingMemories": "Llegint els teus records...",
   "msgLearningMemories": "Aprenent dels teus records...",
-  "msgUploadAttachedFileFailed": "No s'ha pogut pujar el fitxer adjunt."
+  "msgUploadAttachedFileFailed": "No s'ha pogut pujar el fitxer adjunt.",
+  "captureRecordingError": "S'ha produït un error durant l'enregistrament: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Enregistrament aturat: {reason}. És possible que hàgiu de reconnectar les pantalles externes o reiniciar l'enregistrament.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Es requereix permís de micròfon",
+  "captureMicrophonePermissionInSystemPreferences": "Concediu el permís de micròfon a les Preferències del Sistema",
+  "captureScreenRecordingPermissionRequired": "Es requereix permís d'enregistrament de pantalla",
+  "captureDisplayDetectionFailed": "Ha fallat la detecció de pantalla. Enregistrament aturat."
 }

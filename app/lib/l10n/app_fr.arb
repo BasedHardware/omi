@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Échec du téléchargement du fichier, veuillez réessayer plus tard",
   "msgReadingMemories": "Lecture de vos souvenirs...",
   "msgLearningMemories": "Apprentissage de vos souvenirs...",
-  "msgUploadAttachedFileFailed": "Échec du téléchargement du fichier joint."
+  "msgUploadAttachedFileFailed": "Échec du téléchargement du fichier joint.",
+  "captureRecordingError": "Une erreur s'est produite pendant l'enregistrement : {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Enregistrement arrêté : {reason}. Vous devrez peut-être reconnecter les écrans externes ou redémarrer l'enregistrement.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Autorisation du microphone requise",
+  "captureMicrophonePermissionInSystemPreferences": "Accordez l'autorisation du microphone dans les Préférences Système",
+  "captureScreenRecordingPermissionRequired": "Autorisation d'enregistrement d'écran requise",
+  "captureDisplayDetectionFailed": "La détection d'écran a échoué. Enregistrement arrêté."
 }

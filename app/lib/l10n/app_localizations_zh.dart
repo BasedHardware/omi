@@ -7444,4 +7444,26 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => '上传附件失败。';
+
+  @override
+  String captureRecordingError(String error) {
+    return '录音过程中发生错误：$error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return '录制已停止：$reason。您可能需要重新连接外部显示器或重新开始录制。';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => '需要麦克风权限';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => '在系统偏好设置中授予麦克风权限';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => '需要屏幕录制权限';
+
+  @override
+  String get captureDisplayDetectionFailed => '显示器检测失败。录制已停止。';
 }

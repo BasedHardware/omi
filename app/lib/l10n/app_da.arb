@@ -2363,5 +2363,25 @@
   "msgUploadFileFailed": "Kunne ikke uploade fil, prøv venligst igen senere",
   "msgReadingMemories": "Læser dine minder...",
   "msgLearningMemories": "Lærer fra dine minder...",
-  "msgUploadAttachedFileFailed": "Kunne ikke uploade den vedhæftede fil."
+  "msgUploadAttachedFileFailed": "Kunne ikke uploade den vedhæftede fil.",
+  "captureRecordingError": "Der opstod en fejl under optagelsen: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Optagelse stoppet: {reason}. Du skal muligvis tilslutte eksterne skærme igen eller genstarte optagelsen.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofontilladelse påkrævet",
+  "captureMicrophonePermissionInSystemPreferences": "Giv mikrofontilladelse i Systemindstillinger",
+  "captureScreenRecordingPermissionRequired": "Skærmoptagelsestilladelse påkrævet",
+  "captureDisplayDetectionFailed": "Skærmregistrering mislykkedes. Optagelse stoppet."
 }

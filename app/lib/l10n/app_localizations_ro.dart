@@ -7615,4 +7615,26 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Încărcarea fișierului atașat a eșuat.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'A apărut o eroare în timpul înregistrării: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Înregistrarea s-a oprit: $reason. Este posibil să fie necesar să reconectați ecranele externe sau să reporniți înregistrarea.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Este necesară permisiunea microfonului';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Acordați permisiunea microfonului în Preferințe Sistem';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Este necesară permisiunea de înregistrare a ecranului';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Detectarea ecranului a eșuat. Înregistrarea s-a oprit.';
 }

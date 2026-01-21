@@ -2387,5 +2387,25 @@
   "msgUploadFileFailed": "Datei-Upload fehlgeschlagen, bitte versuchen Sie es später erneut",
   "msgReadingMemories": "Lese deine Erinnerungen...",
   "msgLearningMemories": "Lerne aus deinen Erinnerungen...",
-  "msgUploadAttachedFileFailed": "Hochladen der angehängten Datei fehlgeschlagen."
+  "msgUploadAttachedFileFailed": "Hochladen der angehängten Datei fehlgeschlagen.",
+  "captureRecordingError": "Bei der Aufnahme ist ein Fehler aufgetreten: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Aufnahme gestoppt: {reason}. Möglicherweise müssen Sie externe Bildschirme erneut anschließen oder die Aufnahme neu starten.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofonberechtigung erforderlich",
+  "captureMicrophonePermissionInSystemPreferences": "Mikrofonberechtigung in den Systemeinstellungen erteilen",
+  "captureScreenRecordingPermissionRequired": "Bildschirmaufnahme-Berechtigung erforderlich",
+  "captureDisplayDetectionFailed": "Bildschirmerkennung fehlgeschlagen. Aufnahme gestoppt."
 }

@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Nie udało się przesłać pliku, spróbuj ponownie później",
   "msgReadingMemories": "Czytanie twoich wspomnień...",
   "msgLearningMemories": "Uczenie się z twoich wspomnień...",
-  "msgUploadAttachedFileFailed": "Nie udało się przesłać załączonego pliku."
+  "msgUploadAttachedFileFailed": "Nie udało się przesłać załączonego pliku.",
+  "captureRecordingError": "Wystąpił błąd podczas nagrywania: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Nagrywanie zatrzymane: {reason}. Może być konieczne ponowne podłączenie zewnętrznych wyświetlaczy lub ponowne uruchomienie nagrywania.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Wymagane pozwolenie na mikrofon",
+  "captureMicrophonePermissionInSystemPreferences": "Udziel pozwolenia na mikrofon w Preferencjach systemowych",
+  "captureScreenRecordingPermissionRequired": "Wymagane pozwolenie na nagrywanie ekranu",
+  "captureDisplayDetectionFailed": "Wykrywanie wyświetlacza nie powiodło się. Nagrywanie zatrzymane."
 }

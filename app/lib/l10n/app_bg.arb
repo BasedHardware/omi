@@ -2388,5 +2388,25 @@
   "msgUploadFileFailed": "Качването на файла се провали, моля опитайте отново по-късно",
   "msgReadingMemories": "Четене на вашите спомени...",
   "msgLearningMemories": "Учене от вашите спомени...",
-  "msgUploadAttachedFileFailed": "Качването на прикачения файл се провали."
+  "msgUploadAttachedFileFailed": "Качването на прикачения файл се провали.",
+  "captureRecordingError": "Възникна грешка по време на записа: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Записът спря: {reason}. Може да се наложи да свържете отново външните дисплеи или да рестартирате записа.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Изисква се разрешение за микрофон",
+  "captureMicrophonePermissionInSystemPreferences": "Дайте разрешение за микрофон в Системни предпочитания",
+  "captureScreenRecordingPermissionRequired": "Изисква се разрешение за запис на екрана",
+  "captureDisplayDetectionFailed": "Откриването на дисплея е неуспешно. Записът е спрян."
 }

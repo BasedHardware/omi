@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Faila augšupielāde neizdevās, lūdzu mēģiniet vēlāk",
   "msgReadingMemories": "Lasa jūsu atmiņas...",
   "msgLearningMemories": "Mācās no jūsu atmiņām...",
-  "msgUploadAttachedFileFailed": "Neizdevās augšupielādēt pievienoto failu."
+  "msgUploadAttachedFileFailed": "Neizdevās augšupielādēt pievienoto failu.",
+  "captureRecordingError": "Ierakstīšanas laikā radās kļūda: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Ierakstīšana apturēta: {reason}. Iespējams, būs jāpievieno ārējie displeji vēlreiz vai jārestartē ierakstīšana.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Nepieciešama mikrofona atļauja",
+  "captureMicrophonePermissionInSystemPreferences": "Piešķiriet mikrofona atļauju Sistēmas iestatījumos",
+  "captureScreenRecordingPermissionRequired": "Nepieciešama ekrāna ierakstīšanas atļauja",
+  "captureDisplayDetectionFailed": "Displeja noteikšana neizdevās. Ierakstīšana apturēta."
 }

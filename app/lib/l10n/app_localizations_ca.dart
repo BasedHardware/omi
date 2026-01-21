@@ -7625,4 +7625,27 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'No s\'ha pogut pujar el fitxer adjunt.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'S\'ha produït un error durant l\'enregistrament: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Enregistrament aturat: $reason. És possible que hàgiu de reconnectar les pantalles externes o reiniciar l\'enregistrament.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Es requereix permís de micròfon';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences =>
+      'Concediu el permís de micròfon a les Preferències del Sistema';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Es requereix permís d\'enregistrament de pantalla';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Ha fallat la detecció de pantalla. Enregistrament aturat.';
 }

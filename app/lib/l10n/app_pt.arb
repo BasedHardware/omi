@@ -2406,5 +2406,25 @@
   "msgUploadFileFailed": "Falha ao enviar arquivo, por favor tente novamente mais tarde",
   "msgReadingMemories": "Lendo suas memórias...",
   "msgLearningMemories": "Aprendendo com suas memórias...",
-  "msgUploadAttachedFileFailed": "Falha ao enviar o arquivo anexado."
+  "msgUploadAttachedFileFailed": "Falha ao enviar o arquivo anexado.",
+  "captureRecordingError": "Ocorreu um erro durante a gravação: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Gravação parada: {reason}. Pode ser necessário reconectar os monitores externos ou reiniciar a gravação.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Permissão de microfone necessária",
+  "captureMicrophonePermissionInSystemPreferences": "Conceda permissão de microfone nas Preferências do Sistema",
+  "captureScreenRecordingPermissionRequired": "Permissão de gravação de tela necessária",
+  "captureDisplayDetectionFailed": "Detecção de tela falhou. Gravação parada."
 }

@@ -7596,4 +7596,26 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Gagal mengunggah file terlampir.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Terjadi kesalahan saat merekam: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Perekaman dihentikan: $reason. Anda mungkin perlu menyambungkan kembali layar eksternal atau memulai ulang perekaman.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Izin mikrofon diperlukan';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Berikan izin mikrofon di Preferensi Sistem';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Izin perekaman layar diperlukan';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Deteksi layar gagal. Perekaman dihentikan.';
 }

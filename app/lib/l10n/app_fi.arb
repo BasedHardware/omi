@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Tiedoston lataus epäonnistui, yritä myöhemmin uudelleen",
   "msgReadingMemories": "Luetaan muistojasi...",
   "msgLearningMemories": "Opitaan muistoistasi...",
-  "msgUploadAttachedFileFailed": "Liitetiedoston lataus epäonnistui."
+  "msgUploadAttachedFileFailed": "Liitetiedoston lataus epäonnistui.",
+  "captureRecordingError": "Tallennuksen aikana tapahtui virhe: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Tallennus pysähtyi: {reason}. Saatat joutua yhdistämään ulkoiset näytöt uudelleen tai käynnistämään tallennuksen uudelleen.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofonin käyttöoikeus vaaditaan",
+  "captureMicrophonePermissionInSystemPreferences": "Myönnä mikrofonin käyttöoikeus Järjestelmäasetuksissa",
+  "captureScreenRecordingPermissionRequired": "Näytön tallennusoikeus vaaditaan",
+  "captureDisplayDetectionFailed": "Näytön tunnistus epäonnistui. Tallennus pysäytetty."
 }

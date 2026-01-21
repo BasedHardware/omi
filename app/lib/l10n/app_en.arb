@@ -9446,5 +9446,25 @@
   "msgUploadAttachedFileFailed": "Failed to upload the attached file.",
   "@msgUploadAttachedFileFailed": {
     "description": "Error when attached file upload fails"
-  }
+  },
+  "captureRecordingError": "An error occurred during recording: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Recording stopped: {reason}. You may need to reconnect external displays or restart recording.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Microphone permission required",
+  "captureMicrophonePermissionInSystemPreferences": "Grant microphone permission in System Preferences",
+  "captureScreenRecordingPermissionRequired": "Screen recording permission required",
+  "captureDisplayDetectionFailed": "Display detection failed. Recording stopped."
 }

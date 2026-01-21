@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Caricamento file fallito, si prega di riprovare più tardi",
   "msgReadingMemories": "Leggendo i tuoi ricordi...",
   "msgLearningMemories": "Imparando dai tuoi ricordi...",
-  "msgUploadAttachedFileFailed": "Caricamento del file allegato fallito."
+  "msgUploadAttachedFileFailed": "Caricamento del file allegato fallito.",
+  "captureRecordingError": "Si è verificato un errore durante la registrazione: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Registrazione interrotta: {reason}. Potrebbe essere necessario ricollegare i display esterni o riavviare la registrazione.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Autorizzazione microfono richiesta",
+  "captureMicrophonePermissionInSystemPreferences": "Concedi l'autorizzazione al microfono nelle Preferenze di Sistema",
+  "captureScreenRecordingPermissionRequired": "Autorizzazione registrazione schermo richiesta",
+  "captureDisplayDetectionFailed": "Rilevamento schermo non riuscito. Registrazione interrotta."
 }

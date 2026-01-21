@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Nahrávanie súboru zlyhalo, skúste to neskôr",
   "msgReadingMemories": "Čítanie vašich spomienok...",
   "msgLearningMemories": "Učenie sa z vašich spomienok...",
-  "msgUploadAttachedFileFailed": "Nahratie priloženého súboru zlyhalo."
+  "msgUploadAttachedFileFailed": "Nahratie priloženého súboru zlyhalo.",
+  "captureRecordingError": "Počas nahrávania sa vyskytla chyba: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Nahrávanie zastavené: {reason}. Možno budete musieť znova pripojiť externé displeje alebo reštartovať nahrávanie.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Vyžaduje sa povolenie mikrofónu",
+  "captureMicrophonePermissionInSystemPreferences": "Udeľte povolenie mikrofónu v Systémových preferenciách",
+  "captureScreenRecordingPermissionRequired": "Vyžaduje sa povolenie na nahrávanie obrazovky",
+  "captureDisplayDetectionFailed": "Detekcia displeja zlyhala. Nahrávanie zastavené."
 }

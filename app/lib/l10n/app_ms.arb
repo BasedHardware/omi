@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Gagal memuat naik fail, sila cuba lagi kemudian",
   "msgReadingMemories": "Membaca kenangan anda...",
   "msgLearningMemories": "Belajar dari kenangan anda...",
-  "msgUploadAttachedFileFailed": "Gagal memuat naik fail yang dilampirkan."
+  "msgUploadAttachedFileFailed": "Gagal memuat naik fail yang dilampirkan.",
+  "captureRecordingError": "Ralat berlaku semasa rakaman: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Rakaman dihentikan: {reason}. Anda mungkin perlu menyambung semula paparan luaran atau mulakan semula rakaman.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Kebenaran mikrofon diperlukan",
+  "captureMicrophonePermissionInSystemPreferences": "Berikan kebenaran mikrofon dalam Keutamaan Sistem",
+  "captureScreenRecordingPermissionRequired": "Kebenaran rakaman skrin diperlukan",
+  "captureDisplayDetectionFailed": "Pengesanan paparan gagal. Rakaman dihentikan."
 }

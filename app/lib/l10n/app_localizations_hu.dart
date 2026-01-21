@@ -7615,4 +7615,26 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'A csatolt fájl feltöltése sikertelen.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Hiba történt a felvétel során: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'A felvétel leállt: $reason. Lehet, hogy újra kell csatlakoztatnia a külső kijelzőket vagy újra kell indítania a felvételt.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofon engedély szükséges';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Adja meg a mikrofon engedélyt a Rendszerbeállításokban';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Képernyőfelvétel engedély szükséges';
+
+  @override
+  String get captureDisplayDetectionFailed => 'A kijelző észlelése sikertelen. A felvétel leállt.';
 }

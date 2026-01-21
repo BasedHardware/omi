@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Dosya yüklenemedi, lütfen daha sonra tekrar deneyin",
   "msgReadingMemories": "Anılarınız okunuyor...",
   "msgLearningMemories": "Anılarınızdan öğreniliyor...",
-  "msgUploadAttachedFileFailed": "Ekli dosya yüklenemedi."
+  "msgUploadAttachedFileFailed": "Ekli dosya yüklenemedi.",
+  "captureRecordingError": "Kayıt sırasında bir hata oluştu: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Kayıt durduruldu: {reason}. Harici ekranları yeniden bağlamanız veya kaydı yeniden başlatmanız gerekebilir.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofon izni gerekli",
+  "captureMicrophonePermissionInSystemPreferences": "Sistem Tercihleri'nde mikrofon izni verin",
+  "captureScreenRecordingPermissionRequired": "Ekran kaydı izni gerekli",
+  "captureDisplayDetectionFailed": "Ekran algılama başarısız. Kayıt durduruldu."
 }

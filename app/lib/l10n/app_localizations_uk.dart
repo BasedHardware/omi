@@ -7588,4 +7588,26 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Не вдалося завантажити прикріплений файл.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Під час запису сталася помилка: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Запис зупинено: $reason. Можливо, вам потрібно буде повторно підключити зовнішні дисплеї або перезапустити запис.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Потрібен дозвіл на мікрофон';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Надайте дозвіл на мікрофон у Системних налаштуваннях';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Потрібен дозвіл на запис екрану';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Виявлення дисплея не вдалося. Запис зупинено.';
 }

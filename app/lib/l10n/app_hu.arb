@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "A fájl feltöltése sikertelen, kérjük próbálja újra később",
   "msgReadingMemories": "Emlékeid olvasása...",
   "msgLearningMemories": "Tanulás az emlékeidből...",
-  "msgUploadAttachedFileFailed": "A csatolt fájl feltöltése sikertelen."
+  "msgUploadAttachedFileFailed": "A csatolt fájl feltöltése sikertelen.",
+  "captureRecordingError": "Hiba történt a felvétel során: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "A felvétel leállt: {reason}. Lehet, hogy újra kell csatlakoztatnia a külső kijelzőket vagy újra kell indítania a felvételt.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Mikrofon engedély szükséges",
+  "captureMicrophonePermissionInSystemPreferences": "Adja meg a mikrofon engedélyt a Rendszerbeállításokban",
+  "captureScreenRecordingPermissionRequired": "Képernyőfelvétel engedély szükséges",
+  "captureDisplayDetectionFailed": "A kijelző észlelése sikertelen. A felvétel leállt."
 }

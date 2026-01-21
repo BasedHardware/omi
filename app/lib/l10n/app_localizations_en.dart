@@ -7577,4 +7577,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Failed to upload the attached file.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'An error occurred during recording: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Recording stopped: $reason. You may need to reconnect external displays or restart recording.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Microphone permission required';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Grant microphone permission in System Preferences';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Screen recording permission required';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Display detection failed. Recording stopped.';
 }

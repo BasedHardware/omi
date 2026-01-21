@@ -7591,4 +7591,26 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Ekli dosya yüklenemedi.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Kayıt sırasında bir hata oluştu: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Kayıt durduruldu: $reason. Harici ekranları yeniden bağlamanız veya kaydı yeniden başlatmanız gerekebilir.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofon izni gerekli';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Sistem Tercihleri\'nde mikrofon izni verin';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Ekran kaydı izni gerekli';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Ekran algılama başarısız. Kayıt durduruldu.';
 }

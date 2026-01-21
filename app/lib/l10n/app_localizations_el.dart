@@ -7629,4 +7629,26 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Η μεταφόρτωση του συνημμένου αρχείου απέτυχε.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Παρουσιάστηκε σφάλμα κατά την εγγραφή: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Η εγγραφή σταμάτησε: $reason. Ίσως χρειαστεί να επανασυνδέσετε εξωτερικές οθόνες ή να επανεκκινήσετε την εγγραφή.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Απαιτείται άδεια μικροφώνου';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Χορηγήστε άδεια μικροφώνου στις Προτιμήσεις Συστήματος';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Απαιτείται άδεια εγγραφής οθόνης';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Η ανίχνευση οθόνης απέτυχε. Η εγγραφή σταμάτησε.';
 }

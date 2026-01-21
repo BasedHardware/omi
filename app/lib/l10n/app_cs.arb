@@ -2365,5 +2365,25 @@
   "msgUploadFileFailed": "Nahrávání souboru se nezdařilo, zkuste to prosím později",
   "msgReadingMemories": "Čtení vašich vzpomínek...",
   "msgLearningMemories": "Učení se z vašich vzpomínek...",
-  "msgUploadAttachedFileFailed": "Nahrání přiloženého souboru se nezdařilo."
+  "msgUploadAttachedFileFailed": "Nahrání přiloženého souboru se nezdařilo.",
+  "captureRecordingError": "Při nahrávání došlo k chybě: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Nahrávání zastaveno: {reason}. Možná budete muset znovu připojit externí displeje nebo restartovat nahrávání.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Vyžadováno oprávnění k mikrofonu",
+  "captureMicrophonePermissionInSystemPreferences": "Udělte oprávnění k mikrofonu v Předvolbách systému",
+  "captureScreenRecordingPermissionRequired": "Vyžadováno oprávnění k nahrávání obrazovky",
+  "captureDisplayDetectionFailed": "Detekce displeje selhala. Nahrávání zastaveno."
 }

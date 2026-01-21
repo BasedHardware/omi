@@ -7576,4 +7576,26 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Liitetiedoston lataus epäonnistui.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Tallennuksen aikana tapahtui virhe: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Tallennus pysähtyi: $reason. Saatat joutua yhdistämään ulkoiset näytöt uudelleen tai käynnistämään tallennuksen uudelleen.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofonin käyttöoikeus vaaditaan';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Myönnä mikrofonin käyttöoikeus Järjestelmäasetuksissa';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Näytön tallennusoikeus vaaditaan';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Näytön tunnistus epäonnistui. Tallennus pysäytetty.';
 }

@@ -7581,4 +7581,26 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Nepavyko įkelti pridėto failo.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Įrašymo metu įvyko klaida: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Įrašymas sustabdytas: $reason. Gali tekti iš naujo prijungti išorinius ekranus arba paleisti įrašymą iš naujo.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Reikalingas mikrofono leidimas';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Suteikite mikrofono leidimą Sistemos nuostatose';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Reikalingas ekrano įrašymo leidimas';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Ekrano aptikimas nepavyko. Įrašymas sustabdytas.';
 }

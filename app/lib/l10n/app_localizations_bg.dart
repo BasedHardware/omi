@@ -7610,4 +7610,26 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Качването на прикачения файл се провали.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Възникна грешка по време на записа: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Записът спря: $reason. Може да се наложи да свържете отново външните дисплеи или да рестартирате записа.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Изисква се разрешение за микрофон';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Дайте разрешение за микрофон в Системни предпочитания';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Изисква се разрешение за запис на екрана';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Откриването на дисплея е неуспешно. Записът е спрян.';
 }

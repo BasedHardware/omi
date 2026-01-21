@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Не удалось загрузить файл, попробуйте позже",
   "msgReadingMemories": "Читаем ваши воспоминания...",
   "msgLearningMemories": "Учимся на ваших воспоминаниях...",
-  "msgUploadAttachedFileFailed": "Не удалось загрузить прикреплённый файл."
+  "msgUploadAttachedFileFailed": "Не удалось загрузить прикреплённый файл.",
+  "captureRecordingError": "Произошла ошибка во время записи: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Запись остановлена: {reason}. Возможно, вам потребуется переподключить внешние дисплеи или перезапустить запись.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Требуется разрешение на использование микрофона",
+  "captureMicrophonePermissionInSystemPreferences": "Предоставьте разрешение на микрофон в Системных настройках",
+  "captureScreenRecordingPermissionRequired": "Требуется разрешение на запись экрана",
+  "captureDisplayDetectionFailed": "Ошибка обнаружения дисплея. Запись остановлена."
 }

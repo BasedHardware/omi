@@ -2406,5 +2406,25 @@
   "msgUploadFileFailed": "ファイルのアップロードに失敗しました。後でもう一度お試しください",
   "msgReadingMemories": "思い出を読み込んでいます...",
   "msgLearningMemories": "思い出から学習しています...",
-  "msgUploadAttachedFileFailed": "添付ファイルのアップロードに失敗しました。"
+  "msgUploadAttachedFileFailed": "添付ファイルのアップロードに失敗しました。",
+  "captureRecordingError": "録音中にエラーが発生しました: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "録画が停止しました: {reason}。外部ディスプレイを再接続するか、録画を再開する必要があるかもしれません。",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "マイクの許可が必要です",
+  "captureMicrophonePermissionInSystemPreferences": "システム環境設定でマイクの許可を与えてください",
+  "captureScreenRecordingPermissionRequired": "画面録画の許可が必要です",
+  "captureDisplayDetectionFailed": "ディスプレイの検出に失敗しました。録画を停止しました。"
 }

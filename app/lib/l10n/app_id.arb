@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Gagal mengunggah file, silakan coba lagi nanti",
   "msgReadingMemories": "Membaca kenangan Anda...",
   "msgLearningMemories": "Belajar dari kenangan Anda...",
-  "msgUploadAttachedFileFailed": "Gagal mengunggah file terlampir."
+  "msgUploadAttachedFileFailed": "Gagal mengunggah file terlampir.",
+  "captureRecordingError": "Terjadi kesalahan saat merekam: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Perekaman dihentikan: {reason}. Anda mungkin perlu menyambungkan kembali layar eksternal atau memulai ulang perekaman.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Izin mikrofon diperlukan",
+  "captureMicrophonePermissionInSystemPreferences": "Berikan izin mikrofon di Preferensi Sistem",
+  "captureScreenRecordingPermissionRequired": "Izin perekaman layar diperlukan",
+  "captureDisplayDetectionFailed": "Deteksi layar gagal. Perekaman dihentikan."
 }

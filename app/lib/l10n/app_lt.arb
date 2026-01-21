@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Failo įkėlimas nepavyko, bandykite vėliau",
   "msgReadingMemories": "Skaitomi jūsų prisiminimai...",
   "msgLearningMemories": "Mokomasi iš jūsų prisiminimų...",
-  "msgUploadAttachedFileFailed": "Nepavyko įkelti pridėto failo."
+  "msgUploadAttachedFileFailed": "Nepavyko įkelti pridėto failo.",
+  "captureRecordingError": "Įrašymo metu įvyko klaida: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Įrašymas sustabdytas: {reason}. Gali tekti iš naujo prijungti išorinius ekranus arba paleisti įrašymą iš naujo.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Reikalingas mikrofono leidimas",
+  "captureMicrophonePermissionInSystemPreferences": "Suteikite mikrofono leidimą Sistemos nuostatose",
+  "captureScreenRecordingPermissionRequired": "Reikalingas ekrano įrašymo leidimas",
+  "captureDisplayDetectionFailed": "Ekrano aptikimas nepavyko. Įrašymas sustabdytas."
 }

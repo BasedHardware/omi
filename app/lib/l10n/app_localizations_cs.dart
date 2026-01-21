@@ -7575,4 +7575,26 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Nahrání přiloženého souboru se nezdařilo.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Při nahrávání došlo k chybě: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Nahrávání zastaveno: $reason. Možná budete muset znovu připojit externí displeje nebo restartovat nahrávání.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Vyžadováno oprávnění k mikrofonu';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Udělte oprávnění k mikrofonu v Předvolbách systému';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Vyžadováno oprávnění k nahrávání obrazovky';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Detekce displeje selhala. Nahrávání zastaveno.';
 }

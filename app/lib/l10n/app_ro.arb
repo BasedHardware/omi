@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Încărcarea fișierului a eșuat, vă rugăm să încercați din nou mai târziu",
   "msgReadingMemories": "Se citesc amintirile tale...",
   "msgLearningMemories": "Se învață din amintirile tale...",
-  "msgUploadAttachedFileFailed": "Încărcarea fișierului atașat a eșuat."
+  "msgUploadAttachedFileFailed": "Încărcarea fișierului atașat a eșuat.",
+  "captureRecordingError": "A apărut o eroare în timpul înregistrării: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Înregistrarea s-a oprit: {reason}. Este posibil să fie necesar să reconectați ecranele externe sau să reporniți înregistrarea.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Este necesară permisiunea microfonului",
+  "captureMicrophonePermissionInSystemPreferences": "Acordați permisiunea microfonului în Preferințe Sistem",
+  "captureScreenRecordingPermissionRequired": "Este necesară permisiunea de înregistrare a ecranului",
+  "captureDisplayDetectionFailed": "Detectarea ecranului a eșuat. Înregistrarea s-a oprit."
 }

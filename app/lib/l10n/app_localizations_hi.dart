@@ -7559,4 +7559,26 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'संलग्न फ़ाइल अपलोड करने में विफल।';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'रिकॉर्डिंग के दौरान एक त्रुटि हुई: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'रिकॉर्डिंग रुक गई: $reason। आपको बाहरी डिस्प्ले को फिर से कनेक्ट करने या रिकॉर्डिंग पुनः आरंभ करने की आवश्यकता हो सकती है।';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'माइक्रोफ़ोन अनुमति आवश्यक है';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'सिस्टम वरीयताओं में माइक्रोफ़ोन अनुमति दें';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'स्क्रीन रिकॉर्डिंग अनुमति आवश्यक है';
+
+  @override
+  String get captureDisplayDetectionFailed => 'डिस्प्ले पहचान विफल। रिकॉर्डिंग रुकी।';
 }

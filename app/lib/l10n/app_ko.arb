@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "파일 업로드 실패, 나중에 다시 시도해 주세요",
   "msgReadingMemories": "추억을 읽는 중...",
   "msgLearningMemories": "추억에서 배우는 중...",
-  "msgUploadAttachedFileFailed": "첨부 파일 업로드에 실패했습니다."
+  "msgUploadAttachedFileFailed": "첨부 파일 업로드에 실패했습니다.",
+  "captureRecordingError": "녹음 중 오류가 발생했습니다: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "녹화가 중지되었습니다: {reason}. 외부 디스플레이를 다시 연결하거나 녹화를 다시 시작해야 할 수 있습니다.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "마이크 권한이 필요합니다",
+  "captureMicrophonePermissionInSystemPreferences": "시스템 환경설정에서 마이크 권한을 부여하세요",
+  "captureScreenRecordingPermissionRequired": "화면 녹화 권한이 필요합니다",
+  "captureDisplayDetectionFailed": "디스플레이 감지 실패. 녹화가 중지되었습니다."
 }

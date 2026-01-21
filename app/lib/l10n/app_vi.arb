@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Tải tệp lên thất bại, vui lòng thử lại sau",
   "msgReadingMemories": "Đang đọc kỷ niệm của bạn...",
   "msgLearningMemories": "Đang học từ kỷ niệm của bạn...",
-  "msgUploadAttachedFileFailed": "Tải tệp đính kèm lên thất bại."
+  "msgUploadAttachedFileFailed": "Tải tệp đính kèm lên thất bại.",
+  "captureRecordingError": "Đã xảy ra lỗi trong quá trình ghi: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Ghi hình đã dừng: {reason}. Bạn có thể cần kết nối lại màn hình ngoài hoặc bắt đầu ghi lại.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Cần có quyền truy cập micrô",
+  "captureMicrophonePermissionInSystemPreferences": "Cấp quyền micrô trong Tùy chọn Hệ thống",
+  "captureScreenRecordingPermissionRequired": "Cần có quyền ghi màn hình",
+  "captureDisplayDetectionFailed": "Phát hiện màn hình thất bại. Ghi hình đã dừng."
 }

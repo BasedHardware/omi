@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Η μεταφόρτωση αρχείου απέτυχε, παρακαλώ δοκιμάστε ξανά αργότερα",
   "msgReadingMemories": "Διαβάζω τις αναμνήσεις σου...",
   "msgLearningMemories": "Μαθαίνω από τις αναμνήσεις σου...",
-  "msgUploadAttachedFileFailed": "Η μεταφόρτωση του συνημμένου αρχείου απέτυχε."
+  "msgUploadAttachedFileFailed": "Η μεταφόρτωση του συνημμένου αρχείου απέτυχε.",
+  "captureRecordingError": "Παρουσιάστηκε σφάλμα κατά την εγγραφή: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Η εγγραφή σταμάτησε: {reason}. Ίσως χρειαστεί να επανασυνδέσετε εξωτερικές οθόνες ή να επανεκκινήσετε την εγγραφή.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Απαιτείται άδεια μικροφώνου",
+  "captureMicrophonePermissionInSystemPreferences": "Χορηγήστε άδεια μικροφώνου στις Προτιμήσεις Συστήματος",
+  "captureScreenRecordingPermissionRequired": "Απαιτείται άδεια εγγραφής οθόνης",
+  "captureDisplayDetectionFailed": "Η ανίχνευση οθόνης απέτυχε. Η εγγραφή σταμάτησε."
 }

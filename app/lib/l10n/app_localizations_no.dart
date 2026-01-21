@@ -7574,4 +7574,26 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Kunne ikke laste opp vedlagt fil.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Det oppstod en feil under opptaket: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Opptaket stoppet: $reason. Du må kanskje koble til eksterne skjermer på nytt eller starte opptaket på nytt.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofontillatelse kreves';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Gi mikrofontillatelse i Systemvalg';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Skjermopptakstillatelse kreves';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Skjermgjenkjenning mislyktes. Opptak stoppet.';
 }

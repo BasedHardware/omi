@@ -2406,5 +2406,25 @@
   "msgUploadFileFailed": "文件上传失败，请稍后重试",
   "msgReadingMemories": "正在读取您的记忆...",
   "msgLearningMemories": "正在从您的记忆中学习...",
-  "msgUploadAttachedFileFailed": "上传附件失败。"
+  "msgUploadAttachedFileFailed": "上传附件失败。",
+  "captureRecordingError": "录音过程中发生错误：{error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "录制已停止：{reason}。您可能需要重新连接外部显示器或重新开始录制。",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "需要麦克风权限",
+  "captureMicrophonePermissionInSystemPreferences": "在系统偏好设置中授予麦克风权限",
+  "captureScreenRecordingPermissionRequired": "需要屏幕录制权限",
+  "captureDisplayDetectionFailed": "显示器检测失败。录制已停止。"
 }

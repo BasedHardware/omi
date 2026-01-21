@@ -7456,4 +7456,26 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => '첨부 파일 업로드에 실패했습니다.';
+
+  @override
+  String captureRecordingError(String error) {
+    return '녹음 중 오류가 발생했습니다: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return '녹화가 중지되었습니다: $reason. 외부 디스플레이를 다시 연결하거나 녹화를 다시 시작해야 할 수 있습니다.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => '마이크 권한이 필요합니다';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => '시스템 환경설정에서 마이크 권한을 부여하세요';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => '화면 녹화 권한이 필요합니다';
+
+  @override
+  String get captureDisplayDetectionFailed => '디스플레이 감지 실패. 녹화가 중지되었습니다.';
 }

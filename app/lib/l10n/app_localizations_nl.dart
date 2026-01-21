@@ -7600,4 +7600,26 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Uploaden van bijgevoegd bestand mislukt.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Er is een fout opgetreden tijdens de opname: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Opname gestopt: $reason. Mogelijk moet u externe beeldschermen opnieuw aansluiten of de opname opnieuw starten.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Microfoontoestemming vereist';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Geef microfoontoestemming in Systeemvoorkeuren';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Schermopnametoestemming vereist';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Schermdetectie mislukt. Opname gestopt.';
 }

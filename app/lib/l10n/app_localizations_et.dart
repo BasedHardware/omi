@@ -7578,4 +7578,26 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Manustatud faili üleslaadimine ebaõnnestus.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Salvestamisel ilmnes viga: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Salvestamine peatatud: $reason. Võimalik, et peate välised ekraanid uuesti ühendama või salvestamise taaskäivitama.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Mikrofoni luba on vajalik';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Andke mikrofoni luba Süsteemieelistustes';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Ekraani salvestamise luba on vajalik';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Ekraani tuvastamine ebaõnnestus. Salvestamine peatatud.';
 }

@@ -7600,4 +7600,26 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Gagal memuat naik fail yang dilampirkan.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Ralat berlaku semasa rakaman: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Rakaman dihentikan: $reason. Anda mungkin perlu menyambung semula paparan luaran atau mulakan semula rakaman.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Kebenaran mikrofon diperlukan';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Berikan kebenaran mikrofon dalam Keutamaan Sistem';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Kebenaran rakaman skrin diperlukan';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Pengesanan paparan gagal. Rakaman dihentikan.';
 }

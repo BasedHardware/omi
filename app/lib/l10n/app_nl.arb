@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "Bestand uploaden mislukt, probeer het later opnieuw",
   "msgReadingMemories": "Je herinneringen lezen...",
   "msgLearningMemories": "Leren van je herinneringen...",
-  "msgUploadAttachedFileFailed": "Uploaden van bijgevoegd bestand mislukt."
+  "msgUploadAttachedFileFailed": "Uploaden van bijgevoegd bestand mislukt.",
+  "captureRecordingError": "Er is een fout opgetreden tijdens de opname: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "Opname gestopt: {reason}. Mogelijk moet u externe beeldschermen opnieuw aansluiten of de opname opnieuw starten.",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "Microfoontoestemming vereist",
+  "captureMicrophonePermissionInSystemPreferences": "Geef microfoontoestemming in Systeemvoorkeuren",
+  "captureScreenRecordingPermissionRequired": "Schermopnametoestemming vereist",
+  "captureDisplayDetectionFailed": "Schermdetectie mislukt. Opname gestopt."
 }

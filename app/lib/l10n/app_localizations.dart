@@ -14192,6 +14192,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to upload the attached file.'**
   String get msgUploadAttachedFileFailed;
+
+  /// No description provided for @captureRecordingError.
+  ///
+  /// In en, this message translates to:
+  /// **'An error occurred during recording: {error}'**
+  String captureRecordingError(String error);
+
+  /// No description provided for @captureRecordingStoppedDisplayIssue.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording stopped: {reason}. You may need to reconnect external displays or restart recording.'**
+  String captureRecordingStoppedDisplayIssue(String reason);
+
+  /// No description provided for @captureMicrophonePermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission required'**
+  String get captureMicrophonePermissionRequired;
+
+  /// No description provided for @captureMicrophonePermissionInSystemPreferences.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant microphone permission in System Preferences'**
+  String get captureMicrophonePermissionInSystemPreferences;
+
+  /// No description provided for @captureScreenRecordingPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen recording permission required'**
+  String get captureScreenRecordingPermissionRequired;
+
+  /// No description provided for @captureDisplayDetectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Display detection failed. Recording stopped.'**
+  String get captureDisplayDetectionFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -11,10 +11,10 @@
 |--------|-------|
 | Total Files | ~48 |
 | Total Strings | ~405 |
-| Completed Files | 28 |
+| Completed Files | 29 |
 | In Progress | 0 |
-| Pending Files | ~20 |
-| Progress | ~70% |
+| Pending Files | ~19 |
+| Progress | ~71% |
 
 **CRITICAL ISSUE**: ~162 pre-existing l10n keys in non-English ARB files still contain
 English text instead of proper translations. See PRIORITY 0 section below.
@@ -225,15 +225,13 @@ Keys added: msgCameraNotAvailable, msgCameraPermissionDenied, msgCameraAccessErr
             msgSelectImagesGenericError, msgMaxFilesLimit, msgSelectFilesError, msgSelectFilesGenericError,
             msgUploadFileFailed, msgReadingMemories, msgLearningMemories, msgUploadAttachedFileFailed
 
-### [ ] providers/capture_provider.dart (~5 strings)
-Status: PENDING
+### [x] providers/capture_provider.dart (6 strings)
+Status: COMPLETED
 Description: Recording error messages
-Strings found:
-- "An error occurred during recording: $error"
-- "Microphone permission required"
-- "Grant microphone permission in System Preferences"
-- "Screen recording permission required"
-- "Display detection failed. Recording stopped."
+Keys added: captureRecordingError, captureRecordingStoppedDisplayIssue, captureMicrophonePermissionRequired,
+            captureMicrophonePermissionInSystemPreferences, captureScreenRecordingPermissionRequired,
+            captureDisplayDetectionFailed
+Keys with placeholders: captureRecordingError, captureRecordingStoppedDisplayIssue
 
 ### [ ] providers/developer_mode_provider.dart (~5 strings)
 Status: PENDING
@@ -366,6 +364,13 @@ Fix requires either:
 ================================================================================
 ## CHANGELOG
 ================================================================================
+
+[2026-01-21] Localized providers/capture_provider.dart with 6 l10n keys for 34 languages
+- Added 6 new localization keys for recording error and permission messages
+- Keys added: captureRecordingError, captureRecordingStoppedDisplayIssue, captureMicrophonePermissionRequired,
+  captureMicrophonePermissionInSystemPreferences, captureScreenRecordingPermissionRequired, captureDisplayDetectionFailed
+- Keys with placeholders: captureRecordingError, captureRecordingStoppedDisplayIssue
+- Updated Dart code to use MyApp.navigatorKey.currentContext?.l10n pattern with fallbacks
 
 [2026-01-20] Localized providers/message_provider.dart with 16 l10n keys for 34 languages
 - Added 16 new localization keys for camera/photo/file picker error messages and loading text

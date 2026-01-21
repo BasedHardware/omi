@@ -2405,5 +2405,25 @@
   "msgUploadFileFailed": "อัปโหลดไฟล์ล้มเหลว กรุณาลองอีกครั้งในภายหลัง",
   "msgReadingMemories": "กำลังอ่านความทรงจำของคุณ...",
   "msgLearningMemories": "กำลังเรียนรู้จากความทรงจำของคุณ...",
-  "msgUploadAttachedFileFailed": "อัปโหลดไฟล์แนบล้มเหลว"
+  "msgUploadAttachedFileFailed": "อัปโหลดไฟล์แนบล้มเหลว",
+  "captureRecordingError": "เกิดข้อผิดพลาดขณะบันทึก: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "การบันทึกหยุดลง: {reason} คุณอาจต้องเชื่อมต่อจอภาพภายนอกอีกครั้งหรือเริ่มการบันทึกใหม่",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "ต้องได้รับอนุญาตใช้ไมโครโฟน",
+  "captureMicrophonePermissionInSystemPreferences": "ให้สิทธิ์ไมโครโฟนในการตั้งค่าระบบ",
+  "captureScreenRecordingPermissionRequired": "ต้องได้รับอนุญาตบันทึกหน้าจอ",
+  "captureDisplayDetectionFailed": "การตรวจจับจอภาพล้มเหลว การบันทึกหยุดลง"
 }

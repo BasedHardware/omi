@@ -7595,4 +7595,26 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Neizdevās augšupielādēt pievienoto failu.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Ierakstīšanas laikā radās kļūda: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Ierakstīšana apturēta: $reason. Iespējams, būs jāpievieno ārējie displeji vēlreiz vai jārestartē ierakstīšana.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Nepieciešama mikrofona atļauja';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Piešķiriet mikrofona atļauju Sistēmas iestatījumos';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Nepieciešama ekrāna ierakstīšanas atļauja';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Displeja noteikšana neizdevās. Ierakstīšana apturēta.';
 }

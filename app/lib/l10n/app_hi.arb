@@ -2406,5 +2406,25 @@
   "msgUploadFileFailed": "फ़ाइल अपलोड विफल, कृपया बाद में पुनः प्रयास करें",
   "msgReadingMemories": "आपकी यादें पढ़ रहे हैं...",
   "msgLearningMemories": "आपकी यादों से सीख रहे हैं...",
-  "msgUploadAttachedFileFailed": "संलग्न फ़ाइल अपलोड करने में विफल।"
+  "msgUploadAttachedFileFailed": "संलग्न फ़ाइल अपलोड करने में विफल।",
+  "captureRecordingError": "रिकॉर्डिंग के दौरान एक त्रुटि हुई: {error}",
+  "@captureRecordingError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "captureRecordingStoppedDisplayIssue": "रिकॉर्डिंग रुक गई: {reason}। आपको बाहरी डिस्प्ले को फिर से कनेक्ट करने या रिकॉर्डिंग पुनः आरंभ करने की आवश्यकता हो सकती है।",
+  "@captureRecordingStoppedDisplayIssue": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "captureMicrophonePermissionRequired": "माइक्रोफ़ोन अनुमति आवश्यक है",
+  "captureMicrophonePermissionInSystemPreferences": "सिस्टम वरीयताओं में माइक्रोफ़ोन अनुमति दें",
+  "captureScreenRecordingPermissionRequired": "स्क्रीन रिकॉर्डिंग अनुमति आवश्यक है",
+  "captureDisplayDetectionFailed": "डिस्प्ले पहचान विफल। रिकॉर्डिंग रुकी।"
 }

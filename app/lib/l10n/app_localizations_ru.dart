@@ -7599,4 +7599,27 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Не удалось загрузить прикреплённый файл.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Произошла ошибка во время записи: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Запись остановлена: $reason. Возможно, вам потребуется переподключить внешние дисплеи или перезапустить запись.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Требуется разрешение на использование микрофона';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences =>
+      'Предоставьте разрешение на микрофон в Системных настройках';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Требуется разрешение на запись экрана';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Ошибка обнаружения дисплея. Запись остановлена.';
 }

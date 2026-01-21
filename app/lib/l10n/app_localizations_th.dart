@@ -7542,4 +7542,26 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'อัปโหลดไฟล์แนบล้มเหลว';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'เกิดข้อผิดพลาดขณะบันทึก: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'การบันทึกหยุดลง: $reason คุณอาจต้องเชื่อมต่อจอภาพภายนอกอีกครั้งหรือเริ่มการบันทึกใหม่';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'ต้องได้รับอนุญาตใช้ไมโครโฟน';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'ให้สิทธิ์ไมโครโฟนในการตั้งค่าระบบ';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'ต้องได้รับอนุญาตบันทึกหน้าจอ';
+
+  @override
+  String get captureDisplayDetectionFailed => 'การตรวจจับจอภาพล้มเหลว การบันทึกหยุดลง';
 }

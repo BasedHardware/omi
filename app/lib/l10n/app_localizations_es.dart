@@ -7588,4 +7588,27 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get msgUploadAttachedFileFailed => 'Error al subir el archivo adjunto.';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Ocurrió un error durante la grabación: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Grabación detenida: $reason. Es posible que necesite reconectar las pantallas externas o reiniciar la grabación.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Se requiere permiso de micrófono';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences =>
+      'Conceda permiso de micrófono en Preferencias del Sistema';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Se requiere permiso de grabación de pantalla';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Error en la detección de pantalla. Grabación detenida.';
 }
