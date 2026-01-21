@@ -7,6 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 class AppOwnerReviewCard extends StatefulWidget {
@@ -140,7 +141,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                       }
                                     },
                                     decoration: InputDecoration(
-                                      hintText: 'Write something',
+                                      hintText: context.l10n.writeSomething,
                                       hintStyle: const TextStyle(color: Colors.grey),
                                       border: const OutlineInputBorder(
                                         borderRadius: BorderRadius.all(Radius.circular(8)),
@@ -178,7 +179,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                           updateShowReplyField(false);
                                         },
                                         child:
-                                            const Text('Cancel', style: TextStyle(color: Colors.white, fontSize: 16)),
+                                            Text(context.l10n.cancel, style: const TextStyle(color: Colors.white, fontSize: 16)),
                                       ),
                                     ),
                                     const SizedBox(
@@ -210,8 +211,8 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                             });
                                           }
                                         },
-                                        child: const Text('Submit Reply',
-                                            style: TextStyle(color: Colors.black, fontSize: 16)),
+                                        child: Text(context.l10n.submitReply,
+                                            style: const TextStyle(color: Colors.black, fontSize: 16)),
                                       ),
                                     ),
                                   ],
@@ -268,7 +269,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                           updateShowReplyField(!showReplyField);
                         },
                         child: Text(
-                          widget.review.response.isNotEmpty ? 'Edit Your Reply' : 'Reply To Review',
+                          widget.review.response.isNotEmpty ? context.l10n.editYourReply : context.l10n.replyToReview,
                           style: const TextStyle(color: Colors.black),
                         ),
                       ),

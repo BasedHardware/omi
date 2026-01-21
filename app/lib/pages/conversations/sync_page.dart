@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
@@ -113,9 +114,9 @@ class WalListItem extends StatelessWidget {
                 confirmDismiss: (direction) {
                   return OmiConfirmDialog.show(
                     context,
-                    title: 'Delete Recording',
-                    message: 'This cannot be undone.',
-                    confirmLabel: 'Delete',
+                    title: context.l10n.deleteRecording,
+                    message: context.l10n.thisCannotBeUndone,
+                    confirmLabel: context.l10n.delete,
                     confirmColor: Colors.red,
                   );
                 },
@@ -169,7 +170,7 @@ class WalListItem extends StatelessWidget {
                                 Row(
                                   children: [
                                     Text(
-                                      secondsToHumanReadable(wal.seconds),
+                                      secondsToHumanReadable(wal.seconds, context),
                                       style: TextStyle(
                                         color: Colors.grey.shade500,
                                         fontSize: 13,
@@ -183,14 +184,14 @@ class WalListItem extends StatelessWidget {
                                           color: Colors.deepPurple.withOpacity(0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: const Row(
+                                        child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(Icons.sd_card, size: 10, color: Colors.deepPurpleAccent),
-                                            SizedBox(width: 3),
+                                            const Icon(Icons.sd_card, size: 10, color: Colors.deepPurpleAccent),
+                                            const SizedBox(width: 3),
                                             Text(
-                                              'SD Card',
-                                              style: TextStyle(
+                                              context.l10n.sdCard,
+                                              style: const TextStyle(
                                                 color: Colors.deepPurpleAccent,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
@@ -213,7 +214,7 @@ class WalListItem extends StatelessWidget {
                                             Icon(Icons.sd_card, size: 10, color: Colors.deepPurple.shade300),
                                             const SizedBox(width: 3),
                                             Text(
-                                              'From SD',
+                                              context.l10n.fromSd,
                                               style: TextStyle(
                                                 color: Colors.deepPurple.shade300,
                                                 fontSize: 10,
@@ -237,7 +238,7 @@ class WalListItem extends StatelessWidget {
                                             Icon(Icons.memory, size: 10, color: Colors.teal.shade300),
                                             const SizedBox(width: 3),
                                             Text(
-                                              'Limitless',
+                                              context.l10n.limitless,
                                               style: TextStyle(
                                                 color: Colors.teal.shade300,
                                                 fontSize: 10,
@@ -255,11 +256,13 @@ class WalListItem extends StatelessWidget {
                           ),
                           if (wal.isSyncing)
                             _buildStatusChip(
-                              wal.syncMethod == SyncMethod.wifi ? 'Fast Transfer' : 'Syncing',
+                              wal.syncMethod == SyncMethod.wifi
+                                  ? context.l10n.fastTransfer
+                                  : context.l10n.syncingStatus,
                               wal.syncMethod == SyncMethod.wifi ? Colors.blue : Colors.orange,
                             )
                           else if (hasError)
-                            _buildStatusChip('Failed', Colors.red)
+                            _buildStatusChip(context.l10n.failedStatus, Colors.red)
                           else if (wal.status == WalStatus.miss)
                             _buildFaIcon(FontAwesomeIcons.circleExclamation, size: 16),
                         ],
@@ -297,7 +300,7 @@ class WalListItem extends StatelessWidget {
                         if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
                           const SizedBox(height: 4),
                           Text(
-                            'ETA: ${_formatEta(wal.syncEtaSeconds!)}',
+                            context.l10n.etaLabel(_formatEta(wal.syncEtaSeconds!)),
                             style: TextStyle(
                               color: Colors.grey.shade600,
                               fontSize: 11,
@@ -400,19 +403,51 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       child: Column(
         children: [
           if (showTransferMethod) ...[
-            _buildSettingsItem(
-              icon: FontAwesomeIcons.bolt,
-              title: 'Transfer Method',
+            Builder(builder: (context) {
+              return _buildSettingsItem(
+                icon: FontAwesomeIcons.bolt,
+                title: context.l10n.transferMethod,
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isFastTransfer ? Colors.blue.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    isFastTransfer ? context.l10n.fast : context.l10n.ble,
+                    style: TextStyle(
+                      color: isFastTransfer ? Colors.blue : Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                showChevron: true,
+                onTap: () {
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(builder: (context) => const FastTransferSettingsPage()),
+                      )
+                      .then((_) => setState(() {}));
+                },
+              );
+            }),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
+          Builder(builder: (context) {
+            return _buildSettingsItem(
+              icon: FontAwesomeIcons.mobile,
+              title: context.l10n.storeAudioOnPhone,
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isFastTransfer ? Colors.blue.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                  color: isPhoneStorageOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(
-                  isFastTransfer ? 'Fast' : 'BLE',
+                  isPhoneStorageOn ? context.l10n.on : context.l10n.off,
                   style: TextStyle(
-                    color: isFastTransfer ? Colors.blue : Colors.white,
+                    color: isPhoneStorageOn ? Colors.green : Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -422,47 +457,19 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               onTap: () {
                 Navigator.of(context)
                     .push(
-                      MaterialPageRoute(builder: (context) => const FastTransferSettingsPage()),
+                      MaterialPageRoute(builder: (context) => const LocalStoragePage()),
                     )
                     .then((_) => setState(() {}));
               },
-            ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-          ],
-          _buildSettingsItem(
-            icon: FontAwesomeIcons.mobile,
-            title: 'Store Audio on Phone',
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isPhoneStorageOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                isPhoneStorageOn ? 'On' : 'Off',
-                style: TextStyle(
-                  color: isPhoneStorageOn ? Colors.green : Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            showChevron: true,
-            onTap: () {
-              Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(builder: (context) => const LocalStoragePage()),
-                  )
-                  .then((_) => setState(() {}));
-            },
-          ),
+            );
+          }),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
               final isCloudOn = userProvider.privateCloudSyncEnabled;
               return _buildSettingsItem(
                 icon: FontAwesomeIcons.cloud,
-                title: 'Store Audio on Cloud',
+                title: context.l10n.storeAudioOnCloud,
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -470,7 +477,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Text(
-                    isCloudOn ? 'On' : 'Off',
+                    isCloudOn ? context.l10n.on : context.l10n.off,
                     style: TextStyle(
                       color: isCloudOn ? Colors.green : Colors.white,
                       fontSize: 13,
@@ -505,22 +512,25 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           physics: const BouncingScrollPhysics(),
           child: Row(
             children: [
-              _buildChip(
-                  'All', totalCount, syncProvider.storageFilter == null, () => syncProvider.clearStorageFilter()),
+              _buildChip(context.l10n.all, totalCount, syncProvider.storageFilter == null,
+                  () => syncProvider.clearStorageFilter()),
               const SizedBox(width: 8),
               _buildChip(
-                  'Phone',
+                  context.l10n.phone,
                   phoneCount,
                   syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
                   () => syncProvider.setStorageFilter(WalStorage.disk)),
               const SizedBox(width: 8),
               if (sdCardRelatedCount > 0) ...[
-                _buildChip('SD Card', sdCardRelatedCount, syncProvider.storageFilter == WalStorage.sdcard,
+                _buildChip(context.l10n.sdCard, sdCardRelatedCount, syncProvider.storageFilter == WalStorage.sdcard,
                     () => syncProvider.setStorageFilter(WalStorage.sdcard)),
                 const SizedBox(width: 8),
               ],
               if (flashPageRelatedCount > 0)
-                _buildChip('Limitless', flashPageRelatedCount, syncProvider.storageFilter == WalStorage.flashPage,
+                _buildChip(
+                    context.l10n.limitless,
+                    flashPageRelatedCount,
+                    syncProvider.storageFilter == WalStorage.flashPage,
                     () => syncProvider.setStorageFilter(WalStorage.flashPage)),
             ],
           ),
@@ -575,15 +585,15 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void _showCancelSyncDialog(BuildContext context, SyncProvider provider) async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Cancel Sync',
-      message: 'Data already downloaded will be saved. You can resume later.',
-      confirmLabel: 'Cancel Sync',
+      title: context.l10n.cancelSync,
+      message: context.l10n.cancelSyncMessage,
+      confirmLabel: context.l10n.cancelSync,
       confirmColor: Colors.orange,
     );
     if (confirmed == true && context.mounted) {
       provider.cancelSync();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync cancelled'), backgroundColor: Colors.orange),
+        SnackBar(content: Text(context.l10n.syncCancelled), backgroundColor: Colors.orange),
       );
     }
   }
@@ -591,16 +601,16 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Delete Processed Files',
-      message: 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: context.l10n.deleteProcessedFiles,
+      message: context.l10n.thisCannotBeUndone,
+      confirmLabel: context.l10n.delete,
       confirmColor: Colors.red,
     );
     if (confirmed == true && context.mounted) {
       await provider.deleteAllSyncedWals();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Processed files deleted'), backgroundColor: Colors.green),
+          SnackBar(content: Text(context.l10n.processedFilesDeleted), backgroundColor: Colors.green),
         );
       }
     }
@@ -655,7 +665,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         lowerMessage.contains('tcp');
   }
 
-  String _formatErrorMessage(String errorMessage) {
+  String _formatErrorMessage(BuildContext context, String errorMessage) {
     // Clean up exception prefixes
     if (errorMessage.startsWith('WifiSyncException: ')) {
       errorMessage = errorMessage.substring('WifiSyncException: '.length);
@@ -670,31 +680,31 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     if (lowerMessage.contains('internal error') ||
         lowerMessage.contains('invalidpacketlength') ||
         lowerMessage.contains('packet length')) {
-      return 'Failed to enable WiFi on device. Please try again.';
+      return context.l10n.wifiEnableFailed;
     }
     if (lowerMessage.contains('does not support wifi')) {
-      return 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+      return context.l10n.deviceNoFastTransfer;
     }
     if (errorMessage.contains('Hotspot name must be') || errorMessage.contains('Password must be')) {
       return errorMessage;
     }
     if (lowerMessage.contains('hotspot') && lowerMessage.contains('enable')) {
-      return 'Please enable your phone\'s hotspot and try again.';
+      return context.l10n.enableHotspotMessage;
     }
     if (lowerMessage.contains('tcp server') || lowerMessage.contains('network server')) {
-      return 'Failed to start transfer. Please try again.';
+      return context.l10n.transferStartFailed;
     }
     if (lowerMessage.contains('timeout') || lowerMessage.contains('did not respond')) {
-      return 'Device did not respond. Please try again.';
+      return context.l10n.deviceNotResponding;
     }
     if (lowerMessage.contains('credentials')) {
-      return 'Invalid WiFi credentials. Check your hotspot settings.';
+      return context.l10n.invalidWifiCredentials;
     }
     if (lowerMessage.contains('connection') && lowerMessage.contains('fail')) {
-      return 'WiFi connection failed. Please try again.';
+      return context.l10n.wifiConnectionFailed;
     }
     if (lowerMessage.contains('wifi') && lowerMessage.contains('fail')) {
-      return 'WiFi connection failed. Please try again.';
+      return context.l10n.wifiConnectionFailed;
     }
 
     return errorMessage;
@@ -710,23 +720,24 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           children: [
             _buildFaIcon(FontAwesomeIcons.sdCard, size: 20, color: Colors.deepPurpleAccent),
             const SizedBox(width: 12),
-            const Text('SD Card Processing', style: TextStyle(color: Colors.white, fontSize: 18)),
+            Text(context.l10n.sdCardProcessing, style: const TextStyle(color: Colors.white, fontSize: 18)),
           ],
         ),
         content: Text(
-          'Processing $sdCardCount recording${sdCardCount > 1 ? 's' : ''}. Files will be removed from SD card after.',
+          context.l10n.sdCardProcessingMessage(sdCardCount),
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500))),
+              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade500))),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               _startSyncWithWifiSheet(context, syncProvider);
             },
-            child: const Text('Process', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.process,
+                style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -794,12 +805,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isWifiError ? 'WiFi Sync Failed' : 'Processing Failed',
+                          isWifiError ? context.l10n.wifiSyncFailed : context.l10n.processingFailed,
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _formatErrorMessage(errorMessage),
+                          _formatErrorMessage(context, errorMessage),
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -821,10 +832,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                           color: const Color(0xFF2A2A2E),
                           borderRadius: BorderRadius.circular(100),
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
-                            'Retry',
-                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                            context.l10n.retry,
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                           ),
                         ),
                       ),
@@ -883,8 +894,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             Flexible(
                               child: Text(
                                 isSdCardSyncing
-                                    ? 'Downloading from SD Card'
-                                    : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
+                                    ? context.l10n.downloadingFromSdCard
+                                    : context.l10n.processingProgress(
+                                        syncProvider.processedWalsCount, syncProvider.initialMissingWalsCount),
                                 style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -954,7 +966,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    '${syncProvider.syncedConversationsPointers.length} conversations created',
+                    context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -985,7 +997,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('Internet required'),
+                content: Text(context.l10n.internetRequired),
                 backgroundColor: Colors.red.shade700,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1004,11 +1016,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Process Audio',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                    Text(context.l10n.processAudio,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 3),
                     Text(
-                      secondsToHumanReadable(totalSecondsToProcess),
+                      secondsToHumanReadable(totalSecondsToProcess, context),
                       style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -1020,8 +1032,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   color: Colors.deepPurpleAccent,
                   borderRadius: BorderRadius.circular(100),
                 ),
-                child: const Text('Start',
-                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                child: Text(context.l10n.start,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -1030,7 +1042,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(20),
       padding: const EdgeInsets.all(32),
@@ -1050,9 +1062,10 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             child: Center(child: _buildFaIcon(FontAwesomeIcons.microphone, size: 24)),
           ),
           const SizedBox(height: 20),
-          const Text('No Recordings', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(context.l10n.noRecordings,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          Text('Audio from your Omi device will appear here',
+          Text(context.l10n.audioFromOmiWillAppearHere,
               style: TextStyle(color: Colors.grey.shade500, fontSize: 14), textAlign: TextAlign.center),
         ],
       ),
@@ -1080,14 +1093,14 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text('Offline Sync',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Text(context.l10n.offlineSync,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             centerTitle: true,
             actions: [
               PullDownButton(
                 itemBuilder: (context) => [
                   PullDownMenuItem(
-                    title: 'Delete Processed',
+                    title: context.l10n.deleteProcessed,
                     iconWidget: _buildFaIcon(FontAwesomeIcons.trash, size: 16, color: Colors.red),
                     isDestructive: true,
                     onTap: () => _showDeleteProcessedDialog(context, syncProvider),
@@ -1136,7 +1149,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             },
                           ),
                           const SizedBox(height: 20),
-                          _buildSectionHeader('Recordings'),
+                          _buildSectionHeader(context.l10n.recordings),
                           _buildFilterChips(statsSnapshot.data),
                           const SizedBox(height: 16),
                         ],
@@ -1156,7 +1169,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       final filteredWals = syncProvider.filteredWals;
 
                       if (syncProvider.allWals.isEmpty) {
-                        return SliverToBoxAdapter(child: _buildEmptyState());
+                        return SliverToBoxAdapter(child: _buildEmptyState(context));
                       }
 
                       if (filteredWals.isEmpty && syncProvider.storageFilter != null) {
@@ -1172,10 +1185,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                               children: [
                                 _buildFaIcon(FontAwesomeIcons.filter, size: 24),
                                 const SizedBox(height: 16),
-                                const Text('No Recordings',
-                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                                Text(context.l10n.noRecordings,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
                                 const SizedBox(height: 4),
-                                Text('Try a different filter',
+                                Text(context.l10n.tryDifferentFilter,
                                     style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
                               ],
                             ),

@@ -208,14 +208,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Debug Mode Detected',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        Text(
+                          context.l10n.debugModeDetected,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 2),
-                        const Text(
-                          'Performance reduced 5-10x. Use Release mode.',
-                          style: TextStyle(fontSize: 12),
+                        Text(
+                          context.l10n.performanceReduced,
+                          style: const TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 4),
                         TweenAnimationBuilder<double>(
@@ -223,7 +223,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                           duration: const Duration(seconds: 10),
                           builder: (context, value, child) {
                             return Text(
-                              'Auto-closing in ${value.toInt()}s',
+                              context.l10n.autoClosingInSeconds(value.toInt()),
                               style: const TextStyle(fontSize: 10, color: Colors.white70),
                             );
                           },
@@ -529,15 +529,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           context: context,
           builder: (context) => AlertDialog(
             backgroundColor: const Color(0xFF1A1A1A),
-            title: const Text('Model Required', style: TextStyle(color: Colors.white)),
-            content: const Text(
-              'Please download a Whisper model before saving.',
-              style: TextStyle(color: Colors.white70),
+            title: Text(context.l10n.modelRequired, style: const TextStyle(color: Colors.white)),
+            content: Text(
+              context.l10n.downloadWhisperModel,
+              style: const TextStyle(color: Colors.white70),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('OK', style: TextStyle(color: Colors.blue)),
+                child: Text(context.l10n.ok, style: const TextStyle(color: Colors.blue)),
               ),
             ],
           ),
@@ -659,7 +659,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     fontSize: 12,
                   ),
                   decoration: InputDecoration(
-                    hintText: '{\n  "provider": "deepgramLive",\n  ...\n}',
+                    hintText: context.l10n.transcriptionJsonPlaceholder,
                     hintStyle: TextStyle(color: Colors.grey.shade700),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(12),
@@ -888,20 +888,21 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red, size: 24),
-                  SizedBox(width: 8),
-                  Text('Device Not Compatible', style: TextStyle(color: Colors.white, fontSize: 18)),
+                  const Icon(Icons.error_outline, color: Colors.red, size: 24),
+                  const SizedBox(width: 8),
+                  Text(context.l10n.deviceNotCompatibleTitle,
+                      style: const TextStyle(color: Colors.white, fontSize: 18)),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Your device does not meet the requirements for On-Device transcription.',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    context.l10n.deviceNotMeetRequirements,
+                    style: const TextStyle(color: Colors.white70),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -909,26 +910,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     style: const TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Enabling this will likely cause the app to crash or freeze.',
-                    style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                  Text(
+                    context.l10n.willLikelyCrash,
+                    style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Transcription will be significantly slower and less accurate.',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    context.l10n.transcriptionSlowerLessAccurate,
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Proceed anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
+                  child: Text(context.l10n.proceedAnyway, style: const TextStyle(color: Colors.white12, fontSize: 10)),
                 ),
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, false),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text('Close', style: TextStyle(color: Colors.white)),
+                  child: Text(context.l10n.close, style: const TextStyle(color: Colors.white)),
                 ),
               ],
               actionsAlignment: MainAxisAlignment.spaceBetween,
@@ -941,11 +942,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-                  SizedBox(width: 8),
-                  Expanded(child: Text('Older Device Detected', style: TextStyle(color: Colors.white, fontSize: 18))),
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: Text(context.l10n.olderDeviceDetected,
+                          style: const TextStyle(color: Colors.white, fontSize: 18))),
                 ],
               ),
               content: Column(
@@ -957,29 +960,30 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     style: const TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'On-device transcription may be slower on this device.',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    context.l10n.transcriptionSlowerOnDevice,
+                    style: const TextStyle(color: Colors.white70),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '• Battery usage will be higher than cloud transcription.',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    '• ${context.l10n.batteryUsageHigher}',
+                    style: const TextStyle(color: Colors.white70),
                   ),
-                  const Text(
-                    '• Consider using Omi Cloud for better performance.',
-                    style: TextStyle(color: Colors.white70),
+                  Text(
+                    '• ${context.l10n.considerOmiCloud}',
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Continue', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  child: Text(context.l10n.continueButton,
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -991,44 +995,45 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.battery_alert, color: Colors.orange, size: 24),
-                  SizedBox(width: 8),
-                  Text('High Resource Usage', style: TextStyle(color: Colors.white, fontSize: 18)),
+                  const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
+                  const SizedBox(width: 8),
+                  Text(context.l10n.highResourceUsage, style: const TextStyle(color: Colors.white, fontSize: 18)),
                 ],
               ),
-              content: const Column(
+              content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'On-Device transcription is computationally intensive.',
-                    style: TextStyle(color: Colors.white70),
+                    context.l10n.computationallyIntensive,
+                    style: const TextStyle(color: Colors.white70),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    '• Battery drain will increase significantly.',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  Text(
-                    '• Device may warm up during extended use.',
-                    style: TextStyle(color: Colors.white70),
+                    '• ${context.l10n.batteryDrainSignificantly}',
+                    style: const TextStyle(color: Colors.white70),
                   ),
                   Text(
-                    '• Speed and accuracy may be lower than Cloud models.',
-                    style: TextStyle(color: Colors.white70),
+                    '• ${context.l10n.deviceMayWarmUp}',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  Text(
+                    '• ${context.l10n.speedAccuracyLower}',
+                    style: const TextStyle(color: Colors.white70),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('I Understand', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                  child: Text(context.l10n.iUnderstand,
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1071,7 +1076,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             Expanded(
               child: _buildTabOption(
                 isSelected: currentTab == 0,
-                title: 'Omi',
+                title: context.l10n.transcriptionSourceOmi,
                 onTap: () {
                   setState(() {
                     _useCustomStt = false;
@@ -1092,7 +1097,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             Expanded(
               child: _buildTabOption(
                 isSelected: currentTab == 2,
-                title: 'Cloud Provider',
+                title: context.l10n.cloudProvider,
                 onTap: () {
                   setState(() {
                     _useCustomStt = true;
@@ -1119,11 +1124,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               TextSpan(
                 children: [
                   TextSpan(
-                    text: '1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ',
+                    text: context.l10n.premiumMinutesMonth,
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   TextSpan(
-                    text: 'View usage',
+                    text: context.l10n.viewUsage,
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 12,
@@ -1140,7 +1145,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           )
         else if (currentTab == 1)
           Text(
-            'Audio is processed locally. Works offline, more private, but uses more battery.',
+            context.l10n.audioProcessedLocally,
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           )
         else if (currentTab == 2)
@@ -1203,7 +1208,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              '${_connectedDeviceName ?? 'Device'} uses $codecReason. Omi will be used.',
+              context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason),
               style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
             ),
           ),
@@ -1358,7 +1363,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }).toList();
 
     return _buildAutocompleteField(
-      label: 'Language',
+      label: context.l10n.languageLabel,
       hint: 'en (English)',
       value: _formatLanguageDisplay(_currentLanguage),
       suggestions: suggestions,
@@ -1376,7 +1381,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final models = _currentConfig.supportedModels;
 
     return _buildAutocompleteField(
-      label: 'Model',
+      label: context.l10n.modelLabel,
       hint: _currentConfig.defaultModel,
       value: _currentModel,
       suggestions: models,
@@ -1387,15 +1392,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
-              title: const Text('Performance Warning', style: TextStyle(color: Colors.white)),
-              content: const Text(
-                'This model is large and may crash the app or run very slowly on mobile devices.\n\n"small" or "base" is recommended.',
-                style: TextStyle(color: Colors.white70),
+              title: Text(context.l10n.performanceWarning, style: const TextStyle(color: Colors.white)),
+              content: Text(
+                context.l10n.modelTooLargeWarning,
+                style: const TextStyle(color: Colors.white70),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('OK', style: TextStyle(color: Colors.blue)),
+                  child: Text(context.l10n.ok, style: const TextStyle(color: Colors.blue)),
                 ),
               ],
             ),
@@ -1686,19 +1691,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               children: [
                 const Icon(Icons.apple, color: Colors.white, size: 24),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Using Native iOS Speech Recognition',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+                    context.l10n.usingNativeIosSpeech,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Your device\'s native speech engine will be used. No model download required.',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+          Text(
+            context.l10n.nativeEngineNoDownload,
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 20),
           _buildLanguageSelector(),
@@ -1725,13 +1730,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Model Ready (ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin)',
+                    context.l10n.modelReadyWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
                   ),
                 ),
                 TextButton(
                   onPressed: _downloadModel,
-                  child: Text('Re-download', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                  child: Text(context.l10n.reDownload, style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
                 ),
               ],
             ),
@@ -1748,7 +1753,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Please do not close the app.',
+                  context.l10n.doNotCloseApp,
                   style: TextStyle(color: Colors.orange.shade300, fontSize: 11),
                 ),
               ),
@@ -1757,7 +1762,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    _modelDownloadStatus ?? 'Downloading...',
+                    _modelDownloadStatus ?? context.l10n.downloading,
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                   ),
                   TextButton(
@@ -1767,7 +1772,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       minimumSize: const Size(50, 24),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: Text('Cancel', style: TextStyle(color: Colors.red.shade400, fontSize: 12)),
+                    child: Text(context.l10n.cancel, style: TextStyle(color: Colors.red.shade400, fontSize: 12)),
                   ),
                 ],
               ),
@@ -1780,7 +1785,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 child: ElevatedButton.icon(
                   onPressed: _downloadModel,
                   icon: const Icon(Icons.download, size: 16),
-                  label: Text('Download Model (ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin)'),
+                  label: Text(
+                      context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
@@ -1835,34 +1841,35 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text('Download Model', style: TextStyle(color: Colors.white)),
+        title: Text(context.l10n.downloadModel, style: const TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Model: ggml-$modelName.bin',
+              context.l10n.modelNameWithFile('ggml-$modelName.bin'),
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 8),
             Text(
-              'Estimated Size: ~${estimatedSizeMB.toStringAsFixed(0)} MB',
+              context.l10n.estimatedSizeWithValue(estimatedSizeMB.toStringAsFixed(0)),
               style: const TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 8),
             Text(
-              'Available Space: ${freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : 'Unknown'}',
+              context.l10n.availableSpaceWithValue(
+                  freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : context.l10n.unknown),
               style: TextStyle(
                 color: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? Colors.red : Colors.white70,
                 fontWeight: FontWeight.bold,
               ),
             ),
             if (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
-              const Padding(
-                padding: EdgeInsets.only(top: 10),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
                 child: Text(
-                  'Warning: Not enough space!',
-                  style: TextStyle(color: Colors.red),
+                  context.l10n.notEnoughSpace,
+                  style: const TextStyle(color: Colors.red),
                 ),
               ),
           ],
@@ -1870,12 +1877,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed:
                 (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
-            child: const Text('Download', style: TextStyle(color: Colors.blue)),
+            child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
           ),
         ],
       ),
@@ -1886,7 +1893,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     setState(() {
       _isDownloadingModel = true;
       _downloadProgress = 0.0;
-      _modelDownloadStatus = 'Preparing $modelName...';
+      _modelDownloadStatus = context.l10n.preparingModel(modelName);
     });
 
     try {
@@ -1920,8 +1927,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             if (mounted) {
               setState(() {
                 _downloadProgress = received / contentLength;
-                _modelDownloadStatus =
-                    'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
+                _modelDownloadStatus = context.l10n.downloadingModelProgress(modelName,
+                    (received / 1024 / 1024).toStringAsFixed(1), (contentLength / 1024 / 1024).toStringAsFixed(1));
               });
             }
           },
@@ -1935,7 +1942,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         setState(() {
           _urlController.text = filePath;
           _isDownloadingModel = false;
-          _modelDownloadStatus = 'Done';
+          _modelDownloadStatus = context.l10n.done;
         });
       }
 
@@ -1967,17 +1974,17 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (mounted) {
           setState(() {
             _isDownloadingModel = false;
-            _modelDownloadStatus = 'Cancelled';
+            _modelDownloadStatus = context.l10n.cancelled;
           });
         }
       } else {
         if (mounted) {
           setState(() {
             _isDownloadingModel = false;
-            _modelDownloadStatus = 'Error: $e';
+            _modelDownloadStatus = context.l10n.errorWithMessage(e.toString());
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Download error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text(context.l10n.downloadErrorWithMessage(e.toString())), backgroundColor: Colors.red),
           );
         }
       }
@@ -1991,7 +1998,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _downloadClient?.close();
     setState(() {
       _isDownloadingModel = false;
-      _modelDownloadStatus = 'Cancelled';
+      _modelDownloadStatus = context.l10n.cancelled;
     });
   }
 
@@ -2401,7 +2408,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Omi\'s built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.',
+          context.l10n.omiTranscriptionOptimized,
           style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
         ),
       ],
@@ -2439,9 +2446,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                   )
-                : const Text(
-                    'Save',
-                    style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                : Text(
+                    context.l10n.save,
+                    style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
           ),
         ),
@@ -2529,7 +2536,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
         actions: [
           TextButton(
             onPressed: _resetToTemplate,
-            child: Text('Reset', style: TextStyle(color: Colors.grey.shade400)),
+            child: Text(context.l10n.reset, style: TextStyle(color: Colors.grey.shade400)),
           ),
         ],
       ),
@@ -2546,15 +2553,13 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
     final isResponseSchema = widget.isResponseSchema;
     final templates =
         isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
-    final description = isResponseSchema
-        ? 'Quickly populate with a known provider\'s response format'
-        : 'Quickly populate with a known provider\'s request format';
+    final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Use template from',
+          context.l10n.useTemplateFrom,
           style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
         ),
         const SizedBox(height: 8),
@@ -2569,7 +2574,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
             child: DropdownButton<String>(
               value: null,
               hint: Text(
-                'Select a provider template...',
+                context.l10n.selectProviderTemplate,
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
               ),
               isExpanded: true,
@@ -2593,9 +2598,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
                             color: Colors.green.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
-                            'Live',
-                            style: TextStyle(
+                          child: Text(
+                            context.l10n.live,
+                            style: const TextStyle(
                               color: Colors.green,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -2652,7 +2657,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Invalid JSON',
+                      context.l10n.invalidJsonError,
                       style: TextStyle(color: Colors.red.shade400, fontSize: 13),
                     ),
                   ),
@@ -2709,9 +2714,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
-            child: const Text(
-              'Save',
-              style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+            child: Text(
+              context.l10n.save,
+              style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
         ),

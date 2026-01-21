@@ -25,6 +25,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_message_input.dart';
 import 'package:omi/ui/atoms/omi_send_button.dart';
@@ -370,7 +371,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             if (selectedApp != null) ...[
                               const SizedBox(height: 2),
                               Text(
-                                'Chat with ${selectedApp.name}',
+                                context.l10n.chatWithAppName(selectedApp.name),
                                 style: const TextStyle(
                                   color: ResponsiveHelper.textTertiary,
                                   fontSize: 11,
@@ -380,9 +381,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               ),
                             ] else ...[
                               const SizedBox(height: 2),
-                              const Text(
-                                'Default AI Assistant',
-                                style: TextStyle(
+                              Text(
+                                context.l10n.defaultAiAssistant,
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textTertiary,
                                   fontSize: 11,
                                 ),
@@ -476,7 +477,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     }
 
     if (provider.isClearingChat) {
-      return _buildLoadingState("Deleting your messages from Omi's memory...");
+      return _buildLoadingState(context.l10n.deletingMessages);
     }
 
     if (provider.messages.isEmpty) {
@@ -651,22 +652,26 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   ),
                 ),
           const SizedBox(height: 24),
-          Text(
-            isConnected ? '✨ Ready to chat!' : '🌐 Connection needed',
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+          Builder(
+            builder: (context) => Text(
+              isConnected ? context.l10n.readyToChat : context.l10n.connectionNeeded,
+              style: const TextStyle(
+                color: ResponsiveHelper.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            isConnected ? 'Start a conversation and let the magic begin' : 'Please check your internet connection',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 14,
-              height: 1.5,
+          Builder(
+            builder: (context) => Text(
+              isConnected ? context.l10n.startConversation : context.l10n.checkInternetConnection,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: ResponsiveHelper.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -780,7 +785,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Container(
                     margin: const EdgeInsets.only(left: 50, top: 6),
                     child: Text(
-                      formatChatTimestamp(message.createdAt),
+                      formatChatTimestamp(message.createdAt, context: context),
                       style: TextStyle(
                         color: ResponsiveHelper.textTertiary.withValues(alpha: 0.5),
                         fontSize: 11,
@@ -951,7 +956,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
+          Text(context.l10n.wasThisHelpful, style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
           const SizedBox(width: 4),
           OmiIconButton(
             icon: Icons.thumb_down_alt_outlined,
@@ -964,7 +969,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               setMessageNps(-1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('Thank you for your feedback!'),
+                  content: Text(context.l10n.thankYouForFeedback),
                   backgroundColor: ResponsiveHelper.backgroundTertiary,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -984,7 +989,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               setMessageNps(1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('Thank you for your feedback!'),
+                  content: Text(context.l10n.thankYouForFeedback),
                   backgroundColor: ResponsiveHelper.backgroundTertiary,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1041,9 +1046,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '📎 Attached Files',
-            style: TextStyle(
+          Text(
+            context.l10n.attachedFiles,
+            style: const TextStyle(
               color: ResponsiveHelper.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -1321,7 +1326,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (provider.selectedFiles.length > 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('You can only upload 4 files at a time'),
+          content: Text(context.l10n.maxFilesUploadError),
           backgroundColor: ResponsiveHelper.purplePrimary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1355,28 +1360,37 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           PopupMenuItem<String>(
             value: 'camera',
             padding: EdgeInsets.zero,
-            child: _buildPopupFileOption(
-              icon: Icons.camera_alt_rounded,
-              title: "Take a Photo",
-              subtitle: "Capture with camera",
+            child: Builder(
+              builder: (context) => _buildPopupFileOption(
+                context: context,
+                icon: Icons.camera_alt_rounded,
+                title: context.l10n.takePhoto,
+                subtitle: context.l10n.captureWithCamera,
+              ),
             ),
           ),
         PopupMenuItem<String>(
           value: 'gallery',
           padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.photo_library_rounded,
-            title: "Select Images",
-            subtitle: "Choose from gallery",
+          child: Builder(
+            builder: (context) => _buildPopupFileOption(
+              context: context,
+              icon: Icons.photo_library_rounded,
+              title: context.l10n.selectImages,
+              subtitle: context.l10n.chooseFromGallery,
+            ),
           ),
         ),
         PopupMenuItem<String>(
           value: 'file',
           padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.attach_file_rounded,
-            title: "Select a File",
-            subtitle: "Choose any file type",
+          child: Builder(
+            builder: (context) => _buildPopupFileOption(
+              context: context,
+              icon: Icons.attach_file_rounded,
+              title: context.l10n.selectFile,
+              subtitle: context.l10n.chooseAnyFileType,
+            ),
           ),
         ),
       ],
@@ -1398,6 +1412,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildPopupFileOption({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -1461,7 +1476,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('✨ Message copied to clipboard'),
+                content: Text(context.l10n.messageCopied),
                 backgroundColor: ResponsiveHelper.purplePrimary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1488,7 +1503,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('You cannot report your own messages'),
+                content: Text(context.l10n.cannotReportOwnMessages),
                 backgroundColor: Colors.orange,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1499,19 +1514,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           }
           showDialog(
             context: context,
-            builder: (context) {
+            builder: (dialogContext) {
               return getDialog(
-                context,
-                () => Navigator.of(context).pop(),
+                dialogContext,
+                () => Navigator.of(dialogContext).pop(),
                 () {
                   MixpanelManager().track('Chat Message Reported', properties: {'message': message.text});
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                   Navigator.of(context).pop();
                   context.read<MessageProvider>().removeLocalMessage(message.id);
                   reportMessageServer(message.id);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('✅ Message reported successfully'),
+                      content: Text(context.l10n.messageReportedSuccessfully),
                       backgroundColor: ResponsiveHelper.purplePrimary,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1519,8 +1534,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ),
                   );
                 },
-                'Report Message',
-                'Are you sure you want to report this message?',
+                context.l10n.reportMessage,
+                context.l10n.confirmReportMessage,
               );
             },
           );
@@ -1590,7 +1605,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const OmiSectionHeader(icon: FontAwesomeIcons.robot, title: 'Select Chat Assistant'),
+                  Builder(
+                    builder: (context) => OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
+                  ),
                   const Spacer(),
                   OmiIconButton(
                     icon: FontAwesomeIcons.xmark,
@@ -1651,29 +1668,31 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               width: 1,
                             ),
                           ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.store,
-                                color: ResponsiveHelper.purplePrimary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 12),
-                              Text(
-                                'Enable More Apps',
-                                style: TextStyle(
-                                  color: ResponsiveHelper.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                          child: Builder(
+                            builder: (context) => Row(
+                              children: [
+                                const Icon(
+                                  FontAwesomeIcons.store,
+                                  color: ResponsiveHelper.purplePrimary,
+                                  size: 16,
                                 ),
-                              ),
-                              Spacer(),
-                              Icon(
-                                FontAwesomeIcons.chevronRight,
-                                color: ResponsiveHelper.textTertiary,
-                                size: 12,
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                Text(
+                                  context.l10n.enableMoreApps,
+                                  style: const TextStyle(
+                                    color: ResponsiveHelper.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(
+                                  FontAwesomeIcons.chevronRight,
+                                  color: ResponsiveHelper.textTertiary,
+                                  size: 12,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1745,14 +1764,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        app?.description ?? 'Default AI Assistant',
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textSecondary,
-                          fontSize: 12,
+                      Builder(
+                        builder: (context) => Text(
+                          app?.description ?? context.l10n.defaultAiAssistant,
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textSecondary,
+                            fontSize: 12,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -1798,15 +1819,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void _showClearChatDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => getDialog(
-        context,
-        () => Navigator.of(context).pop(),
+      builder: (dialogContext) => getDialog(
+        dialogContext,
+        () => Navigator.of(dialogContext).pop(),
         () {
           context.read<MessageProvider>().clearChat();
-          Navigator.of(context).pop();
+          Navigator.of(dialogContext).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Chat cleared'),
+              content: Text(context.l10n.chatCleared),
               backgroundColor: ResponsiveHelper.backgroundTertiary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1814,8 +1835,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             ),
           );
         },
-        'Clear Chat?',
-        'Are you sure you want to clear the chat? This action cannot be undone.',
+        context.l10n.clearChatTitle,
+        context.l10n.confirmClearChat,
       ),
     );
   }

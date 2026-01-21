@@ -10,6 +10,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -103,9 +104,9 @@ class _SheetHeader extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Summary Template',
-              style: TextStyle(
+            Text(
+              context.l10n.summaryTemplate,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -177,11 +178,11 @@ class _AppsListState extends State<_AppsList> {
         _buildShimmerListItem(),
 
         // Suggested Apps section shimmer
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'Suggested Templates',
-            style: TextStyle(
+            context.l10n.suggestedTemplates,
+            style: const TextStyle(
               color: Colors.grey,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -192,11 +193,11 @@ class _AppsListState extends State<_AppsList> {
         _buildShimmerListItem(),
 
         // Other Apps section shimmer
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'Available Apps',
-            style: TextStyle(
+            context.l10n.availableTemplates,
+            style: const TextStyle(
               color: Colors.grey,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -304,11 +305,11 @@ class _AppsListState extends State<_AppsList> {
       children: [
         // Suggested Apps section
         if (suggestedApps.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              'Suggested Templates',
-              style: TextStyle(
+              context.l10n.suggestedTemplates,
+              style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -335,7 +336,7 @@ class _AppsListState extends State<_AppsList> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              suggestedApps.isNotEmpty ? 'Other Templates' : 'Available Templates',
+              suggestedApps.isNotEmpty ? context.l10n.otherTemplates : context.l10n.availableTemplates,
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
@@ -373,11 +374,11 @@ class _AppsListState extends State<_AppsList> {
         ],
 
         // Get Creative section
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'Get Creative',
-            style: TextStyle(
+            context.l10n.getCreative,
+            style: const TextStyle(
               color: Colors.grey,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -436,7 +437,7 @@ class _AppsListState extends State<_AppsList> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to install ${app.name}. Please try again.'),
+              content: Text(context.l10n.failedToInstallApp(app.name)),
               duration: const Duration(seconds: 3),
               backgroundColor: Colors.red,
             ),
@@ -466,7 +467,7 @@ class _AppsListState extends State<_AppsList> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error installing ${app.name}: ${e.toString()}'),
+            content: Text(context.l10n.errorInstallingApp(app.name, e.toString())),
             duration: const Duration(seconds: 3),
             backgroundColor: Colors.red,
           ),
@@ -525,7 +526,7 @@ class _AppListItemState extends State<_AppListItem> {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${widget.app.name.decodeString} set as default summarization app'),
+                  content: Text(context.l10n.setAsDefaultSuccess(widget.app.name.decodeString)),
                   duration: const Duration(seconds: 2),
                 ),
               );
@@ -545,24 +546,24 @@ class _AppListItemState extends State<_AppListItem> {
   Future<bool?> _showSetDefaultConfirmation(BuildContext context) {
     return showCupertinoDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return CupertinoAlertDialog(
-          title: const Text('Set Default App'),
+          title: Text(context.l10n.setDefaultApp),
           content: Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child: Text(
-              'Set ${widget.app.name.decodeString} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.',
+              context.l10n.setDefaultAppContent(widget.app.name.decodeString),
             ),
           ),
           actions: [
             CupertinoDialogAction(
               isDefaultAction: true,
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(context.l10n.cancel),
             ),
             CupertinoDialogAction(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Set Default'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(context.l10n.setDefaultButton),
             ),
           ],
         );
@@ -593,9 +594,9 @@ class _AppListItemState extends State<_AppListItem> {
             size: 20,
           ),
           const SizedBox(height: 2),
-          const Text(
-            'Default',
-            style: TextStyle(
+          Text(
+            context.l10n.defaultLabel,
+            style: const TextStyle(
               color: Colors.white70,
               fontWeight: FontWeight.w600,
               fontSize: 11,
@@ -664,7 +665,7 @@ class _AppListItemState extends State<_AppListItem> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Default',
+                  context.l10n.defaultLabel,
                   style: TextStyle(
                     color: Colors.amber.shade300,
                     fontSize: 9,
@@ -701,7 +702,7 @@ class _AppListItemState extends State<_AppListItem> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Last Used',
+                  context.l10n.lastUsedLabel,
                   style: TextStyle(
                     color: Colors.grey.shade400,
                     fontSize: 9,
@@ -807,9 +808,9 @@ class _CreateTemplateListItem extends StatelessWidget {
               size: 18,
             ),
           ),
-          title: const Text(
-            'Create Custom Template',
-            style: TextStyle(
+          title: Text(
+            context.l10n.createCustomTemplate,
+            style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
               fontSize: 16,
@@ -858,9 +859,9 @@ class _EnableAppsListItem extends StatelessWidget {
               size: 14,
             ),
           ),
-          title: const Text(
-            'All Templates',
-            style: TextStyle(
+          title: Text(
+            context.l10n.allTemplates,
+            style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
               fontSize: 16,
@@ -880,7 +881,7 @@ class _EnableAppsListItem extends StatelessWidget {
               context,
               CapabilityAppsPage(
                 capability: AppCapability(
-                  title: 'Summary',
+                  title: context.l10n.summary,
                   id: 'memories',
                 ),
                 apps: memoriesApps,

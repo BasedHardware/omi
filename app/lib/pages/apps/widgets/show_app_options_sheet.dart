@@ -7,6 +7,7 @@ import 'package:omi/pages/apps/update_app.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -45,7 +46,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
               ),
               child: ListTile(
                 title: Text(
-                  app.isNotPersona() ? 'Keep App Public' : 'Keep Persona Public',
+                  context.l10n.keepItemPublic(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona),
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
                 trailing: Switch(
@@ -63,9 +64,9 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          app.isNotPersona() ? 'Make App Public?' : 'Make Persona Public?',
-                          'If you make the ${app.isNotPersona() ? 'app' : 'persona'} public, it can be used by everyone',
-                          okButtonText: 'Confirm',
+                          context.l10n.makeItemPublicQuestion(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona),
+                          context.l10n.makeItemPublicExplanation(app.isNotPersona() ? context.l10n.itemApp.toLowerCase() : context.l10n.itemPersona.toLowerCase()),
+                          okButtonText: context.l10n.confirm,
                         ),
                       );
                     } else {
@@ -80,9 +81,9 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          app.isNotPersona() ? 'Make App Private?' : 'Make Persona Private?',
-                          'If you make the ${app.isNotPersona() ? 'app' : 'persona'} private now, it will stop working for everyone and will be visible only to you',
-                          okButtonText: 'Confirm',
+                          context.l10n.makeItemPrivateQuestion(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona),
+                          context.l10n.makeItemPrivateExplanation(app.isNotPersona() ? context.l10n.itemApp.toLowerCase() : context.l10n.itemPersona.toLowerCase()),
+                          okButtonText: context.l10n.confirm,
                         ),
                       );
                     }
@@ -97,7 +98,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
               child: Column(
                 children: [
                   ListTile(
-                    title: Text(app.isNotPersona() ? 'Manage App' : 'Update Persona Details'),
+                    title: Text(app.isNotPersona() ? context.l10n.manageApp : context.l10n.updatePersonaDetails),
                     leading: const Icon(Icons.edit),
                     onTap: () {
                       Navigator.pop(context);
@@ -114,7 +115,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                     },
                   ),
                   ListTile(
-                    title: Text('Delete ${app.isNotPersona() ? 'App' : 'Persona'}'),
+                    title: Text(context.l10n.deleteItemTitle(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona)),
                     leading: const Icon(
                       Icons.delete,
                     ),
@@ -130,9 +131,9 @@ class ShowAppOptionsSheet extends StatelessWidget {
                             Navigator.pop(context);
                             Navigator.pop(context);
                           },
-                          'Delete ${app.isNotPersona() ? 'App' : 'Persona'}?',
-                          'Are you sure you want to delete this ${app.isNotPersona() ? 'App' : 'Persona'}? This action cannot be undone.',
-                          okButtonText: 'Confirm',
+                          context.l10n.deleteItemQuestion(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona),
+                          context.l10n.deleteItemConfirmation(app.isNotPersona() ? context.l10n.itemApp : context.l10n.itemPersona),
+                          okButtonText: context.l10n.confirm,
                         ),
                       );
                     },

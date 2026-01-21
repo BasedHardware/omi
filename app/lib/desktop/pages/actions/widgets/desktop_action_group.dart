@@ -8,6 +8,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_badge.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -96,7 +97,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
     if (newText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Action item description cannot be empty'),
+          content: Text(context.l10n.actionItemDescriptionCannotBeEmpty),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -123,7 +124,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
       Logger.debug('Error updating action item description: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Failed to update action item'),
+          content: Text(context.l10n.failedToUpdateActionItem),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -149,12 +150,13 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
               borderRadius: BorderRadius.circular(8),
               boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FontAwesomeIcons.check, color: Colors.white, size: 14),
-                SizedBox(width: 8),
-                Text('Saved', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                const Icon(FontAwesomeIcons.check, color: Colors.white, size: 14),
+                const SizedBox(width: 8),
+                Text(context.l10n.saved,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -221,7 +223,9 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.conversationTitle.isNotEmpty ? widget.conversationTitle : 'Untitled Conversation',
+                        widget.conversationTitle.isNotEmpty
+                            ? widget.conversationTitle
+                            : context.l10n.untitledConversation,
                         style: const TextStyle(
                           color: ResponsiveHelper.textPrimary,
                           fontSize: 16,
@@ -232,7 +236,7 @@ class _DesktopActionGroupState extends State<DesktopActionGroup> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$incompleteCount remaining',
+                        context.l10n.countRemaining(incompleteCount.toString()),
                         style: const TextStyle(
                           color: ResponsiveHelper.textSecondary,
                           fontSize: 12,

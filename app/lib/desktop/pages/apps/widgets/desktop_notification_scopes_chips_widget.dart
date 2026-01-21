@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/ui/atoms/omi_choice_chip.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import '../../../../pages/apps/providers/add_app_provider.dart';
 
@@ -22,19 +23,19 @@ class DesktopNotificationScopesChipsWidget extends StatelessWidget {
             color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   FontAwesomeIcons.bell,
                   color: ResponsiveHelper.textTertiary,
                   size: 24,
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
-                  'No notification scopes available',
-                  style: TextStyle(
+                  context.l10n.noNotificationScopesAvailable,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 14,
                   ),

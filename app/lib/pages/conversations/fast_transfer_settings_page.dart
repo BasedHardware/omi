@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class FastTransferSettingsPage extends StatefulWidget {
   const FastTransferSettingsPage({super.key});
@@ -38,7 +39,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
     SharedPreferencesUtil().preferredSyncMethod = method;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(method == 'wifi' ? 'Fast Transfer enabled' : 'Bluetooth sync enabled'),
+        content: Text(method == 'wifi' ? context.l10n.fastTransferEnabled : context.l10n.bluetoothSyncEnabled),
         backgroundColor: Colors.green,
       ),
     );
@@ -50,16 +51,16 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Enable Fast Transfer',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.enableFastTransfer,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.',
+              context.l10n.fastTransferDescription,
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
             ),
             const SizedBox(height: 16),
@@ -75,7 +76,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Internet access is paused during transfer',
+                      context.l10n.internetAccessPausedDuringTransfer,
                       style: TextStyle(color: Colors.amber.shade300, fontSize: 13),
                     ),
                   ),
@@ -87,11 +88,11 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade500)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Enable', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -111,6 +112,8 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
     required String speed,
     required IconData icon,
     required Color iconColor,
+    required String selectedLabel,
+    required String selectLabel,
     String? badge,
     String? description,
   }) {
@@ -195,7 +198,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Text(
-                    isSelected ? 'Selected' : 'Select',
+                    isSelected ? selectedLabel : selectLabel,
                     style: TextStyle(
                       color: isSelected ? Colors.green : Colors.grey.shade400,
                       fontSize: 13,
@@ -233,9 +236,9 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
           icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Transfer Method',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.transferMethod,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),
@@ -245,29 +248,31 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Choose how recordings are transferred from your Omi device to your phone.',
+              context.l10n.chooseTransferMethodDescription,
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 24),
             _buildMethodCard(
               method: 'wifi',
-              title: 'Fast Transfer',
-              speed: '~150 KB/s via WiFi',
+              title: context.l10n.fastTransfer,
+              speed: context.l10n.wifiSpeed,
               icon: Icons.bolt,
               iconColor: Colors.blue,
-              badge: '5X FASTER',
-              description:
-                  'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.',
+              selectedLabel: context.l10n.selected,
+              selectLabel: context.l10n.selectOption,
+              badge: context.l10n.fiveTimesFaster,
+              description: context.l10n.fastTransferMethodDescription,
             ),
             const SizedBox(height: 16),
             _buildMethodCard(
               method: 'ble',
-              title: 'Bluetooth',
-              speed: '~30 KB/s via BLE',
+              title: context.l10n.bluetooth,
+              speed: context.l10n.bleSpeed,
               icon: Icons.bluetooth,
               iconColor: Colors.deepPurpleAccent,
-              description:
-                  'Uses standard Bluetooth Low Energy connection. Slower but doesn\'t affect your WiFi connection.',
+              selectedLabel: context.l10n.selected,
+              selectLabel: context.l10n.selectOption,
+              description: context.l10n.bluetoothMethodDescription,
             ),
           ],
         ),

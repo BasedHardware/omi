@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ApiKeysWidget extends StatefulWidget {
   final String appId;
@@ -66,7 +67,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         _showNewKeyDialog();
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('Failed to create provider API key: ${e.toString()}');
+      AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(e.toString()));
     } finally {
       setState(() {
         _isCreatingKey = false;
@@ -78,25 +79,25 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: const Text('Create a Key', textAlign: TextAlign.center),
+        title: Text(context.l10n.createAKey, textAlign: TextAlign.center),
         content: _buildNewKeyContent(),
         contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         actions: [
           Center(
             child: ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                Navigator.of(dialogContext).pop();
                 setState(() {
                   _newKey = null;
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.secondary,
+                backgroundColor: Theme.of(dialogContext).colorScheme.secondary,
                 minimumSize: const Size(120, 40),
               ),
-              child: const Text('Done', style: TextStyle(color: Colors.white)),
+              child: Text(context.l10n.done, style: const TextStyle(color: Colors.white)),
             ),
           ),
         ],
@@ -112,9 +113,9 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
 
     try {
       await Provider.of<AddAppProvider>(context, listen: false).deleteApiKey(widget.appId, keyId);
-      AppSnackbar.showSnackbarSuccess('API key revoked successfully');
+      AppSnackbar.showSnackbarSuccess(context.l10n.apiKeyRevokedSuccessfully);
     } catch (e) {
-      AppSnackbar.showSnackbarError('Failed to revoke API key: ${e.toString()}');
+      AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(e.toString()));
     } finally {
       setState(() {
         _deletingKeyId = null;
@@ -124,7 +125,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    AppSnackbar.showSnackbarSuccess('Copied to clipboard');
+    AppSnackbar.showSnackbarSuccess(context.l10n.copiedToClipboard('API key'));
   }
 
   @override
@@ -148,7 +149,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                 Row(
                   children: [
                     Text(
-                      'API Keys',
+                      context.l10n.apiKeys,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(width: 8),
@@ -163,28 +164,28 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (context) => AlertDialog(
+                          builder: (dialogContext) => AlertDialog(
                             backgroundColor: const Color(0xFF1F1F25),
-                            title: const Text('Omi API Keys'),
-                            content: const Text(
-                              'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.',
+                            title: Text(context.l10n.omiApiKeys),
+                            content: Text(
+                              context.l10n.apiKeysDescription,
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
+                                onPressed: () => Navigator.of(dialogContext).pop(),
                                 style: TextButton.styleFrom(
-                                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                                  backgroundColor: Theme.of(dialogContext).colorScheme.secondary,
                                   foregroundColor: Colors.white,
                                 ),
-                                child: const Text(
-                                  'Got it',
+                                child: Text(
+                                  context.l10n.gotIt,
                                 ),
                               ),
                             ],
                           ),
                         );
                       },
-                      tooltip: 'About Omi API Keys',
+                      tooltip: context.l10n.aboutOmiApiKeys,
                     ),
                   ],
                 ),
@@ -200,7 +201,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                           ),
                         )
                       : const Icon(Icons.add, size: 16),
-                  label: Text(_isCreatingKey ? 'Creating...' : 'Create Key'),
+                  label: Text(_isCreatingKey ? context.l10n.creating : context.l10n.createKey),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     foregroundColor: Colors.white,
@@ -224,7 +225,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               padding: const EdgeInsets.all(16.0),
               child: Center(
                 child: Text(
-                  'No API keys yet. Create one to integrate with your app.',
+                  context.l10n.noApiKeysYet,
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -244,7 +245,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       children: [
         Center(
           child: Text(
-            'Your new key:',
+            context.l10n.yourNewKey,
             style: Theme.of(context).textTheme.labelLarge,
           ),
         ),
@@ -252,7 +253,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: Color(0xFF35343B),
+            color: const Color(0xFF35343B),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -275,7 +276,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               IconButton(
                 icon: const Icon(Icons.copy, size: 18),
                 onPressed: () => _copyToClipboard(_newKey!.secret!),
-                tooltip: 'Copy to clipboard',
+                tooltip: context.l10n.copyToClipboard,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -283,19 +284,19 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
           ),
         ),
         const SizedBox(height: 16),
-        const Row(
+        Row(
           children: [
             Expanded(
               child: Text.rich(
                 TextSpan(
                   children: [
                     TextSpan(
-                      text: 'Please copy it now and write it down somewhere safe. ',
-                      style: TextStyle(color: Colors.white),
+                      text: context.l10n.pleaseCopyKeyNow,
+                      style: const TextStyle(color: Colors.white),
                     ),
                     TextSpan(
-                      text: 'You will not be able to see it again.',
-                      style: TextStyle(
+                      text: context.l10n.willNotSeeAgain,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -331,7 +332,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '${DateFormat('MMM d, yyyy HH:mm').format(key.createdAt)}',
+              '${DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt)}',
               style: Theme.of(context).textTheme.labelMedium,
             ),
             trailing: SizedBox(
@@ -354,7 +355,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                         color: Colors.red,
                       ),
                       onPressed: () => _showDeleteConfirmation(key.id),
-                      tooltip: 'Revoke key',
+                      tooltip: context.l10n.revokeKey,
                     ),
             ),
           ),
@@ -366,23 +367,23 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   void _showDeleteConfirmation(String keyId) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: const Text('Revoke API Key?'),
-        content: const Text(
-          'This action cannot be undone. Any applications using this key will no longer be able to access the API.',
+        title: Text(context.l10n.revokeApiKeyQuestion),
+        content: Text(
+          context.l10n.revokeApiKeyWarning,
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Cancel', style: Theme.of(context).textTheme.bodyMedium),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(context.l10n.cancel, style: Theme.of(dialogContext).textTheme.bodyMedium),
           ),
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop();
+              Navigator.of(dialogContext).pop();
               _deleteApiKey(keyId);
             },
-            child: const Text('Revoke', style: TextStyle(color: Colors.red)),
+            child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),

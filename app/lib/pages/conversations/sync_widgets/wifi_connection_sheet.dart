@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Represents the current step of WiFi connection process
@@ -177,7 +178,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                 children: [
                   Expanded(
                     child: Text(
-                      isFailed ? 'Connection Failed' : 'Connecting to ${widget.deviceName}',
+                      isFailed ? context.l10n.wifiConnectionFailedTitle : context.l10n.connectingToDeviceName(widget.deviceName),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -204,7 +205,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
               // Step 1: Enabling WiFi
               _buildStepRow(
                 icon: Icons.wifi_tethering,
-                title: 'Enable ${widget.deviceName}\'s WiFi',
+                title: context.l10n.enableDeviceWifi(widget.deviceName),
                 isActive: step == WifiConnectionStep.enablingWifi,
                 isCompleted: step.index > WifiConnectionStep.enablingWifi.index && !isFailed,
                 isFailed: isFailed &&
@@ -215,7 +216,7 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
               // Step 2: Connecting to device
               _buildStepRow(
                 icon: Icons.wifi,
-                title: 'Connect to ${widget.deviceName}',
+                title: context.l10n.connectToDeviceName(widget.deviceName),
                 isActive: step == WifiConnectionStep.connectingToDevice,
                 isCompleted: step == WifiConnectionStep.connected,
                 isFailed: isFailed && widget.controller.currentStep == WifiConnectionStep.connectingToDevice,
@@ -258,14 +259,14 @@ class _WifiConnectionSheetContentState extends State<_WifiConnectionSheetContent
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.refresh, size: 20),
-                        SizedBox(width: 8),
+                        const Icon(Icons.refresh, size: 20),
+                        const SizedBox(width: 8),
                         Text(
-                          'Retry',
-                          style: TextStyle(
+                          context.l10n.retry,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),

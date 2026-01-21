@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class LocalStoragePage extends StatefulWidget {
   const LocalStoragePage({super.key});
@@ -32,7 +33,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Local storage enabled' : 'Local storage disabled',
+              value ? context.l10n.localStorageEnabled : context.l10n.localStorageDisabled,
             ),
             backgroundColor: Colors.green,
           ),
@@ -43,7 +44,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update settings: ${e.toString()}'),
+            content: Text(context.l10n.failedToUpdateSettings(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -57,13 +58,13 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Privacy Notice',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(context.l10n.privacyNotice,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.',
+              context.l10n.recordingsMayCaptureOthers,
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
             ),
           ],
@@ -71,11 +72,11 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade500)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Enable', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -102,8 +103,8 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
           icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Store Audio on Phone',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(context.l10n.storeAudioOnPhone,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -124,10 +125,10 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                     children: [
                       _buildFaIcon(FontAwesomeIcons.mobile, size: 20, color: Colors.deepPurpleAccent),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Store Audio on Phone',
-                          style: TextStyle(
+                          context.l10n.storeAudioOnPhone,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -141,7 +142,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                           borderRadius: BorderRadius.circular(100),
                         ),
                         child: Text(
-                          isEnabled ? 'On' : 'Off',
+                          isEnabled ? context.l10n.on : context.l10n.off,
                           style: TextStyle(
                             color: isEnabled ? Colors.green : Colors.white,
                             fontSize: 13,
@@ -153,7 +154,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.',
+                    context.l10n.storeAudioDescription,
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 14,
@@ -166,9 +167,9 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Enable Local Storage',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.enableLocalStorage,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,

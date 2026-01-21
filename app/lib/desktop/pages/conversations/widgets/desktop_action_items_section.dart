@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionItemsSection extends StatelessWidget {
@@ -30,7 +31,7 @@ class DesktopActionItemsSection extends StatelessWidget {
         // Section header
         OmiSectionHeader(
           icon: FontAwesomeIcons.listCheck,
-          title: 'Action Items',
+          title: context.l10n.actionItems,
           badgeLabel: '${actionItems.length}',
         ),
 

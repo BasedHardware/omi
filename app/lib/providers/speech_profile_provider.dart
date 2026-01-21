@@ -22,6 +22,22 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/logger.dart';
 
+/// Enum for loading text states in speech profile
+enum SpeechProfileLoadingState {
+  uploading,
+  memorizing,
+  personalizing,
+  allSet,
+}
+
+/// Enum for progress message states in speech profile
+enum SpeechProfileProgressState {
+  keepSpeaking,
+  keepGoing,
+  almostThere,
+  soClose,
+}
+
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
@@ -51,13 +67,13 @@ class SpeechProfileProvider extends ChangeNotifier
   bool isInitialised = false;
 
   String text = '';
-  String message = '';
+  SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
   late Function? _finalizedCallback;
   late Function? _processConversationCallback;
 
   /// only used during onboarding /////
-  String loadingText = 'Uploading your voice profile....';
+  SpeechProfileLoadingState loadingState = SpeechProfileLoadingState.uploading;
   ServerConversation? conversation;
 
   // Onboarding state (questions from server)
@@ -74,8 +90,8 @@ class SpeechProfileProvider extends ChangeNotifier
     }
   }
 
-  void updateLoadingText(String text) {
-    loadingText = text;
+  void updateLoadingState(SpeechProfileLoadingState state) {
+    loadingState = state;
     notifyListeners();
   }
 
@@ -241,7 +257,7 @@ class SpeechProfileProvider extends ChangeNotifier
       connectionStateListener?.cancel();
       _bleBytesStream?.cancel();
 
-      updateLoadingText('Memorizing your voice...');
+      updateLoadingState(SpeechProfileLoadingState.memorizing);
       Logger.debug('Creating WAV file...');
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       Logger.debug('WAV file created, uploading profile...');
@@ -277,7 +293,7 @@ class SpeechProfileProvider extends ChangeNotifier
       SharedPreferencesUtil().hasSpeakerProfile = true;
       Logger.debug('Speaker profile saved to preferences');
 
-      updateLoadingText('Personalizing your experience...');
+      updateLoadingState(SpeechProfileLoadingState.personalizing);
 
       // Trigger conversation processing before marking complete
       if (_processConversationCallback != null) {
@@ -288,7 +304,7 @@ class SpeechProfileProvider extends ChangeNotifier
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
-      updateLoadingText("You're all set!");
+      updateLoadingState(SpeechProfileLoadingState.allSet);
       notifyListeners();
     } finally {
       if (_finalizedCallback != null) {
@@ -385,13 +401,13 @@ class SpeechProfileProvider extends ChangeNotifier
     // Only show user's speech, not Omi questions
     text = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
     int wordsCount = text.split(' ').length;
-    message = 'Keep speaking until you get 100%.';
+    progressState = SpeechProfileProgressState.keepSpeaking;
     if (wordsCount > 10) {
-      message = 'Keep going, you are doing great';
+      progressState = SpeechProfileProgressState.keepGoing;
     } else if (wordsCount > 25) {
-      message = 'Great job, you are almost there';
+      progressState = SpeechProfileProgressState.almostThere;
     } else if (wordsCount > 40) {
-      message = 'So close, just a little more';
+      progressState = SpeechProfileProgressState.soClose;
     }
     notifyListeners();
   }
