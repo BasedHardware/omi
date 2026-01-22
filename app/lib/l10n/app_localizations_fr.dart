@@ -7858,4 +7858,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Grands écarts de temps détectés ($gaps)';
   }
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 }

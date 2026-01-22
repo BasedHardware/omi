@@ -7789,4 +7789,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Phát hiện các khoảng cách thời gian lớn ($gaps)';
   }
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 }

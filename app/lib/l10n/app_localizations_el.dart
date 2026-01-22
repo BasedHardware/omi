@@ -7843,4 +7843,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Εντοπίστηκαν μεγάλα χρονικά κενά ($gaps)';
   }
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 }
