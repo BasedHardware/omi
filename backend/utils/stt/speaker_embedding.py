@@ -32,7 +32,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
 
     with open(audio_path, 'rb') as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
-        response = requests.post(f"{api_url}/v1/embedding", files=files, timeout=300)
+        response = requests.post(f"{api_url}/v2/embedding", files=files, timeout=300)
         response.raise_for_status()
 
     result = response.json()

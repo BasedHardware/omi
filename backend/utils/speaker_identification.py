@@ -14,7 +14,7 @@ from utils.other.storage import (
     upload_person_speech_sample_from_bytes,
 )
 from utils.speaker_sample import verify_and_transcribe_sample
-from utils.speaker_sample_migration import migrate_person_samples_v1_to_v2
+from utils.speaker_sample_migration import migrate_person_samples_v1_to_v3, migrate_person_samples_v2_to_v3
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 
@@ -250,11 +250,15 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
-        # Run lazy migration for v1 samples before checking count
+        # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
         person = users_db.get_person(uid, person_id)
-        if person and person.get('speech_samples_version', 1) == 1:
-            person = await migrate_person_samples_v1_to_v2(uid, person)
+        if person:
+            version = person.get('speech_samples_version', 1)
+            if version == 1:
+                person = await migrate_person_samples_v1_to_v3(uid, person)
+            elif version == 2:
+                person = await migrate_person_samples_v2_to_v3(uid, person)
 
         # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
@@ -415,9 +419,7 @@ async def extract_speaker_samples(
             wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
 
             # Verify sample quality and get transcript using centralized function
-            transcript, is_valid, reason = await verify_and_transcribe_sample(
-                wav_bytes, sample_rate, expected_text
-            )
+            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
             if not is_valid:
                 print(f"Sample failed quality check: {reason}", uid, conversation_id)
                 continue  # Try next segment
