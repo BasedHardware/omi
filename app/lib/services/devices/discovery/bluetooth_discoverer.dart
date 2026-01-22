@@ -47,6 +47,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
         timeout: Duration(seconds: timeout),
       );
 
+      // Give listener time to receive scan results within timeout
       await Future.delayed(Duration(seconds: timeout));
 
       final List<BtDevice> devices = bleResults
