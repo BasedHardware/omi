@@ -12,10 +12,10 @@ from typing import Optional, Tuple
 
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
 from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
-from utils.text_utils import compute_text_similarity
+from utils.text_utils import compute_text_containment
 
 MIN_WORDS = 5
-MIN_SIMILARITY = 0.6
+MIN_CONTAINMENT = 0.9
 MIN_DOMINANT_SPEAKER_RATIO = 0.7
 
 
@@ -30,7 +30,7 @@ async def verify_and_transcribe_sample(
     Checks:
     1. Transcription has at least MIN_WORDS words
     2. Dominant speaker accounts for >= MIN_DOMINANT_SPEAKER_RATIO of words (via diarization)
-    3. Transcribed text has >= MIN_SIMILARITY with expected text (if provided)
+    3. Transcribed text has >= MIN_CONTAINMENT containment in expected text (if provided)
 
     Args:
         audio_bytes: WAV format audio bytes
@@ -66,9 +66,9 @@ async def verify_and_transcribe_sample(
     transcript = ' '.join(w.get('text', '') for w in words)
 
     if expected_text:
-        similarity = compute_text_similarity(transcript, expected_text)
-        if similarity < MIN_SIMILARITY:
-            return transcript, False, f"text_mismatch: similarity={similarity:.2f}"
+        containment = compute_text_containment(transcript, expected_text)
+        if containment < MIN_CONTAINMENT:
+            return transcript, False, f"text_mismatch: containment={containment:.2f}"
 
     return transcript, True, "ok"
 
