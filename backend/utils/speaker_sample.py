@@ -39,8 +39,14 @@ async def verify_and_transcribe_sample(
 
     Returns:
         (transcript, is_valid, reason): Tuple of (str or None, bool, str)
+        - reason "transcription_failed" indicates transient API error (sample should be kept)
+        - other reasons indicate quality issues (sample may be dropped)
     """
-    words = await asyncio.to_thread(deepgram_prerecorded_from_bytes, audio_bytes, sample_rate, True)
+    try:
+        words = await asyncio.to_thread(deepgram_prerecorded_from_bytes, audio_bytes, sample_rate, True)
+    except RuntimeError as e:
+        # Transient transcription failure - distinguish from quality issues
+        return None, False, f"transcription_failed: {e}"
 
     if len(words) < MIN_WORDS:
         return None, False, f"insufficient_words: {len(words)}/{MIN_WORDS}"

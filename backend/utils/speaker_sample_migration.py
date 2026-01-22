@@ -71,6 +71,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
         valid_samples = []
         valid_transcripts = []
+        has_transient_failures = False
 
         for sample_path in samples:
             try:
@@ -80,6 +81,8 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
                 continue
             except Exception as e:
                 print(f"Error downloading sample {sample_path}: {e}", uid, person_id)
+                # Transient download failure - keep sample, skip migration for now
+                has_transient_failures = True
                 continue
 
             transcript, is_valid, reason = await verify_and_transcribe_sample(audio_bytes, 16000)
@@ -87,9 +90,19 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             if is_valid:
                 valid_samples.append(sample_path)
                 valid_transcripts.append(transcript)
+            elif reason.startswith("transcription_failed"):
+                # Transient API failure - keep sample, don't migrate yet
+                print(f"Transcription failed for {sample_path}, keeping sample: {reason}", uid, person_id)
+                has_transient_failures = True
             else:
+                # Quality issue - drop sample
                 print(f"Dropping sample {sample_path}: {reason}", uid, person_id)
                 await asyncio.to_thread(delete_sample_from_storage, sample_path)
+
+        # Don't mark as v2 if there were transient failures - retry next time
+        if has_transient_failures:
+            print(f"Migration incomplete due to transient failures, will retry later", uid, person_id)
+            return person
 
         new_embedding = None
         if valid_samples:

@@ -174,7 +174,7 @@ def deepgram_prerecorded_from_bytes(
         print(f'Deepgram prerecorded from bytes error: {e}')
         if attempts < 2:
             return deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1)
-        return []
+        raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
 
 
 @timeit
