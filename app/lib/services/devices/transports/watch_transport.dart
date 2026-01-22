@@ -88,7 +88,7 @@ class WatchTransport extends DeviceTransport {
   }
 
   @override
-  Future<void> connect({bool autoConnect = false}) async {
+  Future<void> connect() async {
     if (_state == DeviceTransportState.connected) {
       return;
     }

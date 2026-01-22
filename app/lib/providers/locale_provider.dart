@@ -71,6 +71,54 @@ class LocaleProvider extends ChangeNotifier {
         return 'العربية (Arabic)';
       case 'hi':
         return 'हिंदी (Hindi)';
+      case 'ru':
+        return 'Русский (Russian)';
+      case 'it':
+        return 'Italiano (Italian)';
+      case 'nl':
+        return 'Nederlands (Dutch)';
+      case 'tr':
+        return 'Türkçe (Turkish)';
+      case 'vi':
+        return 'Tiếng Việt (Vietnamese)';
+      case 'th':
+        return 'ไทย (Thai)';
+      case 'id':
+        return 'Bahasa Indonesia (Indonesian)';
+      case 'pl':
+        return 'Polski (Polish)';
+      case 'uk':
+        return 'Українська (Ukrainian)';
+      case 'sv':
+        return 'Svenska (Swedish)';
+      case 'da':
+        return 'Dansk (Danish)';
+      case 'fi':
+        return 'Suomi (Finnish)';
+      case 'no':
+        return 'Norsk (Norwegian)';
+      case 'cs':
+        return 'Čeština (Czech)';
+      case 'el':
+        return 'Ελληνικά (Greek)';
+      case 'hu':
+        return 'Magyar (Hungarian)';
+      case 'ro':
+        return 'Română (Romanian)';
+      case 'sk':
+        return 'Slovenčina (Slovak)';
+      case 'bg':
+        return 'Български (Bulgarian)';
+      case 'ca':
+        return 'Català (Catalan)';
+      case 'et':
+        return 'Eesti (Estonian)';
+      case 'lt':
+        return 'Lietuvių (Lithuanian)';
+      case 'lv':
+        return 'Latviešu (Latvian)';
+      case 'ms':
+        return 'Bahasa Melayu (Malay)';
       default:
         return locale.languageCode;
     }

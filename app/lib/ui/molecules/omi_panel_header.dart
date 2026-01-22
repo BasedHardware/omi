@@ -23,6 +23,8 @@ class OmiPanelHeader extends StatelessWidget {
   /// Called when the trailing close button is pressed. If `null`, close button is hidden.
   final VoidCallback? onClose;
 
+  final Widget? action;
+
   /// Alignment spacing between widgets.
   final double spacing;
 
@@ -32,6 +34,7 @@ class OmiPanelHeader extends StatelessWidget {
     required this.title,
     this.badgeLabel,
     this.onClose,
+    this.action,
     this.spacing = 12,
   });
 
@@ -85,6 +88,10 @@ class OmiPanelHeader extends StatelessWidget {
 
           // Spacer + optional close button.
           const Spacer(),
+          if (action != null) ...[
+            action!,
+            SizedBox(width: spacing),
+          ],
           if (onClose != null)
             OmiIconButton(
               icon: FontAwesomeIcons.xmark,

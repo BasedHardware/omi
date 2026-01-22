@@ -1497,10 +1497,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "23f08335362185a5ea2ad3a4e597f1375e78bce8a040df5c600c8d3552ef2394"
+      sha256: e3641ec5d63ebf0d9b41bd43201a66e3fc79a65db5f61fc181f04cd27aab950c
       url: "https://pub.dev"
     source: hosted
-    version: "1.17.0"
+    version: "1.16.0"
   mgrs_dart:
     dependency: transitive
     description:
@@ -2235,10 +2235,10 @@ packages:
     dependency: transitive
     description:
       name: test_api
-      sha256: ab2726c1a94d3176a45960b6234466ec367179b87dd74f1611adb1f3b5fb9d55
+      sha256: "522f00f556e73044315fa4585ec3270f1808a4b186c936e612cab0b565ff1e00"
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.7"
+    version: "0.7.6"
   time:
     dependency: transitive
     description:
@@ -2570,10 +2570,11 @@ packages:
   whisper_flutter_new:
     dependency: "direct main"
     description:
-      name: whisper_flutter_new
-      sha256: "56f5449cd459ed9bbb9d3641aae6a72ed594e1a200f56b1939891996fbd7dd4d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      resolved-ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      url: "https://github.com/BasedHardware/whisper_flutter_new.git"
+    source: git
     version: "1.0.1"
   win32:
     dependency: transitive

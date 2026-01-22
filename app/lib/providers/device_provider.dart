@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/connection_foreground_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -17,7 +17,6 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -31,8 +30,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   bool _hasLowBatteryAlerted = false;
+  Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
-  bool _isAutoConnecting = false; // Track if autoConnect is in progress
+  final int _connectionCheckSeconds = 15; // 10s periods, 5s for each scan
 
   bool _havingNewFirmware = false;
   bool get havingNewFirmware => _havingNewFirmware && pairedDevice != null && isConnected;
@@ -143,93 +143,50 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         batteryLevel = value;
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
+          final ctx = MyApp.navigatorKey.currentContext;
           NotificationService.instance.createNotification(
-            title: "Low Battery Alert",
-            body: "Your device is running low on battery. Time for a recharge! 🔋",
+            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+            body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = true;
         }
-
-        if (PlatformService.isAndroid && connectedDevice != null) {
-          ConnectionForegroundService.instance.updateNotification(
-            deviceName: connectedDevice!.name,
-            batteryLevel: value,
-          );
-        }
-
         notifyListeners();
       },
     );
     notifyListeners();
   }
 
-  /// autoConnect leverages platform-native BLE reconnection:
-  /// - iOS: Connection request doesn't time out, reconnects when device is available
-  /// - Android: Uses connectGatt with autoConnect=true for efficient background scanning
-  Future startAutoConnect(String caller, {bool boundDeviceOnly = false}) async {
-    if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
-      Logger.debug('startAutoConnect: Skipping, reconnect delayed until $_reconnectAt');
-      return;
+  Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {
+    _reconnectionTimer?.cancel();
+    scan(t) async {
+      debugPrint("Period connect seconds: $_connectionCheckSeconds, triggered timer at ${DateTime.now()}");
+
+      final deviceService = ServiceManager.instance().device;
+      if (deviceService is DeviceService && deviceService.isWifiSyncInProgress) {
+        debugPrint("Skipping BLE reconnect - WiFi sync in progress");
+        return;
+      }
+      if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
+        return;
+      }
+      if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
+        t.cancel();
+        return;
+      }
+      Logger.debug("isConnected: $isConnected, isConnecting: $isConnecting, connectedDevice: $connectedDevice");
+      if ((!isConnected && connectedDevice == null)) {
+        if (isConnecting) {
+          return;
+        }
+        await scanAndConnectToDevice();
+      } else {
+        t.cancel();
+      }
     }
 
-    if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
-      Logger.debug('startAutoConnect: No bound device, skipping');
-      return;
-    }
-
-    Logger.debug("startAutoConnect ($caller): isConnected=$isConnected, isConnecting=$isConnecting");
-
-    if (isConnected || isConnecting) {
-      Logger.debug('startAutoConnect: Already connected or connecting, skipping');
-      return;
-    }
-
-    final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
-    if (pairedDeviceId.isEmpty) {
-      Logger.debug('startAutoConnect: No paired device ID');
-      return;
-    }
-
-    _isAutoConnecting = true;
-    updateConnectingStatus(true);
-
-    try {
-      Logger.debug('startAutoConnect: Using autoConnect for device $pairedDeviceId');
-      await ServiceManager.instance().device.ensureConnection(
-            pairedDeviceId,
-            force: true,
-            autoConnect: true,
-          );
-    } catch (e) {
-      Logger.debug('startAutoConnect: Connection failed: $e');
-    } finally {
-      _isAutoConnecting = false;
-      updateConnectingStatus(false);
-    }
-  }
-
-  /// Scans for devices and connects. Used for initial pairing and manual reconnection.
-  /// For background reconnection after disconnect, use startAutoConnect instead.
-  Future periodicConnect(String caller, {bool boundDeviceOnly = false}) async {
-    if (_reconnectAt != null && _reconnectAt!.isAfter(DateTime.now())) {
-      Logger.debug('periodicConnect: Skipping, reconnect delayed until $_reconnectAt');
-      return;
-    }
-
-    if (boundDeviceOnly && SharedPreferencesUtil().btDevice.id.isEmpty) {
-      Logger.debug('periodicConnect: No bound device, skipping');
-      return;
-    }
-
-    Logger.debug("periodicConnect ($caller): isConnected=$isConnected, isConnecting=$isConnecting");
-
-    if (isConnected || isConnecting) {
-      Logger.debug('periodicConnect: Already connected or connecting, skipping');
-      return;
-    }
-
-    await scanAndConnectToDevice();
+    _reconnectionTimer = Timer.periodic(Duration(seconds: _connectionCheckSeconds), scan);
+    scan(_reconnectionTimer);
   }
 
   Future<BtDevice?> _scanConnectDevice() async {
@@ -307,12 +264,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
+    if (isConnected) {
+      _reconnectionTimer?.cancel();
+    }
     notifyListeners();
   }
 
   @override
   void dispose() {
     _bleBatteryLevelListener?.cancel();
+    _reconnectionTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
@@ -327,10 +288,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    if (PlatformService.isAndroid) {
-      await ConnectionForegroundService.instance.stop();
-    }
-
     captureProvider?.updateRecordingDevice(null);
 
     // Wals
@@ -340,18 +297,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
     _disconnectNotificationTimer = Timer(const Duration(seconds: 30), () {
+      final ctx = MyApp.navigatorKey.currentContext;
       NotificationService.instance.createNotification(
-        title: 'Your Omi Device Disconnected',
-        body: 'Please reconnect to continue using your Omi.',
+        title: ctx?.l10n.deviceDisconnectedNotificationTitle ?? 'Your Omi Device Disconnected',
+        body: ctx?.l10n.deviceDisconnectedNotificationBody ?? 'Please reconnect to continue using your Omi.',
       );
     });
     MixpanelManager().deviceDisconnected();
 
     // Retired 1s to prevent the race condition made by standby power of ble device
-    // Use startAutoConnect for reconnection - as it uses platform-native autoConnect
-    // that doesn't require active scanning
     Future.delayed(const Duration(seconds: 1), () {
-      startAutoConnect('coming from onDisconnect');
+      periodicConnect('coming from onDisconnect');
     });
   }
 
@@ -377,10 +333,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
-
-    if (PlatformService.isAndroid) {
-      await ConnectionForegroundService.instance.start(deviceName: device.name);
-    }
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(device);
@@ -480,11 +432,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
-        title: 'Firmware Update Available',
-        description:
-            'A new firmware update ($_latestFirmwareVersion) is available for your Omi device. Would you like to update now?',
-        confirmText: 'Update',
-        cancelText: 'Later',
+        title: context.l10n.firmwareUpdateAvailable,
+        description: context.l10n.firmwareUpdateAvailableDescription(_latestFirmwareVersion),
+        confirmText: context.l10n.update,
+        cancelText: context.l10n.later,
         onConfirm: () {
           Navigator.of(context).pop();
           setFirmwareUpdateInProgress(true);

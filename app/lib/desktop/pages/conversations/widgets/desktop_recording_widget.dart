@@ -4,16 +4,22 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'desktop_name_speaker_dialog.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -165,7 +171,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           Column(
             children: [
               Text(
-                isInitializing ? 'Setting up...' : 'Start Your First Recording',
+                isInitializing ? context.l10n.settingUp : context.l10n.startYourFirstRecording,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -176,8 +182,8 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               const SizedBox(height: 6),
               SelectableText(
                 isInitializing
-                    ? 'Preparing system audio capture'
-                    : 'Click the button to capture audio for live transcripts, AI insights, and automatic saving.',
+                    ? context.l10n.preparingSystemAudioCapture
+                    : context.l10n.clickTheButtonToCaptureAudio,
                 style: const TextStyle(
                   fontSize: 15,
                   color: ResponsiveHelper.textTertiary,
@@ -264,10 +270,10 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               children: [
                 Text(
                   captureProvider.isAutoReconnecting
-                      ? 'Reconnecting...'
+                      ? context.l10n.reconnecting
                       : isRecordingOrPaused
-                          ? (isPaused ? 'Recording Paused' : 'Recording Active')
-                          : (isInitializing ? 'Setting up...' : 'Start Recording'),
+                          ? (isPaused ? context.l10n.recordingPaused : context.l10n.recordingActive)
+                          : (isInitializing ? context.l10n.settingUp : context.l10n.startRecording),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -280,14 +286,14 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                   children: [
                     Text(
                       captureProvider.isAutoReconnecting
-                          ? 'Resuming in ${captureProvider.reconnectCountdown}s...'
+                          ? context.l10n.resumingInCountdown(captureProvider.reconnectCountdown.toString())
                           : isRecordingOrPaused
                               ? (latestTranscript.isNotEmpty
                                   ? (latestTranscript.length > 60
                                       ? '${latestTranscript.substring(0, 60)}...'
                                       : latestTranscript)
-                                  : (isPaused ? 'Tap play to resume' : 'Listening for audio...'))
-                              : (isInitializing ? 'Preparing audio capture' : 'Click to begin recording'),
+                                  : (isPaused ? context.l10n.tapPlayToResume : context.l10n.listeningForAudio))
+                              : (isInitializing ? context.l10n.preparingAudioCapture : context.l10n.clickToBeginRecording),
                       style: TextStyle(
                         fontSize: 14,
                         color: isRecordingOrPaused ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
@@ -311,11 +317,11 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      const Opacity(
+                      Opacity(
                         opacity: 0.6,
                         child: Text(
-                          'translated',
-                          style: TextStyle(
+                          context.l10n.translated,
+                          style: const TextStyle(
                             fontSize: 10,
                             color: ResponsiveHelper.textQuaternary,
                             fontStyle: FontStyle.italic,
@@ -429,7 +435,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               ),
               const SizedBox(width: 12),
               Text(
-                'Live Transcript',
+                context.l10n.liveTranscript,
                 style: TextStyle(
                   fontSize: isFullScreen ? 16 : 14,
                   fontWeight: FontWeight.w500,
@@ -440,7 +446,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               if (segments.isNotEmpty) ...[
                 const Spacer(),
                 Text(
-                  '${segments.length} segment${segments.length == 1 ? '' : 's'}',
+                  segments.length == 1
+                      ? context.l10n.segmentsSingular(segments.length.toString())
+                      : context.l10n.segmentsPlural(segments.length.toString()),
                   style: const TextStyle(
                     fontSize: 12,
                     color: ResponsiveHelper.textQuaternary,
@@ -477,7 +485,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                           ),
                           SizedBox(height: isFullScreen ? 12 : 6),
                           Text(
-                            isRecording ? 'Listening for audio...' : 'Start recording to see live transcript',
+                            isRecording ? context.l10n.listeningForAudio : context.l10n.startRecordingToSeeTranscript,
                             style: TextStyle(
                               fontSize: isFullScreen ? 16 : 12,
                               color: ResponsiveHelper.textTertiary,
@@ -500,34 +508,63 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   String _getStatusText(RecordingState state, bool isPaused, CaptureProvider captureProvider) {
-    if (captureProvider.isAutoReconnecting) return 'Reconnecting...';
-    if (isPaused) return 'Paused';
+    if (captureProvider.isAutoReconnecting) return context.l10n.reconnecting;
+    if (isPaused) return context.l10n.paused;
     switch (state) {
       case RecordingState.initialising:
-        return 'Initializing...';
+        return context.l10n.initializing;
       case RecordingState.systemAudioRecord:
-        return 'Recording';
+        return context.l10n.recording;
       default:
-        return 'Start Recording';
+        return context.l10n.startRecording;
     }
   }
 
   String _getSubtitleText(RecordingState state, bool isPaused, CaptureProvider captureProvider) {
     if (captureProvider.isAutoReconnecting) {
-      return 'Microphone changed. Resuming in ${captureProvider.reconnectCountdown}s';
+      return context.l10n.microphoneChangedResumingIn(captureProvider.reconnectCountdown.toString());
     }
-    if (isPaused) return 'Click play to resume or stop to finish';
+    if (isPaused) return context.l10n.clickPlayToResumeOrStop;
     switch (state) {
       case RecordingState.initialising:
-        return 'Setting up system audio capture';
+        return context.l10n.settingUpSystemAudioCapture;
       case RecordingState.systemAudioRecord:
-        return 'Capturing audio and generating transcript';
+        return context.l10n.capturingAudioAndGeneratingTranscript;
       default:
-        return 'Click to begin recording system audio';
+        return context.l10n.clickToBeginRecordingSystemAudio;
     }
   }
 
+  void _showSpeakerAssignmentDialog(BuildContext context, String segmentId, int speakerId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        final suggestion = captureProvider.suggestionsBySegmentId.values
+            .firstWhere((s) => s.speakerId == speakerId, orElse: () => SpeakerLabelSuggestionEvent.empty());
+
+        return DesktopNameSpeakerDialog(
+          speakerId: speakerId,
+          segmentId: segmentId,
+          segments: captureProvider.segments,
+          suggestion: suggestion,
+          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+            MixpanelManager().taggedSegment(personId == 'user' ? 'User' : 'User Person');
+
+            await captureProvider.assignSpeakerToConversation(
+              speakerId,
+              personId,
+              personName,
+              segmentIds,
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildLiveTranscriptContent(List<TranscriptSegment> segments) {
+    final people = context.watch<PeopleProvider>().people;
     final displaySegments = segments;
 
     return Column(
@@ -537,21 +574,35 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         final segment = entry.value;
         final isLatest = index == displaySegments.length - 1;
 
+        String speakerName = segment.isUser ? context.l10n.you : context.l10n.speakerWithId(segment.speakerId.toString());
+        if (segment.personId != null && !segment.isUser) {
+          final person = people.firstWhereOrNull((p) => p.id == segment.personId);
+          if (person != null) {
+            speakerName = person.name;
+          }
+        }
+
         return Container(
           margin: EdgeInsets.only(bottom: index == displaySegments.length - 1 ? 0 : 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Speaker indicator
-              Container(
-                margin: const EdgeInsets.only(top: 2),
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: segment.isUser
-                      ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.9)
-                      : ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(3),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () => _showSpeakerAssignmentDialog(context, segment.id, segment.speakerId),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: segment.isUser
+                          ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.9)
+                          : ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
                 ),
               ),
 
@@ -562,12 +613,18 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      segment.isUser ? 'You' : 'Speaker ${segment.speakerId}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: segment.isUser ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () => _showSpeakerAssignmentDialog(context, segment.id, segment.speakerId),
+                        child: Text(
+                          speakerName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: segment.isUser ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -627,20 +684,20 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   Widget _buildTranslationNotice() {
-    return const Opacity(
+    return Opacity(
       opacity: 0.5,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.check_circle,
             size: 10,
             color: ResponsiveHelper.textTertiary,
           ),
-          SizedBox(width: 4),
+          const SizedBox(width: 4),
           SelectableText(
-            'translated by omi',
-            style: TextStyle(
+            context.l10n.translatedByOmi,
+            style: const TextStyle(
               fontSize: 10,
               color: ResponsiveHelper.textTertiary,
               fontStyle: FontStyle.italic,
@@ -702,18 +759,18 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                                 width: 1,
                               ),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.arrow_back_rounded,
                                   size: 16,
                                   color: ResponsiveHelper.textSecondary,
                                 ),
-                                SizedBox(width: 6),
+                                const SizedBox(width: 6),
                                 Text(
-                                  'Back to Conversations',
-                                  style: TextStyle(
+                                  context.l10n.backToConversations,
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
                                     color: ResponsiveHelper.textSecondary,
@@ -828,9 +885,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           children: [
             const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
             const SizedBox(width: 8),
-            const Text(
-              'System',
-              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+            Text(
+              context.l10n.systemAudio,
+              style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
             ),
             const SizedBox(width: 8),
             _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
@@ -850,9 +907,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           children: [
             const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
             const SizedBox(width: 8),
-            const Text(
-              'Mic',
-              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+            Text(
+              context.l10n.mic,
+              style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
             ),
             const SizedBox(width: 4),
             Icon(
@@ -940,7 +997,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
       if (mounted && result == true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Audio input set to ${device['name']}'),
+            content: Text(context.l10n.audioInputSetTo(device['name']!)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -949,7 +1006,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error switching audio device: $e'),
+            content: Text(context.l10n.errorSwitchingAudioDevice(e.toString())),
             duration: const Duration(seconds: 3),
             backgroundColor: Colors.red,
           ),
@@ -973,21 +1030,21 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text('Select Audio Input',
-                  style: TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w600)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(context.l10n.selectAudioInput,
+                  style: const TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w600)),
             ),
             Divider(height: 1, color: Colors.white.withOpacity(0.1)),
             const SizedBox(height: 4),
             if (_availableAudioDevices.isNotEmpty)
               ..._availableAudioDevices.map(_buildFloatingAudioDeviceItem)
             else
-              const Padding(
-                  padding: EdgeInsets.all(16),
+              Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Center(
-                      child: Text('Loading devices...',
-                          style: TextStyle(fontSize: 12, color: ResponsiveHelper.textSecondary)))),
+                      child: Text(context.l10n.loadingDevices,
+                          style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textSecondary)))),
             const SizedBox(height: 4),
           ],
         ),
@@ -1034,7 +1091,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  device['name'] ?? 'Unknown Device',
+                  device['name'] ?? context.l10n.unknownDevice,
                   style: TextStyle(
                     fontSize: 14,
                     color: isSelected ? Colors.white : Colors.white70,

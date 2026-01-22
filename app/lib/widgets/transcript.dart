@@ -11,6 +11,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 // Use speaker colors from person.dart for bubble colors
@@ -737,14 +738,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('Translation Notice'),
-              content: const Text(
-                'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
-                style: TextStyle(fontSize: 14),
+              title: Text(context.l10n.translationNotice),
+              content: Text(
+                context.l10n.translationNoticeMessage,
+                style: const TextStyle(fontSize: 14),
               ),
               actions: [
                 TextButton(
-                  child: const Text('OK'),
+                  child: Text(context.l10n.ok),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
@@ -843,17 +844,21 @@ String tryDecodingText(String text) {
   return _decodedTextCache[text]!;
 }
 
-String formatChatTimestamp(DateTime dateTime) {
+String formatChatTimestamp(DateTime dateTime, {BuildContext? context}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+  final timeStr = dateTimeFormat('h:mm a', dateTime);
 
   if (messageDate == today) {
     // Today, show time only
-    return dateTimeFormat('h:mm a', dateTime);
+    return timeStr;
   } else if (messageDate == today.subtract(const Duration(days: 1))) {
     // Yesterday
-    return 'Yesterday ${dateTimeFormat('h:mm a', dateTime)}';
+    if (context != null) {
+      return context.l10n.yesterdayAtTime(timeStr);
+    }
+    return 'Yesterday $timeStr';
   } else {
     // Other days
     return dateTimeFormat('MMM d, h:mm a', dateTime);

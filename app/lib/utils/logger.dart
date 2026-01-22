@@ -5,6 +5,7 @@ import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class CrashlyticsTalkerObserver extends TalkerObserver {
   CrashlyticsTalkerObserver();
@@ -86,7 +87,7 @@ class LoggerSnackbar extends StatelessWidget {
         contentPadding: const EdgeInsets.all(0),
         leading: const Icon(Icons.error_outline, color: Colors.white),
         title: Text(
-          data.message ?? 'Something went wrong! Please try again later.',
+          data.message ?? context.l10n.somethingWentWrongTryAgain,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         trailing: IconButton(

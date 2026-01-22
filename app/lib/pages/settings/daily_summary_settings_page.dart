@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummarySettingsPage extends StatefulWidget {
   const DailySummarySettingsPage({super.key});
@@ -84,13 +85,13 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: Text(
-                          'Cancel',
+                          context.l10n.cancel,
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
                         ),
                       ),
-                      const Text(
-                        'Select Time',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.selectTime,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
@@ -101,9 +102,9 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                           _updateHour(tempHour);
                           Navigator.pop(context);
                         },
-                        child: const Text(
-                          'Done',
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        child: Text(
+                          context.l10n.done,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -194,7 +195,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Summary generated for ${picked.month}/${picked.day}/${picked.year}'),
+            content: Text(context.l10n.summaryGeneratedForDate('${picked.month}/${picked.day}/${picked.year}')),
             backgroundColor: Colors.green.shade700,
           ),
         );
@@ -203,7 +204,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Failed to generate summary. Make sure you have conversations for that day.'),
+            content: Text(context.l10n.failedToGenerateSummaryCheckConversations),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -216,7 +217,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Daily Summary'),
+        title: Text(context.l10n.dailySummary),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         actions: [
@@ -229,13 +230,13 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               }
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'generate',
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                    SizedBox(width: 12),
-                    Text('Generate Summary', style: TextStyle(color: Colors.white)),
+                    const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                    const SizedBox(width: 12),
+                    Text(context.l10n.generateSummary, style: const TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -254,7 +255,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 20),
                     child: Text(
-                      'Get a personalized summary of your day\'s conversations delivered as a notification.',
+                      context.l10n.dailySummaryDescription,
                       style: TextStyle(
                         color: Colors.grey.shade400,
                         fontSize: 14,
@@ -282,7 +283,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
           // Enable toggle row
           _buildSettingRow(
             icon: FontAwesomeIcons.bell,
-            title: 'Daily Summary',
+            title: context.l10n.dailySummary,
             trailing: Switch(
               value: _enabled,
               onChanged: _updateEnabled,
@@ -304,7 +305,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               behavior: HitTestBehavior.opaque,
               child: _buildSettingRow(
                 icon: FontAwesomeIcons.clock,
-                title: 'Delivery Time',
+                title: context.l10n.deliveryTime,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

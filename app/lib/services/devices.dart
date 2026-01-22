@@ -20,12 +20,16 @@ abstract class IDeviceService {
   void stop();
   Future<void> discover({String? desirableDeviceId, int timeout = 5});
 
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, bool autoConnect = false});
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false});
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
 
   DateTime? getFirstConnectedAt();
+
+  // WiFi sync support - pause BLE reconnection during WiFi transfer
+  void setWifiSyncInProgress(bool value);
+  Future<void> disconnectDevice();
 }
 
 enum DeviceServiceStatus {
@@ -126,7 +130,7 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  Future<void> _connectToDevice(String id, {bool autoConnect = false}) async {
+  Future<void> _connectToDevice(String id) async {
     // Drop existing connection first
     if (_connection?.status == DeviceConnectionState.connected) {
       await _connection?.disconnect();
@@ -154,10 +158,7 @@ class DeviceService implements IDeviceService {
 
     _connection = DeviceConnectionFactory.create(device);
     if (_connection != null) {
-      await _connection!.connect(
-        onConnectionStateChanged: onDeviceConnectionStateChanged,
-        autoConnect: autoConnect,
-      );
+      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
       Logger.debug("Failed to create device connection for ${device.id}");
     }
@@ -225,10 +226,10 @@ class DeviceService implements IDeviceService {
   // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
   @override
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, bool autoConnect = false}) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
-      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force autoConnect=$autoConnect");
+      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
       // Not force
       if (!force && _connection != null) {
@@ -247,7 +248,7 @@ class DeviceService implements IDeviceService {
 
       // Connect
       try {
-        await _connectToDevice(deviceId, autoConnect: autoConnect);
+        await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
         return null;
@@ -276,5 +277,23 @@ class DeviceService implements IDeviceService {
       Logger.debug('Error getting stored device: $e');
     }
     return null;
+  }
+
+  bool _isWifiSyncInProgress = false;
+  bool get isWifiSyncInProgress => _isWifiSyncInProgress;
+
+  @override
+  void setWifiSyncInProgress(bool value) {
+    _isWifiSyncInProgress = value;
+    Logger.debug("DeviceService: WiFi sync in progress: $value");
+  }
+
+  @override
+  Future<void> disconnectDevice() async {
+    if (_connection != null) {
+      Logger.debug("DeviceService: Disconnecting device...");
+      await _connection?.disconnect();
+      _connection = null;
+    }
   }
 }

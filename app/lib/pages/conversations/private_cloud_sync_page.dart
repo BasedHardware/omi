@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PrivateCloudSyncPage extends StatefulWidget {
   const PrivateCloudSyncPage({super.key});
@@ -30,7 +31,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Cloud storage enabled' : 'Cloud storage disabled',
+              value ? context.l10n.cloudStorageEnabled : context.l10n.cloudStorageDisabled,
             ),
             backgroundColor: Colors.green,
           ),
@@ -42,7 +43,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update settings: ${e.toString()}'),
+            content: Text(context.l10n.failedToUpdateSettings(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -56,20 +57,20 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Enable Cloud Storage',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        title: Text(context.l10n.enableCloudStorage,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
         content: Text(
-          'Your real-time recordings will be stored in private cloud storage as you speak.',
+          context.l10n.cloudStorageDialogMessage,
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade500)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Enable', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -99,8 +100,8 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
               icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text('Store Audio on Cloud',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Text(context.l10n.storeAudioOnCloud,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             centerTitle: true,
           ),
           body: isLoading
@@ -123,10 +124,10 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                               children: [
                                 _buildFaIcon(FontAwesomeIcons.cloud, size: 20, color: Colors.deepPurpleAccent),
                                 const SizedBox(width: 12),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
-                                    'Store Audio on Cloud',
-                                    style: TextStyle(
+                                    context.l10n.storeAudioOnCloud,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 18,
                                       fontWeight: FontWeight.w600,
@@ -140,7 +141,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                                     borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: Text(
-                                    isEnabled ? 'On' : 'Off',
+                                    isEnabled ? context.l10n.on : context.l10n.off,
                                     style: TextStyle(
                                       color: isEnabled ? Colors.green : Colors.white,
                                       fontSize: 13,
@@ -152,7 +153,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                             ),
                             const SizedBox(height: 20),
                             Text(
-                              'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.',
+                              context.l10n.storeAudioCloudDescription,
                               style: TextStyle(
                                 color: Colors.grey.shade400,
                                 fontSize: 14,
@@ -165,9 +166,9 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Enable Cloud Storage',
-                                  style: TextStyle(
+                                Text(
+                                  context.l10n.enableCloudStorage,
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,

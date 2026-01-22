@@ -988,7 +988,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               focusNode: _searchFocusNode,
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
-                                hintText: 'Search transcript or summary...',
+                                hintText: context.l10n.searchTranscriptOrSummary,
                                 hintStyle: TextStyle(color: Colors.grey[400]),
                                 prefixIcon: const Icon(Icons.search, color: Colors.white70),
                                 suffixIcon: _searchQuery.isNotEmpty

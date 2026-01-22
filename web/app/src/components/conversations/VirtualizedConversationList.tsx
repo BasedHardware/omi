@@ -49,20 +49,8 @@ interface RowProps {
   onEnterSelectionMode?: (id: string) => void;
 }
 
-// Row component for react-window v2
-function RowComponent({
-  index,
-  style,
-  items,
-  onConversationClick,
-  onStarToggle,
-  selectedId,
-  isSelectionMode,
-  selectedIds,
-  onSelect,
-  mergingIds,
-  onEnterSelectionMode,
-}: {
+// Row props type including react-window props
+type RowComponentProps = {
   ariaAttributes: {
     'aria-posinset': number;
     'aria-setsize': number;
@@ -70,7 +58,24 @@ function RowComponent({
   };
   index: number;
   style: CSSProperties;
-} & RowProps): ReactElement {
+} & RowProps;
+
+// Row component for react-window v2 - memoized to prevent unnecessary re-renders
+// Using a wrapper function to satisfy react-window's expected signature
+function RowComponentImpl(props: RowComponentProps): ReactElement {
+  const {
+    index,
+    style,
+    items,
+    onConversationClick,
+    onStarToggle,
+    selectedId,
+    isSelectionMode,
+    selectedIds,
+    onSelect,
+    mergingIds,
+    onEnterSelectionMode,
+  } = props;
   const item = items[index];
 
   if (item.type === 'header') {
@@ -107,6 +112,8 @@ function RowComponent({
     </div>
   );
 }
+
+const RowComponent = memo(RowComponentImpl) as typeof RowComponentImpl;
 
 export function VirtualizedConversationList({
   groupedConversations,

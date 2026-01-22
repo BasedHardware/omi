@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopLanguageScreen extends StatefulWidget {
@@ -158,7 +159,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
       // Show error message like mobile version
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Please select your primary language'),
+          content: Text(context.l10n.pleaseSelectYourPrimaryLanguage),
           backgroundColor: ResponsiveHelper.errorColor,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
@@ -208,9 +209,9 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     ),
                   ),
                   SizedBox(height: responsive.spacing(baseSpacing: 24)),
-                  const Text(
-                    'Choose your language',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.chooseYourLanguage,
+                    style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -219,9 +220,9 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: responsive.spacing(baseSpacing: 8)),
-                  const Text(
-                    'Select your preferred language for the best Omi experience',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.selectPreferredLanguageForBestExperience,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
                       color: Color(0xFF9CA3AF),
@@ -263,9 +264,9 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
-                  decoration: const InputDecoration(
-                    hintText: 'Search languages...',
-                    hintStyle: TextStyle(
+                  decoration: InputDecoration(
+                    hintText: context.l10n.searchLanguages,
+                    hintStyle: const TextStyle(
                       color: Color(0xFF6B7280),
                       fontSize: 15,
                     ),
@@ -322,7 +323,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     OmiButton(
-                      label: selectedLanguage != null ? 'Continue' : 'Select a language',
+                      label: selectedLanguage != null ? context.l10n.continueButton : context.l10n.selectALanguage,
                       onPressed: selectedLanguage != null ? _continueWithLanguage : null,
                       enabled: selectedLanguage != null,
                     ),
@@ -330,7 +331,7 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                 ),
                 const SizedBox(height: 8),
                 OmiButton(
-                  label: 'Back',
+                  label: context.l10n.back,
                   type: OmiButtonType.text,
                   onPressed: widget.onBack,
                 ),
@@ -343,28 +344,28 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
   }
 
   Widget _buildEmptyState() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.search_off_rounded,
             size: 48,
             color: Color(0xFF4B5563),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
-            'No languages found',
-            style: TextStyle(
+            context.l10n.noLanguagesFound,
+            style: const TextStyle(
               color: Color(0xFF9CA3AF),
               fontSize: 16,
               fontWeight: FontWeight.w500,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            'Try a different search term',
-            style: TextStyle(
+            context.l10n.tryDifferentSearchTerm,
+            style: const TextStyle(
               color: Color(0xFF6B7280),
               fontSize: 14,
             ),

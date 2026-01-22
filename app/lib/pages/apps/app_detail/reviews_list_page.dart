@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ReviewsListPage extends StatefulWidget {
   final App app;
@@ -57,9 +58,9 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Reply to Review',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.replyToReview,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: ValueListenableBuilder<bool>(
           valueListenable: isSubmitting,
@@ -74,7 +75,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   maxLength: 250,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: 'Write your reply...',
+                    hintText: context.l10n.writeYourReply,
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     filled: true,
                     fillColor: Colors.black.withOpacity(0.3),
@@ -93,7 +94,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           TextButton(
             onPressed: isSubmitting.value ? null : () => Navigator.pop(context),
             child: Text(
-              'Cancel',
+              context.l10n.cancel,
               style: TextStyle(color: Colors.grey.shade400),
             ),
           ),
@@ -117,8 +118,8 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                             Navigator.pop(context);
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Reply sent successfully'),
+                              SnackBar(
+                                content: Text(context.l10n.replySentSuccessfully),
                                 backgroundColor: Colors.green,
                               ),
                             );
@@ -127,7 +128,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Failed to send reply: $e'),
+                                content: Text(context.l10n.failedToSendReply(e.toString())),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -149,7 +150,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         ),
                       )
-                    : const Text('Send'),
+                    : Text(context.l10n.send),
               );
             },
           ),
@@ -198,9 +199,9 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
           ),
         ),
-        title: const Text(
-          'Ratings & Reviews',
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.ratingsAndReviews,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -226,7 +227,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  _buildFilterChip('All', selectedRating == 0, () => filterReviews(0)),
+                  _buildFilterChip(context.l10n.all, selectedRating == 0, () => filterReviews(0)),
                   const SizedBox(width: 8),
                   ...List.generate(5, (index) {
                     final starCount = index + 1;
@@ -236,7 +237,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: _buildFilterChip(
-                        '$starCount Star',
+                        context.l10n.starFilterLabel(starCount),
                         selectedRating == starCount,
                         () => filterReviews(starCount),
                       ),
@@ -260,7 +261,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No Reviews Found',
+                            context.l10n.noReviewsFound,
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 16,
@@ -313,7 +314,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   }
 
   Widget _buildReviewItem(AppReview review) {
-    final displayName = review.username.isNotEmpty ? review.username : 'Anonymous User';
+    final displayName = review.username.isNotEmpty ? review.username : context.l10n.anonymousUser;
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
     final isOwner = widget.app.isOwner(SharedPreferencesUtil().uid);
 
@@ -481,7 +482,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   color: Colors.deepPurple,
                 ),
                 label: Text(
-                  review.response.isNotEmpty ? 'Edit Reply' : 'Reply',
+                  review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
                   style: const TextStyle(color: Colors.deepPurple, fontSize: 13),
                 ),
               ),
