@@ -123,11 +123,11 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         transcripts = person_data.get('speech_sample_transcripts', [])
         # Ensure transcript array alignment with samples:
         # If we're adding a transcript but existing samples don't have transcripts,
-        # pad with None values for the existing samples first
+        # pad with empty strings for the existing samples first (Dart expects non-null)
         existing_sample_count = len(samples) - 1  # samples already has new one appended
         if len(transcripts) < existing_sample_count:
-            # Pad with None for each existing sample without a transcript
-            transcripts.extend([None] * (existing_sample_count - len(transcripts)))
+            # Pad with empty strings for each existing sample without a transcript
+            transcripts.extend([''] * (existing_sample_count - len(transcripts)))
         transcripts.append(transcript)
         update_data['speech_sample_transcripts'] = transcripts
         update_data['speech_samples_version'] = 2

@@ -71,6 +71,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
         valid_samples = []
         valid_transcripts = []
+        samples_to_delete = []
         has_transient_failures = False
 
         for sample_path in samples:
@@ -78,6 +79,8 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
                 audio_bytes = await asyncio.to_thread(download_sample_audio, sample_path)
             except NotFound:
                 print(f"Sample not found in storage, skipping: {sample_path}", uid, person_id)
+                # Mark for removal from Firestore (blob already gone)
+                samples_to_delete.append(sample_path)
                 continue
             except Exception as e:
                 print(f"Error downloading sample {sample_path}: {e}", uid, person_id)
@@ -95,14 +98,21 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
                 print(f"Transcription failed for {sample_path}, keeping sample: {reason}", uid, person_id)
                 has_transient_failures = True
             else:
-                # Quality issue - drop sample
-                print(f"Dropping sample {sample_path}: {reason}", uid, person_id)
-                await asyncio.to_thread(delete_sample_from_storage, sample_path)
+                # Quality issue - mark for deletion (defer actual delete)
+                print(f"Marking sample for deletion {sample_path}: {reason}", uid, person_id)
+                samples_to_delete.append(sample_path)
 
-        # Don't mark as v2 if there were transient failures - retry next time
+        # Don't commit changes if there were transient failures - retry next time
         if has_transient_failures:
             print(f"Migration incomplete due to transient failures, will retry later", uid, person_id)
             return person
+
+        # Now safe to delete blobs - no transient failures
+        for sample_path in samples_to_delete:
+            try:
+                await asyncio.to_thread(delete_sample_from_storage, sample_path)
+            except Exception as e:
+                print(f"Failed to delete sample {sample_path}: {e}", uid, person_id)
 
         new_embedding = None
         if valid_samples:
