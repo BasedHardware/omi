@@ -1,9 +1,15 @@
+import 'dart:ui';
+import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pasteboard/pasteboard.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
@@ -63,6 +69,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   bool isScrollingDown = false;
   bool _showVoiceRecorder = false;
+  bool _isDragging = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -92,6 +99,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         _sendMessageUtil(textController.text.trim());
         return KeyEventResult.handled;
       }
+
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.keyV &&
+          (HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed)) {
+        _handlePaste();
+        return KeyEventResult.handled;
+      }
+      
       return KeyEventResult.ignored;
     });
 
@@ -207,71 +222,132 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             _requestFocusIfPossible();
           }
         },
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+        child: DropTarget(
+          onDragEntered: (_) => setState(() => _isDragging = true),
+          onDragExited: (_) => setState(() => _isDragging = false),
+          onDragDone: (detail) {
+            setState(() => _isDragging = false);
+            List<File> files = detail.files.map((e) => File(e.path)).toList();
+            context.read<MessageProvider>().addFiles(files);
           },
-          child: Focus(
-            focusNode: _focusNode,
-            autofocus: true,
-            child: GestureDetector(
-              onTap: () {
-                if (!_focusNode.hasFocus) {
-                  _focusNode.requestFocus();
-                }
-              },
-              child: Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
-                builder: (context, provider, connectivityProvider, appProvider, child) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          ResponsiveHelper.backgroundPrimary,
-                          ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Stack(
-                        children: [
-                          _buildAnimatedBackground(),
-
-                          // Main content with glassmorphism
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.02),
-                              borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+                },
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (!_focusNode.hasFocus) {
+                        _focusNode.requestFocus();
+                      }
+                    },
+                    child: Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
+                      builder: (context, provider, connectivityProvider, appProvider, child) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                ResponsiveHelper.backgroundPrimary,
+                                ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
+                              ],
                             ),
-                            child: Column(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Stack(
                               children: [
-                                _buildModernHeader(appProvider),
-                                if (provider.isLoadingMessages) _buildLoadingBar(),
-                                Expanded(
-                                  child: _animationsInitialized
-                                      ? FadeTransition(
-                                          opacity: _fadeAnimation,
-                                          child: SlideTransition(
-                                            position: _slideAnimation,
-                                            child: _buildChatContent(provider, connectivityProvider),
-                                          ),
-                                        )
-                                      : _buildChatContent(provider, connectivityProvider),
+                                _buildAnimatedBackground(),
+
+                                // Main content with glassmorphism
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.02),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      _buildModernHeader(appProvider),
+                                      if (provider.isLoadingMessages) _buildLoadingBar(),
+                                      Expanded(
+                                        child: _animationsInitialized
+                                            ? FadeTransition(
+                                                opacity: _fadeAnimation,
+                                                child: SlideTransition(
+                                                  position: _slideAnimation,
+                                                  child: _buildChatContent(provider, connectivityProvider),
+                                                ),
+                                              )
+                                            : _buildChatContent(provider, connectivityProvider),
+                                      ),
+                                      _buildFloatingInputArea(provider, connectivityProvider),
+                                    ],
+                                  ),
                                 ),
-                                _buildFloatingInputArea(provider, connectivityProvider),
                               ],
                             ),
                           ),
-                        ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              if (_isDragging)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.6),
+                        child: Center(
+                          child: DottedBorder(
+                            borderType: BorderType.RRect,
+                            radius: const Radius.circular(20),
+                            dashPattern: const [10, 5],
+                            color: Colors.white.withOpacity(0.4),
+                            strokeWidth: 2,
+                            child: Container(
+                              width: MediaQuery.of(context).size.width * 0.7,
+                              height: MediaQuery.of(context).size.height * 0.7,
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.file_upload_outlined,
+                                    size: 64,
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Drop files here to add to your message',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
+                ),
+            ],
           ),
         ));
   }
@@ -1527,6 +1603,51 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         },
       ),
     );
+  }
+
+  Future<void> _handlePaste() async {
+    final files = await Pasteboard.files();
+    if (files.isNotEmpty) {
+      if (mounted) {
+        context.read<MessageProvider>().addFiles(files.map((e) => File(e)).toList());
+      }
+      return;
+    }
+
+    final imageBytes = await Pasteboard.image;
+    if (imageBytes != null) {
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/pasted_image_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(imageBytes);
+      if (mounted) {
+        context.read<MessageProvider>().addFiles([file]);
+      }
+    } else {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = clipboardData?.text;
+      if (text != null && text.isNotEmpty) {
+        final selection = textController.selection;
+        String newText;
+        int newSelectionIndex;
+
+        if (selection.isValid) {
+          newText = textController.text.replaceRange(
+            selection.start,
+            selection.end,
+            text,
+          );
+          newSelectionIndex = selection.start + text.length;
+        } else {
+          newText = textController.text + text;
+          newSelectionIndex = newText.length;
+        }
+
+        textController.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: newSelectionIndex),
+        );
+      }
+    }
   }
 
   void _sendMessageUtil(String text) {
