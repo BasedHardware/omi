@@ -885,7 +885,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   Widget _buildCustomNormalMessageWidget(ServerMessage message, MessageProvider provider, int chatIndex) {
     var thinkingTextRaw = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     bool showTypingIndicator = provider.showTypingIndicator && chatIndex == provider.messages.length - 1;
 
@@ -934,14 +934,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     );
   }
 
-  /// Get the display text from thinking (removes app_id suffix if present)
-  String _getThinkingDisplayText(String thinkingText) {
-    int index = thinkingText.indexOf('|app_id:');
-    if (index >= 0) {
-      return thinkingText.substring(0, index);
-    }
-    return thinkingText;
-  }
 
   Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
     if (!message.askForNps) return const SizedBox();

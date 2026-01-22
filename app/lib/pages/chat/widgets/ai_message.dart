@@ -33,7 +33,7 @@ import 'package:omi/widgets/text_selection_controls.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
-String? _parseAppIdFromThinking(String thinkingText) {
+String? parseAppIdFromThinking(String thinkingText) {
   if (thinkingText.contains('|app_id:')) {
     var parts = thinkingText.split('|app_id:');
     if (parts.length == 2) {
@@ -44,7 +44,7 @@ String? _parseAppIdFromThinking(String thinkingText) {
 }
 
 /// Get the display text from thinking (removes app_id suffix if present)
-String _getThinkingDisplayText(String thinkingText) {
+String getThinkingDisplayText(String thinkingText) {
   int index = thinkingText.indexOf('|app_id:');
   if (index >= 0) {
     return thinkingText.substring(0, index);
@@ -469,8 +469,8 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
@@ -635,8 +635,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
