@@ -11,7 +11,7 @@ from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.storage import transfer_manager
 from google.cloud.exceptions import NotFound as BlobNotFound
-from google.cloud.exceptions import NotFound, Forbidden
+from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
@@ -47,16 +47,10 @@ def upload_profile_audio(file_path: str, uid: str):
 
 
 def get_user_has_speech_profile(uid: str, max_age_days: int = None) -> bool:
-    if not speech_profiles_bucket:
-        return False
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/speech_profile.wav')
-    try:
-        if not blob.exists():
-            return False
-    except Forbidden:
+    if not blob.exists():
         return False
-
 
     # Check age if max_age_days is specified
     if max_age_days is not None:
