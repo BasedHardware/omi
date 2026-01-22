@@ -1606,45 +1606,58 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Future<void> _handlePaste() async {
-    final files = await Pasteboard.files();
-    if (files.isNotEmpty) {
-      if (mounted) {
-        context.read<MessageProvider>().addFiles(files.map((e) => File(e)).toList());
-      }
-      return;
-    }
-
-    final imageBytes = await Pasteboard.image;
-    if (imageBytes != null) {
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/pasted_image_${DateTime.now().millisecondsSinceEpoch}.png');
-      await file.writeAsBytes(imageBytes);
-      if (mounted) {
-        context.read<MessageProvider>().addFiles([file]);
-      }
-    } else {
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = clipboardData?.text;
-      if (text != null && text.isNotEmpty) {
-        final selection = textController.selection;
-        String newText;
-        int newSelectionIndex;
-
-        if (selection.isValid) {
-          newText = textController.text.replaceRange(
-            selection.start,
-            selection.end,
-            text,
-          );
-          newSelectionIndex = selection.start + text.length;
-        } else {
-          newText = textController.text + text;
-          newSelectionIndex = newText.length;
+    try {
+      final files = await Pasteboard.files();
+      if (files.isNotEmpty) {
+        if (mounted) {
+          context.read<MessageProvider>().addFiles(files.map((e) => File(e)).toList());
         }
+        return;
+      }
 
-        textController.value = TextEditingValue(
-          text: newText,
-          selection: TextSelection.collapsed(offset: newSelectionIndex),
+      final imageBytes = await Pasteboard.image;
+      if (imageBytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/pasted_image_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(imageBytes);
+        if (mounted) {
+          context.read<MessageProvider>().addFiles([file]);
+        }
+      } else {
+        final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+        final text = clipboardData?.text;
+        if (text != null && text.isNotEmpty) {
+          final selection = textController.selection;
+          String newText;
+          int newSelectionIndex;
+
+          if (selection.isValid) {
+            newText = textController.text.replaceRange(
+              selection.start,
+              selection.end,
+              text,
+            );
+            newSelectionIndex = selection.start + text.length;
+          } else {
+            newText = textController.text + text;
+            newSelectionIndex = newText.length;
+          }
+
+          textController.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: newSelectionIndex),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to paste content.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
       }
     }

@@ -136,7 +136,16 @@ class MessageProvider extends ChangeNotifier {
     if (filesToAdd.isNotEmpty) {
       selectedFiles.addAll(filesToAdd);
       selectedFileTypes.addAll(typesToAdd);
-      await uploadFiles(filesToAdd, appProvider?.selectedChatAppId);
+      try {
+        await uploadFiles(filesToAdd, appProvider?.selectedChatAppId);
+      } catch (e) {
+        Logger.debug('Failed to upload files: $e');
+        if (selectedFiles.length >= filesToAdd.length) {
+          selectedFiles.removeRange(selectedFiles.length - filesToAdd.length, selectedFiles.length);
+          selectedFileTypes.removeRange(selectedFileTypes.length - filesToAdd.length, selectedFileTypes.length);
+        }
+        AppSnackbar.showSnackbarError('File upload failed. Please try again.');
+      }
       notifyListeners();
     }
   }
