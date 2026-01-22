@@ -204,7 +204,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future start() async {
+    final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
+    // Re-add the syncing WAL if it was lost
+    if (syncingWal != null && !_wals.any((w) => w.id == syncingWal.id)) {
+      _wals = [syncingWal, ..._wals];
+    }
     listener.onWalUpdated();
   }
 
@@ -621,7 +626,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   void setDevice(BtDevice? device) async {
     _device = device;
+    final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
+    // Re-add the syncing WAL if it was lost
+    if (syncingWal != null && !_wals.any((w) => w.id == syncingWal.id)) {
+      _wals = [syncingWal, ..._wals];
+    }
     listener.onWalUpdated();
   }
 
@@ -788,6 +798,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       // Notify: Connecting to device
       connectionListener?.onConnectingToDevice();
+
+      // Wait for device to set up its WiFi AP before phone tries to connect
+      debugPrint("SDCardWalSync WiFi: Step 3 - Waiting for device AP to become available...");
+      await Future.delayed(const Duration(seconds: 3));
 
       debugPrint("SDCardWalSync WiFi: Step 4 - Connecting phone to device WiFi AP");
       final wifiResult = await wifiNetwork.connectToAp(ssid, password: password);
