@@ -770,7 +770,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       connectionListener?.onEnablingDeviceWifi();
 
       debugPrint("SDCardWalSync WiFi: Step 1 - Configuring device AP with SSID: $ssid");
-      final setupResult = await connection.setupWifiSync(ssid, password);
+      var setupResult = await connection.setupWifiSync(ssid, password);
+
+      // If a previous session is still running, stop it and retry
+      if (!setupResult.success && setupResult.errorCode == WifiSyncErrorCode.sessionAlreadyRunning) {
+        debugPrint("SDCardWalSync WiFi: Previous session running, stopping it first...");
+        await connection.stopWifiSync();
+        await Future.delayed(const Duration(seconds: 1));
+        setupResult = await connection.setupWifiSync(ssid, password);
+      }
+
       if (!setupResult.success) {
         _resetSyncState();
         final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';

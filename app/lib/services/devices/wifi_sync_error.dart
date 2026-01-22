@@ -4,6 +4,7 @@ enum WifiSyncErrorCode {
   invalidSetupLength(0x02),
   ssidLengthInvalid(0x03),
   passwordLengthInvalid(0x04),
+  sessionAlreadyRunning(0x05),
   wifiHardwareNotAvailable(0xFE),
   unknownCommand(0xFF);
 
@@ -29,6 +30,8 @@ enum WifiSyncErrorCode {
         return 'Device name must be 1-32 characters';
       case WifiSyncErrorCode.passwordLengthInvalid:
         return 'Password must be 8-63 characters';
+      case WifiSyncErrorCode.sessionAlreadyRunning:
+        return 'Previous sync session is still running';
       case WifiSyncErrorCode.wifiHardwareNotAvailable:
         return 'Your device does not support WiFi sync';
       case WifiSyncErrorCode.unknownCommand:
