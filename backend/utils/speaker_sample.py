@@ -10,9 +10,7 @@ Provides functions for:
 import asyncio
 from typing import Optional, Tuple
 
-from google.cloud.exceptions import NotFound
-
-from utils.other.storage import speech_profiles_bucket, storage_client
+from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
 from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
 from utils.text_utils import compute_text_similarity
 
@@ -82,9 +80,7 @@ def download_sample_audio(sample_path: str) -> bytes:
     Raises:
         NotFound: If the sample doesn't exist
     """
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blob = bucket.blob(sample_path)
-    return blob.download_as_bytes()
+    return download_speech_profile_bytes(sample_path)
 
 
 def delete_sample_from_storage(sample_path: str) -> bool:
@@ -97,10 +93,4 @@ def delete_sample_from_storage(sample_path: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blob = bucket.blob(sample_path)
-    try:
-        blob.delete()
-        return True
-    except NotFound:
-        return False
+    return delete_speech_profile_blob(sample_path)
