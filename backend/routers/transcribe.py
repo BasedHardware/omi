@@ -1257,6 +1257,10 @@ async def _stream_handler(
                     elif version == 2:
                         person = await migrate_person_samples_v2_to_v3(uid, person)
 
+                # Skip cache if migration failed (version still <3) to avoid mixing embedding spaces
+                if person.get('speech_samples_version', 1) < 3:
+                    continue
+
                 emb = person.get('speaker_embedding')
                 if emb:
                     person_embeddings_cache[person['id']] = {
