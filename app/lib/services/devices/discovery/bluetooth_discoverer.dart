@@ -46,6 +46,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
         return const DeviceDiscoveryResult(devices: []);
       }
 
+      // Delay to allow Bluetooth permissions to settle on Android before scanning.
       await Future.delayed(const Duration(seconds: 2));
 
       await BluetoothAdapter.startScan(
