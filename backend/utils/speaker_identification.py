@@ -13,7 +13,8 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
-from utils.speaker_sample_migration import migrate_person_samples_v1_to_v2, verify_and_transcribe_sample
+from utils.speaker_sample import verify_and_transcribe_sample
+from utils.speaker_sample_migration import migrate_person_samples_v1_to_v2
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 
