@@ -373,6 +373,35 @@ def test_migrate_v2_to_v3_transient_failure_skips_update(monkeypatch):
     assert updates == []
 
 
+def test_migrate_v2_to_v3_missing_first_sample_skips_update(monkeypatch):
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": ["missing.wav"],
+        "speech_sample_transcripts": ["text"],
+        "speaker_embedding": [0.1, 0.2],
+    }
+    updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_download(_path):
+        raise NotFound("missing")
+
+    def fake_update(*_args, **_kwargs):
+        updates.append((_args, _kwargs))
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration, "download_sample_audio", fake_download)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_after_migration", fake_update)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person
+    assert updates == []
+
+
 # v1 -> v3 composite migration tests
 
 
