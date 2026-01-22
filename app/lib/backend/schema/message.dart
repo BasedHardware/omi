@@ -1,6 +1,9 @@
 import 'package:collection/collection.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/models/genui.dart';
+import 'package:omi/utils/logger.dart';
+
 enum MessageSender { ai, human }
 
 enum MessageType {
@@ -127,6 +130,7 @@ class ServerMessage {
   int? rating;
 
   List<String> thinkings = [];
+  GenUiPayload? genUi;
 
   ServerMessage(
     this.id,
@@ -141,9 +145,23 @@ class ServerMessage {
     this.memories, {
     this.askForNps = true,
     this.rating,
+    this.genUi,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
+    GenUiPayload? genUi;
+    final genUiValue = json['genui'];
+    if (genUiValue != null) {
+      try {
+        genUi = GenUiPayload.tryParse(genUiValue);
+        if (genUi == null) {
+          Logger.debug('Failed to parse genui payload for message ${json['id']}');
+        }
+      } catch (e) {
+        Logger.error('Error parsing genui payload for message ${json['id']}: $e');
+      }
+    }
+
     return ServerMessage(
       json['id'],
       DateTime.parse(json['created_at']).toLocal(),
@@ -157,6 +175,7 @@ class ServerMessage {
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? true,
       rating: json['rating'],
+      genUi: genUi,
     );
   }
 

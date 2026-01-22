@@ -37,6 +37,7 @@ dependencies:
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
   pull_down_button: ^0.10.2
+  genui: ^0.0.7
 
   flutter_map: ^7.0.2
   latlong2: ^0.9.1

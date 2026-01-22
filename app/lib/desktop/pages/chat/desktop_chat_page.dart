@@ -24,6 +24,7 @@ import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dar
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/genui_message_widget.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -1015,7 +1016,17 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   ],
                 ))
             : const SizedBox.shrink(),
-        message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
+        message.text.isEmpty && message.genUi == null
+            ? const SizedBox.shrink()
+            : Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: message.genUi != null
+                    ? GenUiMessageWidget(
+                        payload: message.genUi!,
+                        sendMessage: _sendMessageUtil,
+                      )
+                    : getMarkdownWidget(context, message.text.decodeString),
+              ),
         _getNpsWidget(context, message, (int value, {String? reason}) {
           provider.setMessageNps(message, value, reason: reason);
         }),

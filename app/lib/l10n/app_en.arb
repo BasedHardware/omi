@@ -9766,5 +9766,37 @@
   "deviceDoesNotSupportWifiSwitchingToBle": "Device does not support WiFi sync, switching to Bluetooth",
   "@deviceDoesNotSupportWifiSwitchingToBle": {
     "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
+  },
+  "genUiOpenMap": "Open map",
+  "@genUiOpenMap": {
+    "description": "Label for opening a map from GenUI cards"
+  },
+  "genUiLocationPermissionDenied": "Location permission denied. Please allow access to share your location.",
+  "@genUiLocationPermissionDenied": {
+    "description": "Error when location permission is denied for GenUI"
+  },
+  "genUiLocationPermissionPermanentlyDenied": "Location permission is permanently denied. Please enable it in Settings to share your location.",
+  "@genUiLocationPermissionPermanentlyDenied": {
+    "description": "Error when location permission is permanently denied for GenUI"
+  },
+  "genUiShareLocationFailed": "Unable to share location. Please try again.",
+  "@genUiShareLocationFailed": {
+    "description": "Error when sharing location fails for GenUI"
+  },
+  "genUiMapOpenFailed": "Unable to open maps.",
+  "@genUiMapOpenFailed": {
+    "description": "Error when opening maps for GenUI"
+  },
+  "genUiLocationSharedMessage": "My current location is {latitude}, {longitude}.",
+  "@genUiLocationSharedMessage": {
+    "description": "Message sent after sharing location",
+    "placeholders": {
+      "latitude": {},
+      "longitude": {}
+    }
+  },
+  "genUiMapDefaultTitle": "Location",
+  "@genUiMapDefaultTitle": {
+    "description": "Fallback title for map cards"
   }
 }

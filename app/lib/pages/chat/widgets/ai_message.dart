@@ -19,6 +19,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
+import 'package:omi/pages/chat/widgets/genui_message_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -273,6 +274,7 @@ Widget buildMessageWidget(
       thinkings: message.thinkings,
       messageText: message.text.decodeString,
       message: message,
+      sendMessage: sendMessage,
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
       onAskOmi: onAskOmi,
@@ -423,6 +425,7 @@ class NormalMessageWidget extends StatefulWidget {
   final String messageText;
   final List<String> thinkings;
   final ServerMessage message;
+  final Function(String) sendMessage;
   final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
@@ -432,6 +435,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.showTypingIndicator,
     required this.messageText,
     required this.message,
+    required this.sendMessage,
     required this.setMessageNps,
     required this.createdAt,
     this.thinkings = const [],
@@ -576,31 +580,36 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         //         ),
         //       )
         //     : const SizedBox.shrink(),
-        widget.messageText.isEmpty
+        widget.messageText.isEmpty && widget.message.genUi == null
             ? const SizedBox.shrink()
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Builder(
-                  builder: (context) {
-                    String? selectedText;
-                    return SelectionArea(
-                      onSelectionChanged: (SelectedContent? selectedContent) {
-                        selectedText = selectedContent?.plainText;
-                      },
-                      contextMenuBuilder: (context, selectableRegionState) {
-                        return omiSelectionMenuBuilder(
-                          context,
-                          selectableRegionState,
-                          (text) {
-                            widget.onAskOmi?.call(text);
-                          },
-                          selectedText: selectedText,
-                        );
-                      },
-                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                    );
-                  },
-                ),
+                child: widget.message.genUi != null
+                    ? GenUiMessageWidget(
+                        payload: widget.message.genUi!,
+                        sendMessage: widget.sendMessage,
+                      )
+                    : Builder(
+                        builder: (context) {
+                          String? selectedText;
+                          return SelectionArea(
+                            onSelectionChanged: (SelectedContent? selectedContent) {
+                              selectedText = selectedContent?.plainText;
+                            },
+                            contextMenuBuilder: (context, selectableRegionState) {
+                              return omiSelectionMenuBuilder(
+                                context,
+                                selectableRegionState,
+                                (text) {
+                                  widget.onAskOmi?.call(text);
+                                },
+                                selectedText: selectedText,
+                              );
+                            },
+                            child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                          );
+                        },
+                      ),
               ),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
