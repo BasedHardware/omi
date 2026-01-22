@@ -2531,5 +2531,7 @@
   "chooseTransferMethod": "Escolher método de transferência",
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "largeTimeGapDetected": "Grande intervalo de tempo detetado ({gap})",
-  "largeTimeGapsDetected": "Grandes intervalos de tempo detetados ({gaps})"
+  "largeTimeGapsDetected": "Grandes intervalos de tempo detetados ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

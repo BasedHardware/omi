@@ -2496,5 +2496,7 @@
   "chooseTransferMethod": "転送方法を選択",
   "fastTransferSpeed": "WiFi経由で約150 KB/s",
   "largeTimeGapDetected": "大きな時間差が検出されました ({gap})",
-  "largeTimeGapsDetected": "大きな時間差が検出されました ({gaps})"
+  "largeTimeGapsDetected": "大きな時間差が検出されました ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

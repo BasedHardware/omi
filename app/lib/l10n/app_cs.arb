@@ -2464,5 +2464,7 @@
   "chooseTransferMethod": "Vyberte metodu přenosu",
   "fastTransferSpeed": "~150 KB/s přes WiFi",
   "largeTimeGapDetected": "Zjištěna velká časová mezera ({gap})",
-  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})"
+  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

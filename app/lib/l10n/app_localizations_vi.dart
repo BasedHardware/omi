@@ -3708,6 +3708,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get recordingActive => 'Ghi âm đang hoạt động';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => 'Bắt đầu ghi âm';
 
   @override

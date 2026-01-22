@@ -2504,5 +2504,7 @@
   "chooseTransferMethod": "Vælg overførselsmetode",
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "largeTimeGapDetected": "Stort tidsgab opdaget ({gap})",
-  "largeTimeGapsDetected": "Store tidsgab opdaget ({gaps})"
+  "largeTimeGapsDetected": "Store tidsgab opdaget ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

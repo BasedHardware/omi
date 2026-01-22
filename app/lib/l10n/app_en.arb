@@ -9766,5 +9766,7 @@
   "deviceDoesNotSupportWifiSwitchingToBle": "Device does not support WiFi sync, switching to Bluetooth",
   "@deviceDoesNotSupportWifiSwitchingToBle": {
     "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
-  }
+  },
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

@@ -3632,6 +3632,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingActive => '录音活跃';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => '开始录音';
 
   @override

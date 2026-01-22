@@ -3722,6 +3722,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get recordingActive => 'Înregistrare activă';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => 'Începeți înregistrarea';
 
   @override

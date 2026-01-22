@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Pasirinkite perdavimo būdą",
   "fastTransferSpeed": "~150 KB/s per WiFi",
   "largeTimeGapDetected": "Aptiktas didelis laiko tarpas ({gap})",
-  "largeTimeGapsDetected": "Aptikti dideli laiko tarpai ({gaps})"
+  "largeTimeGapsDetected": "Aptikti dideli laiko tarpai ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

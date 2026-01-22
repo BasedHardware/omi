@@ -115,6 +115,10 @@ class CaptureProvider extends ChangeNotifier
 
   int _getRecordingDuration() => _recordingDuration;
 
+  RecordingSource _recordingSource = RecordingSource.none;
+  RecordingSource get recordingSource => _recordingSource;
+  bool get isDeviceRecordingActive => _recordingSource == RecordingSource.device;
+
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
 
@@ -863,9 +867,52 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void updateRecordingState(RecordingState state) {
+    final previousState = recordingState;
     recordingState = state;
+    _updateRecordingSource(state);
+
+    if (state == RecordingState.deviceRecord && PlatformService.isDesktop) {
+      _stopSystemAudioForDeviceRecording(previousState);
+    }
+
     notifyListeners();
     _broadcastRecordingState();
+  }
+
+  void _updateRecordingSource(RecordingState state) {
+    switch (state) {
+      case RecordingState.systemAudioRecord:
+        _recordingSource = RecordingSource.mac;
+        break;
+      case RecordingState.deviceRecord:
+        _recordingSource = RecordingSource.device;
+        break;
+      case RecordingState.stop:
+      case RecordingState.error:
+        _recordingSource = RecordingSource.none;
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _stopSystemAudioForDeviceRecording(RecordingState previousState) {
+    if (!PlatformService.isDesktop) return;
+    if (previousState != RecordingState.systemAudioRecord &&
+        previousState != RecordingState.initialising &&
+        previousState != RecordingState.pause) {
+      return;
+    }
+
+    Logger.debug('Device recording started - stopping system audio recording.');
+    _shouldAutoResumeAfterWake = false;
+    _isAutoReconnecting = false;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _isPaused = false;
+    _stopRecordingTimer();
+    ServiceManager.instance().systemAudio.stopAndClearCallbacks();
+    _screenCaptureChannel.invokeMethod('resetRecordingSource');
   }
 
   /// Sends current geolocation to backend if location services are enabled and permission is granted
@@ -960,6 +1007,12 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (isDeviceRecordingActive || recordingState == RecordingState.deviceRecord) {
+      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.deviceRecordingActive ??
+          'Your Omi device is recording. Stop it to record system audio.');
+      return;
+    }
+
     // User wants to record - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
 
@@ -994,6 +1047,11 @@ class CaptureProvider extends ChangeNotifier
             Logger.debug('System audio recording started successfully.');
           },
           onStop: () {
+            if (_recordingSource == RecordingSource.device) {
+              Logger.debug('System audio stopped while device recording is active.');
+              return;
+            }
+
             if (_isPaused) {
               updateRecordingState(RecordingState.pause);
             } else {
@@ -1002,6 +1060,10 @@ class CaptureProvider extends ChangeNotifier
             _socket?.stop(reason: 'system audio stream ended from native');
           },
           onError: (error) {
+            if (_recordingSource == RecordingSource.device) {
+              Logger.debug('System audio error received while device recording is active: $error');
+              return;
+            }
             Logger.debug('System audio capture error: $error');
             AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureRecordingError(error) ??
                 'An error occurred during recording: $error');

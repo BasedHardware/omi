@@ -7113,6 +7113,18 @@ abstract class AppLocalizations {
   /// **'Recording Active'**
   String get recordingActive;
 
+  /// Status when recording on device
+  ///
+  /// In en, this message translates to:
+  /// **'Recording on device'**
+  String get recordingOnDevice;
+
+  /// Message when device recording blocks system audio
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi device is recording. Stop it to record system audio.'**
+  String get deviceRecordingActive;
+
   /// Button text to start recording
   ///
   /// In en, this message translates to:

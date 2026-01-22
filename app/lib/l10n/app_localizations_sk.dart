@@ -3704,6 +3704,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get recordingActive => 'Záznam aktívny';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => 'Spustiť záznam';
 
   @override

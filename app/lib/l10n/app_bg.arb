@@ -2464,5 +2464,7 @@
   "chooseTransferMethod": "Изберете метод на прехвърляне",
   "fastTransferSpeed": "~150 KB/s чрез WiFi",
   "largeTimeGapDetected": "Открита е голяма времева разлика ({gap})",
-  "largeTimeGapsDetected": "Открити са големи времеви разлики ({gaps})"
+  "largeTimeGapsDetected": "Открити са големи времеви разлики ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

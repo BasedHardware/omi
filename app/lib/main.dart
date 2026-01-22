@@ -269,7 +269,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (context == null) return;
 
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-      if (captureProvider.recordingState == RecordingState.stop) {
+      if (captureProvider.recordingState == RecordingState.stop && !captureProvider.isDeviceRecordingActive) {
         await captureProvider.streamSystemAudioRecording();
       }
     } catch (e) {

@@ -3722,6 +3722,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get recordingActive => 'Gravació activa';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => 'Comença la gravació';
 
   @override

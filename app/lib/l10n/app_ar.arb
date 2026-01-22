@@ -2462,5 +2462,7 @@
   "chooseTransferMethod": "اختر طريقة النقل",
   "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi",
   "largeTimeGapDetected": "تم اكتشاف فجوة زمنية كبيرة ({gap})",
-  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})"
+  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})",
+  "recordingOnDevice": "Recording on device",
+  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
 }

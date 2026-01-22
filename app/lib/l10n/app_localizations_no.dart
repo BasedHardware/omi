@@ -3701,6 +3701,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get recordingActive => 'Opptak aktivt';
 
   @override
+  String get recordingOnDevice => 'Recording on device';
+
+  @override
+  String get deviceRecordingActive => 'Your Omi device is recording. Stop it to record system audio.';
+
+
+  @override
   String get startRecording => 'Start opptak';
 
   @override
