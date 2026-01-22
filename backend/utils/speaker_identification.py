@@ -249,16 +249,17 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
-        # Check current sample count once
+        # Run lazy migration for v1 samples before checking count
+        # (migration may drop invalid samples, freeing up space)
+        person = users_db.get_person(uid, person_id)
+        if person and person.get('speech_samples_version', 1) == 1:
+            person = await migrate_person_samples_v1_to_v2(uid, person)
+
+        # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 1:
             print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
             return
-
-        # Run lazy migration for v1 samples before adding new sample
-        person = users_db.get_person(uid, person_id)
-        if person and person.get('speech_samples_version', 1) == 1:
-            person = await migrate_person_samples_v1_to_v2(uid, person)
 
         # Fetch conversation to get started_at and segment details
         conversation = conversations_db.get_conversation(uid, conversation_id)
