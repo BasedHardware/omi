@@ -91,6 +91,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
+from utils.speaker_sample_migration import migrate_person_samples_v1_to_v3, migrate_person_samples_v2_to_v3
 
 
 router = APIRouter()
@@ -1243,10 +1244,19 @@ async def _stream_handler(
         if not speaker_id_enabled:
             return
 
-        # Load person embeddings
+        # Load person embeddings (migrate if needed for v2 API compatibility)
         try:
             people = user_db.get_people(uid)
             for person in people:
+                # Check if embedding needs migration
+                version = person.get('speech_samples_version', 1)
+                if version < 3 and person.get('speech_samples'):
+                    # Trigger lazy migration to regenerate embedding with v2 API
+                    if version == 1:
+                        person = await migrate_person_samples_v1_to_v3(uid, person)
+                    elif version == 2:
+                        person = await migrate_person_samples_v2_to_v3(uid, person)
+
                 emb = person.get('speaker_embedding')
                 if emb:
                     person_embeddings_cache[person['id']] = {
