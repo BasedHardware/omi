@@ -193,7 +193,9 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
             embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
             new_embedding = embedding.flatten().tolist()
         except NotFound:
-            print(f"First sample not found in storage during v2→v3 migration: {samples[0]}", uid, person_id)
+            # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
+            print(f"First sample not found during v2→v3 migration, skipping: {samples[0]}", uid, person_id)
+            return person
         except Exception as e:
             print(f"Error extracting speaker embedding during v2→v3 migration: {e}", uid, person_id)
             # Transient error, don't migrate yet
@@ -210,8 +212,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
         )
 
         person['speech_samples_version'] = 3
-        if new_embedding is not None:
-            person['speaker_embedding'] = new_embedding
+        person['speaker_embedding'] = new_embedding
 
         return person
 
