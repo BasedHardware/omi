@@ -7643,4 +7643,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '检测到多个较大时间间隔 ($gaps)';
   }
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 }
