@@ -14,7 +14,7 @@ from utils.other.storage import (
     upload_person_speech_sample_from_bytes,
 )
 from utils.speaker_sample import verify_and_transcribe_sample
-from utils.speaker_sample_migration import migrate_person_samples_v1_to_v3, migrate_person_samples_v2_to_v3
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 
@@ -254,11 +254,7 @@ async def extract_speaker_samples(
         # (migration may drop invalid samples, freeing up space)
         person = users_db.get_person(uid, person_id)
         if person:
-            version = person.get('speech_samples_version', 1)
-            if version == 1:
-                person = await migrate_person_samples_v1_to_v3(uid, person)
-            elif version == 2:
-                person = await migrate_person_samples_v2_to_v3(uid, person)
+            person = await maybe_migrate_person_samples(uid, person)
 
         # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)

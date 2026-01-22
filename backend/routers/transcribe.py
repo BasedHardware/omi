@@ -91,7 +91,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
-from utils.speaker_sample_migration import migrate_person_samples_v1_to_v3, migrate_person_samples_v2_to_v3
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 
 
 router = APIRouter()
@@ -1248,14 +1248,9 @@ async def _stream_handler(
         try:
             people = user_db.get_people(uid)
             for person in people:
-                # Check if embedding needs migration
-                version = person.get('speech_samples_version', 1)
-                if version < 3 and person.get('speech_samples'):
-                    # Trigger lazy migration to regenerate embedding with v2 API
-                    if version == 1:
-                        person = await migrate_person_samples_v1_to_v3(uid, person)
-                    elif version == 2:
-                        person = await migrate_person_samples_v2_to_v3(uid, person)
+                # Migrate if needed for v2 API compatibility
+                if person.get('speech_samples'):
+                    person = await maybe_migrate_person_samples(uid, person)
 
                 # Skip cache if migration failed (version still <3) to avoid mixing embedding spaces
                 if person.get('speech_samples_version', 1) < 3:

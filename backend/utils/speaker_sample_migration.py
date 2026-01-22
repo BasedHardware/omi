@@ -245,3 +245,30 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: dict) -> dict:
 
     # Now do v2→v3
     return await migrate_person_samples_v2_to_v3(uid, person)
+
+
+async def maybe_migrate_person_samples(uid: str, person: dict) -> dict:
+    """
+    Migrate person's speech samples to v3 if needed.
+
+    Checks speech_samples_version and triggers appropriate migration:
+    - v1 → v3 (composite through v2)
+    - v2 → v3
+
+    Args:
+        uid: User ID
+        person: Person dict
+
+    Returns:
+        Updated person dict (may be unchanged if already v3 or migration fails)
+    """
+    version = person.get('speech_samples_version', 1)
+    if version >= 3:
+        return person
+
+    if version == 1:
+        return await migrate_person_samples_v1_to_v3(uid, person)
+    elif version == 2:
+        return await migrate_person_samples_v2_to_v3(uid, person)
+
+    return person
