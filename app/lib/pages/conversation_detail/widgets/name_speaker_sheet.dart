@@ -191,7 +191,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           children: [
             Expanded(
               child: Text(
-                context.l10n.tagSpeaker(widget.speakerId),
+                context.l10n.tagSpeaker(TranscriptSegment.displaySpeakerId(widget.speakerId)),
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),

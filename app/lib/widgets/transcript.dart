@@ -528,7 +528,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     ? 'omi'
                                     : (suggestion != null && person == null
                                         ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                        : (person != null
+                                            ? person.name
+                                            : context.l10n.speakerWithId(
+                                                TranscriptSegment.displaySpeakerId(data.speakerId).toString(),
+                                              ))),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300

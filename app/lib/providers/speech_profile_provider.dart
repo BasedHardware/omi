@@ -362,7 +362,7 @@ class SpeechProfileProvider extends ChangeNotifier
     // Filter out Omi question segments for speaker validation
     final userSegments = segments.where((e) => e.speakerId != omiSpeakerId).toList();
 
-    int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
+    int speakersCount = userSegments.map((e) => e.speakerId).toSet().length;
     Logger.debug('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
       var speakerToWords = userSegments.fold<Map<int, int>>(

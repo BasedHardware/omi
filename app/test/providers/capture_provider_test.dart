@@ -65,4 +65,29 @@ void main() {
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
   });
+
+  test('TranscriptSegment parses speaker metadata with fallbacks', () {
+    final segmentWithSpeakerId = TranscriptSegment.fromJson({
+      'id': 'segment-1',
+      'text': 'Hello',
+      'speaker_id': '2',
+      'speaker_confidence': 0.82,
+      'start': 0,
+      'end': 1,
+    });
+
+    expect(segmentWithSpeakerId.speakerId, 2);
+    expect(segmentWithSpeakerId.speakerConfidence, 0.82);
+
+    final segmentWithSpeakerString = TranscriptSegment.fromJson({
+      'id': 'segment-2',
+      'text': 'Hi',
+      'speaker': 'SPEAKER_03',
+      'start': 0,
+      'end': 1,
+    });
+
+    expect(segmentWithSpeakerString.speakerId, 3);
+    expect(segmentWithSpeakerString.speakerConfidence, isNull);
+  });
 }

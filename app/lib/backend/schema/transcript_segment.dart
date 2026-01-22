@@ -34,7 +34,8 @@ class TranscriptSegment {
 
   String text;
   String? speaker;
-  late int speakerId;
+  final int speakerId;
+  final double? speakerConfidence;
   bool isUser;
   String? personId;
   double start;
@@ -47,6 +48,8 @@ class TranscriptSegment {
     required this.id,
     required this.text,
     required this.speaker,
+    int? speakerId,
+    this.speakerConfidence,
     required this.isUser,
     required this.personId,
     required this.start,
@@ -54,8 +57,31 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
-  }) {
-    speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+  }) : speakerId = _normalizeSpeakerId(speakerId ?? _parseSpeakerId(speaker));
+
+  static int _normalizeSpeakerId(int value) {
+    if (value < 0) return 0;
+    return value;
+  }
+
+  static int _parseSpeakerId(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return _normalizeSpeakerId(value);
+    if (value is num) return _normalizeSpeakerId(value.toInt());
+    if (value is String) {
+      final directParse = int.tryParse(value);
+      if (directParse != null) return _normalizeSpeakerId(directParse);
+      final match = RegExp(r'(\d+)').firstMatch(value);
+      if (match != null) return _normalizeSpeakerId(int.tryParse(match.group(1)!) ?? 0);
+    }
+    return 0;
+  }
+
+  static double? _parseSpeakerConfidence(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   @override
@@ -71,10 +97,15 @@ class TranscriptSegment {
 
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
+    final speakerValue = json['speaker'];
+    final speakerId = _parseSpeakerId(json['speaker_id'] ?? speakerValue);
+
     return TranscriptSegment(
       id: (json['id'] ?? '') as String,
       text: json['text'] as String,
-      speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
+      speaker: (speakerValue ?? 'SPEAKER_00') as String,
+      speakerId: speakerId,
+      speakerConfidence: _parseSpeakerConfidence(json['speaker_confidence']),
       isUser: (json['is_user'] ?? false) as bool,
       personId: json['person_id'],
       start: double.tryParse(json['start'].toString()) ?? 0.0,
@@ -91,6 +122,7 @@ class TranscriptSegment {
       'text': text,
       'speaker': speaker,
       'speaker_id': speakerId,
+      if (speakerConfidence != null) 'speaker_confidence': speakerConfidence,
       'is_user': isUser,
       'start': start,
       'end': end,
@@ -154,7 +186,7 @@ class TranscriptSegment {
       // - previous segments before ws2 is switched on the backend, (duration of speech profile) will not be assigned.
       bool isNotEmpty = joinedSimilarSegments.isNotEmpty;
       bool isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
-      bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
+      bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speakerId == newSegment.speakerId;
 
       if (isNotEmpty && isSameSpeaker && isSameUser) {
         joinedSimilarSegments.last.text += ' ${newSegment.text}';
@@ -168,7 +200,7 @@ class TranscriptSegment {
 
     bool isNotEmpty = segments.isNotEmpty;
     bool isSameUser = isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
-    bool isSameSpeaker = isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
+    bool isSameSpeaker = isNotEmpty && segments.last.speakerId == joinedSimilarSegments[0].speakerId;
     bool withinThreshold = isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
 
     if (isNotEmpty && isSameSpeaker && isSameUser && withinThreshold) {
@@ -200,7 +232,7 @@ class TranscriptSegment {
         if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
           speakerName = peopleMap[segment.personId]!;
         } else {
-          speakerName = 'Speaker ${segment.speakerId}';
+          speakerName = 'Speaker ${TranscriptSegment.displaySpeakerId(segment.speakerId)}';
         }
         transcript += '$timestampStr $speakerName: $segmentText ';
       }
@@ -218,5 +250,9 @@ class TranscriptSegment {
       }
     }
     return true;
+  }
+
+  static int displaySpeakerId(int speakerId) {
+    return _normalizeSpeakerId(speakerId) + 1;
   }
 }
