@@ -10,8 +10,10 @@ import 'package:omi/models/playback_state.dart';
 import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
 import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wifi/wifi_network_service.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
@@ -535,7 +537,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
     final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
-    if (preferredMethod == 'ble' && wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+    bool wifiHardwareAvailable = false;
+    if (wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+      wifiHardwareAvailable = await _checkWifiHardwareAvailable();
+      if (!wifiHardwareAvailable && preferredMethod == 'wifi') {
+        SharedPreferencesUtil().preferredSyncMethod = 'ble';
+        if (mounted) {
+          _showSnackBar(context.l10n.deviceDoesNotSupportWifiSwitchingToBle, Colors.orange);
+        }
+      }
+    }
+
+    if (preferredMethod == 'ble' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard) {
       if (!mounted) return;
       final result = await FastTransferSuggestionDialog.show(context);
       if (result == null) return;
@@ -550,7 +563,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
     final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
     if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
-      if (currentMethod == 'wifi' && wifiSupported) {
+      if (currentMethod == 'wifi' && wifiHardwareAvailable) {
         if (!mounted) return;
         final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
         if (!hasPermission) {
@@ -564,13 +577,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     try {
       final syncProvider = context.read<SyncProvider>();
       final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
       // Show WiFi connection sheet if using WiFi for SD card transfer
-      if (currentMethod == 'wifi' && wifiSupported && widget.wal.storage == WalStorage.sdcard && mounted) {
+      if (currentMethod == 'wifi' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard && mounted) {
         WifiConnectionListenerBridge? listener;
 
-        final controller = await WifiConnectionSheet.show(
+        final sheetController = await WifiConnectionSheet.show(
           context,
           deviceName: 'Omi',
           onCancel: () {
@@ -583,7 +595,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           },
         );
 
-        listener = WifiConnectionListenerBridge(controller);
+        listener = WifiConnectionListenerBridge(sheetController);
         await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
       } else {
         await syncProvider.transferWalToPhone(widget.wal);
@@ -597,6 +609,33 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       if (mounted) {
         _showSnackBar(context.l10n.transferFailedMessage(e.toString()), Colors.red);
       }
+    }
+  }
+
+  Future<bool> _checkWifiHardwareAvailable() async {
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(widget.wal.device);
+      if (connection == null) {
+        return true;
+      }
+
+      final ssid = WifiNetworkService.generateSsid(widget.wal.device);
+      final password = WifiNetworkService.generatePassword(widget.wal.device);
+
+      final result = await connection.setupWifiSync(ssid, password);
+
+      if (!result.success && result.errorCode == WifiSyncErrorCode.wifiHardwareNotAvailable) {
+        return false;
+      }
+
+      if (result.success) {
+        await connection.stopWifiSync();
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error checking WiFi hardware: $e');
+      return true;
     }
   }
 

@@ -14516,6 +14516,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Large time gaps detected ({gaps})'**
   String largeTimeGapsDetected(String gaps);
+
+  /// Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Device does not support WiFi sync, switching to Bluetooth'**
+  String get deviceDoesNotSupportWifiSwitchingToBle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

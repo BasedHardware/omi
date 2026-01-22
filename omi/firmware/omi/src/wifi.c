@@ -789,14 +789,6 @@ void start_wifi_thread(void)
 	is_hardware_available = true;
 	LOG_INF("Wi-Fi hardware is ready");
 
-	// check if Wi-Fi hardware is broken/unavailable
-	if (!wifi_check_hardware_ready()) {
-		LOG_ERR("Wi-Fi hardware not ready");
-		return;
-	}
-	is_hardware_available = true;
-	LOG_INF("Wi-Fi hardware is ready");
-
 	while (1) {
 		switch (current_wifi_state) {
 		case WIFI_STATE_OFF:

@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -207,24 +208,22 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
 
-            // Daily Score Widget
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: DailyScoreWidget(),
+            // Daily Score, Today's Tasks, and Goals Widgets
+            if (SharedPreferencesUtil().showGoalTrackerEnabled) ...[
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: DailyScoreWidget(),
+                ),
               ),
-            ),
-
-            // Today's Tasks (top 3)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(top: 8, bottom: 8),
-                child: TodayTasksWidget(),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 8, bottom: 8),
+                  child: TodayTasksWidget(),
+                ),
               ),
-            ),
-
-            // Goals Widget (up to 3 goals)
-            SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
+              SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
+            ],
 
             // Conversations section header
             SliverToBoxAdapter(

@@ -75,6 +75,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _questionAnimationController.dispose();
     super.dispose();
   }
@@ -82,14 +83,16 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   final ScrollController _scrollController = ScrollController();
 
   void scrollDown() async {
-    if (_scrollController.hasClients) {
-      await Future.delayed(const Duration(milliseconds: 250));
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    if (!mounted) return;
+    if (_scrollController.positions.isEmpty) return;
+
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   @override

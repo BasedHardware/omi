@@ -319,29 +319,31 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                     ),
                                   ),
 
-                                // Daily Score + Today Tasks + Goals section (only when not searching)
-                                if (hasAnyConversationsInSystem && !isSearchActive)
+                                // Daily Score + Today Tasks + Goals section
+                                if (hasAnyConversationsInSystem &&
+                                    !isSearchActive &&
+                                    SharedPreferencesUtil().showGoalTrackerEnabled)
                                   SliverToBoxAdapter(
                                     child: FadeTransition(
                                       opacity: _fadeAnimation,
                                       child: Container(
                                         padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
                                         height: 260, // Height to fit 3 tasks/goals
-                                        child: Row(
+                                        child: const Row(
                                           crossAxisAlignment: CrossAxisAlignment.stretch,
                                           children: [
                                             // Daily Score Widget
-                                            const Expanded(
+                                            Expanded(
                                               child: DesktopDailyScoreWidget(),
                                             ),
-                                            const SizedBox(width: 16),
+                                            SizedBox(width: 16),
                                             // Today Tasks Widget
-                                            const Expanded(
+                                            Expanded(
                                               child: DesktopTodayTasksWidget(),
                                             ),
-                                            const SizedBox(width: 16),
+                                            SizedBox(width: 16),
                                             // Goals Widget
-                                            const Expanded(
+                                            Expanded(
                                               child: DesktopGoalsWidget(),
                                             ),
                                           ],
