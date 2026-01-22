@@ -104,7 +104,8 @@
           "doc/hardware/OmiConsumer",
           "doc/hardware/DevKit2",
           "doc/hardware/DevKit1",
-          "doc/hardware/omiGlass"
+          "doc/hardware/omiGlass",
+          "doc/hardware/PaintingOMI"
         ]
       },
       {
