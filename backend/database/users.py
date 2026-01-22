@@ -100,12 +100,44 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+@transactional
+def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
+    """Transaction to atomically add sample and transcript."""
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+
+    person_data = snapshot.to_dict()
+    samples = person_data.get('speech_samples', [])
+
+    if len(samples) >= max_samples:
+        return False
+
+    samples.append(sample_path)
+    update_data = {
+        'speech_samples': samples,
+        'updated_at': datetime.now(timezone.utc),
+    }
+
+    if transcript is not None:
+        transcripts = person_data.get('speech_sample_transcripts', [])
+        transcripts.append(transcript)
+        update_data['speech_sample_transcripts'] = transcripts
+        update_data['speech_samples_version'] = 2
+
+    transaction.update(person_ref, update_data)
+    return True
+
+
 def add_person_speech_sample(
     uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
 ) -> bool:
     """
     Append speech sample path to person's speech_samples list.
     Limits to max_samples to prevent unlimited growth.
+
+    Uses Firestore transaction to ensure atomic read-modify-write,
+    preventing array drift from concurrent updates.
 
     Args:
         uid: User ID
@@ -115,36 +147,11 @@ def add_person_speech_sample(
         max_samples: Maximum number of samples to keep (default 5)
 
     Returns:
-        True if sample was added, False if limit reached
+        True if sample was added, False if limit reached or person not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-
-    if not person_doc.exists:
-        return False
-
-    person_data = person_doc.to_dict()
-    current_samples = person_data.get('speech_samples', [])
-
-    # Check if we've hit the limit
-    if len(current_samples) >= max_samples:
-        return False
-
-    update_data = {
-        'speech_samples': firestore.ArrayUnion([sample_path]),
-        'updated_at': datetime.now(timezone.utc),
-    }
-
-    # If transcript provided, append to transcripts array as well
-    if transcript is not None:
-        current_transcripts = person_data.get('speech_sample_transcripts', [])
-        current_transcripts.append(transcript)
-        update_data['speech_sample_transcripts'] = current_transcripts
-        # Mark as v2 when adding samples with transcripts
-        update_data['speech_samples_version'] = 2
-
-    person_ref.update(update_data)
-    return True
+    transaction = db.transaction()
+    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
