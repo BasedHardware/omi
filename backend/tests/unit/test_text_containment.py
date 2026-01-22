@@ -44,3 +44,11 @@ class TestComputeTextContainment:
         expected = "วันนี้สวัสดีครับเพื่อนๆ"
         assert compute_text_containment(transcript, expected) == 1.0
 
+    def test_expected_empty_returns_zero(self):
+        assert compute_text_containment("hello", "") == 0.0
+
+    def test_trigram_length_boundary_contained(self):
+        assert compute_text_containment("hey", "oh hey there") == 1.0
+
+    def test_trigram_length_boundary_not_contained(self):
+        assert compute_text_containment("hey", "oh he there") == 0.0
