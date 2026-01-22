@@ -36,15 +36,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
     });
 
     try {
-      // Wait for adapter state with timeout - don't hang forever
-      try {
-        await BluetoothAdapter.adapterState
-            .where((v) => v == BluetoothAdapterStateHelper.on)
-            .first
-            .timeout(const Duration(seconds: 5));
-      } catch (e) {
-        return const DeviceDiscoveryResult(devices: []);
-      }
+      await BluetoothAdapter.adapterState.where((v) => v == BluetoothAdapterStateHelper.on).first;
 
       // Delay to allow Bluetooth permissions to settle on Android before scanning.
       await Future.delayed(const Duration(seconds: 2));
