@@ -13,7 +13,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
-from utils.speaker_sample_migration import verify_and_transcribe_sample
+from utils.speaker_sample_migration import migrate_person_samples_v1_to_v2, verify_and_transcribe_sample
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 
@@ -254,6 +254,11 @@ async def extract_speaker_samples(
         if sample_count >= 1:
             print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
             return
+
+        # Run lazy migration for v1 samples before adding new sample
+        person = users_db.get_person(uid, person_id)
+        if person and person.get('speech_samples_version', 1) == 1:
+            person = await migrate_person_samples_v1_to_v2(uid, person)
 
         # Fetch conversation to get started_at and segment details
         conversation = conversations_db.get_conversation(uid, conversation_id)

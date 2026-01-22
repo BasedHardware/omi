@@ -10,7 +10,6 @@ Provides functions for:
 import asyncio
 from typing import Optional, Tuple
 
-from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
 from database import users as users_db
@@ -22,6 +21,19 @@ from utils.text_utils import compute_text_similarity
 MIN_WORDS = 5
 MIN_SIMILARITY = 0.6
 MIN_DOMINANT_SPEAKER_RATIO = 0.7
+
+# In-process locks to prevent concurrent migration for same person
+_migration_locks: dict[tuple[str, str], asyncio.Lock] = {}
+_locks_lock = asyncio.Lock()
+
+
+async def _get_migration_lock(uid: str, person_id: str) -> asyncio.Lock:
+    """Get or create a lock for the given uid/person_id pair."""
+    key = (uid, person_id)
+    async with _locks_lock:
+        if key not in _migration_locks:
+            _migration_locks[key] = asyncio.Lock()
+        return _migration_locks[key]
 
 
 async def verify_and_transcribe_sample(
@@ -118,6 +130,8 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
     Samples that fail quality checks are DROPPED along with speaker_embedding.
 
+    Uses in-process lock to prevent concurrent migration for same person.
+
     Args:
         uid: User ID
         person: Person dict with 'id', 'speech_samples', 'speech_samples_version', etc.
@@ -129,60 +143,68 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
     if version >= 2:
         return person
 
-    samples = person.get('speech_samples', [])
-    if not samples:
-        users_db.update_person_speech_samples_version(uid, person['id'], 2)
-        person['speech_samples_version'] = 2
-        person['speech_sample_transcripts'] = []
-        return person
-
     person_id = person['id']
-    valid_samples = []
-    valid_transcripts = []
+    lock = await _get_migration_lock(uid, person_id)
 
-    for sample_path in samples:
-        try:
-            audio_bytes = await asyncio.to_thread(download_sample_audio, sample_path)
-        except NotFound:
-            print(f"Sample not found in storage, skipping: {sample_path}", uid, person_id)
-            continue
-        except Exception as e:
-            print(f"Error downloading sample {sample_path}: {e}", uid, person_id)
-            continue
+    async with lock:
+        # Re-check version inside lock (another call may have migrated)
+        fresh_person = users_db.get_person(uid, person_id)
+        if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
+            return fresh_person
 
-        transcript, is_valid, reason = await verify_and_transcribe_sample(audio_bytes, 16000)
+        samples = person.get('speech_samples', [])
+        if not samples:
+            users_db.update_person_speech_samples_version(uid, person_id, 2)
+            person['speech_samples_version'] = 2
+            person['speech_sample_transcripts'] = []
+            return person
 
-        if is_valid:
-            valid_samples.append(sample_path)
-            valid_transcripts.append(transcript)
-        else:
-            print(f"Dropping sample {sample_path}: {reason}", uid, person_id)
-            await asyncio.to_thread(delete_sample_from_storage, sample_path)
+        valid_samples = []
+        valid_transcripts = []
 
-    new_embedding = None
-    if valid_samples:
-        try:
-            first_sample_audio = await asyncio.to_thread(download_sample_audio, valid_samples[0])
-            embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
-            new_embedding = embedding.flatten().tolist()
-        except Exception as e:
-            print(f"Error extracting speaker embedding: {e}", uid, person_id)
+        for sample_path in samples:
+            try:
+                audio_bytes = await asyncio.to_thread(download_sample_audio, sample_path)
+            except NotFound:
+                print(f"Sample not found in storage, skipping: {sample_path}", uid, person_id)
+                continue
+            except Exception as e:
+                print(f"Error downloading sample {sample_path}: {e}", uid, person_id)
+                continue
 
-    users_db.update_person_speech_samples_after_migration(
-        uid,
-        person_id,
-        samples=valid_samples,
-        transcripts=valid_transcripts,
-        version=2,
-        speaker_embedding=new_embedding,
-    )
+            transcript, is_valid, reason = await verify_and_transcribe_sample(audio_bytes, 16000)
 
-    person['speech_samples'] = valid_samples
-    person['speech_sample_transcripts'] = valid_transcripts
-    person['speech_samples_version'] = 2
-    if new_embedding is not None:
-        person['speaker_embedding'] = new_embedding
-    elif not valid_samples:
-        person['speaker_embedding'] = None
+            if is_valid:
+                valid_samples.append(sample_path)
+                valid_transcripts.append(transcript)
+            else:
+                print(f"Dropping sample {sample_path}: {reason}", uid, person_id)
+                await asyncio.to_thread(delete_sample_from_storage, sample_path)
 
-    return person
+        new_embedding = None
+        if valid_samples:
+            try:
+                first_sample_audio = await asyncio.to_thread(download_sample_audio, valid_samples[0])
+                embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
+                new_embedding = embedding.flatten().tolist()
+            except Exception as e:
+                print(f"Error extracting speaker embedding: {e}", uid, person_id)
+
+        users_db.update_person_speech_samples_after_migration(
+            uid,
+            person_id,
+            samples=valid_samples,
+            transcripts=valid_transcripts,
+            version=2,
+            speaker_embedding=new_embedding,
+        )
+
+        person['speech_samples'] = valid_samples
+        person['speech_sample_transcripts'] = valid_transcripts
+        person['speech_samples_version'] = 2
+        if new_embedding is not None:
+            person['speaker_embedding'] = new_embedding
+        elif not valid_samples:
+            person['speaker_embedding'] = None
+
+        return person

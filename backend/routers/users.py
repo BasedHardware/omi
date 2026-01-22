@@ -58,7 +58,6 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
-from utils.speaker_sample_migration import migrate_person_samples_v1_to_v2
 from utils.webhooks import webhook_first_time_setup
 
 router = APIRouter()
@@ -238,15 +237,13 @@ def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_us
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
-async def get_single_person(
+def get_single_person(
     person_id: str, include_speech_samples: bool = False, uid: str = Depends(auth.get_current_user_uid)
 ):
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     if include_speech_samples:
-        # Run lazy migration for v1 samples
-        person = await migrate_person_samples_v1_to_v2(uid, person)
         # Convert stored GCS paths to signed URLs
         stored_paths = person.get('speech_samples', [])
         person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
@@ -254,16 +251,13 @@ async def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-async def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-        # Run lazy migration and convert GCS paths to signed URLs for each person
+        # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
-            # Run lazy migration for v1 samples
-            people[i] = await migrate_person_samples_v1_to_v2(uid, person)
-            # Convert stored GCS paths to signed URLs
-            stored_paths = people[i].get('speech_samples', [])
+            stored_paths = person.get('speech_samples', [])
             people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
