@@ -408,15 +408,17 @@ def delete_all_user_private_cloud_sync_data(uid: str) -> None:
         return
     bucket = storage_client.bucket(private_cloud_sync_bucket)
 
-    # Delete all chunks for this user
-    chunks_prefix = f'chunks/{uid}/'
-    for blob in bucket.list_blobs(prefix=chunks_prefix):
-        blob.delete()
+    # Use a batch request to efficiently delete all blobs for the user.
+    with storage_client.batch():
+        # Delete all chunks for this user
+        chunks_prefix = f'chunks/{uid}/'
+        for blob in bucket.list_blobs(prefix=chunks_prefix):
+            blob.delete()
 
-    # Delete all merged audio files for this user
-    audio_prefix = f'audio/{uid}/'
-    for blob in bucket.list_blobs(prefix=audio_prefix):
-        blob.delete()
+        # Delete all merged audio files for this user
+        audio_prefix = f'audio/{uid}/'
+        for blob in bucket.list_blobs(prefix=audio_prefix):
+            blob.delete()
 
 
 def download_audio_chunks_and_merge(
