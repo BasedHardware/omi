@@ -1,14 +1,11 @@
-import os
-import re
+import asyncio
 import json
 import logging
-from typing import List, Optional, Dict, Any
 import os
 import re
-import json
-import logging
-from typing import List, Optional, Dict, Any
-from openai import OpenAI, AsyncOpenAI, APIConnectionError
+from typing import Any, Dict, List, Optional
+
+from openai import APIConnectionError, AsyncOpenAI
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -19,6 +16,9 @@ logger = logging.getLogger(__name__)
 VLLM_API_BASE = os.environ.get("VLLM_API_BASE", "http://localhost:8000/v1")
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", "EMPTY")
 VLLM_MODEL_NAME = os.environ.get("VLLM_MODEL_NAME", "meta-llama/Meta-Llama-3.1-8B-Instruct")
+
+_async_client: Optional[AsyncOpenAI] = None
+_async_client_lock: Optional[asyncio.Lock] = None
 
 # Legacy Regex Patterns (for self-identification fallback)
 SPEAKER_IDENTIFICATION_PATTERNS = {
@@ -165,6 +165,47 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
                 return name.capitalize()
     return None
 
+async def _get_async_client_lock() -> asyncio.Lock:
+    global _async_client_lock
+    if _async_client_lock is None:
+        _async_client_lock = asyncio.Lock()
+    return _async_client_lock
+
+
+async def get_async_client() -> AsyncOpenAI:
+    global _async_client
+    if _async_client is not None:
+        return _async_client
+
+    lock = await _get_async_client_lock()
+    async with lock:
+        if _async_client is None:
+            _async_client = AsyncOpenAI(
+                base_url=VLLM_API_BASE,
+                api_key=VLLM_API_KEY,
+                timeout=5.0,
+            )
+    return _async_client
+
+
+async def close_async_client() -> None:
+    global _async_client
+    if _async_client is None:
+        return
+    try:
+        close_fn = getattr(_async_client, "aclose", None)
+        if close_fn:
+            await close_fn()
+        else:
+            close_result = _async_client.close()
+            if asyncio.iscoroutine(close_result):
+                await close_result
+    except Exception:
+        logger.exception("Failed to close AsyncOpenAI client")
+    finally:
+        _async_client = None
+
+
 async def identify_speaker_and_clean_transcript(transcript: str) -> Dict[str, Any]:
     """
     Uses vLLM (Llama 8B) to:
@@ -178,12 +219,7 @@ async def identify_speaker_and_clean_transcript(transcript: str) -> Dict[str, An
         return {"speakers": None, "cleaned_transcript": transcript}
 
     try:
-        # Use AsyncOpenAI for non-blocking calls
-        client = AsyncOpenAI(
-            base_url=VLLM_API_BASE,
-            api_key=VLLM_API_KEY,
-            timeout=5.0
-        )
+        client = await get_async_client()
         
         response = await client.chat.completions.create(
             model=VLLM_MODEL_NAME,
@@ -200,6 +236,9 @@ async def identify_speaker_and_clean_transcript(transcript: str) -> Dict[str, An
         data = json.loads(content)
         return data
 
+    except APIConnectionError as e:
+        logger.error(f"LLM Speaker ID Connection Error: {e}")
+        return {"speakers": None, "cleaned_transcript": transcript}
     except Exception as e:
         logger.error(f"LLM Speaker ID Error: {e}")
         # Fallback: Return raw transcript and no speakers
@@ -209,5 +248,9 @@ async def identify_speaker_from_transcript(transcript: str) -> Optional[List[str
     """
     Wrapper for backward compatibility if just speaker ID is needed.
     """
+    legacy_name = detect_speaker_from_text(transcript)
+    if legacy_name:
+        return [legacy_name]
+
     result = await identify_speaker_and_clean_transcript(transcript)
     return result.get("speakers")

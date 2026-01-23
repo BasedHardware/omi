@@ -1,14 +1,19 @@
 
-import logging
-import pytest
-import sys
+import asyncio
 import os
-from unittest.mock import MagicMock, AsyncMock, patch
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 # Add backend to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
-from utils.text_speaker_detection import detect_speaker_from_text, identify_speaker_from_transcript
+from utils.text_speaker_detection import (
+    detect_speaker_from_text,
+    identify_speaker_and_clean_transcript,
+    identify_speaker_from_transcript,
+)
 
 class TestSpeakerIdentification:
     
@@ -45,9 +50,10 @@ class TestSpeakerIdentification:
         mock_completion = MagicMock()
         mock_completion.choices[0].message.content = mock_response
         
-        with patch('utils.text_speaker_detection.AsyncOpenAI') as MockAsyncOpenAI:
-            mock_client_instance = MockAsyncOpenAI.return_value
+        with patch('utils.text_speaker_detection.get_async_client', new_callable=AsyncMock) as mock_get_client:
+            mock_client_instance = MagicMock()
             mock_client_instance.chat.completions.create = AsyncMock(return_value=mock_completion)
+            mock_get_client.return_value = mock_client_instance
             
             result = await identify_speaker_from_transcript(transcript)
             print(f"[Test] Parsed Result: {result}")
@@ -57,15 +63,15 @@ class TestSpeakerIdentification:
     async def test_llm_full_response_structure(self):
         """Verify that identify_speaker_and_clean_transcript returns full structure."""
         print("\n[Test] Checking Full JSON Structure...")
-        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
         
         mock_response = '{"speakers": ["Alice"], "cleaned_transcript": "Cleaned text"}'
         mock_completion = MagicMock()
         mock_completion.choices[0].message.content = mock_response
         
-        with patch('utils.text_speaker_detection.AsyncOpenAI') as MockAsyncOpenAI:
-            mock_client_instance = MockAsyncOpenAI.return_value
+        with patch('utils.text_speaker_detection.get_async_client', new_callable=AsyncMock) as mock_get_client:
+            mock_client_instance = MagicMock()
             mock_client_instance.chat.completions.create = AsyncMock(return_value=mock_completion)
+            mock_get_client.return_value = mock_client_instance
             
             result = await identify_speaker_and_clean_transcript("input text")
             print(f"[Test] Result: {result}")
@@ -76,11 +82,11 @@ class TestSpeakerIdentification:
     async def test_llm_api_failure(self):
         """Verify graceful fallback when API fails."""
         print("\n[Test] Simulating API Failure (500/Timeout)...")
-        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
         
-        with patch('utils.text_speaker_detection.AsyncOpenAI') as MockAsyncOpenAI:
-            mock_client_instance = MockAsyncOpenAI.return_value
+        with patch('utils.text_speaker_detection.get_async_client', new_callable=AsyncMock) as mock_get_client:
+            mock_client_instance = MagicMock()
             mock_client_instance.chat.completions.create = AsyncMock(side_effect=Exception("API Down"))
+            mock_get_client.return_value = mock_client_instance
             
             transcript = "Raw text"
             result = await identify_speaker_and_clean_transcript(transcript)
@@ -93,15 +99,15 @@ class TestSpeakerIdentification:
     async def test_llm_invalid_json(self):
         """Verify fallback when LLM returns invalid JSON."""
         print("\n[Test] Simulating Invalid JSON (Hallucination)...")
-        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
         
         mock_response = 'Not JSON!'
         mock_completion = MagicMock()
         mock_completion.choices[0].message.content = mock_response
         
-        with patch('utils.text_speaker_detection.AsyncOpenAI') as MockAsyncOpenAI:
-            mock_client_instance = MockAsyncOpenAI.return_value
+        with patch('utils.text_speaker_detection.get_async_client', new_callable=AsyncMock) as mock_get_client:
+            mock_client_instance = MagicMock()
             mock_client_instance.chat.completions.create = AsyncMock(return_value=mock_completion)
+            mock_get_client.return_value = mock_client_instance
             
             transcript = "Raw text"
             result = await identify_speaker_and_clean_transcript(transcript)
@@ -113,8 +119,6 @@ class TestSpeakerIdentification:
     def test_empty_input(self):
         """Verify empty input returns None immediately without API call."""
         print("\n[Test] Checking Empty Input...")
-        import asyncio
-        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
         
         loop = asyncio.new_event_loop()
         result = loop.run_until_complete(identify_speaker_and_clean_transcript(""))

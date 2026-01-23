@@ -5,6 +5,7 @@ import time
 import json
 import difflib
 from typing import List, Optional
+from openai import APIConnectionError, OpenAI
 
 # Add backend to path to import existing utils
 # Assuming this script run from omi/ (repo root) or omi/backend/tests/

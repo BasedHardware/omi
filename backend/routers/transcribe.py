@@ -65,7 +65,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
-from utils.text_speaker_detection import detect_speaker_from_text
+from utils.text_speaker_detection import identify_speaker_from_transcript
 from utils.stt.streaming import (
     SPEECH_PROFILE_FIXED_DURATION,
     SPEECH_PROFILE_PADDING_DURATION,
@@ -1619,8 +1619,14 @@ async def _listen(
                             except asyncio.QueueFull:
                                 pass  # Drop if queue is full
 
-                    # Text-based detection
-                    detected_name = detect_speaker_from_text(segment.text)
+                    # Text-based detection (legacy regex + LLM addressee detection)
+                    detected_speakers = await identify_speaker_from_transcript(segment.text)
+                    detected_name = None
+                    if isinstance(detected_speakers, list) and len(detected_speakers) == 1:
+                        detected_name = detected_speakers[0]
+                    elif isinstance(detected_speakers, str):
+                        detected_name = detected_speakers
+
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
