@@ -370,11 +370,11 @@ async def mcp_authorize(
     code_challenge: Optional[str] = None,
     code_challenge_method: Optional[str] = None,
 ):
-    """OAuth authorize endpoint. Redirects to client with authorization code."""
+    """OAuth authorize endpoint."""
     if client_id != "omi":
         raise HTTPException(status_code=400, detail="Invalid client_id")
 
-    redirect_url = f"{redirect_uri}?code=omi_auth"
+    redirect_url = f"{redirect_uri}?code=omi"
     if state:
         redirect_url += f"&state={state}"
 
@@ -383,7 +383,7 @@ async def mcp_authorize(
 
 @router.post("/token", tags=["mcp"])
 async def mcp_token(request: Request):
-    """OAuth token endpoint. Validates API key and returns it as access token."""
+    """OAuth token endpoint."""
     try:
         form_data = await request.form()
         client_secret = form_data.get("client_secret")
@@ -402,7 +402,6 @@ async def mcp_token(request: Request):
     if client_id != "omi":
         raise HTTPException(status_code=400, detail="Invalid client_id")
 
-    # Validate the API key before returning it as access token
     user_id = authenticate_api_key(client_secret)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid API key")
