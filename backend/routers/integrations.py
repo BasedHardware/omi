@@ -202,6 +202,34 @@ class IntegrationData(BaseModel):
     refresh_token: Optional[str] = None
 
 
+class AppleHealthSyncData(BaseModel):
+    """Health data synced from Apple Health on iOS device"""
+
+    period_days: int = Field(default=7, description="Number of days of data")
+
+    # Steps data
+    total_steps: Optional[int] = Field(default=None, description="Total steps in period")
+    average_steps_per_day: Optional[float] = Field(default=None, description="Average steps per day")
+
+    # Sleep data
+    total_sleep_hours: Optional[float] = Field(default=None, description="Total sleep hours")
+    total_in_bed_hours: Optional[float] = Field(default=None, description="Total time in bed hours")
+    sleep_sessions_count: Optional[int] = Field(default=None, description="Number of sleep sessions")
+    sleep_sessions: Optional[list] = Field(default=None, description="Sleep session details")
+
+    # Heart rate data
+    heart_rate_average: Optional[float] = Field(default=None, description="Average heart rate")
+    heart_rate_min: Optional[float] = Field(default=None, description="Minimum heart rate")
+    heart_rate_max: Optional[float] = Field(default=None, description="Maximum heart rate")
+
+    # Active energy data
+    total_active_energy: Optional[float] = Field(default=None, description="Total active energy kcal")
+    average_active_energy_per_day: Optional[float] = Field(default=None, description="Average daily active energy")
+
+    # Workouts data
+    workouts: Optional[list] = Field(default=None, description="List of workout records")
+
+
 class IntegrationResponse(BaseModel):
     """Response containing integration status"""
 
@@ -245,6 +273,75 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=404, detail="Integration not found")
 
     return None
+
+
+@router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
+def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Sync Apple Health data from the iOS device.
+
+    This endpoint receives health data collected from Apple HealthKit on the user's
+    iPhone/Apple Watch and stores it for use in chat queries.
+
+    Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
+    """
+    # Build the health data structure
+    health_data = {
+        'period_days': data.period_days,
+    }
+
+    # Steps
+    if data.total_steps is not None:
+        health_data['steps'] = {
+            'total': data.total_steps,
+            'average_per_day': data.average_steps_per_day or (data.total_steps / max(data.period_days, 1)),
+            'period_days': data.period_days,
+        }
+
+    # Sleep
+    if data.total_sleep_hours is not None or data.sleep_sessions:
+        health_data['sleep'] = {
+            'total_sleep_hours': data.total_sleep_hours or 0,
+            'total_in_bed_hours': data.total_in_bed_hours or 0,
+            'sessions_count': data.sleep_sessions_count or 0,
+            'sessions': data.sleep_sessions or [],
+        }
+
+    # Heart rate
+    if data.heart_rate_average is not None:
+        health_data['heart_rate'] = {
+            'average': data.heart_rate_average,
+            'minimum': data.heart_rate_min,
+            'maximum': data.heart_rate_max,
+        }
+
+    # Active energy
+    if data.total_active_energy is not None:
+        health_data['active_energy'] = {
+            'total': data.total_active_energy,
+            'average_per_day': data.average_active_energy_per_day
+            or (data.total_active_energy / max(data.period_days, 1)),
+        }
+
+    # Workouts
+    if data.workouts:
+        health_data['workouts'] = data.workouts
+
+    # Save the integration with health data
+    integration_data = {
+        'connected': True,
+        'health_data': health_data,
+        'last_synced': datetime.now(timezone.utc).isoformat(),
+    }
+
+    users_db.set_integration(uid, 'apple_health', integration_data)
+
+    return {
+        "status": "ok",
+        "app_key": "apple_health",
+        "synced_at": integration_data['last_synced'],
+        "data_types_synced": list(health_data.keys()),
+    }
 
 
 @router.get("/v1/integrations/github/repositories", tags=['integrations'])
