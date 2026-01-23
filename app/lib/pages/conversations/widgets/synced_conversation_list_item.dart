@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -7,7 +10,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
 
 class SyncedConversationListItem extends StatefulWidget {
   final DateTime date;
@@ -194,7 +196,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        _getConversationDuration(),
+                        _getConversationDuration(context),
                         style: const TextStyle(color: Colors.white, fontSize: 11),
                         maxLines: 1,
                         textAlign: TextAlign.end,
@@ -209,13 +211,13 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     );
   }
 
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     if (conversation.transcriptSegments.isEmpty) return '';
 
     // Get the total duration in seconds
     int durationSeconds = conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class AboutOmiPage extends StatefulWidget {
   const AboutOmiPage({super.key});
@@ -34,7 +36,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
                 MixpanelManager().pageOpened('About Privacy Policy');
                 routeToPage(
                   context,
-                  const PageWebView(url: 'https://www.omi.me/pages/privacy', title: 'Privacy Policy'),
+                  PageWebView(url: 'https://www.omi.me/pages/privacy', title: context.l10n.privacyPolicyTitle),
                 );
               },
             ),

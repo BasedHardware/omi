@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:omi/providers/voice_recorder_provider.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+
+import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class VoiceRecorderWidget extends StatefulWidget {
   final Function(String) onTranscriptReady;
@@ -38,7 +41,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
         onTranscriptReady: widget.onTranscriptReady,
         onClose: widget.onClose,
       );
-      
+
       // Only start recording if not already recording
       if (!provider.isRecording) {
         provider.startRecording();
@@ -116,9 +119,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                   Shimmer.fromColors(
                     baseColor: Color(0xFF35343B),
                     highlightColor: Colors.white,
-                    child: const Text(
-                      'Transcribing...',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.transcribing,
+                      style: const TextStyle(
                         color: Colors.white,
                       ),
                     ),
@@ -170,9 +173,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Error',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w700),
+                  Text(
+                    context.l10n.error,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(width: 16),
                   Expanded(

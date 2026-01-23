@@ -41,10 +41,12 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Refer https://developer.android.com/about/versions/14/changes/fgs-types-required#connected-device -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
@@ -136,6 +138,15 @@
                     android:host="try.omi.me"
                     android:scheme="https"
                     android:pathPattern="/apps/.*" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:path="/unlimited" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

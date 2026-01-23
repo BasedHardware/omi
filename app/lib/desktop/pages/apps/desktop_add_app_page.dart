@@ -1,7 +1,12 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -13,18 +18,16 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-// Desktop widgets
 import 'widgets/desktop_app_metadata_widget.dart';
 import 'widgets/desktop_capabilities_chips_widget.dart';
-import 'widgets/desktop_prompt_text_field.dart';
 import 'widgets/desktop_notification_scopes_chips_widget.dart';
+import 'widgets/desktop_prompt_text_field.dart';
+
+// Desktop widgets
 
 class DesktopAddAppPage extends StatefulWidget {
   final VoidCallback? onNavigateBack;
@@ -250,9 +253,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Create New App',
-                  style: TextStyle(
+                Text(
+                  context.l10n.createNewApp,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: ResponsiveHelper.textPrimary,
@@ -260,7 +263,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Build and submit your custom Omi app',
+                  context.l10n.buildSubmitCustomOmiApp,
                   style: TextStyle(
                     fontSize: 12,
                     color: ResponsiveHelper.textSecondary.withValues(alpha: 0.5),
@@ -322,7 +325,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
 
                         // App metadata section - using desktop widget
                         _buildSectionCard(
-                          title: 'App Details',
+                          title: context.l10n.appDetails,
                           icon: FontAwesomeIcons.info,
                           child: DesktopAppMetadataWidget(
                             pickImage: () async {
@@ -344,7 +347,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         if (provider.isPaid) ...[
                           const SizedBox(height: 24),
                           _buildSectionCard(
-                            title: 'Payment Details',
+                            title: context.l10n.paymentDetails,
                             icon: FontAwesomeIcons.creditCard,
                             child: PaymentDetailsWidget(
                               appPricingController: provider.priceController,
@@ -362,7 +365,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
 
                         // Capabilities section - using desktop widget
                         _buildSectionCard(
-                          title: 'App Capabilities',
+                          title: context.l10n.appCapabilities,
                           icon: FontAwesomeIcons.cogs,
                           child: const DesktopCapabilitiesChipsWidget(),
                         ),
@@ -382,7 +385,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         if (provider.isCapabilitySelectedById('proactive_notification')) ...[
                           const SizedBox(height: 24),
                           _buildSectionCard(
-                            title: 'Notification Scopes',
+                            title: context.l10n.notificationScopes,
                             icon: FontAwesomeIcons.bell,
                             child: const DesktopNotificationScopesChipsWidget(),
                           ),
@@ -466,7 +469,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   ),
             const SizedBox(height: 16),
             Text(
-              provider.isSubmitting ? 'Submitting your app...' : 'Preparing the form for you...',
+              provider.isSubmitting ? context.l10n.submittingYourApp : context.l10n.preparingFormForYou,
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
@@ -559,30 +562,30 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
               width: 1,
             ),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
+              const Icon(
                 FontAwesomeIcons.lightbulb,
                 color: ResponsiveHelper.purplePrimary,
                 size: 20,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Need help getting started?',
-                      style: TextStyle(
+                      context.l10n.needHelpGettingStarted,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      'Click here for app building guides and documentation',
-                      style: TextStyle(
+                      context.l10n.clickHereForAppBuildingGuides,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textSecondary,
                         fontSize: 14,
                       ),
@@ -590,7 +593,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   ],
                 ),
               ),
-              Icon(
+              const Icon(
                 FontAwesomeIcons.externalLink,
                 color: ResponsiveHelper.purplePrimary,
                 size: 16,
@@ -604,7 +607,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
 
   Widget _buildScreenshotsSection(AddAppProvider provider) {
     return _buildSectionCard(
-      title: 'Preview and Screenshots',
+      title: context.l10n.previewAndScreenshots,
       icon: FontAwesomeIcons.images,
       child: SizedBox(
         height: 180,
@@ -733,7 +736,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
 
   Widget _buildDesktopPromptsSection(AddAppProvider provider) {
     return _buildSectionCard(
-      title: 'AI Prompts',
+      title: context.l10n.aiPrompts,
       icon: FontAwesomeIcons.brain,
       child: Form(
         key: provider.promptKey,
@@ -745,16 +748,16 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
             if (provider.isCapabilitySelectedById('chat'))
               DesktopPromptTextField(
                 controller: provider.chatPromptController,
-                label: 'Chat Prompt',
-                hint: 'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                label: context.l10n.chatPrompt,
+                hint: context.l10n.chatPromptPlaceholder,
               ),
             if (provider.isCapabilitySelectedById('memories') && provider.isCapabilitySelectedById('chat'))
               const SizedBox(height: 20),
             if (provider.isCapabilitySelectedById('memories'))
               DesktopPromptTextField(
                 controller: provider.conversationPromptController,
-                label: 'Conversation Prompt',
-                hint: 'You are an awesome app, you will be given transcript and summary of a conversation...',
+                label: context.l10n.conversationPrompt,
+                hint: context.l10n.conversationPromptPlaceholder,
               ),
           ],
         ),
@@ -764,7 +767,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
 
   Widget _buildPrivacySection(AddAppProvider provider) {
     return _buildSectionCard(
-      title: 'App Privacy & Terms',
+      title: context.l10n.appPrivacyAndTerms,
       icon: FontAwesomeIcons.shield,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -783,10 +786,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'Make my app public',
-                  style: TextStyle(
+                  context.l10n.makeMyAppPublic,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                   ),
@@ -806,10 +809,10 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy',
-                  style: TextStyle(
+                  context.l10n.submitAppTermsAgreement,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                     height: 1.4,
@@ -874,7 +877,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Submit App',
+                        context.l10n.submitApp,
                         style: TextStyle(
                           color: provider.isValid ? Colors.white : ResponsiveHelper.textQuaternary,
                           fontSize: 16,
@@ -899,11 +902,11 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
         context: context,
         builder: (ctx) {
           return ConfirmationDialog(
-            title: 'Submit App?',
+            title: context.l10n.submitAppQuestion,
             description: provider.makeAppPublic
-                ? 'Your app will be reviewed and made public. You can start using it immediately, even during the review!'
-                : 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!',
-            checkboxText: "Don't show it again",
+                ? context.l10n.submitAppPublicDescription
+                : context.l10n.submitAppPrivateDescription,
+            checkboxText: context.l10n.dontShowAgain,
             checkboxValue: !showSubmitAppConfirmation,
             onCheckboxChanged: (value) {
               setState(() {
@@ -963,19 +966,19 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                               ),
                             ),
                             const SizedBox(height: 20),
-                            const Text(
-                              'Start Earning! 💰',
-                              style: TextStyle(
+                            Text(
+                              context.l10n.startEarning,
+                              style: const TextStyle(
                                 color: ResponsiveHelper.textPrimary,
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
-                              'Connect Stripe or PayPal to receive payments for your app.',
+                            Text(
+                              context.l10n.connectStripeOrPayPal,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: ResponsiveHelper.textSecondary,
                                 fontSize: 16,
                               ),
@@ -988,9 +991,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                                 Navigator.pop(ctx);
                                 routeToPage(context, const PaymentsPage());
                               },
-                              child: const Text(
-                                'Connect Now',
-                                style: TextStyle(
+                              child: Text(
+                                context.l10n.connectNow,
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -999,9 +1002,9 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                             const SizedBox(height: 8),
                             CupertinoButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: const Text(
-                                'Maybe Later',
-                                style: TextStyle(
+                              child: Text(
+                                context.l10n.maybeLater,
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textSecondary,
                                 ),
                               ),

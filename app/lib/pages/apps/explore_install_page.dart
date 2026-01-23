@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/filter_sheet.dart';
-import 'package:omi/pages/apps/list_item.dart';
-import 'package:omi/pages/apps/widgets/category_apps_page.dart';
-import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
-import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/pages/apps/widgets/category_apps_page.dart';
+import 'package:omi/pages/apps/widgets/category_section.dart';
+import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-
 import 'add_app.dart';
 
 String filterValueToString(dynamic value) {
@@ -605,22 +606,22 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                     ),
                                   ),
                                   const SizedBox(width: 16),
-                                  const Expanded(
+                                  Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'Create Your Own App',
-                                          style: TextStyle(
+                                          context.l10n.createYourOwnApp,
+                                          style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
                                             color: Colors.black,
                                           ),
                                         ),
-                                        SizedBox(height: 2),
+                                        const SizedBox(height: 2),
                                         Text(
-                                          'Build and share your custom app',
-                                          style: TextStyle(
+                                          context.l10n.buildAndShareYourCustomApp,
+                                          style: const TextStyle(
                                             fontSize: 13,
                                             color: Colors.black54,
                                           ),
@@ -706,7 +707,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               SizedBox(
                                                 height: 44,
                                                 child: SearchBar(
-                                                  hintText: 'Search 1500+ Apps',
+                                                  hintText: context.l10n.searchAppsPlaceholder,
                                                   leading: const Padding(
                                                     padding: EdgeInsets.only(left: 6.0),
                                                     child: Icon(FontAwesomeIcons.magnifyingGlass,
@@ -787,9 +788,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: const Text(
-                                              'My Apps',
-                                              style: TextStyle(
+                                            label: Text(
+                                              context.l10n.myApps,
+                                              style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
@@ -859,8 +860,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             ),
                                             label: Text(
                                               (state.visibleFilterCount > 0 && !state.isSearchActive)
-                                                  ? 'Installed'
-                                                  : 'Installed Apps',
+                                                  ? context.l10n.installed
+                                                  : context.l10n.installedApps,
                                               style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
@@ -932,9 +933,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: const Text(
-                                              'Filters',
-                                              style: TextStyle(
+                                            label: Text(
+                                              context.l10n.filters,
+                                              style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,

@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'desktop_conversation_detail_page.dart';
 import 'widgets/desktop_conversation_card.dart';
+import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
-import 'widgets/desktop_search_widget.dart';
-import 'widgets/desktop_search_result_header.dart';
+import 'widgets/desktop_goals_widget.dart';
 import 'widgets/desktop_recording_widget.dart';
+import 'widgets/desktop_search_result_header.dart';
+import 'widgets/desktop_search_widget.dart';
+import 'widgets/desktop_today_tasks_widget.dart';
 
 class DesktopConversationsPage extends StatefulWidget {
   const DesktopConversationsPage({
@@ -151,8 +156,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
     // If conversation has no app results, update details
     if (detailProvider.conversation.appResults.isEmpty) {
-      await conversationProvider.updateSearchedConvoDetails(
-          detailProvider.conversation.id, date, index);
+      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
       detailProvider.updateConversation(detailProvider.conversation.id, date);
     }
 
@@ -237,17 +241,17 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   if (_isReloading) {
                     return Container(
                       color: ResponsiveHelper.backgroundSecondary.withOpacity(0.85),
-                      child: const Center(
+                      child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
-                              'Reloading conversations...',
-                              style: TextStyle(
+                              context.l10n.reloadingConversations,
+                              style: const TextStyle(
                                 fontSize: 16,
                                 color: ResponsiveHelper.textSecondary,
                               ),
@@ -310,6 +314,39 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                         child: DesktopRecordingWidget(
                                           hasConversations: true,
                                           onStartRecording: _showExpandedRecordingView,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Daily Score + Today Tasks + Goals section
+                                if (hasAnyConversationsInSystem &&
+                                    !isSearchActive &&
+                                    SharedPreferencesUtil().showGoalTrackerEnabled)
+                                  SliverToBoxAdapter(
+                                    child: FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                        height: 260, // Height to fit 3 tasks/goals
+                                        child: const Row(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            // Daily Score Widget
+                                            Expanded(
+                                              child: DesktopDailyScoreWidget(),
+                                            ),
+                                            SizedBox(width: 16),
+                                            // Today Tasks Widget
+                                            Expanded(
+                                              child: DesktopTodayTasksWidget(),
+                                            ),
+                                            SizedBox(width: 16),
+                                            // Goals Widget
+                                            Expanded(
+                                              child: DesktopGoalsWidget(),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -451,7 +488,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome back, ${userName.isNotEmpty ? userName : 'User'}',
+                      context.l10n.welcomeBack(userName.isNotEmpty ? userName : context.l10n.user),
                       style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w600,
@@ -512,7 +549,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               ),
               const SizedBox(width: 8),
               Text(
-                'Starred',
+                context.l10n.starred,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -559,7 +596,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
               ),
               const SizedBox(width: 8),
               Text(
-                hasDateFilter ? DateFormat('MMM d').format(selectedDate) : 'Date',
+                hasDateFilter
+                    ? DateFormat('MMM d', Localizations.localeOf(context).languageCode).format(selectedDate)
+                    : context.l10n.date,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -624,27 +663,27 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   Widget _buildEmptyState(ConversationProvider convoProvider, bool isSearchActive) {
     // Search empty state
     if (isSearchActive) {
-      return const Column(
+      return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.search_off_rounded,
             size: 48,
             color: ResponsiveHelper.textTertiary,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
-            'No results found',
-            style: TextStyle(
+            context.l10n.noResultsFound,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: ResponsiveHelper.textSecondary,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'Try adjusting your search terms',
-            style: TextStyle(
+            context.l10n.tryAdjustingSearchTerms,
+            style: const TextStyle(
               fontSize: 14,
               color: ResponsiveHelper.textTertiary,
             ),
@@ -671,18 +710,18 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'No starred conversations',
-            style: TextStyle(
+          Text(
+            context.l10n.noStarredConversations,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: ResponsiveHelper.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Star conversations to find them quickly here',
-            style: TextStyle(
+          Text(
+            context.l10n.starConversationsToFindQuickly,
+            style: const TextStyle(
               fontSize: 14,
               color: ResponsiveHelper.textTertiary,
             ),
@@ -710,7 +749,8 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
           ),
           const SizedBox(height: 16),
           Text(
-            'No conversations on ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)}',
+            context.l10n.noConversationsOnDate(DateFormat('MMM d, yyyy', Localizations.localeOf(context).languageCode)
+                .format(convoProvider.selectedDate!)),
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -718,9 +758,9 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Try selecting a different date',
-            style: TextStyle(
+          Text(
+            context.l10n.trySelectingDifferentDate,
+            style: const TextStyle(
               fontSize: 14,
               color: ResponsiveHelper.textTertiary,
             ),
@@ -747,7 +787,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
           Padding(
             padding: const EdgeInsets.only(left: 12, bottom: 8),
             child: Text(
-              DateFormat('EEE, MMM d').format(date),
+              DateFormat('EEE, MMM d', Localizations.localeOf(context).languageCode).format(date),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/conversation.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import '../../backend/http/api/conversations.dart';
 
 class TestPromptsPage extends StatefulWidget {
@@ -21,7 +22,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Test Conversation Prompt'),
+        title: Text(context.l10n.testConversationPrompt),
         backgroundColor: Theme.of(context).colorScheme.primary,
         actions: [
           IconButton(
@@ -45,9 +46,9 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               controller: controller,
-              decoration: const InputDecoration(
-                labelText: 'Prompt',
-                labelStyle: TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: context.l10n.prompt,
+                labelStyle: const TextStyle(color: Colors.white),
                 border: OutlineInputBorder(borderSide: BorderSide.none),
                 contentPadding: EdgeInsets.all(0),
               ),
@@ -62,11 +63,11 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
           ),
           result == ''
               ? const SizedBox.shrink()
-              : const Padding(
-                  padding: EdgeInsets.all(16),
+              : Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Text(
-                    'Result',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    context.l10n.result,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
           result == ''

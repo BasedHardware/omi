@@ -1,30 +1,33 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -45,7 +48,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
-  bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
 
@@ -82,7 +84,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
+          final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
+          if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
           }
         });
@@ -225,7 +228,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           final message = provider.messages[chatIndex];
                                           double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
                                           double bottomPadding = chatIndex == 0 ? 16 : 0;
-                                          
+
                                           return Padding(
                                             key: ValueKey(message.id),
                                             padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
@@ -251,11 +254,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                             .read<ConversationProvider>()
                                                             .updateConversation(conversation);
                                                       },
-                                                      setMessageNps: (int value) {
-                                                        provider.setMessageNps(message, value);
+                                                      setMessageNps: (int value, {String? reason}) {
+                                                        provider.setMessageNps(message, value, reason: reason);
                                                       },
                                                     );
-                                                    
+
                                                     // Dynamic spacer logic
                                                     if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
                                                       return Container(
@@ -268,12 +271,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     }
                                                     return child;
                                                   })
-                                                : HumanMessage(message: message, onAskOmi: (text) {
-                                                    setState(() {
-                                                      _selectedContext = text;
-                                                    });
-                                                    textFieldFocusNode.requestFocus();
-                                                  }),
+                                                : HumanMessage(
+                                                    message: message,
+                                                    onAskOmi: (text) {
+                                                      setState(() {
+                                                        _selectedContext = text;
+                                                      });
+                                                      textFieldFocusNode.requestFocus();
+                                                    }),
                                           );
                                         },
                                       ),
@@ -291,338 +296,328 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       topRight: Radius.circular(22),
                     ),
                   ),
-                  child: Consumer<HomeProvider>(builder: (context, home, child) {
+                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(
+                      builder: (context, home, voiceRecorderProvider, child) {
                     bool shouldShowSendButton(MessageProvider p) {
-                      return !p.sendingMessage && !_showVoiceRecorder;
+                      return !p.sendingMessage && !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowVoiceRecorderButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowMenuButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
-                    return Column(
-                      children: [
-                        // Selected images display above the send bar
-                        Consumer<MessageProvider>(builder: (context, provider, child) {
-                          if (provider.selectedFiles.isNotEmpty) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 16, bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              height: 70,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: provider.selectedFiles.length,
-                                itemBuilder: (ctx, idx) {
-                                  return Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    width: 60,
-                                    height: 60,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(16),
-                                      image: provider.selectedFileTypes[idx] == 'image'
-                                          ? DecorationImage(
-                                              image: FileImage(provider.selectedFiles[idx]),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        // File icon for non-images
-                                        if (provider.selectedFileTypes[idx] != 'image')
-                                          const Center(
-                                            child: Icon(
-                                              Icons.insert_drive_file,
-                                              color: Colors.white,
-                                              size: 24,
-                                            ),
+                    return Column(children: [
+                      // Selected images display above the send bar
+                      Consumer<MessageProvider>(builder: (context, provider, child) {
+                        if (provider.selectedFiles.isNotEmpty) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 16, bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            height: 70,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: provider.selectedFiles.length,
+                              itemBuilder: (ctx, idx) {
+                                return Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    borderRadius: BorderRadius.circular(16),
+                                    image: provider.selectedFileTypes[idx] == 'image'
+                                        ? DecorationImage(
+                                            image: FileImage(provider.selectedFiles[idx]),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      // File icon for non-images
+                                      if (provider.selectedFileTypes[idx] != 'image')
+                                        const Center(
+                                          child: Icon(
+                                            Icons.insert_drive_file,
+                                            color: Colors.white,
+                                            size: 24,
                                           ),
-                                        // Loading indicator
-                                        if (provider.isFileUploading(provider.selectedFiles[idx].path))
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.5),
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            child: const Center(
-                                              child: SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                                                ),
-                                              ),
-                                            ),
+                                        ),
+                                      // Loading indicator
+                                      if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.5),
+                                            borderRadius: BorderRadius.circular(16),
                                           ),
-                                        // Close button
-                                        Positioned(
-                                          top: 4,
-                                          right: 4,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              provider.clearSelectedFile(idx);
-                                            },
-                                            child: Container(
+                                          child: const Center(
+                                            child: SizedBox(
                                               width: 16,
                                               height: 16,
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                              child: const Icon(
-                                                FontAwesomeIcons.xmark,
-                                                size: 10,
-                                                color: Colors.black,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          } else {
-                            return const SizedBox.shrink();
-                          }
-                        }),
-                        // Send bar
-                        SafeArea(
-                          bottom: !widget.isPivotBottom,
-                          maintainBottomViewPadding: false,
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              left: 8,
-                              right: 8,
-                              top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                              bottom: widget.isPivotBottom
-                                  ? 20
-                                  : (textFieldFocusNode.hasFocus &&
-                                          (textController.text.length > 40 ||
-                                              textController.text.contains('\n'))
-                                      ? 0
-                                      : 10),
-                            ),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2F),
-                                borderRadius: BorderRadius.circular(32),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  // Plus button
-                                  if (shouldShowMenuButton())
-                                    GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        FocusScope.of(context).unfocus();
-                                        if (provider.selectedFiles.length > 3) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(context.l10n.maxFilesLimit),
-                                              duration: const Duration(seconds: 2),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        _showIOSStyleActionSheet(context);
-                                      },
-                                      child: Container(
-                                        height: 44,
-                                        width: 44,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF3C3C43),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Center(
-                                          child: FaIcon(
-                                            FontAwesomeIcons.plus,
-                                            color: provider.selectedFiles.length > 3
-                                                ? Colors.grey
-                                                : Colors.white,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(width: 12),
-                                  // Text field
-                                  Expanded(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (_selectedContext != null && !_showVoiceRecorder)
-                                          Padding(
-                                            padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF1f1f25),
-                                                borderRadius: BorderRadius.circular(16),
-                                              ),
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 12, vertical: 8),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Padding(
-                                                    padding: EdgeInsets.only(top: 1),
-                                                    child: Icon(Icons.subdirectory_arrow_right,
-                                                        size: 14, color: Colors.blue),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Flexible(
-                                                    child: Text(
-                                                      _selectedContext!.length > 25
-                                                          ? '${_selectedContext!.substring(0, 25)}...'
-                                                          : _selectedContext!,
-                                                      style: const TextStyle(
-                                                        color: Colors.blue,
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  GestureDetector(
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _selectedContext = null;
-                                                      });
-                                                    },
-                                                    child: const Icon(Icons.close,
-                                                        size: 14, color: Colors.blue),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        _showVoiceRecorder
-                                      ? VoiceRecorderWidget(
-                                          onTranscriptReady: (transcript) {
-                                            setState(() {
-                                              textController.text = transcript;
-                                              _showVoiceRecorder = false;
-                                              context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                            });
+                                      // Close button
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            provider.clearSelectedFile(idx);
                                           },
-                                          onClose: () {
-                                            setState(() {
-                                              _showVoiceRecorder = false;
-                                            });
-                                          },
-                                        )
-                                      : Theme(
-                                          data: Theme.of(context).copyWith(
-                                            textSelectionTheme: TextSelectionThemeData(
-                                              selectionColor: Colors.grey.withOpacity(0.4),
-                                              selectionHandleColor: Colors.white,
-                                            ),
-                                          ),
-                                          child: TextField(
-                                            enabled: true,
-                                            controller: textController,
-                                            focusNode: textFieldFocusNode,
-                                            obscureText: false,
-                                            textAlign: TextAlign.start,
-                                            textAlignVertical: TextAlignVertical.center,
-                                            decoration: InputDecoration(
-                                              hintText: context.l10n.askAnything,
-                                              hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
-                                              focusedBorder: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                                              isDense: true,
-                                            ),
-                                            minLines: 1,
-                                            maxLines: 10,
-                                            keyboardType: TextInputType.multiline,
-                                            textCapitalization: TextCapitalization.sentences,
-                                            style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Microphone button
-                                  if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
-                                    GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.lightImpact();
-                                        FocusScope.of(context).unfocus();
-                                        setState(() {
-                                          _showVoiceRecorder = true;
-                                        });
-                                      },
-                                      child: Container(
-                                        height: 44,
-                                        width: 44,
-                                        alignment: Alignment.center,
-                                        child: const FaIcon(
-                                          FontAwesomeIcons.microphone,
-                                          color: Colors.grey,
-                                          size: 20,
-                                        ),
-                                      ),
-                                    ),
-                                  // Send button - only show when there's text
-                                  if (shouldShowSendButton(provider))
-                                    ValueListenableBuilder<TextEditingValue>(
-                                      valueListenable: textController,
-                                      builder: (context, value, child) {
-                                        bool hasText = value.text.trim().isNotEmpty;
-                                        if (!hasText) return const SizedBox.shrink();
-
-                                        bool canSend = hasText &&
-                                            !provider.sendingMessage &&
-                                            !provider.isUploadingFiles &&
-                                            connectivityProvider.isConnected;
-
-                                        return GestureDetector(
-                                          onTap: canSend
-                                              ? () {
-                                                  HapticFeedback.mediumImpact();
-                                                  String message = textController.text.trim();
-                                                  if (message.isEmpty) return;
-                                                  _sendMessageUtil(message);
-                                                }
-                                              : null,
                                           child: Container(
-                                            height: 44,
-                                            width: 44,
-                                            decoration: const BoxDecoration(
+                                            width: 16,
+                                            height: 16,
+                                            decoration: BoxDecoration(
                                               color: Colors.white,
-                                              shape: BoxShape.circle,
+                                              borderRadius: BorderRadius.circular(10),
                                             ),
-                                            child: const Center(
-                                              child: FaIcon(
-                                                FontAwesomeIcons.arrowUp,
-                                                color: Color(0xFF1f1f25),
-                                                size: 18,
-                                              ),
+                                            child: const Icon(
+                                              FontAwesomeIcons.xmark,
+                                              size: 10,
+                                              color: Colors.black,
                                             ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        } else {
+                          return const SizedBox.shrink();
+                        }
+                      }),
+                      // Send bar
+                      SafeArea(
+                        bottom: !widget.isPivotBottom,
+                        maintainBottomViewPadding: false,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            left: 8,
+                            right: 8,
+                            top: provider.selectedFiles.isNotEmpty ? 0 : 8,
+                            bottom: widget.isPivotBottom
+                                ? 20
+                                : (textFieldFocusNode.hasFocus &&
+                                        (textController.text.length > 40 || textController.text.contains('\n'))
+                                    ? 0
+                                    : 10),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2F),
+                              borderRadius: BorderRadius.circular(32),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                // Plus button
+                                if (shouldShowMenuButton())
+                                  GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      FocusScope.of(context).unfocus();
+                                      if (provider.selectedFiles.length > 3) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(context.l10n.maxFilesLimit),
+                                            duration: const Duration(seconds: 2),
                                           ),
                                         );
-                                      },
+                                        return;
+                                      }
+                                      _showIOSStyleActionSheet(context);
+                                    },
+                                    child: Container(
+                                      height: 44,
+                                      width: 44,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF3C3C43),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: FaIcon(
+                                          FontAwesomeIcons.plus,
+                                          color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
                                     ),
-                                ],
-                              ),
+                                  ),
+                                const SizedBox(width: 12),
+                                // Text field
+                                Expanded(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (_selectedContext != null && !voiceRecorderProvider.isActive)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1f1f25),
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Padding(
+                                                  padding: EdgeInsets.only(top: 1),
+                                                  child: Icon(Icons.subdirectory_arrow_right,
+                                                      size: 14, color: Colors.blue),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    _selectedContext!.length > 25
+                                                        ? '${_selectedContext!.substring(0, 25)}...'
+                                                        : _selectedContext!,
+                                                    style: const TextStyle(
+                                                      color: Colors.blue,
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _selectedContext = null;
+                                                    });
+                                                  },
+                                                  child: const Icon(Icons.close, size: 14, color: Colors.blue),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      voiceRecorderProvider.isActive
+                                          ? VoiceRecorderWidget(
+                                              onTranscriptReady: (transcript) {
+                                                textController.text = transcript;
+                                                voiceRecorderProvider.close();
+                                                context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
+                                              },
+                                              onClose: () {
+                                                voiceRecorderProvider.close();
+                                              },
+                                            )
+                                          : Theme(
+                                              data: Theme.of(context).copyWith(
+                                                textSelectionTheme: TextSelectionThemeData(
+                                                  selectionColor: Colors.grey.withOpacity(0.4),
+                                                  selectionHandleColor: Colors.white,
+                                                ),
+                                              ),
+                                              child: TextField(
+                                                enabled: true,
+                                                controller: textController,
+                                                focusNode: textFieldFocusNode,
+                                                obscureText: false,
+                                                textAlign: TextAlign.start,
+                                                textAlignVertical: TextAlignVertical.center,
+                                                decoration: InputDecoration(
+                                                  hintText: context.l10n.askAnything,
+                                                  hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                  focusedBorder: InputBorder.none,
+                                                  enabledBorder: InputBorder.none,
+                                                  contentPadding:
+                                                      const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                                                  isDense: true,
+                                                ),
+                                                minLines: 1,
+                                                maxLines: 10,
+                                                keyboardType: TextInputType.multiline,
+                                                textCapitalization: TextCapitalization.sentences,
+                                                style:
+                                                    const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
+                                              ),
+                                            ),
+                                    ],
+                                  ),
+                                ),
+                                // Microphone button
+                                if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
+                                  GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.lightImpact();
+                                      FocusScope.of(context).unfocus();
+                                      voiceRecorderProvider.startRecording();
+                                    },
+                                    child: Container(
+                                      height: 44,
+                                      width: 44,
+                                      alignment: Alignment.center,
+                                      child: const FaIcon(
+                                        FontAwesomeIcons.microphone,
+                                        color: Colors.grey,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                // Send button - only show when there's text
+                                if (shouldShowSendButton(provider))
+                                  ValueListenableBuilder<TextEditingValue>(
+                                    valueListenable: textController,
+                                    builder: (context, value, child) {
+                                      bool hasText = value.text.trim().isNotEmpty;
+                                      if (!hasText) return const SizedBox.shrink();
+
+                                      bool canSend = hasText &&
+                                          !provider.sendingMessage &&
+                                          !provider.isUploadingFiles &&
+                                          connectivityProvider.isConnected;
+
+                                      return GestureDetector(
+                                        onTap: canSend
+                                            ? () {
+                                                HapticFeedback.mediumImpact();
+                                                String message = textController.text.trim();
+                                                if (message.isEmpty) return;
+                                                _sendMessageUtil(message);
+                                              }
+                                            : null,
+                                        child: Container(
+                                          height: 44,
+                                          width: 44,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Center(
+                                            child: FaIcon(
+                                              FontAwesomeIcons.arrowUp,
+                                              color: Color(0xFF1f1f25),
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                              ],
                             ),
                           ),
-                        )
-                      ]
-                    );
+                        ),
+                      )
+                    ]);
                   }),
                 ),
               ],
@@ -678,11 +673,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     // Wait for the new message to be added to the widget tree
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!scrollController.hasClients) return;
-      
+
       final currentPosition = scrollController.position.pixels;
       final maxExtent = scrollController.position.maxScrollExtent;
       final distance = (maxExtent - currentPosition).abs();
-      
+
       // If user is very far from bottom, just jump instantly
       if (distance > 1000) {
         scrollController.jumpTo(maxExtent);
@@ -690,18 +685,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         _ensureAtBottom(delayMs: 100);
       } else if (distance > 300) {
         // Medium distance - smooth but quick animation
-        scrollController.animateTo(
-          maxExtent,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOut,
-        ).then((_) => _ensureAtBottom(delayMs: 50));
+        scrollController
+            .animateTo(
+              maxExtent,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOut,
+            )
+            .then((_) => _ensureAtBottom(delayMs: 50));
       } else {
         // Already near bottom - gentle animation
-        scrollController.animateTo(
-          maxExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        ).then((_) => _ensureAtBottom(delayMs: 50));
+        scrollController
+            .animateTo(
+              maxExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+            )
+            .then((_) => _ensureAtBottom(delayMs: 50));
       }
     });
   }
@@ -709,10 +708,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   void _ensureAtBottom({int delayMs = 50}) {
     Future.delayed(Duration(milliseconds: delayMs), () {
       if (!scrollController.hasClients) return;
-      
+
       final current = scrollController.position.pixels;
       final max = scrollController.position.maxScrollExtent;
-      
+
       // Only adjust if we're noticeably not at bottom (more than 20 pixels off)
       if (max - current > 20) {
         scrollController.animateTo(
@@ -784,7 +783,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             context.read<MessageProvider>().clearChat();
             Navigator.of(context).pop();
           }
-        }, "Clear Chat?", context.l10n.clearChatConfirm);
+        }, context.l10n.clearChatQuestion, context.l10n.clearChatConfirm);
       },
     );
   }
@@ -797,7 +796,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     await routeToPage(
       context,
       CapabilityAppsPage(
-        capability: AppCapability(id: 'chat', title: 'Chat Assistants'),
+        capability: AppCapability(id: 'chat', title: context.l10n.chatAssistantsTitle),
         apps: const [],
       ),
     );
@@ -928,10 +927,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 width: double.infinity,
                 height: 32,
                 color: Colors.green,
-                child: const Center(
+                child: Center(
                   child: Text(
-                    'Syncing messages with server...',
-                    style: TextStyle(color: Colors.white, fontSize: 12),
+                    context.l10n.syncingMessages,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
               ),
@@ -954,7 +953,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         Container(
           constraints: const BoxConstraints(maxWidth: 140),
           child: Text(
-            selectedApp != null ? selectedApp.getName() : "Omi",
+            selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
             style: const TextStyle(color: Colors.white, fontSize: 16),
             overflow: TextOverflow.ellipsis,
           ),
@@ -988,9 +987,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Chat Apps',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.chatAppsTitle,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.w600,
@@ -1013,9 +1012,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     padding: EdgeInsets.only(left: 2, top: 1),
                     child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
                   ),
-                  title: const Text(
-                    'Clear Chat',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                  title: Text(
+                    context.l10n.clearChat,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 16),
                   ),
                   onTap: () {
                     Navigator.of(context).pop();
@@ -1027,9 +1026,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     padding: EdgeInsets.only(left: 2, top: 1),
                     child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
                   ),
-                  title: const Text(
-                    'Enable Apps',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  title: Text(
+                    context.l10n.enableApps,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   trailing: const Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
@@ -1041,11 +1040,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   },
                 ),
                 const Divider(color: Colors.white12, height: 1),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 20, 8),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
                   child: Text(
-                    'Select App',
-                    style: TextStyle(
+                    context.l10n.selectApp,
+                    style: const TextStyle(
                       color: Colors.white60,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
@@ -1060,7 +1059,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       // Omi option
                       _buildDrawerAppItem(
                         avatar: _getOmiAvatar(),
-                        name: 'Omi',
+                        name: context.l10n.omiAppName,
                         isSelected: isOmiSelected,
                         onTap: () {
                           Navigator.of(context).pop();
@@ -1082,11 +1081,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 : null,
                           )),
                       if (chatApps.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(20),
+                        Padding(
+                          padding: const EdgeInsets.all(20),
                           child: Text(
-                            'No chat apps enabled.\nTap "Enable Apps" to add some.',
-                            style: TextStyle(color: Colors.white38, fontSize: 14),
+                            context.l10n.noChatAppsEnabled,
+                            style: const TextStyle(color: Colors.white38, fontSize: 14),
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -1141,9 +1140,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.cancel,
+                  style: const TextStyle(
                     color: Colors.black,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -1166,9 +1165,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   color: Colors.redAccent,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Disable',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.disable,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -1284,38 +1283,38 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 child: Column(
                   children: [
                     _buildIOSActionItem(
-                      title: "Take Photo",
+                      title: context.l10n.takePhoto,
                       icon: Icons.camera_alt,
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
                         if (mounted) {
-                          context.read<MessageProvider>().captureImage();
+                          this.context.read<MessageProvider>().captureImage();
                         }
                       },
                       isFirst: true,
                     ),
                     _buildDivider(),
                     _buildIOSActionItem(
-                      title: "Photo Library",
+                      title: context.l10n.photoLibrary,
                       icon: Icons.photo_library,
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
                         if (mounted) {
-                          context.read<MessageProvider>().selectImage();
+                          this.context.read<MessageProvider>().selectImage();
                         }
                       },
                     ),
                     _buildDivider(),
                     _buildIOSActionItem(
-                      title: "Choose File",
+                      title: context.l10n.chooseFile,
                       icon: Icons.folder,
                       onTap: () {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context);
                         if (mounted) {
-                          context.read<MessageProvider>().selectFile();
+                          this.context.read<MessageProvider>().selectFile();
                         }
                       },
                       isLast: true,

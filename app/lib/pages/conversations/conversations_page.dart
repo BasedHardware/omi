@@ -1,27 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
-import 'package:omi/pages/conversations/widgets/search_widget.dart';
-import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/wrapped_banner.dart';
-import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/developer_mode_provider.dart';
-import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/services/app_review_service.dart';
-import 'package:omi/utils/ui_guidelines.dart';
+
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/empty_conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/daily_score_widget.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
+import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
+import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'widgets/conversations_group_widget.dart';
-import 'widgets/goal_tracker_widget.dart';
+import 'widgets/empty_conversations.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -34,6 +38,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   TextEditingController textController = TextEditingController();
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+
+  void _refreshGoals() {
+    _goalsWidgetKey.currentState?.refresh();
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -153,13 +162,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('building conversations page');
+    Logger.debug('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
       return RefreshIndicator(
         onRefresh: () async {
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          // Refresh goals widget
+          _refreshGoals();
           await Future.wait([
             convoProvider.getInitialConversations(),
             Provider.of<FolderProvider>(context, listen: false).loadFolders(),
@@ -171,15 +182,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Wrapped 2025 Banner
-            const SliverToBoxAdapter(child: WrappedBanner()),
-            // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
+            // Header widgets (unchanged)
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+
+            // Search bar
             Consumer2<HomeProvider, ConversationProvider>(
               builder: (context, homeProvider, convoProvider, _) {
-                // Show search bar if explicitly shown OR if there's an active search query
                 bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                 if (!shouldShowSearchBar) {
                   return const SliverToBoxAdapter(child: SizedBox.shrink());
@@ -187,9 +197,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 return const SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      SizedBox(height: 12), // above search widget
+                      SizedBox(height: 12),
                       SearchWidget(),
-                      SizedBox(height: 12), //below search widget
+                      SizedBox(height: 12),
                     ],
                   ),
                 );
@@ -197,14 +207,41 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            // Goal tracker widget - before folders
-            Selector<DeveloperModeProvider, bool>(
-              selector: (context, provider) => provider.showGoalTrackerEnabled,
-              builder: (context, showGoalTrackerEnabled, child) {
-                if (!showGoalTrackerEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
-                return const SliverToBoxAdapter(child: GoalTrackerWidget());
-              },
+
+            // Daily Score, Today's Tasks, and Goals Widgets
+            if (SharedPreferencesUtil().showGoalTrackerEnabled) ...[
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: DailyScoreWidget(),
+                ),
+              ),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 8, bottom: 8),
+                  child: TodayTasksWidget(),
+                ),
+              ),
+              SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
+            ],
+
+            // Conversations section header
+            SliverToBoxAdapter(
+              child: Builder(
+                builder: (context) => Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+                  child: Text(
+                    context.l10n.conversations,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
             ),
+
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
@@ -249,7 +286,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
                     if (index == convoProvider.groupedConversations.length) {
-                      debugPrint('loading more conversations');
+                      Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
                       }

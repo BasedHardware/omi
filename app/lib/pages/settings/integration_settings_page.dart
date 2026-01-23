@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
 
 class IntegrationSettingsPage extends StatefulWidget {
   final String appName;
@@ -85,9 +88,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
         final fallback = candidates.isNotEmpty ? candidates.first : null;
         if (fallback != null) {
           await provider.setSelectedApp(fallback);
-          debugPrint('Task integration disabled: ${widget.appName} - switched to ${fallback.key}');
+          Logger.debug('Task integration disabled: ${widget.appName} - switched to ${fallback.key}');
         } else {
-          debugPrint('Task integration disabled: ${widget.appName} - no active integration selected');
+          Logger.debug('Task integration disabled: ${widget.appName} - no active integration selected');
         }
       }
       provider.refresh();
@@ -126,7 +129,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.white),
               onPressed: widget.onRefresh,
-              tooltip: 'Refresh',
+              tooltip: context.l10n.refresh,
             ),
         ],
       ),
@@ -150,7 +153,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Connected to ${widget.appName}',
+                        context.l10n.connectedToApp(widget.appName),
                         style: const TextStyle(
                           color: Colors.green,
                           fontSize: 14,

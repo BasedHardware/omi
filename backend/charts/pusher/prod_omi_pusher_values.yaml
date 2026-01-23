@@ -282,10 +282,10 @@ resources:
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
     cpu: 0.7
-    memory: 2Gi
+    memory: 4.5Gi
   limits:
-    cpu: 1
-    memory: 3.5Gi
+    cpu: 0.7
+    memory: 4.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:

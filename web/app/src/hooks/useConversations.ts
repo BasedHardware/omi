@@ -73,6 +73,7 @@ export function useConversations(
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(cachedEntry?.offset || 0);
   const [hasMore, setHasMore] = useState(cachedEntry?.hasMore ?? true);
+  const [hasProcessing, setHasProcessing] = useState(false);
 
   // Track previous params to detect changes
   const prevStartDate = useRef(params.startDate?.getTime());
@@ -211,6 +212,34 @@ export function useConversations(
     });
     return unsubscribe;
   }, [fetchConversations]);
+
+  // Track if any conversations are processing
+  useEffect(() => {
+    const processing = conversations.some(c => c.status === 'processing');
+    setHasProcessing(processing);
+  }, [conversations]);
+
+  // Poll for updates while conversations are processing with exponential backoff
+  useEffect(() => {
+    if (!hasProcessing) return;
+
+    let pollCount = 0;
+    let timeoutId: NodeJS.Timeout;
+
+    const poll = () => {
+      fetchConversations(0, false, true); // Background refresh, skip cache
+      pollCount++;
+
+      // Exponential backoff: 5s, 10s, 20s, 30s (max)
+      const nextInterval = Math.min(5000 * Math.pow(2, Math.floor(pollCount / 3)), 30000);
+      timeoutId = setTimeout(poll, nextInterval);
+    };
+
+    // Start polling after initial 5s delay
+    timeoutId = setTimeout(poll, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [hasProcessing, fetchConversations]);
 
   // Load more conversations
   const loadMore = useCallback(async () => {

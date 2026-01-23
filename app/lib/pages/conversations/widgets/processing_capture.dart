@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -13,10 +18,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -95,7 +99,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       } else if (provider.isPaused) {
         await provider.resumeSystemAudioRecording();
       } else if (recordingState == RecordingState.initialising) {
-        debugPrint('initialising, have to wait');
+        Logger.debug('initialising, have to wait');
       } else {
         await provider.streamSystemAudioRecording();
       }
@@ -125,7 +129,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         await provider.streamRecording();
         MixpanelManager().phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
-        debugPrint('initialising, have to wait');
+        Logger.debug('initialising, have to wait');
       } else {
         setState(() {
           _isPhoneMicPaused = false;
@@ -195,7 +199,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              'Waiting for device...',
+              context.l10n.waitingForDevice,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -215,7 +219,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Text(
-              (isHavingTranscript || isHavingPhotos) ? 'In progress...' : 'Say something...',
+              (isHavingTranscript || isHavingPhotos) ? context.l10n.inProgress : context.l10n.saySomething,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
               maxLines: 1,
             ),
@@ -230,7 +234,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // Always check pause state first with highest priority (both desktop and phone)
     if (captureProvider.isPaused || _isPhoneMicPaused) {
-      stateText = "Paused";
+      stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
@@ -238,7 +242,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
       if (lastEvent is MessageServiceStatusEvent) {
         if (lastEvent.status == "ready") {
-          stateText = "Listening";
+          stateText = context.l10n.listening;
           statusIndicator = const RecordingStatusIndicator();
         } else {
           bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
@@ -305,148 +309,125 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          // Top row with status tag and controls
-          Padding(
-            padding: const EdgeInsets.only(left: 8, right: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left: Status tag + Star indicator
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
-                            style: const TextStyle(
-                              color: Color(0xFFC9CBCF),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ),
+      return Padding(
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        child: Row(
+          children: [
+            // Left: Status tag
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF35343B),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isPaused ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused) : context.l10n.listening,
+                    style: const TextStyle(
+                      color: Color(0xFFC9CBCF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    // Star indicator when conversation is marked for starring
-                    if (provider.isConversationMarkedForStarring) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FaIcon(
-                              FontAwesomeIcons.solidStar,
-                              size: 12,
-                              color: Colors.amber,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Starred',
-                              style: TextStyle(
-                                color: Colors.amber,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                // Right: Control buttons for both device and phone recording
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Pause/Resume button
-                    GestureDetector(
-                      onTap: () async {
-                        if (!isPaused) {
-                          // Muting: double impact for a satisfying "click-click" feel
-                          HapticFeedback.heavyImpact();
-                          await Future.delayed(const Duration(milliseconds: 80));
-                          HapticFeedback.lightImpact();
-                          // User is pausing/muting
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: true,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        } else {
-                          // Unmuting: standard haptic feedback
-                          HapticFeedback.mediumImpact();
-                          // User is resuming
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: false,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        }
-                        _toggleRecording(context, provider);
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isPaused
-                              ? isDeviceRecording
-                                  ? const Color(0xFFFE5D50)
-                                  : const Color(0xFF7C3AED)
-                              : isDeviceRecording
-                                  ? const Color(0xFF35343B)
-                                  : const Color(0xFFFF9500),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: FaIcon(
-                            isPaused
-                                ? isDeviceRecording
-                                    ? FontAwesomeIcons.microphoneSlash
-                                    : FontAwesomeIcons.play
-                                : isDeviceRecording
-                                    ? FontAwesomeIcons.microphone
-                                    : FontAwesomeIcons.pause,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          if (provider.photos.isNotEmpty || provider.segments.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const LiteCaptureWidget(),
+            // Star indicator when conversation is marked for starring
+            if (provider.isConversationMarkedForStarring) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const FaIcon(
+                      FontAwesomeIcons.solidStar,
+                      size: 12,
+                      color: Colors.amber,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      context.l10n.starred,
+                      style: const TextStyle(
+                        color: Colors.amber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Middle: Transcript text (takes remaining space)
+            if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+              const Expanded(child: LiteCaptureWidget())
+            else
+              const Spacer(),
+            // Right: Pause/Resume button
+            GestureDetector(
+              onTap: () async {
+                if (!isPaused) {
+                  HapticFeedback.heavyImpact();
+                  await Future.delayed(const Duration(milliseconds: 80));
+                  HapticFeedback.lightImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: true,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                } else {
+                  HapticFeedback.mediumImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: false,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                }
+                _toggleRecording(context, provider);
+              },
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: isPaused
+                      ? isDeviceRecording
+                          ? const Color(0xFFFE5D50)
+                          : const Color(0xFF7C3AED)
+                      : isDeviceRecording
+                          ? const Color(0xFF35343B)
+                          : const Color(0xFFFF9500),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: FaIcon(
+                    isPaused
+                        ? isDeviceRecording
+                            ? FontAwesomeIcons.microphoneSlash
+                            : FontAwesomeIcons.play
+                        : isDeviceRecording
+                            ? FontAwesomeIcons.microphone
+                            : FontAwesomeIcons.pause,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+              ),
+            ),
           ],
-        ],
+        ),
       );
     } else {
       // For non-recording states, show the original header-based UI
@@ -560,7 +541,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
 
   if (isDesktop) {
     if (isLoading) {
-      text = 'Initialising System Audio';
+      text = context.l10n.initialisingSystemAudio;
       icon = const SizedBox(
         height: 8,
         width: 8,
@@ -570,16 +551,16 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.systemAudioRecord) {
-      text = 'Stop Recording';
+      text = context.l10n.stopRecording;
       icon = const Icon(Icons.stop, color: Colors.red, size: 12);
     } else {
-      text = 'Continue Recording';
+      text = context.l10n.continueRecording;
       icon = const Icon(Icons.mic, size: 18);
     }
   } else {
     // Phone Mic
     if (isLoading) {
-      text = 'Initialising Recorder';
+      text = context.l10n.initialisingRecorder;
       icon = const SizedBox(
         height: 8,
         width: 8,
@@ -589,7 +570,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (currentActualState == RecordingState.record) {
-      text = 'Pause Recording';
+      text = context.l10n.pauseRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
@@ -603,7 +584,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else if (isPhoneMicPaused) {
-      text = 'Resume Recording';
+      text = context.l10n.resumeRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
@@ -617,7 +598,7 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         ),
       );
     } else {
-      text = 'Continue Recording';
+      text = context.l10n.continueRecording;
       icon = const Icon(Icons.mic, size: 18);
     }
   }
@@ -642,18 +623,13 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
 }
 
 Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // FIXME, this has to be a single one always, and also a conversation obj
+  // Only show at most 1 processing widget on homepage
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  return SliverList(
-    delegate: SliverChildBuilderDelegate(
-      (context, index) {
-        var pm = conversations[index];
-        return ProcessingConversationWidget(conversation: pm);
-      },
-      childCount: conversations.length,
-    ),
+  // Show only the first (most recent) processing conversation
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(conversation: conversations.first),
   );
 }
 
@@ -724,9 +700,9 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       child: Shimmer.fromColors(
                         baseColor: Colors.white,
                         highlightColor: Colors.grey,
-                        child: const Text(
-                          'Processing',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.processing,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,

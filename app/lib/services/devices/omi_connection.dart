@@ -3,12 +3,16 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+
+import 'package:version/version.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:version/version.dart';
+import 'package:omi/utils/logger.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
   static const String settingsServiceUuid = '19b10010-e8f2-537e-4f6c-d104768a1214';
@@ -33,7 +37,7 @@ class OmiDeviceConnection extends DeviceConnection {
       if (data.isNotEmpty) return data[0];
       return -1;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error reading battery level: $e');
+      Logger.debug('OmiDeviceConnection: Error reading battery level: $e');
       return -1;
     }
   }
@@ -47,25 +51,25 @@ class OmiDeviceConnection extends DeviceConnection {
 
       final subscription = stream.listen((value) {
         if (value.isNotEmpty && onBatteryLevelChange != null) {
-          debugPrint('Battery level changed: ${value[0]}');
+          Logger.debug('Battery level changed: ${value[0]}');
           onBatteryLevelChange(value[0]);
         }
       });
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up battery listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up battery listener: $e');
       return null;
     }
   }
 
   @override
   Future<List<int>> performGetButtonState() async {
-    debugPrint('perform button state called');
+    Logger.debug('perform button state called');
     try {
       return await transport.readCharacteristic(buttonServiceUuid, buttonTriggerCharacteristicUuid);
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error reading button state: $e');
+      Logger.debug('OmiDeviceConnection: Error reading button state: $e');
       return <int>[];
     }
   }
@@ -77,15 +81,15 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
 
-      debugPrint('Subscribed to button stream from Omi Device');
+      Logger.debug('Subscribed to button stream from Omi Device');
       final subscription = stream.listen((value) {
-        debugPrint("new button value $value");
+        Logger.debug("new button value $value");
         if (value.isNotEmpty) onButtonReceived(value);
       });
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up button listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up button listener: $e');
       return null;
     }
   }
@@ -97,14 +101,14 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(omiServiceUuid, audioDataStreamCharacteristicUuid);
 
-      debugPrint('Subscribed to audioBytes stream from Omi Device');
+      Logger.debug('Subscribed to audioBytes stream from Omi Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
       });
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up audio listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up audio listener: $e');
       return null;
     }
   }
@@ -127,11 +131,11 @@ class OmiDeviceConnection extends DeviceConnection {
         case 21:
           return BleAudioCodec.opusFS320;
         default:
-          debugPrint('OmiDeviceConnection: Unknown codec id: $codecId');
+          Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
           return BleAudioCodec.pcm8;
       }
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error reading audio codec: $e');
+      Logger.debug('OmiDeviceConnection: Error reading audio codec: $e');
       return BleAudioCodec.pcm8;
     }
   }
@@ -139,16 +143,16 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
-      debugPrint('storage list called');
+      Logger.debug('storage list called');
       return await performGetStorageList();
     }
-    debugPrint('storage list error');
+    Logger.debug('storage list error');
     return Future.value(<int>[]);
   }
 
   @override
   Future<List<int>> performGetStorageList() async {
-    debugPrint('perform storage list called');
+    Logger.debug('perform storage list called');
     try {
       final storageValue =
           await transport.readCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
@@ -156,7 +160,7 @@ class OmiDeviceConnection extends DeviceConnection {
       List<int> storageLengths = [];
       if (storageValue.isNotEmpty) {
         int totalEntries = (storageValue.length / 4).toInt();
-        debugPrint('Storage list: $totalEntries items');
+        Logger.debug('Storage list: $totalEntries items');
 
         for (int i = 0; i < totalEntries; i++) {
           int baseIndex = i * 4;
@@ -169,10 +173,10 @@ class OmiDeviceConnection extends DeviceConnection {
           storageLengths.add(result);
         }
       }
-      debugPrint('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
+      Logger.debug('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
       return storageLengths;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error reading storage list: $e');
+      Logger.debug('OmiDeviceConnection: Error reading storage list: $e');
       return <int>[];
     }
   }
@@ -191,7 +195,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up storage listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up storage listener: $e');
       return null;
     }
   }
@@ -203,12 +207,12 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<bool> performPlayToSpeakerHaptic(int level) async {
     try {
-      debugPrint('About to play to speaker haptic');
+      Logger.debug('About to play to speaker haptic');
       await transport
           .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [level & 0xFF]);
       return true;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error playing haptic: $e');
+      Logger.debug('OmiDeviceConnection: Error playing haptic: $e');
       return false;
     }
   }
@@ -216,10 +220,10 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<bool> performWriteToStorage(int numFile, int command, int offset) async {
     try {
-      debugPrint('About to write to storage bytes');
-      debugPrint('about to send $numFile');
-      debugPrint('about to send $command');
-      debugPrint('about to send offset$offset');
+      Logger.debug('About to write to storage bytes');
+      Logger.debug('about to send $numFile');
+      Logger.debug('about to send $command');
+      Logger.debug('about to send offset$offset');
 
       var offsetBytes = [
         (offset >> 24) & 0xFF,
@@ -232,7 +236,7 @@ class OmiDeviceConnection extends DeviceConnection {
           [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
       return true;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error writing to storage: $e');
+      Logger.debug('OmiDeviceConnection: Error writing to storage: $e');
       return false;
     }
   }
@@ -244,7 +248,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(omiServiceUuid, imageCaptureControlCharacteristicUuid, [0x05]);
       print('cameraStartPhotoController');
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error starting photo capture: $e');
+      Logger.debug('OmiDeviceConnection: Error starting photo capture: $e');
     }
   }
 
@@ -254,7 +258,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(omiServiceUuid, imageCaptureControlCharacteristicUuid, [0x00]);
       print('cameraStopPhotoController');
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error stopping photo capture: $e');
+      Logger.debug('OmiDeviceConnection: Error stopping photo capture: $e');
     }
   }
 
@@ -264,7 +268,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(omiServiceUuid, imageCaptureControlCharacteristicUuid, [-1]);
       print('cameraTakePhoto');
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error taking photo: $e');
+      Logger.debug('OmiDeviceConnection: Error taking photo: $e');
     }
   }
 
@@ -275,7 +279,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
       return true;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Photo streaming characteristic not available: $e');
+      Logger.debug('OmiDeviceConnection: Photo streaming characteristic not available: $e');
       return false;
     }
   }
@@ -286,14 +290,14 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(omiServiceUuid, imageDataStreamCharacteristicUuid);
 
-      debugPrint('Subscribed to imageBytes stream from Omi Device');
+      Logger.debug('Subscribed to imageBytes stream from Omi Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onImageBytesReceived(value);
       });
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up image listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up image listener: $e');
       return null;
     }
   }
@@ -332,14 +336,14 @@ class OmiDeviceConnection extends DeviceConnection {
           if (isTransferring) {
             final imageBytes = buffer.toBytes();
             if (imageBytes.isNotEmpty) {
-              debugPrint('Completed image bytes length: ${imageBytes.length}');
+              Logger.debug('Completed image bytes length: ${imageBytes.length}');
               try {
                 onImageReceived(OrientedImage(
                   imageBytes: imageBytes,
                   orientation: currentOrientation ?? ImageOrientation.orientation0,
                 ));
               } catch (e) {
-                debugPrint('Error processing image: $e');
+                Logger.debug('Error processing image: $e');
               }
             }
           }
@@ -361,7 +365,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
         // If we are not in a transfer state, ignore the packet unless it's frame 0.
         if (!isTransferring) {
-          debugPrint("Ignoring packet with frame $frameIndex, waiting for frame 0 to start transfer.");
+          Logger.debug("Ignoring packet with frame $frameIndex, waiting for frame 0 to start transfer.");
           return;
         }
 
@@ -395,7 +399,7 @@ class OmiDeviceConnection extends DeviceConnection {
         } else {
           // Out of order frame. The image is now corrupt.
           // We should discard everything and wait for the next frame 0.
-          debugPrint('Frame out of order. Expected $nextExpectedFrame, got $frameIndex. Discarding image.');
+          Logger.debug('Frame out of order. Expected $nextExpectedFrame, got $frameIndex. Discarding image.');
           buffer.clear();
           isTransferring = false;
           nextExpectedFrame = 0;
@@ -404,7 +408,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
         // Safety break for oversized buffer
         if (buffer.length > 200 * 1024) {
-          debugPrint("Buffer size exceeded 200KB without a complete image. Resetting.");
+          Logger.debug("Buffer size exceeded 200KB without a complete image. Resetting.");
           buffer.clear();
           isTransferring = false;
           nextExpectedFrame = 0;
@@ -413,7 +417,7 @@ class OmiDeviceConnection extends DeviceConnection {
       },
     );
     bleBytesStream?.onDone(() {
-      debugPrint('Image listener done');
+      Logger.debug('Image listener done');
       cameraStopPhotoController();
     });
     return bleBytesStream;
@@ -451,14 +455,14 @@ class OmiDeviceConnection extends DeviceConnection {
               double axisValue = result + (temp / 1000000);
               accelerometerData.add(axisValue);
             }
-            debugPrint('Accelerometer x direction: ${accelerometerData[0]}');
-            debugPrint('Gyroscope x direction: ${accelerometerData[3]}\n');
+            Logger.debug('Accelerometer x direction: ${accelerometerData[0]}');
+            Logger.debug('Gyroscope x direction: ${accelerometerData[3]}\n');
 
-            debugPrint('Accelerometer y direction: ${accelerometerData[1]}');
-            debugPrint('Gyroscope y direction: ${accelerometerData[4]}\n');
+            Logger.debug('Accelerometer y direction: ${accelerometerData[1]}');
+            Logger.debug('Gyroscope y direction: ${accelerometerData[4]}\n');
 
-            debugPrint('Accelerometer z direction: ${accelerometerData[2]}');
-            debugPrint('Gyroscope z direction: ${accelerometerData[5]}\n');
+            Logger.debug('Accelerometer z direction: ${accelerometerData[2]}');
+            Logger.debug('Gyroscope z direction: ${accelerometerData[5]}\n');
             //simple threshold fall calcaultor
             var fall_number =
                 sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
@@ -471,7 +475,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up accelerometer listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up accelerometer listener: $e');
       return null;
     }
   }
@@ -482,7 +486,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport
           .writeCharacteristic(settingsServiceUuid, settingsDimRatioCharacteristicUuid, [ratio.clamp(0, 100)]);
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting LED dim ratio: $e');
+      Logger.debug('OmiDeviceConnection: Error setting LED dim ratio: $e');
     }
   }
 
@@ -495,7 +499,7 @@ class OmiDeviceConnection extends DeviceConnection {
       }
       return null;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error getting LED dim ratio: $e');
+      Logger.debug('OmiDeviceConnection: Error getting LED dim ratio: $e');
       return null;
     }
   }
@@ -509,7 +513,7 @@ class OmiDeviceConnection extends DeviceConnection {
       }
       return 0;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error getting features: $e');
+      Logger.debug('OmiDeviceConnection: Error getting features: $e');
       return 0;
     }
   }
@@ -519,7 +523,7 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       await transport.writeCharacteristic(settingsServiceUuid, settingsMicGainCharacteristicUuid, [gain.clamp(0, 100)]);
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting mic gain: $e');
+      Logger.debug('OmiDeviceConnection: Error setting mic gain: $e');
     }
   }
 
@@ -532,7 +536,7 @@ class OmiDeviceConnection extends DeviceConnection {
       }
       return null;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error getting mic gain: $e');
+      Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
       return null;
     }
   }
@@ -550,7 +554,7 @@ class OmiDeviceConnection extends DeviceConnection {
           deviceInfo['modelNumber'] = String.fromCharCodes(modelValue);
         }
       } catch (e) {
-        debugPrint('OmiDeviceConnection: Error reading model number: $e');
+        Logger.debug('OmiDeviceConnection: Error reading model number: $e');
       }
 
       // Read firmware revision
@@ -561,7 +565,7 @@ class OmiDeviceConnection extends DeviceConnection {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
       } catch (e) {
-        debugPrint('OmiDeviceConnection: Error reading firmware revision: $e');
+        Logger.debug('OmiDeviceConnection: Error reading firmware revision: $e');
       }
 
       // Read hardware revision
@@ -572,7 +576,7 @@ class OmiDeviceConnection extends DeviceConnection {
           deviceInfo['hardwareRevision'] = String.fromCharCodes(hardwareValue);
         }
       } catch (e) {
-        debugPrint('OmiDeviceConnection: Error reading hardware revision: $e');
+        Logger.debug('OmiDeviceConnection: Error reading hardware revision: $e');
       }
 
       // Read manufacturer name
@@ -583,7 +587,7 @@ class OmiDeviceConnection extends DeviceConnection {
           deviceInfo['manufacturerName'] = String.fromCharCodes(manufacturerValue);
         }
       } catch (e) {
-        debugPrint('OmiDeviceConnection: Error reading manufacturer name: $e');
+        Logger.debug('OmiDeviceConnection: Error reading manufacturer name: $e');
       }
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)
@@ -596,7 +600,7 @@ class OmiDeviceConnection extends DeviceConnection {
         deviceInfo['hasImageStream'] = 'false';
       }
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error getting device info: $e');
+      Logger.debug('OmiDeviceConnection: Error getting device info: $e');
     }
 
     // Set defaults if values are empty
@@ -616,9 +620,26 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
     try {
-      // Format: [0x01][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port_high][port_low]
+      // Validate SSID length (1-32 characters)
+      if (ssid.isEmpty || ssid.length > 32) {
+        debugPrint('OmiDeviceConnection: Invalid SSID length: ${ssid.length}');
+        return WifiSyncSetupResult.failure(
+          WifiSyncErrorCode.ssidLengthInvalid,
+          customMessage: 'SSID must be 1-32 characters',
+        );
+      }
+
+      // Validate password length (8-63 characters for WPA2)
+      if (password.isEmpty || password.length < 8 || password.length > 63) {
+        debugPrint('OmiDeviceConnection: Invalid password length: ${password.length}');
+        return WifiSyncSetupResult.failure(
+          WifiSyncErrorCode.passwordLengthInvalid,
+          customMessage: 'Password must be 8-63 characters',
+        );
+      }
+
       final List<int> command = [];
 
       command.add(0x01);
@@ -633,21 +654,43 @@ class OmiDeviceConnection extends DeviceConnection {
       command.add(passwordBytes.length);
       command.addAll(passwordBytes);
 
-      // Server IP
-      final ipBytes = serverIp.codeUnits;
-      command.add(ipBytes.length);
-      command.addAll(ipBytes);
+      // Set up listener for the response before sending the command
+      final completer = Completer<WifiSyncSetupResult>();
+      StreamSubscription? responseSubscription;
 
-      // Port (big endian - high byte first)
-      command.add((port >> 8) & 0xFF);
-      command.add(port & 0xFF);
+      try {
+        final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageWifiCharacteristicUuid);
 
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
+        responseSubscription = stream.listen((value) {
+          if (value.isNotEmpty && !completer.isCompleted) {
+            final responseCode = value[0];
+            final errorCode = WifiSyncErrorCode.fromCode(responseCode);
+            if (errorCode.isSuccess) {
+              completer.complete(WifiSyncSetupResult.success());
+            } else {
+              completer.complete(WifiSyncSetupResult.failure(errorCode));
+            }
+          }
+        });
 
-      return true;
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Send the setup command
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
+
+        // Wait for response with timeout
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => WifiSyncSetupResult.timeout(),
+        );
+
+        return result;
+      } finally {
+        await responseSubscription?.cancel();
+      }
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up WiFi sync: $e');
-      return false;
+      Logger.debug('OmiDeviceConnection: Error setting up WiFi sync: $e');
+      return WifiSyncSetupResult.connectionFailed();
     }
   }
 
@@ -658,7 +701,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x02]);
       return true;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error starting WiFi sync: $e');
+      Logger.debug('OmiDeviceConnection: Error starting WiFi sync: $e');
       return false;
     }
   }
@@ -670,7 +713,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x03]);
       return true;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error stopping WiFi sync: $e');
+      Logger.debug('OmiDeviceConnection: Error stopping WiFi sync: $e');
       return false;
     }
   }
@@ -691,7 +734,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('OmiDeviceConnection: Error setting up WiFi status listener: $e');
+      Logger.debug('OmiDeviceConnection: Error setting up WiFi status listener: $e');
       return null;
     }
   }

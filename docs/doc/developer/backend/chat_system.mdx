@@ -177,8 +177,7 @@ Tools are loaded dynamically based on user's enabled integrations and installed 
     | Tool | Purpose | Key Parameters |
     |------|---------|----------------|
     | `get_conversations_tool` | Retrieve by date range | `start_date`, `end_date`, `limit`, `include_transcript` |
-    | `vector_search_conversations_tool` | Semantic search | `query`, `start_date`, `end_date`, `limit` |
-    | `search_conversations_tool` | Full-text keyword search | `query`, `limit`, `offset` |
+    | `search_conversations_tool` | Semantic search | `query`, `start_date`, `end_date`, `limit` |
     | `get_memories_tool` | Personal facts about user | `limit`, `offset` |
   </Accordion>
 
@@ -216,7 +215,7 @@ Tools are loaded dynamically based on user's enabled integrations and installed 
     | `get_twitter_tweets_tool` | Twitter/X | Recent tweets |
     | `get_github_pull_requests_tool` | GitHub | Open PRs |
     | `get_github_issues_tool` | GitHub | Open issues |
-    | `perplexity_search_tool` | Perplexity | Web search |
+    | `perplexity_web_search_tool` | Perplexity | Web search |
   </Accordion>
 
   <Accordion title="Dynamic App Tools" icon="puzzle-piece">
@@ -255,7 +254,7 @@ sequenceDiagram
     participant Pine as 🌲 Pinecone
     participant Fire as 🔥 Firestore
 
-    Agent->>Tool: vector_search_conversations_tool(query, dates)
+    Agent->>Tool: search_conversations_tool(query, dates)
     Tool->>Embed: embed_query("John project discussion")
     Embed-->>Tool: [0.012, -0.034, 0.056, ...] (3,072 dims)
     Tool->>Pine: query(vector, uid filter, date range)
@@ -489,7 +488,7 @@ The Flutter app parses these to show:
 
     Agent thinks: *"Need conversations from yesterday about project with John"*
 
-    Agent calls: `vector_search_conversations_tool`
+    Agent calls: `search_conversations_tool`
     - `query`: "John project discussion"
     - `start_date`: "2024-01-19T00:00:00-08:00"
     - `end_date`: "2024-01-19T23:59:59-08:00"

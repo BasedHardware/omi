@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'widgets/action_item_form_sheet.dart';
 
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'widgets/action_item_form_sheet.dart';
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
@@ -34,10 +37,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   bool get wantKeepAlive => true;
 
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadCategoryOrder();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -46,6 +60,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.fetchActionItems(showShimmer: true);
       }
     });
+  }
+
+  void _loadCategoryOrder() {
+    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
+    setState(() {
+      for (final entry in savedOrder.entries) {
+        try {
+          final category = TaskCategory.values.firstWhere(
+            (c) => c.name == entry.key,
+            orElse: () => TaskCategory.noDeadline,
+          );
+          _categoryOrder[category] = entry.value;
+        } catch (_) {}
+      }
+    });
+  }
+
+  void _saveCategoryOrder() {
+    final Map<String, List<String>> toSave = {};
+    for (final entry in _categoryOrder.entries) {
+      toSave[entry.key.name] = entry.value;
+    }
+    SharedPreferencesUtil().taskCategoryOrder = toSave;
   }
 
   @override
@@ -88,7 +125,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Categorize items by deadline
-  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
+  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
+      List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
@@ -134,16 +172,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return categorized;
   }
 
-  String _getCategoryTitle(TaskCategory category) {
+  String _getCategoryTitle(BuildContext context, TaskCategory category) {
     switch (category) {
       case TaskCategory.today:
-        return 'Today';
+        return context.l10n.today;
       case TaskCategory.tomorrow:
-        return 'Tomorrow';
+        return context.l10n.tomorrow;
       case TaskCategory.noDeadline:
-        return 'No Deadline';
+        return context.l10n.tasksNoDeadline;
       case TaskCategory.later:
-        return 'Later';
+        return context.l10n.tasksLater;
     }
   }
 
@@ -253,6 +291,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       // Clear hover state
       _hoveredItemId = null;
     });
+    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 
@@ -328,9 +367,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'No Tasks Yet',
-              style: TextStyle(
+            Text(
+              context.l10n.noTasksYet,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
                 fontWeight: FontWeight.w600,
@@ -338,7 +377,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
             const SizedBox(height: 12),
             Text(
-              'Tasks from your conversations will appear here.\nTap + to create one manually.',
+              context.l10n.tasksEmptyStateMessage,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey[400],
@@ -384,7 +423,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     required List<ActionItemWithMetadata> items,
     required ActionItemsProvider provider,
   }) {
-    final title = _getCategoryTitle(category);
+    final title = _getCategoryTitle(context, category);
     final orderedItems = _getOrderedItems(category, items);
 
     return Padding(
@@ -855,9 +894,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
-      child: isCompleted
-          ? const Icon(Icons.check, size: 14, color: Colors.black)
-          : null,
+      child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
     );
   }
 

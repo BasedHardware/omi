@@ -1,21 +1,25 @@
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
-import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
@@ -107,7 +111,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     if (newText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Action item description cannot be empty'),
+          content: Text(context.l10n.actionItemDescriptionCannotBeEmpty),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -131,10 +135,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       setState(() => _isEditing = false);
       _showSavedMessage();
     } catch (e) {
-      debugPrint('Error updating action item description: $e');
+      Logger.debug('Error updating action item description: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Failed to update action item'),
+          content: Text(context.l10n.failedToUpdateActionItem),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -160,12 +164,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
               borderRadius: BorderRadius.circular(8),
               boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FontAwesomeIcons.check, color: Colors.white, size: 14),
-                SizedBox(width: 8),
-                Text('Saved', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                const Icon(FontAwesomeIcons.check, color: Colors.white, size: 14),
+                const SizedBox(width: 8),
+                Text(context.l10n.saved,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -208,17 +213,17 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       chipColor = Colors.red.withOpacity(0.15);
       textColor = Colors.red.shade300;
       icon = FontAwesomeIcons.triangleExclamation;
-      dueDateText = 'Overdue';
+      dueDateText = context.l10n.overdue;
     } else if (isToday) {
       chipColor = Colors.orange.withOpacity(0.15);
       textColor = Colors.orange.shade300;
       icon = FontAwesomeIcons.calendarDay;
-      dueDateText = 'Today';
+      dueDateText = context.l10n.today;
     } else if (isTomorrow) {
       chipColor = Colors.blue.withOpacity(0.15);
       textColor = Colors.blue.shade300;
       icon = FontAwesomeIcons.calendar;
-      dueDateText = 'Tomorrow';
+      dueDateText = context.l10n.tomorrow;
     } else if (isThisWeek) {
       chipColor = Colors.green.withOpacity(0.15);
       textColor = Colors.green.shade300;
@@ -299,13 +304,21 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     final difference = date.difference(now).inDays;
 
     if (difference == 0) {
-      return 'Today';
+      return context.l10n.today;
     } else if (difference == 1) {
-      return 'Tomorrow';
+      return context.l10n.tomorrow;
     } else if (difference == -1) {
-      return 'Yesterday';
+      return context.l10n.yesterday;
     } else if (difference > 1 && difference <= 7) {
-      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final weekdays = [
+        context.l10n.mondayAbbr,
+        context.l10n.tuesdayAbbr,
+        context.l10n.wednesdayAbbr,
+        context.l10n.thursdayAbbr,
+        context.l10n.fridayAbbr,
+        context.l10n.saturdayAbbr,
+        context.l10n.sundayAbbr,
+      ];
       return weekdays[date.weekday - 1];
     } else {
       return '${months[date.month - 1]} ${date.day}';
@@ -327,10 +340,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         await provider.updateActionItemDueDate(widget.actionItem, result);
         _showSavedMessage();
       } catch (e) {
-        debugPrint('Error updating action item due date: $e');
+        Logger.debug('Error updating action item due date: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Failed to update due date'),
+            content: Text(context.l10n.failedToUpdateDueDate),
             backgroundColor: Colors.red.shade400,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -352,9 +365,9 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.01),
             ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
+            child: Text(
+              context.l10n.upgradeToUnlimited,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -515,13 +528,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
     return OmiPopupMenuButton<String>(
       icon: FontAwesomeIcons.ellipsisVertical,
       itemBuilder: (context) => [
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           value: 'edit',
           child: Row(
             children: [
-              Icon(FontAwesomeIcons.penToSquare, color: ResponsiveHelper.textSecondary, size: 14),
-              SizedBox(width: 8),
-              Text('Edit', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+              const Icon(FontAwesomeIcons.penToSquare, color: ResponsiveHelper.textSecondary, size: 14),
+              const SizedBox(width: 8),
+              Text(context.l10n.edit, style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
             ],
           ),
         ),
@@ -532,7 +545,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
               Icon(widget.actionItem.completed ? FontAwesomeIcons.xmark : FontAwesomeIcons.check,
                   color: ResponsiveHelper.textSecondary, size: 14),
               const SizedBox(width: 8),
-              Text(widget.actionItem.completed ? 'Mark Incomplete' : 'Mark Complete',
+              Text(widget.actionItem.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
             ],
           ),
@@ -543,19 +556,20 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
             children: [
               const Icon(FontAwesomeIcons.calendar, color: ResponsiveHelper.textSecondary, size: 14),
               const SizedBox(width: 8),
-              Text(widget.actionItem.dueAt != null ? 'Edit Due Date' : 'Set Due Date',
+              Text(widget.actionItem.dueAt != null ? context.l10n.editDueDate : context.l10n.setDueDate,
                   style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
             ],
           ),
         ),
         if (widget.actionItem.dueAt != null)
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             value: 'clear_due_date',
             child: Row(
               children: [
-                Icon(FontAwesomeIcons.xmark, color: ResponsiveHelper.textSecondary, size: 14),
-                SizedBox(width: 8),
-                Text('Clear Due Date', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
+                const Icon(FontAwesomeIcons.xmark, color: ResponsiveHelper.textSecondary, size: 14),
+                const SizedBox(width: 8),
+                Text(context.l10n.clearDueDate,
+                    style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14))
               ],
             ),
           ),
@@ -565,7 +579,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
             children: [
               Icon(FontAwesomeIcons.trash, color: Colors.red.shade400, size: 14),
               const SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: Colors.red.shade400, fontSize: 14))
+              Text(context.l10n.delete, style: TextStyle(color: Colors.red.shade400, fontSize: 14))
             ],
           ),
         ),
@@ -614,10 +628,10 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
 
       widget.onChanged?.call();
     } catch (e) {
-      debugPrint('Error clearing action item due date: $e');
+      Logger.debug('Error clearing action item due date: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Failed to clear due date'),
+          content: Text(context.l10n.failedToClearDueDate),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -658,7 +672,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Action item deleted'),
+          content: Text(context.l10n.actionItemDeleted),
           backgroundColor: ResponsiveHelper.backgroundTertiary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -670,8 +684,8 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
 
     OmiConfirmDialog.showWithSkipOption(
       context,
-      title: 'Delete Action Item',
-      message: 'Are you sure you want to delete this action item?',
+      title: context.l10n.deleteActionItemTitle,
+      message: context.l10n.deleteActionItemMessage,
     ).then((result) {
       if (result?.confirmed == true) {
         // Update preference if user chose to skip future confirmations
@@ -682,7 +696,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         context.read<ActionItemsProvider>().deleteActionItem(widget.actionItem);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Action item deleted'),
+            content: Text(context.l10n.actionItemDeleted),
             backgroundColor: ResponsiveHelper.backgroundTertiary,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -763,9 +777,9 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.cancel,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textSecondary,
                         fontSize: 17,
                       ),
@@ -833,9 +847,9 @@ class _DateTimePickerSheetState extends State<_DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         color: ResponsiveHelper.purplePrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:omi/utils/l10n_extensions.dart';
 
 class OmiTextSelectionToolbar extends StatelessWidget {
@@ -58,7 +59,7 @@ class OmiToolbarDivider extends StatelessWidget {
     return Container(
       width: 1.0 / MediaQuery.of(context).devicePixelRatio,
       height: 20,
-      color: const Color.fromARGB(70, 255, 255, 255), 
+      color: const Color.fromARGB(70, 255, 255, 255),
     );
   }
 }
@@ -71,15 +72,15 @@ Widget omiSelectionMenuBuilder(
 }) {
   final List<Widget> toolbarItems = [];
   String text = selectedText ?? '';
-  
+
   if (delegate is TextSelectionDelegate && text.isEmpty) {
     text = delegate.textEditingValue.selection.textInside(delegate.textEditingValue.text);
   }
-  
+
   // Ask Omi
   if (text.trim().isNotEmpty) {
     toolbarItems.add(OmiToolbarAction(
-      label: 'Ask Omi',
+      label: context.l10n.askOmi,
       onPressed: () {
         onAskOmi(text);
         delegate.hideToolbar();
@@ -92,7 +93,7 @@ Widget omiSelectionMenuBuilder(
       toolbarItems.add(const OmiToolbarDivider());
     }
     toolbarItems.add(OmiToolbarAction(
-      label: 'Copy',
+      label: context.l10n.copy,
       onPressed: () {
         delegate.copySelection(SelectionChangedCause.toolbar);
         delegate.hideToolbar();
@@ -123,8 +124,7 @@ Widget omiSelectionMenuBuilder(
 
   return OmiTextSelectionToolbar(
     anchorAbove: delegate.contextMenuAnchors.primaryAnchor,
-    anchorBelow: delegate.contextMenuAnchors.secondaryAnchor ??
-        delegate.contextMenuAnchors.primaryAnchor,
+    anchorBelow: delegate.contextMenuAnchors.secondaryAnchor ?? delegate.contextMenuAnchors.primaryAnchor,
     children: toolbarItems,
   );
 }

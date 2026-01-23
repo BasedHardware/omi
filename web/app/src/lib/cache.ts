@@ -34,13 +34,22 @@ const PERSISTENT_KEYS = ['memories:', 'conversations:', 'actionItems', 'folders'
 // Try to hydrate cache from sessionStorage on module load
 if (typeof window !== 'undefined') {
   try {
-    const stored = sessionStorage.getItem('omi_cache');
-    if (stored) {
-      const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
-      for (const [key, entry] of Object.entries(parsed)) {
-        // Only restore if not expired (check against original TTL)
-        if (Date.now() - entry.timestamp < entry.ttl) {
-          cache.set(key, entry);
+    // Check if this is a page reload - if so, clear cache for fresh data
+    // This ensures refreshing the page always fetches fresh data from server
+    const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const isReload = navEntry?.type === 'reload';
+
+    if (isReload) {
+      sessionStorage.removeItem('omi_cache');
+    } else {
+      const stored = sessionStorage.getItem('omi_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
+        for (const [key, entry] of Object.entries(parsed)) {
+          // Only restore if not expired (check against original TTL)
+          if (Date.now() - entry.timestamp < entry.ttl) {
+            cache.set(key, entry);
+          }
         }
       }
     }
@@ -133,6 +142,35 @@ export function invalidateCache(pattern: string): void {
 
   // Notify listeners
   invalidationListeners.forEach(listener => listener(pattern));
+}
+
+/**
+ * Invalidate a specific cache key (granular invalidation)
+ * More efficient than pattern matching when you know the exact key
+ * @param key - Exact cache key to invalidate
+ */
+export function invalidateCacheKey(key: string): void {
+  if (cache.has(key)) {
+    cache.delete(key);
+    persistCache();
+  }
+}
+
+/**
+ * Invalidate multiple specific cache keys (batch granular invalidation)
+ * @param keys - Array of exact cache keys to invalidate
+ */
+export function invalidateCacheKeys(keys: string[]): void {
+  let deleted = false;
+  for (const key of keys) {
+    if (cache.has(key)) {
+      cache.delete(key);
+      deleted = true;
+    }
+  }
+  if (deleted) {
+    persistCache();
+  }
 }
 
 /**

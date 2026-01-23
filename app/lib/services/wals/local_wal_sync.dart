@@ -3,11 +3,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 class LocalWalSyncImpl implements LocalWalSync {
@@ -37,13 +39,13 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> addExternalWal(Wal wal) async {
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
-      debugPrint("LocalWalSync: WAL ${wal.id} already exists, skipping");
+      Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
       return;
     }
     _wals.add(wal);
     await _saveWalsToFile();
     listener.onWalUpdated();
-    debugPrint("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
+    Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
   }
 
   @override
@@ -61,14 +63,14 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> _initializeWals() async {
     await WalFileManager.init();
     _wals = await WalFileManager.loadWals();
-    debugPrint("wal service start: ${_wals.length}");
+    Logger.debug("wal service start: ${_wals.length}");
 
     // Run migrations for legacy Limitless files
     final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(_wals);
     if (migratedCount > 0) {
       // Reload WALs after migration
       _wals = await WalFileManager.loadWals();
-      debugPrint("wal service after migration: ${_wals.length}");
+      Logger.debug("wal service after migration: ${_wals.length}");
     }
 
     // Fix any inconsistent WAL states from old implementations
@@ -112,7 +114,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   Future _chunk() async {
     if (_frames.isEmpty) {
-      debugPrint("Frames are empty");
+      Logger.debug("Frames are empty");
       return;
     }
 
@@ -155,7 +157,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           break;
         }
       }
-      debugPrint("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
+      Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
 
       Wal wal;
       var walIdx =
@@ -190,14 +192,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       listener.onWalUpdated();
     }
 
-    debugPrint("_chunk wals ${_wals.length}");
+    Logger.debug("_chunk wals ${_wals.length}");
 
     _frames.removeRange(0, pivot);
     _frameSynced.removeRange(0, pivot);
   }
 
   Future _flush() async {
-    debugPrint("_flushing");
+    Logger.debug("_flushing");
     for (var i = 0; i < _wals.length; i++) {
       final wal = _wals[i];
 
@@ -223,7 +225,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         wal.filePath = wal.getFileName();
         wal.storage = WalStorage.disk;
 
-        debugPrint("_flush file ${wal.filePath}");
+        Logger.debug("_flush file ${wal.filePath}");
 
         _wals[i] = wal;
       }
@@ -233,7 +235,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   Future<void> _saveWalsToFile() async {
-    debugPrint('Saving WALs to file');
+    Logger.debug('Saving WALs to file');
     await WalFileManager.saveWals(_wals);
   }
 
@@ -248,7 +250,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
         }
       } catch (e) {
-        debugPrint(e.toString());
+        Logger.debug(e.toString());
         return false;
       }
     }
@@ -303,12 +305,15 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncAll({
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     await _flush();
 
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
-      debugPrint("All synced!");
+      Logger.debug("All synced!");
       return null;
     }
 
@@ -325,26 +330,26 @@ class LocalWalSyncImpl implements LocalWalSync {
       List<File> files = [];
       for (var j = left; j <= right; j++) {
         var wal = wals[j];
-        debugPrint("sync id ${wal.id} ${wal.timerStart}");
+        Logger.debug("sync id ${wal.id} ${wal.timerStart}");
         if (wal.filePath == null) {
-          debugPrint("file path is not found. wal id ${wal.id}");
+          Logger.debug("file path is not found. wal id ${wal.id}");
           wal.status = WalStatus.corrupted;
           continue;
         }
 
         final fullPath = await Wal.getFilePath(wal.filePath);
-        debugPrint("sync wal: ${wal.id} file: $fullPath");
+        Logger.debug("sync wal: ${wal.id} file: $fullPath");
 
         try {
           if (fullPath == null) {
-            debugPrint("could not construct file path for wal id ${wal.id}");
+            Logger.debug("could not construct file path for wal id ${wal.id}");
             wal.status = WalStatus.corrupted;
             continue;
           }
 
           File file = File(fullPath);
           if (!file.existsSync()) {
-            debugPrint("file $fullPath does not exist");
+            Logger.debug("file $fullPath does not exist");
             wal.status = WalStatus.corrupted;
             continue;
           }
@@ -352,12 +357,12 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.isSyncing = true;
         } catch (e) {
           wal.status = WalStatus.corrupted;
-          debugPrint(e.toString());
+          Logger.debug(e.toString());
         }
       }
 
       if (files.isEmpty) {
-        debugPrint("Files are empty");
+        Logger.debug("Files are empty");
         continue;
       }
 
@@ -384,7 +389,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
         }
       } catch (e) {
-        debugPrint('Local WAL sync failed: $e');
+        Logger.debug('Local WAL sync failed: $e');
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             wals[j].isSyncing = false;
@@ -404,7 +409,11 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     await _flush();
 
     var walToSync = _wals.where((w) => w == wal).toList().first;
@@ -413,18 +422,18 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     late File walFile;
     if (wal.filePath == null) {
-      debugPrint("file path is not found. wal id ${wal.id}");
+      Logger.debug("file path is not found. wal id ${wal.id}");
       wal.status = WalStatus.corrupted;
     }
     try {
       final fullPath = await Wal.getFilePath(wal.filePath);
       if (fullPath == null) {
-        debugPrint("could not construct file path for wal id ${wal.id}");
+        Logger.debug("could not construct file path for wal id ${wal.id}");
         wal.status = WalStatus.corrupted;
       } else {
         File file = File(fullPath);
         if (!file.existsSync()) {
-          debugPrint("file $fullPath does not exist");
+          Logger.debug("file $fullPath does not exist");
           wal.status = WalStatus.corrupted;
         } else {
           walFile = file;
@@ -433,7 +442,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     } catch (e) {
       wal.status = WalStatus.corrupted;
-      debugPrint(e.toString());
+      Logger.debug(e.toString());
     }
 
     listener.onWalUpdated();
@@ -452,7 +461,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
       listener.onWalSynced(wal);
     } catch (e) {
-      debugPrint('Single WAL sync failed: $e');
+      Logger.debug('Single WAL sync failed: $e');
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;

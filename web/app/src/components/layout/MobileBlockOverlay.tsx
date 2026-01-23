@@ -1,12 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { X } from 'lucide-react';
 
 type Platform = 'ios' | 'android' | 'other';
 
+// Paths that should completely bypass mobile detection
+const BYPASS_MOBILE_CHECK_PATHS = [
+  '/record/popout',
+  '/record/popout/transcript',
+  '/apps', // Public marketplace should always be accessible on mobile
+];
+
 const APP_STORE_URL = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.friend.ios';
+
+// Debounce delay for resize detection (ms)
+const RESIZE_DEBOUNCE_MS = 500;
+
+// Session storage key for dismissal
+const DISMISSED_KEY = 'omi_mobile_overlay_dismissed';
 
 function AppleIcon({ className }: { className?: string }) {
   return (
@@ -25,16 +40,43 @@ function PlayStoreIcon({ className }: { className?: string }) {
 }
 
 export function MobileBlockOverlay() {
+  const pathname = usePathname();
   const [isMobile, setIsMobile] = useState(false);
   const [platform, setPlatform] = useState<Platform>('other');
   const [mounted, setMounted] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if current path should bypass mobile detection entirely
+  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some(path => pathname?.startsWith(path));
 
   useEffect(() => {
     setMounted(true);
 
-    // Check viewport width
-    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
-    checkMobile();
+    // Check if already dismissed this session
+    if (typeof window !== 'undefined') {
+      const dismissed = sessionStorage.getItem(DISMISSED_KEY);
+      if (dismissed === 'true') {
+        setIsDismissed(true);
+      }
+    }
+
+    // Check viewport width with debounce
+    const checkMobile = () => {
+      // Clear any pending timeout
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+
+      // Only set mobile state after debounce delay
+      resizeTimeoutRef.current = setTimeout(() => {
+        setIsMobile(window.innerWidth < 768);
+      }, RESIZE_DEBOUNCE_MS);
+    };
+
+    // Initial check without debounce
+    setIsMobile(window.innerWidth < 768);
+
     window.addEventListener('resize', checkMobile);
 
     // Detect platform via user agent
@@ -45,11 +87,23 @@ export function MobileBlockOverlay() {
       setPlatform('android');
     }
 
-    return () => window.removeEventListener('resize', checkMobile);
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
   }, []);
 
-  // Don't render anything on server or if not mobile
-  if (!mounted || !isMobile) return null;
+  const handleDismiss = () => {
+    setIsDismissed(true);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(DISMISSED_KEY, 'true');
+    }
+  };
+
+  // Don't render anything on server, if not mobile, if dismissed, or if on bypass path
+  if (!mounted || !isMobile || isDismissed || shouldBypass) return null;
 
   const storeUrl = platform === 'android' ? PLAY_STORE_URL : APP_STORE_URL;
   const storeName = platform === 'android' ? 'Google Play' : 'App Store';
@@ -57,17 +111,16 @@ export function MobileBlockOverlay() {
 
   return (
     <div className="fixed inset-0 z-[9999] bg-bg-primary flex flex-col items-center justify-center p-6">
-      {/* Beta badge - top right corner */}
-      <a
-        href="https://feedback.omi.me"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="absolute top-4 right-4 z-20 px-3 py-1 bg-purple-primary/20 text-purple-primary text-xs font-semibold uppercase tracking-wider rounded-full border border-purple-primary/30 hover:bg-purple-primary/30 transition-colors"
+      {/* Dismiss button - top right corner */}
+      <button
+        onClick={handleDismiss}
+        className="absolute top-4 right-4 z-20 p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
+        aria-label="Continue to web"
       >
-        Beta
-      </a>
+        <X className="w-5 h-5 text-gray-400" />
+      </button>
 
-      {/* Background gradient effect - matches login page */}
+      {/* Background gradient effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-primary/5 rounded-full blur-[120px]" />
       </div>
@@ -76,7 +129,6 @@ export function MobileBlockOverlay() {
       <div className="relative z-10 flex flex-col items-center justify-center flex-1 max-w-sm text-center">
         {/* Round logo with breathing glow */}
         <div className="relative mb-8">
-          {/* Breathing glow effect - matches login page style */}
           <div
             className="absolute inset-0 rounded-full bg-purple-primary/20 blur-xl animate-pulse"
             style={{ animationDuration: '3s' }}
@@ -105,11 +157,19 @@ export function MobileBlockOverlay() {
           href={storeUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-3 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-gray-100 transition-colors"
+          className="inline-flex items-center gap-3 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-gray-100 transition-colors mb-4"
         >
           <StoreIcon className="w-6 h-6" />
           <span>Download on {storeName}</span>
         </a>
+
+        {/* Continue to web button */}
+        <button
+          onClick={handleDismiss}
+          className="text-text-tertiary hover:text-text-secondary transition-colors text-sm"
+        >
+          Continue to web anyway
+        </button>
       </div>
 
       {/* Bottom section with logo and links */}

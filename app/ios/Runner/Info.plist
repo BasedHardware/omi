@@ -94,7 +94,7 @@
 	<key>NSCalendarsUsageDescription</key>
 	<string>Access most functions for calendar viewing and editing.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Access contacts for event attendee editing.</string>
+	<string>Access contacts for event attendee editing and to share conversation summaries via SMS.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>When creating your memories, we use your location for determining where they were created.</string>
 	<key>NSLocationUsageDescription</key>
@@ -150,7 +150,5 @@
 	<false/>
 	<key>com.posthog.posthog.AUTO_INIT</key>
 	<false/>
-	<key>WKCompanionAppBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 </dict>
 </plist>

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:shimmer/shimmer.dart';
 
 class DailySummariesList extends StatefulWidget {
   const DailySummariesList({super.key});
@@ -159,7 +162,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
             ),
             const SizedBox(height: 16),
             Text(
-              'No daily recaps yet',
+              context.l10n.noDailyRecapsYet,
               style: TextStyle(
                 color: Colors.grey.shade400,
                 fontSize: 18,
@@ -168,7 +171,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your daily recaps will appear here once generated',
+              context.l10n.dailyRecapsDescription,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade600,
@@ -191,6 +194,17 @@ class _DailySummariesListState extends State<DailySummariesList> {
     final day = int.tryParse(parts[2]) ?? 1;
 
     final date = DateTime(year, month, day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // Check for Today and Yesterday
+    if (date.year == today.year && date.month == today.month && date.day == today.day) {
+      return 'Today';
+    }
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Yesterday';
+    }
 
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

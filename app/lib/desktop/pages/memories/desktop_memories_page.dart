@@ -1,25 +1,24 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/desktop_memory_item.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_management_dialog.dart';
 
-import 'package:omi/ui/atoms/omi_search_input.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/molecules/omi_empty_state.dart';
-
-enum FilterOption { interesting, system, manual, all }
+enum FilterOption { system, interesting, manual, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
   const DesktopMemoriesPage({super.key});
@@ -140,11 +139,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     setState(() {
       _currentFilter = option;
       switch (option) {
-        case FilterOption.interesting:
-          _selectedCategory = MemoryCategory.interesting;
-          break;
         case FilterOption.system:
           _selectedCategory = MemoryCategory.system;
+          break;
+        case FilterOption.interesting:
+          _selectedCategory = MemoryCategory.interesting;
           break;
         case FilterOption.manual:
           _selectedCategory = MemoryCategory.manual;
@@ -161,13 +160,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     if (!mounted) return;
 
     switch (option) {
-      case FilterOption.interesting:
-        provider.toggleCategoryFilter(MemoryCategory.interesting);
-        MixpanelManager().memoriesFiltered('interesting');
-        break;
       case FilterOption.system:
         provider.toggleCategoryFilter(MemoryCategory.system);
         MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.interesting:
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
         break;
       case FilterOption.manual:
         provider.toggleCategoryFilter(MemoryCategory.manual);
@@ -258,7 +257,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 child: Column(
                                   children: [
                                     _buildModernHeader(provider),
-
                                     Expanded(
                                       child: _animationsInitialized
                                           ? FadeTransition(
@@ -278,8 +276,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                         ),
                       ),
 
-
-
                       // Loading overlay for CMD+R reload
                       if (_isReloading)
                         Container(
@@ -294,7 +290,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Loading memories...',
+                                  context.l10n.loadingMemories,
                                   style: ResponsiveHelper(context).bodyLarge.copyWith(
                                         color: ResponsiveHelper.textPrimary,
                                       ),
@@ -355,7 +351,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           Expanded(
             child: OmiSearchInput(
               controller: _searchController,
-              hint: 'Search memories...',
+              hint: context.l10n.searchMemories,
               onChanged: (value) {
                 provider.setSearchQuery(value);
                 if (value.isNotEmpty) {
@@ -402,10 +398,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         ),
         offset: const Offset(0, 48),
         itemBuilder: (context) => [
-          _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.interesting, 'Interesting'),
-          _buildFilterItem(FilterOption.system, 'System'),
-          _buildFilterItem(FilterOption.manual, 'Manual'),
+          _buildFilterItem(FilterOption.all, context.l10n.allMemories),
+          _buildFilterItem(FilterOption.system, context.l10n.aboutYou),
+          _buildFilterItem(FilterOption.interesting, context.l10n.insights),
+          _buildFilterItem(FilterOption.manual, context.l10n.manual),
         ],
         onSelected: _applyFilter,
         child: Container(
@@ -466,14 +462,14 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
 
   String _getFilterText() {
     switch (_currentFilter) {
-      case FilterOption.interesting:
-        return 'Interesting';
       case FilterOption.system:
-        return 'System';
+        return context.l10n.aboutYou;
+      case FilterOption.interesting:
+        return context.l10n.insights;
       case FilterOption.manual:
-        return 'Manual';
+        return context.l10n.manual;
       case FilterOption.all:
-        return 'All';
+        return context.l10n.all;
     }
   }
 
@@ -560,10 +556,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ),
             const SizedBox(height: 16),
-            const Text(
-              'Loading your memories...',
+            Text(
+              context.l10n.loadingYourMemories,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -581,11 +577,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       children: [
         OmiEmptyState(
           icon: FontAwesomeIcons.brain,
-          title:
-              provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          title: provider.searchQuery.isEmpty && _selectedCategory == null
+              ? context.l10n.noMemoriesYet
+              : context.l10n.noMemoriesFound,
           message: provider.searchQuery.isEmpty && _selectedCategory == null
-              ? 'Create your first memory to get started'
-              : 'Try adjusting your search or filter',
+              ? context.l10n.createYourFirstMemory
+              : context.l10n.tryAdjustingFilter,
           color: ResponsiveHelper.purplePrimary,
         ),
         if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
@@ -608,9 +605,9 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ],
                 ),
-                child: const Text(
-                  'Add your first memory',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.addYourFirstMemory,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -693,10 +690,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       ),
     );
   }
-
-
-
-
 
   void _showManagementSheet(BuildContext context, MemoriesProvider provider) {
     showDialog(

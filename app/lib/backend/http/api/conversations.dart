@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
@@ -15,7 +15,7 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     body: jsonEncode({}),
   );
   if (response == null) return null;
-  debugPrint('createConversationServer: ${response.body}');
+  Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromJson(jsonDecode(response.body));
   } else {
@@ -60,10 +60,10 @@ Future<List<ServerConversation>> getConversations({
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
-    debugPrint('getConversations length: ${memories.length}');
+    Logger.debug('getConversations length: ${memories.length}');
     return memories;
   } else {
-    debugPrint('getConversations error ${response.statusCode}');
+    Logger.debug('getConversations error ${response.statusCode}');
   }
   return [];
 }
@@ -76,7 +76,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('reProcessConversationServer: ${response.body}');
+  Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   }
@@ -91,7 +91,7 @@ Future<bool> deleteConversationServer(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteConversation: ${response.statusCode}');
+  Logger.debug('deleteConversation: ${response.statusCode}');
   return response.statusCode == 204;
 }
 
@@ -106,7 +106,7 @@ Future<ServerConversation?> getConversationById(String conversationId) async {
   if (response.statusCode == 200) {
     return ServerConversation.fromJson(jsonDecode(response.body));
   } else if (response.statusCode == 402) {
-    debugPrint('Unlimited Plan Required for conversation: $conversationId');
+    Logger.debug('Unlimited Plan Required for conversation: $conversationId');
     return null;
   }
   return null;
@@ -120,7 +120,7 @@ Future<bool> updateConversationTitle(String conversationId, String title) async 
     body: '',
   );
   if (response == null) return false;
-  debugPrint('updateConversationTitle: ${response.body}');
+  Logger.debug('updateConversationTitle: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -132,7 +132,7 @@ Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) asy
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getConversationPhotos: ${response.body}');
+  Logger.debug('getConversationPhotos: ${response.body}');
   if (response.statusCode == 200) {
     return (jsonDecode(response.body) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList();
   }
@@ -171,7 +171,7 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
     body: '',
   );
   if (response == null) return TranscriptsResponse();
-  debugPrint('getConversationTranscripts: ${response.body}');
+  Logger.debug('getConversationTranscripts: ${response.body}');
   if (response.statusCode == 200) {
     var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
     return TranscriptsResponse.fromJson(transcripts);
@@ -187,7 +187,7 @@ Future<bool> hasConversationRecording(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('hasConversationRecording: ${response.body}');
+  Logger.debug('hasConversationRecording: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['has_recording'] ?? false;
   }
@@ -221,7 +221,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
     }),
   );
   if (response == null) return false;
-  debugPrint('assignBulkConversationTranscriptSegments: ${response.body}');
+  Logger.debug('assignBulkConversationTranscriptSegments: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -233,7 +233,7 @@ Future<bool> setConversationVisibility(String conversationId, {String visibility
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setConversationVisibility: ${response.body}');
+  Logger.debug('setConversationVisibility: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -245,7 +245,7 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setConversationStarred: ${response.body}');
+  Logger.debug('setConversationStarred: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -268,7 +268,7 @@ Future<bool> setConversationEventsState(
     }),
   );
   if (response == null) return false;
-  debugPrint('setConversationEventsState: ${response.body}');
+  Logger.debug('setConversationEventsState: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -292,7 +292,7 @@ Future<bool> setConversationActionItemState(
     }),
   );
   if (response == null) return false;
-  debugPrint('setConversationActionItemState: ${response.body}');
+  Logger.debug('setConversationActionItemState: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -309,7 +309,7 @@ Future<bool> updateActionItemDescription(
     body: jsonEncode(body),
   );
   if (response == null) return false;
-  debugPrint('updateActionItemDescription: ${response.body}');
+  Logger.debug('updateActionItemDescription: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -324,7 +324,7 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
     }),
   );
   if (response == null) return false;
-  debugPrint('deleteConversationActionItem: ${response.body}');
+  Logger.debug('deleteConversationActionItem: ${response.body}');
   return response.statusCode == 204;
 }
 
@@ -338,20 +338,20 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
     );
 
     if (response.statusCode == 200) {
-      debugPrint('storageSend Response body: ${jsonDecode(response.body)}');
+      Logger.debug('storageSend Response body: ${jsonDecode(response.body)}');
     } else {
-      debugPrint('Failed to storageSend. Status code: ${response.statusCode}');
+      Logger.debug('Failed to storageSend. Status code: ${response.statusCode}');
       return [];
     }
 
     var memories = (jsonDecode(response.body) as List<dynamic>)
         .map((conversation) => ServerConversation.fromJson(conversation))
         .toList();
-    debugPrint('getMemories length: ${memories.length}');
+    Logger.debug('getMemories length: ${memories.length}');
 
     return memories;
   } catch (e) {
-    debugPrint('An error occurred storageSend: $e');
+    Logger.debug('An error occurred storageSend: $e');
     return [];
   }
 }
@@ -364,14 +364,14 @@ Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
     );
 
     if (response.statusCode == 200) {
-      debugPrint('syncLocalFile Response body: ${jsonDecode(response.body)}');
+      Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
       return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
     } else {
-      debugPrint('Failed to upload sample. Status code: ${response.statusCode}');
+      Logger.debug('Failed to upload sample. Status code: ${response.statusCode}');
       throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
     }
   } catch (e) {
-    debugPrint('An error occurred uploadSample: $e');
+    Logger.debug('An error occurred uploadSample: $e');
     throw Exception('An error occurred uploadSample: $e');
   }
 }
@@ -382,7 +382,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   int? limit,
   bool includeDiscarded = true,
 }) async {
-  debugPrint(Env.apiBaseUrl);
+  Logger.debug(Env.apiBaseUrl);
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/search',
     headers: {},
@@ -451,7 +451,7 @@ Future<ActionItemsResponse> getActionItems({
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
-    debugPrint('getActionItems error ${response.statusCode}');
+    Logger.debug('getActionItems error ${response.statusCode}');
     return ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
@@ -465,7 +465,7 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
   );
 
   if (response == null) return [];
-  debugPrint('getConversationSuggestedApps: ${response.body}');
+  Logger.debug('getConversationSuggestedApps: ${response.body}');
   if (response.statusCode == 200) {
     var data = jsonDecode(response.body);
     return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
@@ -515,7 +515,7 @@ Future<MergeConversationsResponse?> mergeConversations(
   bool reprocess = true,
 }) async {
   if (conversationIds.length < 2) {
-    debugPrint('mergeConversations: At least 2 conversations required');
+    Logger.debug('mergeConversations: At least 2 conversations required');
     return null;
   }
 
@@ -531,12 +531,12 @@ Future<MergeConversationsResponse?> mergeConversations(
 
   if (response == null) return null;
 
-  debugPrint('mergeConversations: ${response.body}');
+  Logger.debug('mergeConversations: ${response.body}');
 
   if (response.statusCode == 200) {
     return MergeConversationsResponse.fromJson(jsonDecode(response.body));
   } else {
-    debugPrint('mergeConversations error: ${response.statusCode} - ${response.body}');
+    Logger.debug('mergeConversations error: ${response.statusCode} - ${response.body}');
     return null;
   }
 }

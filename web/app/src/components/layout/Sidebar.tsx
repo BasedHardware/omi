@@ -22,10 +22,23 @@ import {
   Code,
   Settings,
   Bell,
+  Mic,
+  MessageSquare,
 } from 'lucide-react';
+
+// Discord icon SVG component
+function DiscordIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    </svg>
+  );
+}
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
+import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { cn } from '@/lib/utils';
+import { RECORDING_ENABLED } from '@/lib/featureFlags';
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -54,6 +67,11 @@ const navItems: NavItem[] = [
     icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
+    label: 'Record',
+    href: '/record',
+    icon: <Mic className="w-5 h-5" />,
+  },
+  {
     label: 'Recaps',
     href: '/recaps',
     icon: <CalendarDays className="w-5 h-5" />,
@@ -64,8 +82,8 @@ const navItems: NavItem[] = [
     icon: <MessageCircle className="w-5 h-5" />,
   },
   {
-    label: 'Apps',
-    href: '/apps',
+    label: 'My Apps',
+    href: '/my-apps',
     icon: <LayoutGrid className="w-5 h-5" />,
   },
   {
@@ -100,6 +118,8 @@ export function Sidebar({
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const { toggleNotificationCenter, unreadCount } = useNotificationContext();
+  const { state: recordingState } = useRecordingContext();
+  const isRecording = recordingState === 'recording' || recordingState === 'paused';
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
@@ -152,13 +172,16 @@ export function Sidebar({
     setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await signOut();
     onClose();
-  };
+  }, [signOut, onClose]);
 
   // Collapsed width (icon only) vs expanded width
   const sidebarWidth = isExpanded ? 280 : 72;
+
+  // On mobile, sidebar should always show text (behave as expanded)
+  const showText = !isDesktop || isExpanded;
 
   return (
     <>
@@ -203,7 +226,7 @@ export function Sidebar({
           <div
             className={cn(
               'flex items-center pt-7 px-4 pb-4',
-              isExpanded ? 'justify-between' : 'justify-center'
+              showText ? 'justify-between' : 'justify-center'
             )}
           >
             <Link
@@ -213,8 +236,8 @@ export function Sidebar({
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
-                width={isExpanded ? 60 : 32}
-                height={isExpanded ? 24 : 13}
+                width={showText ? 60 : 32}
+                height={showText ? 24 : 13}
                 className="object-contain"
               />
               <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
@@ -238,7 +261,7 @@ export function Sidebar({
             <div
               className={cn(
                 'px-4 pb-3',
-                isExpanded ? 'flex justify-end' : 'flex justify-center'
+                showText ? 'flex justify-end' : 'flex justify-center'
               )}
             >
               <button
@@ -263,7 +286,7 @@ export function Sidebar({
           <div
             className={cn(
               'px-4 pb-3',
-              isExpanded ? 'flex justify-start' : 'flex justify-center'
+              showText ? 'flex justify-start' : 'flex justify-center'
             )}
           >
             <button
@@ -271,7 +294,7 @@ export function Sidebar({
               className={cn(
                 'flex items-center rounded-lg transition-colors',
                 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
-                isExpanded ? 'px-2 py-2' : 'p-2'
+                showText ? 'px-2 py-2' : 'p-2'
               )}
               title="Notifications"
             >
@@ -291,7 +314,7 @@ export function Sidebar({
                   </span>
                 )}
               </div>
-              {isExpanded && (
+              {showText && (
                 <span className="ml-3 text-sm text-text-secondary">
                   Notifications
                 </span>
@@ -303,13 +326,15 @@ export function Sidebar({
         {/* Navigation */}
         <nav className={cn(
           'py-2 space-y-1',
-          isExpanded ? 'px-3' : 'px-2'
+          showText ? 'px-3' : 'px-2'
         )}>
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
               (item.href === '/conversations' &&
                 pathname?.startsWith('/conversations'));
+            const showRecordingBadge = item.href === '/record' && isRecording;
+            const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
 
             return (
               <Link
@@ -318,19 +343,36 @@ export function Sidebar({
                 onClick={() => {
                   if (!isDesktop) onClose();
                 }}
-                title={!isExpanded ? item.label : undefined}
+                title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                 className={cn(
                   'flex items-center rounded-xl',
                   'transition-all duration-150',
-                  isExpanded ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                  showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                   isActive
                     ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                  showComingSoon && 'opacity-60'
                 )}
               >
-                <span className="flex-shrink-0">{item.icon}</span>
-                {isExpanded && (
-                  <span className="font-medium">{item.label}</span>
+                <span className="flex-shrink-0 relative">
+                  {item.icon}
+                  {/* Recording badge - pulsing red dot */}
+                  {showRecordingBadge && (
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                    </span>
+                  )}
+                </span>
+                {showText && (
+                  <span className="font-medium flex items-center gap-2">
+                    {item.label}
+                    {showComingSoon && (
+                      <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                        Soon
+                      </span>
+                    )}
+                  </span>
                 )}
               </Link>
             );
@@ -339,6 +381,38 @@ export function Sidebar({
 
         {/* Spacer to push footer to bottom */}
         <div className="flex-1" />
+
+        {/* Feedback & Discord links */}
+        <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
+          <a
+            href="https://feedback.omi.me"
+            target="_blank"
+            rel="noopener noreferrer"
+            title={!showText ? 'Feedback' : undefined}
+            className={cn(
+              'flex items-center rounded-lg transition-colors',
+              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+            )}
+          >
+            <MessageSquare className="w-4 h-4 flex-shrink-0" />
+            {showText && <span className="text-sm">Feedback</span>}
+          </a>
+          <a
+            href="https://discord.gg/omidotme"
+            target="_blank"
+            rel="noopener noreferrer"
+            title={!showText ? 'Discord' : undefined}
+            className={cn(
+              'flex items-center rounded-lg transition-colors',
+              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              showText ? 'gap-3 px-3 py-2' : 'justify-center p-2'
+            )}
+          >
+            <DiscordIcon className="w-4 h-4 flex-shrink-0" />
+            {showText && <span className="text-sm">Discord</span>}
+          </a>
+        </div>
 
         {/* Footer - User Section with Settings Menu */}
         <div className="border-t border-white/[0.04]">
@@ -358,9 +432,9 @@ export function Sidebar({
                 className={cn(
                   'w-full flex items-center',
                   'hover:bg-bg-tertiary/50 transition-colors',
-                  isExpanded ? 'gap-3 p-4' : 'justify-center p-3'
+                  showText ? 'gap-3 p-4' : 'justify-center p-3'
                 )}
-                title={!isExpanded ? 'Settings' : undefined}
+                title={!showText ? 'Settings' : undefined}
               >
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
@@ -379,7 +453,7 @@ export function Sidebar({
                   )}
                 </div>
 
-                {isExpanded && (
+                {showText && (
                   <>
                     {/* Name & email */}
                     <div className="flex-1 min-w-0 text-left">
@@ -414,7 +488,7 @@ export function Sidebar({
 
               {/* User menu dropdown with settings */}
               <AnimatePresence>
-                {showUserMenu && isExpanded && (
+                {showUserMenu && showText && (
                   <motion.div
                     initial={{ opacity: 0, y: 8, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}

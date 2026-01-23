@@ -30,6 +30,7 @@ interface VirtualizedConversationListProps {
   hasMore?: boolean;
   onLoadMore?: () => void;
   loading?: boolean;
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 // Memoized conversation card to prevent re-renders
@@ -45,21 +46,11 @@ interface RowProps {
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
   mergingIds?: Set<string>;
+  onEnterSelectionMode?: (id: string) => void;
 }
 
-// Row component for react-window v2
-function RowComponent({
-  index,
-  style,
-  items,
-  onConversationClick,
-  onStarToggle,
-  selectedId,
-  isSelectionMode,
-  selectedIds,
-  onSelect,
-  mergingIds,
-}: {
+// Row props type including react-window props
+type RowComponentProps = {
   ariaAttributes: {
     'aria-posinset': number;
     'aria-setsize': number;
@@ -67,7 +58,24 @@ function RowComponent({
   };
   index: number;
   style: CSSProperties;
-} & RowProps): ReactElement {
+} & RowProps;
+
+// Row component for react-window v2 - memoized to prevent unnecessary re-renders
+// Using a wrapper function to satisfy react-window's expected signature
+function RowComponentImpl(props: RowComponentProps): ReactElement {
+  const {
+    index,
+    style,
+    items,
+    onConversationClick,
+    onStarToggle,
+    selectedId,
+    isSelectionMode,
+    selectedIds,
+    onSelect,
+    mergingIds,
+    onEnterSelectionMode,
+  } = props;
   const item = items[index];
 
   if (item.type === 'header') {
@@ -99,10 +107,13 @@ function RowComponent({
         isChecked={selectedIds?.has(item.conversation.id) ?? false}
         onSelect={onSelect}
         isMerging={mergingIds?.has(item.conversation.id) ?? false}
+        onEnterSelectionMode={onEnterSelectionMode}
       />
     </div>
   );
 }
+
+const RowComponent = memo(RowComponentImpl) as typeof RowComponentImpl;
 
 export function VirtualizedConversationList({
   groupedConversations,
@@ -117,6 +128,7 @@ export function VirtualizedConversationList({
   hasMore = false,
   onLoadMore,
   loading = false,
+  onEnterSelectionMode,
 }: VirtualizedConversationListProps) {
   const listRef = useListRef(null);
   const loadMoreTriggeredRef = useRef(false);
@@ -189,8 +201,9 @@ export function VirtualizedConversationList({
       selectedIds,
       onSelect,
       mergingIds,
+      onEnterSelectionMode,
     }),
-    [flatItems, onConversationClick, onStarToggle, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds]
+    [flatItems, onConversationClick, onStarToggle, selectedId, isSelectionMode, selectedIds, onSelect, mergingIds, onEnterSelectionMode]
   );
 
   if (flatItems.length === 0) {

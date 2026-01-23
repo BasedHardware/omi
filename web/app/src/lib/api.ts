@@ -1,5 +1,11 @@
 import { getIdToken } from './firebase';
-import { invalidateCache, invalidationPatterns } from './cache';
+import {
+  invalidateCache,
+  invalidationPatterns,
+  fetchWithCache,
+  cacheKeys,
+  CACHE_TTL,
+} from './cache';
 import type {
   Conversation,
   ConversationSearchResponse,
@@ -144,37 +150,14 @@ export async function getConversations(
 
 /**
  * Get a single conversation by ID
+ * Uses centralized cache with request deduplication
  */
-// Simple cache for getConversation to avoid duplicate requests
-const conversationCache = new Map<string, { data: Conversation; timestamp: number }>();
-const pendingRequests = new Map<string, Promise<Conversation>>();
-const CACHE_TTL = 60000; // 1 minute cache
-
 export async function getConversation(id: string): Promise<Conversation> {
-  // Check cache first
-  const cached = conversationCache.get(id);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-
-  // Check if there's already a pending request for this ID (deduplicate in-flight requests)
-  const pending = pendingRequests.get(id);
-  if (pending) {
-    return pending;
-  }
-
-  // Make the request and cache it
-  const request = fetchWithAuth<Conversation>(`/v1/conversations/${id}`).then(data => {
-    conversationCache.set(id, { data, timestamp: Date.now() });
-    pendingRequests.delete(id);
-    return data;
-  }).catch(err => {
-    pendingRequests.delete(id);
-    throw err;
-  });
-
-  pendingRequests.set(id, request);
-  return request;
+  return fetchWithCache<Conversation>(
+    cacheKeys.conversation(id),
+    () => fetchWithAuth<Conversation>(`/v1/conversations/${id}`),
+    { ttl: CACHE_TTL.SHORT }
+  );
 }
 
 /**
@@ -250,6 +233,38 @@ export async function mergeConversations(
       reprocess,
     }),
   });
+}
+
+/**
+ * Response from processing an in-progress conversation
+ */
+export interface CreateConversationResponse {
+  conversation: Conversation;
+  messages: ServerMessage[];
+}
+
+/**
+ * Finalize an in-progress conversation from a recording session.
+ * This processes the transcript, generates title/summary/action items,
+ * and creates audio file records from stored chunks.
+ *
+ * @returns The processed conversation, or null if no in-progress conversation exists
+ */
+export async function processInProgressConversation(): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>('/v1/conversations', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    // 404 means no in-progress conversation exists
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // ============================================================================

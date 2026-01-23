@@ -4,6 +4,7 @@ import re
 import threading
 import uuid
 import logging
+import asyncio
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -19,6 +20,8 @@ import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
+from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
+from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -30,6 +33,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from utils.notifications import send_important_conversation_message
 from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
@@ -63,6 +67,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
 
 
@@ -324,10 +329,10 @@ def _update_goal_progress(uid: str, conversation: Conversation):
             text = conversation.structured.overview
         elif conversation.transcript_segments:
             text = " ".join([s.text for s in conversation.transcript_segments[:20]])
-        
+
         if not text or len(text) < 10:
             return
-        
+
         # Use utility function to extract and update goal progress
         extract_and_update_goal_progress(uid, text)
     except Exception as e:
@@ -335,7 +340,11 @@ def _update_goal_progress(uid: str, conversation: Conversation):
 
 
 def _extract_memories(uid: str, conversation: Conversation):
-    # TODO: maybe instead (once they can edit them) we should not tie it this hard
+    # Delete old memories for this conversation (if reprocessing)
+    # Also get the IDs to delete from Pinecone
+    existing_memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation.id)
+    for memory_id in existing_memory_ids:
+        delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
     new_memories: List[Memory] = []
@@ -352,11 +361,49 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     parsed_memories = []
+    memories_to_delete = []
+
     for memory in new_memories:
+        # Find similar existing memories
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+
+        # Fetch content for each similar memory
+        similar_memories = []
+        for match in similar_matches:
+            memory_data = memories_db.get_memory(uid, match['memory_id'])
+            if memory_data:
+                similar_memories.append(
+                    {
+                        'memory_id': match['memory_id'],
+                        'category': match['category'],
+                        'score': match['score'],
+                        'content': memory_data.get('content', ''),
+                    }
+                )
+
+        if similar_memories:
+
+            resolution = resolve_memory_conflict(memory.content, similar_memories)
+
+            if resolution.action == 'keep_existing':
+                continue
+
+            elif resolution.action == 'merge':
+                # Replace existing memory with merged version
+                if resolution.merged_content:
+                    memories_to_delete.append(similar_memories[0]['memory_id'])
+                    memory.content = resolution.merged_content
+
+            elif resolution.action == 'keep_both':
+                pass
+
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
-        # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
+
+    for memory_id in memories_to_delete:
+        delete_memory_vector(uid, memory_id)
+        memories_db.delete_memory(uid, memory_id)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
@@ -365,18 +412,21 @@ def _extract_memories(uid: str, conversation: Conversation):
     print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
+    for memory_db_obj in parsed_memories:
+        upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
+
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
-        
+
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
             from database import users as users_db
-            
+
             user = users_db.get_user_store_recording_permission(uid)
             user_name = user.get('name', 'User') if user else 'User'
-            
+
             from database.memories import set_memory_kg_extracted
-            
+
             for memory_db_obj in parsed_memories:
                 if memory_db_obj.kg_extracted:
                     continue
@@ -448,6 +498,14 @@ def _save_action_items(uid: str, conversation: Conversation):
                     description=action_item.description,
                     due_at=action_item.due_at.isoformat(),
                 )
+
+        # Auto-sync to task integration
+        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+        def _run_auto_sync():
+            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+        threading.Thread(target=_run_auto_sync, daemon=True).start()
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -541,11 +599,6 @@ def process_conversation(
 
             if user_folders and conversation.structured:
                 folder_id, confidence, reasoning = assign_conversation_to_folder(
-                    transcript=(
-                        conversation.get_transcript(False, people=people)
-                        if hasattr(conversation, 'get_transcript')
-                        else ''
-                    ),
                     title=conversation.structured.title or '',
                     overview=conversation.structured.overview or '',
                     category=conversation.structured.category.value if conversation.structured.category else 'other',
@@ -638,10 +691,54 @@ def process_conversation(
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
+        # Disable important conversation for now
+        # Send important conversation notification for long conversations (>30 minutes)
+        # threading.Thread(
+        #     target=_send_important_conversation_notification_if_needed,
+        #     args=(uid, conversation),
+        # ).start()
+
     # TODO: trigger external integrations here too
 
     print('process_conversation completed conversation.id=', conversation.id)
     return conversation
+
+
+def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation):
+    """
+    Send notification for long conversations (>30 minutes) that just completed.
+    Only sends once per conversation using Redis deduplication.
+    """
+
+    # Skip if conversation is discarded
+    if conversation.discarded:
+        return
+
+    # Check if we have valid timestamps to compute duration
+    if not conversation.started_at or not conversation.finished_at:
+        print(f"Cannot compute duration for conversation {conversation.id}: missing timestamps")
+        return
+
+    # Calculate duration in seconds
+    duration_seconds = (conversation.finished_at - conversation.started_at).total_seconds()
+
+    # Only notify for conversations longer than 30 minutes (1800 seconds)
+    if duration_seconds < 1800:
+        return
+
+    # Check if notification was already sent for this conversation
+    if redis_db.has_important_conversation_notification_been_sent(uid, conversation.id):
+        print(f"Important conversation notification already sent for {conversation.id}")
+        return
+
+    # Mark as sent before sending to prevent duplicates
+    redis_db.set_important_conversation_notification_sent(uid, conversation.id)
+
+    # Send the notification
+    print(
+        f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds/60:.1f} mins)"
+    )
+    send_important_conversation_message(uid, conversation.id)
 
 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):

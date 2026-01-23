@@ -1,41 +1,49 @@
+import 'dart:ui';
+import 'package:dotted_border/dotted_border.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
+
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pasteboard/pasteboard.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
-import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/ui/atoms/omi_avatar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_message_input.dart';
+import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
+import 'package:omi/ui/molecules/omi_chat_bubble.dart';
+import 'package:omi/ui/molecules/omi_section_header.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/ui/atoms/omi_avatar.dart';
-import 'package:omi/ui/molecules/omi_chat_bubble.dart';
-import 'package:omi/ui/atoms/omi_message_input.dart';
-import 'package:omi/ui/atoms/omi_send_button.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/molecules/omi_section_header.dart';
-import 'package:visibility_detector/visibility_detector.dart';
-
 import 'widgets/desktop_message_action_menu.dart';
 
 class DesktopChatPage extends StatefulWidget {
@@ -52,6 +60,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
+  static final RegExp _contextRegex = RegExp(r'^Context: "([\s\S]+?)"\n\n');
+
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
@@ -60,6 +70,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   bool isScrollingDown = false;
   bool _showVoiceRecorder = false;
+  bool _isDragging = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -89,6 +100,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         _sendMessageUtil(textController.text.trim());
         return KeyEventResult.handled;
       }
+
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.keyV &&
+          (HardwareKeyboard.instance.isMetaPressed || HardwareKeyboard.instance.isControlPressed)) {
+        _handlePaste();
+        return KeyEventResult.handled;
+      }
+      
       return KeyEventResult.ignored;
     });
 
@@ -204,71 +223,132 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             _requestFocusIfPossible();
           }
         },
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+        child: DropTarget(
+          onDragEntered: (_) => setState(() => _isDragging = true),
+          onDragExited: (_) => setState(() => _isDragging = false),
+          onDragDone: (detail) {
+            setState(() => _isDragging = false);
+            List<File> files = detail.files.map((e) => File(e.path)).toList();
+            context.read<MessageProvider>().addFiles(files);
           },
-          child: Focus(
-            focusNode: _focusNode,
-            autofocus: true,
-            child: GestureDetector(
-              onTap: () {
-                if (!_focusNode.hasFocus) {
-                  _focusNode.requestFocus();
-                }
-              },
-              child: Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
-                builder: (context, provider, connectivityProvider, appProvider, child) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          ResponsiveHelper.backgroundPrimary,
-                          ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Stack(
-                        children: [
-                          _buildAnimatedBackground(),
-
-                          // Main content with glassmorphism
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.02),
-                              borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
+                },
+                child: Focus(
+                  focusNode: _focusNode,
+                  autofocus: true,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (!_focusNode.hasFocus) {
+                        _focusNode.requestFocus();
+                      }
+                    },
+                    child: Consumer3<MessageProvider, ConnectivityProvider, AppProvider>(
+                      builder: (context, provider, connectivityProvider, appProvider, child) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                ResponsiveHelper.backgroundPrimary,
+                                ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
+                              ],
                             ),
-                            child: Column(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: Stack(
                               children: [
-                                _buildModernHeader(appProvider),
-                                if (provider.isLoadingMessages) _buildLoadingBar(),
-                                Expanded(
-                                  child: _animationsInitialized
-                                      ? FadeTransition(
-                                          opacity: _fadeAnimation,
-                                          child: SlideTransition(
-                                            position: _slideAnimation,
-                                            child: _buildChatContent(provider, connectivityProvider),
-                                          ),
-                                        )
-                                      : _buildChatContent(provider, connectivityProvider),
+                                _buildAnimatedBackground(),
+
+                                // Main content with glassmorphism
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.02),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      _buildModernHeader(appProvider),
+                                      if (provider.isLoadingMessages) _buildLoadingBar(),
+                                      Expanded(
+                                        child: _animationsInitialized
+                                            ? FadeTransition(
+                                                opacity: _fadeAnimation,
+                                                child: SlideTransition(
+                                                  position: _slideAnimation,
+                                                  child: _buildChatContent(provider, connectivityProvider),
+                                                ),
+                                              )
+                                            : _buildChatContent(provider, connectivityProvider),
+                                      ),
+                                      _buildFloatingInputArea(provider, connectivityProvider),
+                                    ],
+                                  ),
                                 ),
-                                _buildFloatingInputArea(provider, connectivityProvider),
                               ],
                             ),
                           ),
-                        ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              if (_isDragging)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.6),
+                        child: Center(
+                          child: DottedBorder(
+                            borderType: BorderType.RRect,
+                            radius: const Radius.circular(20),
+                            dashPattern: const [10, 5],
+                            color: Colors.white.withOpacity(0.4),
+                            strokeWidth: 2,
+                            child: Container(
+                              width: MediaQuery.of(context).size.width * 0.7,
+                              height: MediaQuery.of(context).size.height * 0.7,
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.file_upload_outlined,
+                                    size: 64,
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Drop files here to add to your message',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
+                ),
+            ],
           ),
         ));
   }
@@ -367,7 +447,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             if (selectedApp != null) ...[
                               const SizedBox(height: 2),
                               Text(
-                                'Chat with ${selectedApp.name}',
+                                context.l10n.chatWithAppName(selectedApp.name),
                                 style: const TextStyle(
                                   color: ResponsiveHelper.textTertiary,
                                   fontSize: 11,
@@ -377,9 +457,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               ),
                             ] else ...[
                               const SizedBox(height: 2),
-                              const Text(
-                                'Default AI Assistant',
-                                style: TextStyle(
+                              Text(
+                                context.l10n.defaultAiAssistant,
+                                style: const TextStyle(
                                   color: ResponsiveHelper.textTertiary,
                                   fontSize: 11,
                                 ),
@@ -473,7 +553,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     }
 
     if (provider.isClearingChat) {
-      return _buildLoadingState("Deleting your messages from Omi's memory...");
+      return _buildLoadingState(context.l10n.deletingMessages);
     }
 
     if (provider.messages.isEmpty) {
@@ -648,22 +728,26 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   ),
                 ),
           const SizedBox(height: 24),
-          Text(
-            isConnected ? '✨ Ready to chat!' : '🌐 Connection needed',
-            style: const TextStyle(
-              color: ResponsiveHelper.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+          Builder(
+            builder: (context) => Text(
+              isConnected ? context.l10n.readyToChat : context.l10n.connectionNeeded,
+              style: const TextStyle(
+                color: ResponsiveHelper.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            isConnected ? 'Start a conversation and let the magic begin' : 'Please check your internet connection',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: ResponsiveHelper.textSecondary,
-              fontSize: 14,
-              height: 1.5,
+          Builder(
+            builder: (context) => Text(
+              isConnected ? context.l10n.startConversation : context.l10n.checkInternetConnection,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: ResponsiveHelper.textSecondary,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -733,6 +817,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   Widget _buildModernMessageBubble(ServerMessage message, MessageProvider provider, int chatIndex) {
     // Make messages take only 70% of available width and align based on sender
+    String text = message.text.decodeString;
+    String? contextText;
+    String messageText = text;
+
+    if (message.sender == MessageSender.human) {
+      final match = _contextRegex.firstMatch(text);
+
+      if (match != null) {
+        contextText = match.group(1);
+        messageText = text.substring(match.end);
+      }
+    }
+
     return Align(
       alignment: message.sender == MessageSender.ai ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
@@ -764,7 +861,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Container(
                     margin: const EdgeInsets.only(left: 50, top: 6),
                     child: Text(
-                      formatChatTimestamp(message.createdAt),
+                      formatChatTimestamp(message.createdAt, context: context),
                       style: TextStyle(
                         color: ResponsiveHelper.textTertiary.withValues(alpha: 0.5),
                         fontSize: 11,
@@ -777,10 +874,43 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (contextText != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6.0, right: 4.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.subdirectory_arrow_right, size: 14, color: ResponsiveHelper.textSecondary),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                contextText,
+                                style: const TextStyle(
+                                  color: ResponsiveHelper.textSecondary,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   OmiChatBubble(
                     type: OmiChatBubbleType.outgoing,
                     child: Text(
-                      message.text.decodeString,
+                      messageText.trimRight(),
                       style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 15,
@@ -806,8 +936,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           context.read<ConversationProvider>().updateConversation(conversation);
         },
         message: message,
-        setMessageNps: (int value) {
-          provider.setMessageNps(message, value);
+        setMessageNps: (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         },
         date: message.createdAt,
       );
@@ -886,14 +1016,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ))
             : const SizedBox.shrink(),
         message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
-        _getNpsWidget(context, message, (int value) {
-          provider.setMessageNps(message, value);
+        _getNpsWidget(context, message, (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         }),
       ],
     );
   }
 
-  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
     if (!message.askForNps) return const SizedBox();
 
     return Padding(
@@ -902,7 +1032,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text('Was this helpful?', style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
+          Text(context.l10n.wasThisHelpful, style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
           const SizedBox(width: 4),
           OmiIconButton(
             icon: Icons.thumb_down_alt_outlined,
@@ -911,10 +1041,11 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             iconSize: 14,
             borderRadius: 6,
             onPressed: () {
-              setMessageNps(0);
+              // For desktop, submit thumbs down without reason picker (can be enhanced later)
+              setMessageNps(-1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('Thank you for your feedback!'),
+                  content: Text(context.l10n.thankYouForFeedback),
                   backgroundColor: ResponsiveHelper.backgroundTertiary,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -934,7 +1065,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               setMessageNps(1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: const Text('Thank you for your feedback!'),
+                  content: Text(context.l10n.thankYouForFeedback),
                   backgroundColor: ResponsiveHelper.backgroundTertiary,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -991,9 +1122,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '📎 Attached Files',
-            style: TextStyle(
+          Text(
+            context.l10n.attachedFiles,
+            style: const TextStyle(
               color: ResponsiveHelper.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -1271,7 +1402,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     if (provider.selectedFiles.length > 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('You can only upload 4 files at a time'),
+          content: Text(context.l10n.maxFilesUploadError),
           backgroundColor: ResponsiveHelper.purplePrimary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1305,28 +1436,37 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           PopupMenuItem<String>(
             value: 'camera',
             padding: EdgeInsets.zero,
-            child: _buildPopupFileOption(
-              icon: Icons.camera_alt_rounded,
-              title: "Take a Photo",
-              subtitle: "Capture with camera",
+            child: Builder(
+              builder: (context) => _buildPopupFileOption(
+                context: context,
+                icon: Icons.camera_alt_rounded,
+                title: context.l10n.takePhoto,
+                subtitle: context.l10n.captureWithCamera,
+              ),
             ),
           ),
         PopupMenuItem<String>(
           value: 'gallery',
           padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.photo_library_rounded,
-            title: "Select Images",
-            subtitle: "Choose from gallery",
+          child: Builder(
+            builder: (context) => _buildPopupFileOption(
+              context: context,
+              icon: Icons.photo_library_rounded,
+              title: context.l10n.selectImages,
+              subtitle: context.l10n.chooseFromGallery,
+            ),
           ),
         ),
         PopupMenuItem<String>(
           value: 'file',
           padding: EdgeInsets.zero,
-          child: _buildPopupFileOption(
-            icon: Icons.attach_file_rounded,
-            title: "Select a File",
-            subtitle: "Choose any file type",
+          child: Builder(
+            builder: (context) => _buildPopupFileOption(
+              context: context,
+              icon: Icons.attach_file_rounded,
+              title: context.l10n.selectFile,
+              subtitle: context.l10n.chooseAnyFileType,
+            ),
           ),
         ),
       ],
@@ -1348,6 +1488,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildPopupFileOption({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
@@ -1411,7 +1552,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('✨ Message copied to clipboard'),
+                content: Text(context.l10n.messageCopied),
                 backgroundColor: ResponsiveHelper.purplePrimary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1438,7 +1579,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('You cannot report your own messages'),
+                content: Text(context.l10n.cannotReportOwnMessages),
                 backgroundColor: Colors.orange,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1449,19 +1590,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           }
           showDialog(
             context: context,
-            builder: (context) {
+            builder: (dialogContext) {
               return getDialog(
-                context,
-                () => Navigator.of(context).pop(),
+                dialogContext,
+                () => Navigator.of(dialogContext).pop(),
                 () {
                   MixpanelManager().track('Chat Message Reported', properties: {'message': message.text});
-                  Navigator.of(context).pop();
+                  Navigator.of(dialogContext).pop();
                   Navigator.of(context).pop();
                   context.read<MessageProvider>().removeLocalMessage(message.id);
                   reportMessageServer(message.id);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('✅ Message reported successfully'),
+                      content: Text(context.l10n.messageReportedSuccessfully),
                       backgroundColor: ResponsiveHelper.purplePrimary,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1469,14 +1610,72 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ),
                   );
                 },
-                'Report Message',
-                'Are you sure you want to report this message?',
+                context.l10n.reportMessage,
+                context.l10n.confirmReportMessage,
               );
             },
           );
         },
       ),
     );
+  }
+
+  Future<void> _handlePaste() async {
+    try {
+      final files = await Pasteboard.files();
+      if (files.isNotEmpty) {
+        if (mounted) {
+          context.read<MessageProvider>().addFiles(files.map((e) => File(e)).toList());
+        }
+        return;
+      }
+
+      final imageBytes = await Pasteboard.image;
+      if (imageBytes != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/pasted_image_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(imageBytes);
+        if (mounted) {
+          context.read<MessageProvider>().addFiles([file]);
+        }
+      } else {
+        final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+        final text = clipboardData?.text;
+        if (text != null && text.isNotEmpty) {
+          final selection = textController.selection;
+          String newText;
+          int newSelectionIndex;
+
+          if (selection.isValid) {
+            newText = textController.text.replaceRange(
+              selection.start,
+              selection.end,
+              text,
+            );
+            newSelectionIndex = selection.start + text.length;
+          } else {
+            newText = textController.text + text;
+            newSelectionIndex = newText.length;
+          }
+
+          textController.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: newSelectionIndex),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to paste content.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
   }
 
   void _sendMessageUtil(String text) {
@@ -1540,7 +1739,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const OmiSectionHeader(icon: FontAwesomeIcons.robot, title: 'Select Chat Assistant'),
+                  Builder(
+                    builder: (context) => OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
+                  ),
                   const Spacer(),
                   OmiIconButton(
                     icon: FontAwesomeIcons.xmark,
@@ -1601,29 +1802,31 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               width: 1,
                             ),
                           ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.store,
-                                color: ResponsiveHelper.purplePrimary,
-                                size: 16,
-                              ),
-                              SizedBox(width: 12),
-                              Text(
-                                'Enable More Apps',
-                                style: TextStyle(
-                                  color: ResponsiveHelper.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                          child: Builder(
+                            builder: (context) => Row(
+                              children: [
+                                const Icon(
+                                  FontAwesomeIcons.store,
+                                  color: ResponsiveHelper.purplePrimary,
+                                  size: 16,
                                 ),
-                              ),
-                              Spacer(),
-                              Icon(
-                                FontAwesomeIcons.chevronRight,
-                                color: ResponsiveHelper.textTertiary,
-                                size: 12,
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                Text(
+                                  context.l10n.enableMoreApps,
+                                  style: const TextStyle(
+                                    color: ResponsiveHelper.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const Spacer(),
+                                const Icon(
+                                  FontAwesomeIcons.chevronRight,
+                                  color: ResponsiveHelper.textTertiary,
+                                  size: 12,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1695,14 +1898,16 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        app?.description ?? 'Default AI Assistant',
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textSecondary,
-                          fontSize: 12,
+                      Builder(
+                        builder: (context) => Text(
+                          app?.description ?? context.l10n.defaultAiAssistant,
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textSecondary,
+                            fontSize: 12,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -1748,15 +1953,15 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void _showClearChatDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => getDialog(
-        context,
-        () => Navigator.of(context).pop(),
+      builder: (dialogContext) => getDialog(
+        dialogContext,
+        () => Navigator.of(dialogContext).pop(),
         () {
           context.read<MessageProvider>().clearChat();
-          Navigator.of(context).pop();
+          Navigator.of(dialogContext).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Chat cleared'),
+              content: Text(context.l10n.chatCleared),
               backgroundColor: ResponsiveHelper.backgroundTertiary,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1764,8 +1969,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             ),
           );
         },
-        'Clear Chat?',
-        'Are you sure you want to clear the chat? This action cannot be undone.',
+        context.l10n.clearChatTitle,
+        context.l10n.confirmClearChat,
       ),
     );
   }

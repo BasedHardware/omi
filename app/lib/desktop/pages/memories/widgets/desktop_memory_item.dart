@@ -1,15 +1,17 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/atoms/omi_icon_badge.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/ui/atoms/omi_icon_badge.dart';
-import 'package:omi/ui/molecules/omi_popup_menu.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 
 class DesktopMemoryItem extends StatelessWidget {
   final Memory memory;
@@ -117,9 +119,9 @@ class DesktopMemoryItem extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.01),
             ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
+            child: Text(
+              context.l10n.upgradeToUnlimited,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -147,19 +149,19 @@ class DesktopMemoryItem extends StatelessWidget {
       builder: (context) => OmiPopupMenuButton<String>(
         icon: Icons.more_vert,
         itemBuilder: (context) => [
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             value: 'edit',
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.edit_outlined,
                   color: ResponsiveHelper.textSecondary,
                   size: 16,
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(
-                  'Edit',
-                  style: TextStyle(
+                  context.l10n.edit,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                   ),
@@ -178,7 +180,7 @@ class DesktopMemoryItem extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  memory.visibility == MemoryVisibility.private ? 'Make Public' : 'Make Private',
+                  memory.visibility == MemoryVisibility.private ? context.l10n.makePublic : context.l10n.makePrivate,
                   style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
@@ -198,7 +200,7 @@ class DesktopMemoryItem extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Delete',
+                  context.l10n.delete,
                   style: TextStyle(
                     color: Colors.red.shade400,
                     fontSize: 14,
@@ -227,8 +229,8 @@ class DesktopMemoryItem extends StatelessWidget {
       case 'delete':
         OmiConfirmDialog.show(
           context,
-          title: 'Delete Memory',
-          message: 'Are you sure you want to delete this memory? This action cannot be undone.',
+          title: context.l10n.deleteMemory,
+          message: context.l10n.deleteMemoryConfirmation,
         ).then((confirmed) {
           if (confirmed == true) {
             provider.deleteMemory(memory);
@@ -241,10 +243,10 @@ class DesktopMemoryItem extends StatelessWidget {
 
   Color _getCategoryColor() {
     switch (memory.category) {
-      case MemoryCategory.interesting:
-        return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
-        return Colors.orange;
+        return ResponsiveHelper.purplePrimary;
+      case MemoryCategory.interesting:
+        return Colors.amber;
       case MemoryCategory.manual:
         return Colors.purple;
     }
@@ -252,10 +254,10 @@ class DesktopMemoryItem extends StatelessWidget {
 
   IconData _getCategoryIcon() {
     switch (memory.category) {
-      case MemoryCategory.interesting:
-        return Icons.lightbulb_outline;
       case MemoryCategory.system:
-        return Icons.settings_outlined;
+        return Icons.person_outlined;
+      case MemoryCategory.interesting:
+        return Icons.lightbulb_outlined;
       case MemoryCategory.manual:
         return Icons.edit_outlined;
     }

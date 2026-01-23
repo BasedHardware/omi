@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/desktop/pages/desktop_home_page.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_auth_screen.dart';
-import 'package:omi/desktop/pages/onboarding/screens/desktop_name_screen.dart';
-import 'package:omi/desktop/pages/onboarding/screens/desktop_language_screen.dart';
-import 'package:omi/desktop/pages/onboarding/screens/desktop_permissions_screen.dart';
 import 'package:omi/desktop/pages/onboarding/screens/desktop_complete_screen.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/desktop/pages/onboarding/screens/desktop_language_screen.dart';
+import 'package:omi/desktop/pages/onboarding/screens/desktop_name_screen.dart';
+import 'package:omi/desktop/pages/onboarding/screens/desktop_permissions_screen.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class DesktopOnboardingWrapper extends StatefulWidget {
   const DesktopOnboardingWrapper({super.key});
@@ -29,38 +33,38 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
-  final List<OnboardingStep> _steps = [
-    OnboardingStep(
-      id: 'auth',
-      title: 'Sign In',
-      description: 'Welcome to Omi',
-      icon: Icons.login_rounded,
-    ),
-    OnboardingStep(
-      id: 'name',
-      title: 'Your Name',
-      description: 'Tell us about yourself',
-      icon: Icons.person_rounded,
-    ),
-    OnboardingStep(
-      id: 'language',
-      title: 'Language',
-      description: 'Choose your preference',
-      icon: Icons.language_rounded,
-    ),
-    OnboardingStep(
-      id: 'permissions',
-      title: 'Permissions',
-      description: 'Grant required access',
-      icon: Icons.shield_rounded,
-    ),
-    OnboardingStep(
-      id: 'complete',
-      title: 'Complete',
-      description: 'You\'re all set',
-      icon: Icons.check_circle_rounded,
-    ),
-  ];
+  List<OnboardingStep> _getSteps(AppLocalizations l10n) => [
+        OnboardingStep(
+          id: 'auth',
+          title: l10n.onboardingSignIn,
+          description: l10n.onboardingWelcomeToOmi,
+          icon: Icons.login_rounded,
+        ),
+        OnboardingStep(
+          id: 'name',
+          title: l10n.onboardingYourName,
+          description: l10n.onboardingTellUsAboutYourself,
+          icon: Icons.person_rounded,
+        ),
+        OnboardingStep(
+          id: 'language',
+          title: l10n.onboardingLanguage,
+          description: l10n.onboardingChooseYourPreference,
+          icon: Icons.language_rounded,
+        ),
+        OnboardingStep(
+          id: 'permissions',
+          title: l10n.onboardingPermissions,
+          description: l10n.onboardingGrantRequiredAccess,
+          icon: Icons.shield_rounded,
+        ),
+        OnboardingStep(
+          id: 'complete',
+          title: l10n.onboardingComplete,
+          description: l10n.onboardingYoureAllSet,
+          icon: Icons.check_circle_rounded,
+        ),
+      ];
 
   List<Widget> get _screens => [
         DesktopAuthScreen(onSignIn: _handleSignIn),
@@ -104,7 +108,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
   }
 
   void _nextStep() {
-    if (_currentStep < _steps.length - 1) {
+    if (_currentStep < _screens.length - 1) {
       setState(() {
         _currentStep++;
       });

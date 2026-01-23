@@ -45,8 +45,10 @@ import 'package:omi/services/shortcut_service.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -55,7 +57,7 @@ enum SettingsSection {
   plansAndBilling,
   calendarIntegration,
   customVocabulary,
-  dailySummary,
+  notifications,
   shortcuts,
   developer,
   about,
@@ -73,7 +75,7 @@ class DesktopSettingsModal extends StatefulWidget {
     return showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Settings',
+      barrierLabel: context.l10n.settings,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (context, animation, secondaryAnimation) {
@@ -99,7 +101,7 @@ class DesktopSettingsModal extends StatefulWidget {
 
 class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   late SettingsSection _selectedSection;
-  
+
   // Shortcuts state
   ShortcutInfo? _askAIShortcut;
   ShortcutInfo? _toggleControlBarShortcut;
@@ -116,10 +118,12 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   Timer? _deletionDebounceTimer;
   bool _isDeletingBatch = false;
 
-  // Daily summary state
+  // Notifications state
   bool _dailySummaryLoading = true;
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22;
+  bool _dailyReflectionEnabled = true;
+  int _notificationFrequency = 3;
 
   @override
   void initState() {
@@ -128,7 +132,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     _loadShortcuts();
     _loadCalendarSettings();
     _loadDailySummarySettings();
-    
+
     // Initialize developer mode provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -160,14 +164,22 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
   Future<void> _loadDailySummarySettings() async {
     final settings = await getDailySummarySettings();
+    final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    final frequency = SharedPreferencesUtil().notificationFrequency;
     if (settings != null && mounted) {
       setState(() {
         _dailySummaryEnabled = settings.enabled;
         _dailySummaryHour = settings.hour;
+        _dailyReflectionEnabled = reflectionEnabled;
+        _notificationFrequency = frequency;
         _dailySummaryLoading = false;
       });
     } else if (mounted) {
-      setState(() => _dailySummaryLoading = false);
+      setState(() {
+        _dailyReflectionEnabled = reflectionEnabled;
+        _notificationFrequency = frequency;
+        _dailySummaryLoading = false;
+      });
     }
   }
 
@@ -189,6 +201,61 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     MixpanelManager().dailySummaryTimeChanged(hour: hour);
   }
 
+  void _updateDailyReflectionEnabled(bool value) {
+    setState(() => _dailyReflectionEnabled = value);
+    SharedPreferencesUtil().dailyReflectionEnabled = value;
+
+    // Schedule or cancel the notification based on the setting
+    if (value) {
+      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+    } else {
+      DailyReflectionNotification.cancelNotification();
+    }
+  }
+
+  void _updateNotificationFrequency(int value) {
+    setState(() => _notificationFrequency = value);
+    SharedPreferencesUtil().notificationFrequency = value;
+  }
+
+  String _getFrequencyLabel(int value) {
+    switch (value) {
+      case 0:
+        return 'Off';
+      case 1:
+        return 'Minimal';
+      case 2:
+        return 'Low';
+      case 3:
+        return 'Balanced';
+      case 4:
+        return 'High';
+      case 5:
+        return 'Maximum';
+      default:
+        return 'Balanced';
+    }
+  }
+
+  String _getFrequencyDescription(int value) {
+    switch (value) {
+      case 0:
+        return 'No proactive notifications';
+      case 1:
+        return 'Only critical reminders';
+      case 2:
+        return 'Important updates only';
+      case 3:
+        return 'Regular helpful nudges';
+      case 4:
+        return 'Frequent check-ins';
+      case 5:
+        return 'Stay constantly engaged';
+      default:
+        return 'Regular helpful nudges';
+    }
+  }
+
   Future<void> _showHourPicker() async {
     if (!_dailySummaryEnabled) return;
 
@@ -204,9 +271,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 borderRadius: BorderRadius.circular(12),
                 side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5)),
               ),
-              title: const Text(
-                'Select Time',
-                style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+              title: Text(
+                context.l10n.selectTime,
+                style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
               ),
               content: SizedBox(
                 width: 300,
@@ -236,14 +303,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel', style: TextStyle(color: ResponsiveHelper.textSecondary)),
+                  child: Text(context.l10n.cancel, style: const TextStyle(color: ResponsiveHelper.textSecondary)),
                 ),
                 TextButton(
                   onPressed: () {
                     _updateDailySummaryHour(tempHour);
                     Navigator.pop(context);
                   },
-                  child: const Text('Done', style: TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.w600)),
+                  child: Text(context.l10n.done,
+                      style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.w600)),
                 ),
               ],
             );
@@ -298,7 +366,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       }
     }
   }
-  
+
   Future<void> _loadShortcuts() async {
     if (!ShortcutService.isSupported) return;
     setState(() => _shortcutsLoading = true);
@@ -316,7 +384,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       if (mounted) setState(() => _shortcutsLoading = false);
     }
   }
-  
+
   void _startRecording(String id) {
     setState(() => _recordingFor = id);
   }
@@ -407,8 +475,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: Text(
-              'SETTINGS',
-              style: TextStyle(
+              context.l10n.settings.toUpperCase(),
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.textTertiary,
@@ -420,43 +488,43 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           // Navigation items
           _buildNavItem(
             icon: FontAwesomeIcons.user,
-            label: 'Account',
+            label: context.l10n.account,
             section: SettingsSection.account,
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.creditCard,
-            label: 'Plans & Billing',
+            label: context.l10n.plansAndBilling,
             section: SettingsSection.plansAndBilling,
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.calendar,
-            label: 'Calendar Integration',
+            label: context.l10n.calendarIntegration,
             section: SettingsSection.calendarIntegration,
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.book,
-            label: 'Custom Vocabulary',
+            label: context.l10n.customVocabulary,
             section: SettingsSection.customVocabulary,
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.bell,
-            label: 'Daily Summary',
-            section: SettingsSection.dailySummary,
+            label: context.l10n.notifications,
+            section: SettingsSection.notifications,
           ),
           if (ShortcutService.isSupported)
             _buildNavItem(
               icon: FontAwesomeIcons.keyboard,
-              label: 'Keyboard Shortcuts',
+              label: context.l10n.keyboardShortcuts,
               section: SettingsSection.shortcuts,
             ),
           _buildNavItem(
             icon: FontAwesomeIcons.code,
-            label: 'Developer',
+            label: context.l10n.developer,
             section: SettingsSection.developer,
           ),
           _buildNavItem(
             icon: FontAwesomeIcons.circleInfo,
-            label: 'About',
+            label: context.l10n.about,
             section: SettingsSection.about,
           ),
 
@@ -541,7 +609,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         return _buildCalendarIntegrationContent();
       case SettingsSection.customVocabulary:
         return _buildCustomVocabularyContent();
-      case SettingsSection.dailySummary:
+      case SettingsSection.notifications:
         return _buildDailySummaryContent();
       case SettingsSection.shortcuts:
         return _buildShortcutsContent();
@@ -558,11 +626,12 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       children: [
         // Your Information section
         _buildSettingsGroup(
-          title: 'Your Information',
+          title: context.l10n.yourInformation,
           children: [
             _buildSettingsRow(
-              title: 'Name',
-              subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
+              title: context.l10n.name,
+              subtitle:
+                  SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
                 await showDialog(
@@ -572,8 +641,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Email',
-              subtitle: SharedPreferencesUtil().email.isEmpty ? 'Not set' : SharedPreferencesUtil().email,
+              title: context.l10n.email,
+              subtitle: SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
               onTap: () {},
               showChevron: false,
             ),
@@ -585,10 +654,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           (element) => element.value == homeProvider.userPrimaryLanguage,
                         )
                         .key
-                    : 'Not set';
+                    : context.l10n.notSet;
 
                 return _buildSettingsRow(
-                  title: 'Language',
+                  title: context.l10n.language,
                   subtitle: languageName,
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Language');
@@ -606,10 +675,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
         // Voice & People section
         _buildSettingsGroup(
-          title: 'Voice & People',
+          title: context.l10n.voiceAndPeople,
           children: [
             _buildSettingsRow(
-              title: 'Speech Profile',
+              title: context.l10n.speechProfile,
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const SpeechProfilePage());
@@ -617,7 +686,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Identifying Others',
+              title: context.l10n.identifyingOthers,
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const UserPeoplePage());
@@ -630,24 +699,24 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
         // Payment & Display & Privacy section
         _buildSettingsGroup(
-          title: 'Preferences',
+          title: context.l10n.preferences,
           children: [
             _buildSettingsRow(
-              title: 'Payment Methods',
+              title: context.l10n.paymentMethods,
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const PaymentsPage());
               },
             ),
             _buildSettingsRow(
-              title: 'Conversation Display',
+              title: context.l10n.conversationDisplay,
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const ConversationDisplaySettings());
               },
             ),
             _buildSettingsRow(
-              title: 'Data Privacy',
+              title: context.l10n.dataPrivacy,
               onTap: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).push(
@@ -662,20 +731,21 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
         // Account section
         _buildSettingsGroup(
-          title: 'Account',
+          title: context.l10n.account,
           children: [
             Builder(
               builder: (context) {
                 final uid = SharedPreferencesUtil().uid;
-                final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+                final truncatedUid =
+                    uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                 return _buildSettingsRow(
-                  title: 'User ID',
+                  title: context.l10n.userId,
                   subtitle: truncatedUid,
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: uid));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: const Text('User ID copied to clipboard'),
+                        content: Text(context.l10n.userIdCopiedToClipboard),
                         backgroundColor: Colors.grey.shade800,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -687,11 +757,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Sign Out',
+              title: context.l10n.signOut,
               onTap: _showSignOutDialog,
             ),
             _buildSettingsRow(
-              title: 'Delete Account',
+              title: context.l10n.deleteAccount,
               isDestructive: true,
               onTap: () {
                 Navigator.of(context).pop();
@@ -715,9 +785,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             Row(
               children: [
-                const Text(
-                  'CUSTOM VOCABULARY',
-                  style: TextStyle(
+                Text(
+                  context.l10n.customVocabulary.toUpperCase(),
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: ResponsiveHelper.textTertiary,
@@ -757,8 +827,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Add words that Omi should recognize during transcription.',
-                    style: TextStyle(
+                    context.l10n.addVocabularyDescription,
+                    style: const TextStyle(
                       fontSize: 13,
                       color: ResponsiveHelper.textTertiary,
                     ),
@@ -779,8 +849,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
                             style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
                             decoration: InputDecoration(
-                              hintText: 'Enter words (comma separated)',
-                              hintStyle: TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
+                              hintText: context.l10n.enterWordsCommaSeparated,
+                              hintStyle:
+                                  TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               border: InputBorder.none,
                             ),
@@ -808,7 +879,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                 ? const SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                    child:
+                                        CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
                                   )
                                 : const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 14),
                           ),
@@ -854,7 +926,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                 const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
                                 )
                               else
                                 GestureDetector(
@@ -867,7 +940,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                                     ),
                                     child: Icon(
                                       Icons.close,
-                                      color: isDisabled ? ResponsiveHelper.textTertiary : ResponsiveHelper.textSecondary,
+                                      color:
+                                          isDisabled ? ResponsiveHelper.textTertiary : ResponsiveHelper.textSecondary,
                                       size: 10,
                                     ),
                                   ),
@@ -892,9 +966,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'DAILY SUMMARY',
-            style: TextStyle(
+          Text(
+            context.l10n.notifications.toUpperCase(),
+            style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
               color: ResponsiveHelper.textTertiary,
@@ -923,16 +997,152 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'DAILY SUMMARY',
-          style: TextStyle(
+        // Notification Frequency Section
+        Text(
+          context.l10n.notificationFrequency.toUpperCase(),
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: ResponsiveHelper.textTertiary,
             letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
+        Text(
+          context.l10n.controlNotificationFrequency,
+          style: const TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _getFrequencyLabel(_notificationFrequency),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: ResponsiveHelper.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _getFrequencyDescription(_notificationFrequency),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: ResponsiveHelper.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _notificationFrequency == 0
+                            ? ResponsiveHelper.backgroundTertiary
+                            : ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$_notificationFrequency',
+                          style: TextStyle(
+                            color: _notificationFrequency == 0
+                                ? ResponsiveHelper.textTertiary
+                                : ResponsiveHelper.purplePrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: ResponsiveHelper.purplePrimary,
+                    inactiveTrackColor: ResponsiveHelper.backgroundTertiary,
+                    thumbColor: Colors.white,
+                    overlayColor: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                    trackHeight: 4,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                  ),
+                  child: Slider(
+                    value: _notificationFrequency.toDouble(),
+                    min: 0,
+                    max: 5,
+                    divisions: 5,
+                    onChanged: (value) => _updateNotificationFrequency(value.round()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        context.l10n.off,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: ResponsiveHelper.textTertiary,
+                        ),
+                      ),
+                      Text(
+                        context.l10n.max,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: ResponsiveHelper.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // Daily Summary Section
+        Text(
+          context.l10n.dailySummary.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ResponsiveHelper.textTertiary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Get a personalized summary of your day\'s conversations delivered as a notification.',
+          style: TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
             color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
@@ -950,26 +1160,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Daily Summary',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: ResponsiveHelper.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Get a personalized summary of your conversations',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: ResponsiveHelper.textTertiary,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        context.l10n.enable,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: ResponsiveHelper.textPrimary,
+                        ),
                       ),
                     ),
                     OmiCheckbox(
@@ -1000,26 +1197,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Delivery Time',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: ResponsiveHelper.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'When to receive your daily summary',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: ResponsiveHelper.textTertiary,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              context.l10n.deliveryTime,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: ResponsiveHelper.textPrimary,
+                              ),
                             ),
                           ),
                           Text(
@@ -1044,6 +1228,60 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ],
           ),
         ),
+
+        const SizedBox(height: 24),
+
+        // Daily Reflection Section
+        const Text(
+          'DAILY REFLECTION',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ResponsiveHelper.textTertiary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Get a reminder at 9 PM to reflect on your day and capture your thoughts.',
+          style: TextStyle(
+            fontSize: 12,
+            color: ResponsiveHelper.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: const Text(
+                    'Enable',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: ResponsiveHelper.textPrimary,
+                    ),
+                  ),
+                ),
+                OmiCheckbox(
+                  value: _dailyReflectionEnabled,
+                  onChanged: _updateDailyReflectionEnabled,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1053,11 +1291,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSettingsGroup(
-          title: 'Subscription',
+          title: context.l10n.subscription,
           children: [
             _buildSettingsRow(
-              title: 'View Plans & Usage',
-              subtitle: 'Manage your subscription and see usage stats',
+              title: context.l10n.viewPlansAndUsage,
+              subtitle: context.l10n.viewPlansDescription,
               onTap: () {
                 Navigator.of(context).pop();
                 MixpanelManager().pageOpened('Plan & Usage');
@@ -1067,8 +1305,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Payment Methods',
-              subtitle: 'Add or change your payment method',
+              title: context.l10n.paymentMethods,
+              subtitle: context.l10n.addOrChangeYourPaymentMethod,
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const PaymentsPage());
@@ -1088,13 +1326,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             // Calendar Providers Section
             _buildSettingsGroup(
-              title: 'Calendar Providers',
+              title: context.l10n.calendarProviders,
               children: [
                 _buildCalendarProviderRow(
                   icon: FontAwesomeIcons.calendar,
                   iconColor: const Color(0xFF5AC8FA),
-                  title: 'macOS Calendar',
-                  subtitle: 'Connect your macOS Calendar',
+                  title: context.l10n.macOsCalendar,
+                  subtitle: context.l10n.connectMacOsCalendar,
                   isEnabled: provider.isAuthorized && provider.isMonitoring,
                   onToggle: (value) async {
                     if (value) {
@@ -1112,11 +1350,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 _buildCalendarProviderRow(
                   icon: FontAwesomeIcons.google,
                   iconColor: const Color(0xFF4285F4),
-                  title: 'Google Calendar',
-                  subtitle: 'Sync your Google account',
+                  title: context.l10n.googleCalendar,
+                  subtitle: context.l10n.googleCalendarComingSoon,
                   isEnabled: false,
                   onToggle: (value) {
-                    AppSnackbar.showSnackbar('Google Calendar integration coming soon!');
+                    AppSnackbar.showSnackbar(context.l10n.googleCalendarComingSoon);
                   },
                 ),
               ],
@@ -1126,11 +1364,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Settings Section
             _buildSettingsGroup(
-              title: 'Display Options',
+              title: context.l10n.displayOptions,
               children: [
                 _buildCalendarToggleRow(
-                  title: 'Show Meetings in Menu Bar',
-                  subtitle: 'Display upcoming meetings in the menu bar',
+                  title: context.l10n.showMeetingsInMenuBar,
+                  subtitle: context.l10n.showMeetingsMenuBarDesc,
                   value: _showMenuBarMeetings,
                   onChanged: (value) {
                     setState(() => _showMenuBarMeetings = value);
@@ -1138,8 +1376,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   },
                 ),
                 _buildCalendarToggleRow(
-                  title: 'Show Events Without Participants',
-                  subtitle: 'Include personal events with no attendees',
+                  title: context.l10n.showEventsWithoutParticipants,
+                  subtitle: context.l10n.showEventsNoParticipantsDesc,
                   value: _showEventsWithNoParticipants,
                   onChanged: (value) {
                     setState(() => _showEventsWithNoParticipants = value);
@@ -1264,9 +1502,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       children: [
         Row(
           children: [
-            const Text(
-              'UPCOMING MEETINGS',
-              style: TextStyle(
+            Text(
+              context.l10n.upcomingMeetings.toUpperCase(),
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: ResponsiveHelper.textTertiary,
@@ -1282,9 +1520,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   minimumSize: Size.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text(
-                  'Refresh',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.refresh,
+                  style: const TextStyle(
                     color: ResponsiveHelper.purplePrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -1305,26 +1543,26 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 width: 1,
               ),
             ),
-            child: const Column(
+            child: Column(
               children: [
-                Icon(
+                const Icon(
                   Icons.event_busy,
                   color: ResponsiveHelper.textTertiary,
                   size: 32,
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 Text(
-                  'No upcoming meetings',
-                  style: TextStyle(
+                  context.l10n.noUpcomingMeetings,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textSecondary,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Checking the next 7 days',
-                  style: TextStyle(
+                  context.l10n.checkingNextSevenDays,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 12,
                   ),
@@ -1360,7 +1598,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             Padding(
               padding: const EdgeInsets.only(left: 4, bottom: 8, top: 8),
               child: Text(
-                _formatMeetingDateHeader(date),
+                _formatMeetingDateHeader(context, date),
                 style: const TextStyle(
                   color: ResponsiveHelper.textSecondary,
                   fontSize: 12,
@@ -1397,22 +1635,23 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     );
   }
 
-  String _formatMeetingDateHeader(DateTime date) {
+  String _formatMeetingDateHeader(BuildContext context, DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
 
     if (date == today) {
-      return 'Today';
+      return context.l10n.today;
     } else if (date == tomorrow) {
-      return 'Tomorrow';
+      return context.l10n.tomorrow;
     } else {
-      return DateFormat('EEEE, MMMM d').format(date);
+      return DateFormat('EEEE, MMMM d', Localizations.localeOf(context).languageCode).format(date);
     }
   }
 
   Widget _buildMeetingCard(CalendarMeeting meeting) {
-    final dateFormat = DateFormat('h:mm a');
+    final locale = Localizations.localeOf(context).languageCode;
+    final dateFormat = DateFormat('h:mm a', locale);
     final duration = meeting.endTime.difference(meeting.startTime);
     final durationString = '${duration.inMinutes} min';
     final platformColor = _getMeetingPlatformColor(meeting.platform);
@@ -1506,11 +1745,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSettingsGroup(
-          title: 'Shortcuts',
+          title: context.l10n.shortcuts,
           children: [
             _buildShortcutRow(
               id: 'toggleControlBar',
-              title: 'Toggle Control Bar',
+              title: context.l10n.toggleControlBar,
               shortcut: _toggleControlBarShortcut?.displayString ?? '⌘\\',
               isRecording: _recordingFor == 'toggleControlBar',
               onTap: () => _startRecording('toggleControlBar'),
@@ -1518,7 +1757,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ),
             _buildShortcutRow(
               id: 'askAI',
-              title: 'Ask Omi',
+              title: context.l10n.askOmi,
               shortcut: _askAIShortcut?.displayString ?? '⌘↩︎',
               isRecording: _recordingFor == 'askAI',
               onTap: () => _startRecording('askAI'),
@@ -1526,12 +1765,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ),
           ],
         ),
-        
         const SizedBox(height: 16),
-        
-        const Text(
-          'Click on a shortcut to change it. Press Escape to cancel.',
-          style: TextStyle(
+        Text(
+          context.l10n.shortcutChangeInstruction,
+          style: const TextStyle(
             fontSize: 12,
             color: ResponsiveHelper.textTertiary,
           ),
@@ -1574,9 +1811,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 if (value == 'reset') onReset?.call();
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'reset',
-                  child: Text('Reset to default', style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
+                  child: Text(context.l10n.resetToDefault,
+                      style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13)),
                 ),
               ],
             ),
@@ -1622,11 +1860,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             // Configuration Section
             _buildSettingsGroup(
-              title: 'Configuration',
+              title: context.l10n.configuration,
               children: [
                 _buildSettingsRow(
-                  title: 'Persona',
-                  subtitle: 'Configure your AI persona',
+                  title: context.l10n.persona,
+                  subtitle: context.l10n.configureYourAiPersona,
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
@@ -1639,8 +1877,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   },
                 ),
                 _buildSettingsRow(
-                  title: 'Transcription',
-                  subtitle: 'Configure STT provider',
+                  title: context.l10n.transcription,
+                  subtitle: context.l10n.configureSTTProvider,
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
@@ -1649,15 +1887,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   },
                 ),
                 _buildSettingsRow(
-                  title: 'Conversation Timeout',
-                  subtitle: 'Set when conversations auto-end',
+                  title: context.l10n.conversationTimeout,
+                  subtitle: context.l10n.setWhenConversationsAutoEnd,
                   onTap: () {
                     ConversationTimeoutDialog.show(context);
                   },
                 ),
                 _buildSettingsRow(
-                  title: 'Import Data',
-                  subtitle: 'Import data from other sources',
+                  title: context.l10n.importData,
+                  subtitle: context.l10n.importDataFromOtherSources,
                   onTap: () {
                     Navigator.of(context).pop();
                     Navigator.of(context).push(
@@ -1672,13 +1910,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Debug & Diagnostics Section
             _buildSettingsGroup(
-              title: 'Debug & Diagnostics',
+              title: context.l10n.debugAndDiagnostics,
               children: [
                 _buildToggleRow(
-                  title: 'Debug Logs',
+                  title: context.l10n.debugLogs,
                   subtitle: SharedPreferencesUtil().devLogsToFileEnabled
-                      ? 'Auto-deletes after 3 days'
-                      : 'Helps diagnose issues',
+                      ? context.l10n.autoDeletesAfter3Days
+                      : context.l10n.helpsDiagnoseIssues,
                   value: SharedPreferencesUtil().devLogsToFileEnabled,
                   onChanged: (v) async {
                     await DebugLogManager.setEnabled(v);
@@ -1695,7 +1933,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             onPressed: () async {
                               final files = await DebugLogManager.listLogFiles();
                               if (files.isEmpty) {
-                                AppSnackbar.showSnackbarError('No log files found.');
+                                AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
                                 return;
                               }
                               if (files.length == 1) {
@@ -1706,7 +1944,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                               await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
                             },
                             icon: const Icon(Icons.upload_file, size: 16),
-                            label: const Text('Share Logs'),
+                            label: Text(context.l10n.shareLogs),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: ResponsiveHelper.backgroundTertiary,
                               foregroundColor: ResponsiveHelper.textPrimary,
@@ -1719,7 +1957,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         ElevatedButton(
                           onPressed: () async {
                             await DebugLogManager.clear();
-                            AppSnackbar.showSnackbar('Debug logs cleared');
+                            AppSnackbar.showSnackbar(context.l10n.debugLogsCleared);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red.withValues(alpha: 0.15),
@@ -1727,14 +1965,14 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
-                          child: const Text('Clear'),
+                          child: Text(context.l10n.clear),
                         ),
                       ],
                     ),
                   ),
                 _buildSettingsRow(
-                  title: 'Export All Data',
-                  subtitle: 'Export conversations to JSON',
+                  title: context.l10n.exportAllData,
+                  subtitle: context.l10n.exportConversationsDescription,
                   trailing: devProvider.loadingExportMemories
                       ? const SizedBox(
                           width: 20,
@@ -1748,7 +1986,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           devProvider.loadingExportMemories = true;
                           setState(() {});
 
-                          AppSnackbar.showSnackbar('Exporting conversations...');
+                          AppSnackbar.showSnackbar(context.l10n.exportingConversations);
                           List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
                           String json = const JsonEncoder.withIndent("     ").convert(memories);
                           final directory = await getApplicationDocumentsDirectory();
@@ -1762,8 +2000,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         },
                 ),
                 _buildSettingsRow(
-                  title: 'Delete Knowledge Graph',
-                  subtitle: 'Clear all nodes and connections',
+                  title: context.l10n.deleteKnowledgeGraph,
+                  subtitle: context.l10n.clearAllNodesAndConnections,
                   isDestructive: true,
                   onTap: () {
                     showDialog(
@@ -1774,27 +2012,29 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5)),
                         ),
-                        title: const Text('Delete Knowledge Graph?', style: TextStyle(color: ResponsiveHelper.textPrimary)),
-                        content: const Text(
-                          'This will delete all derived knowledge graph data. Your original memories remain safe.',
-                          style: TextStyle(color: ResponsiveHelper.textSecondary),
+                        title: Text(context.l10n.deleteKnowledgeGraphQuestion,
+                            style: const TextStyle(color: ResponsiveHelper.textPrimary)),
+                        content: Text(
+                          context.l10n.deleteKnowledgeGraphWarning,
+                          style: const TextStyle(color: ResponsiveHelper.textSecondary),
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Cancel', style: TextStyle(color: ResponsiveHelper.textTertiary)),
+                            child:
+                                Text(context.l10n.cancel, style: const TextStyle(color: ResponsiveHelper.textTertiary)),
                           ),
                           TextButton(
                             onPressed: () async {
                               Navigator.of(ctx).pop();
                               try {
                                 await KnowledgeGraphApi.deleteKnowledgeGraph();
-                                AppSnackbar.showSnackbar('Knowledge Graph deleted');
+                                AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeleted);
                               } catch (e) {
-                                AppSnackbar.showSnackbarError('Failed to delete: $e');
+                                AppSnackbar.showSnackbarError(context.l10n.failedToDeleteError(e.toString()));
                               }
                             },
-                            child: Text('Delete', style: TextStyle(color: Colors.red.shade400)),
+                            child: Text(context.l10n.delete, style: TextStyle(color: Colors.red.shade400)),
                           ),
                         ],
                       ),
@@ -1808,7 +2048,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Developer API Keys Section
             _buildSettingsGroup(
-              title: 'Developer API Keys',
+              title: context.l10n.developerApiKeys,
               children: [
                 const Padding(
                   padding: EdgeInsets.all(16),
@@ -1821,7 +2061,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // MCP Section
             _buildSettingsGroup(
-              title: 'MCP',
+              title: context.l10n.mcp,
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -1830,15 +2070,15 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Connect Omi with AI assistants',
-                              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+                              context.l10n.connectOmiWithAI,
+                              style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
                             ),
                           ),
                           TextButton(
                             onPressed: () => launchUrl(Uri.parse('https://docs.omi.me/doc/developer/MCP')),
-                            child: const Text('Docs'),
+                            child: Text(context.l10n.docs),
                             style: TextButton.styleFrom(foregroundColor: ResponsiveHelper.purplePrimary),
                           ),
                           TextButton.icon(
@@ -1847,7 +2087,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                               builder: (context) => const CreateMcpApiKeyDialog(),
                             ),
                             icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Create Key'),
+                            label: Text(context.l10n.createKey),
                             style: TextButton.styleFrom(
                               foregroundColor: ResponsiveHelper.purplePrimary,
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1880,7 +2120,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                               icon: const Icon(Icons.copy, size: 16, color: ResponsiveHelper.textTertiary),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: '${Env.apiBaseUrl}v1/mcp/sse'));
-                                AppSnackbar.showSnackbar('URL copied');
+                                AppSnackbar.showSnackbar(context.l10n.urlCopied);
                               },
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -1897,9 +2137,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           ),
                         )
                       else if (mcpProvider.keys.isEmpty)
-                        const Text(
-                          'No API keys. Create one to get started.',
-                          style: TextStyle(fontSize: 13, color: ResponsiveHelper.textTertiary),
+                        Text(
+                          context.l10n.noApiKeysCreateOne,
+                          style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textTertiary),
                         )
                       else
                         ...mcpProvider.keys.map((key) => McpApiKeyListItem(apiKey: key)),
@@ -1913,42 +2153,40 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Webhooks Section
             _buildSettingsGroup(
-              title: 'Webhooks',
+              title: context.l10n.webhooks,
               children: [
                 _buildToggleRow(
-                  title: 'Conversation Events',
-                  subtitle: 'New conversation created',
+                  title: context.l10n.conversationEvents,
+                  subtitle: context.l10n.newConversationCreated,
                   value: devProvider.conversationEventsToggled,
                   onChanged: devProvider.onConversationEventsToggled,
                 ),
                 if (devProvider.conversationEventsToggled)
                   _buildWebhookUrlField(devProvider.webhookOnConversationCreated),
                 _buildToggleRow(
-                  title: 'Real-time Transcript',
-                  subtitle: 'Transcript received',
+                  title: context.l10n.realTimeTranscript,
+                  subtitle: context.l10n.transcriptReceived,
                   value: devProvider.transcriptsToggled,
                   onChanged: devProvider.onTranscriptsToggled,
                 ),
-                if (devProvider.transcriptsToggled)
-                  _buildWebhookUrlField(devProvider.webhookOnTranscriptReceived),
+                if (devProvider.transcriptsToggled) _buildWebhookUrlField(devProvider.webhookOnTranscriptReceived),
                 _buildToggleRow(
-                  title: 'Audio Bytes',
-                  subtitle: 'Audio data received',
+                  title: context.l10n.audioBytes,
+                  subtitle: context.l10n.audioDataReceived,
                   value: devProvider.audioBytesToggled,
                   onChanged: devProvider.onAudioBytesToggled,
                 ),
                 if (devProvider.audioBytesToggled) ...[
                   _buildWebhookUrlField(devProvider.webhookAudioBytes),
-                  _buildWebhookUrlField(devProvider.webhookAudioBytesDelay, label: 'Interval (seconds)'),
+                  _buildWebhookUrlField(devProvider.webhookAudioBytesDelay, label: context.l10n.intervalSeconds),
                 ],
                 _buildToggleRow(
-                  title: 'Day Summary',
-                  subtitle: 'Summary generated',
+                  title: context.l10n.daySummary,
+                  subtitle: context.l10n.summaryGenerated,
                   value: devProvider.daySummaryToggled,
                   onChanged: devProvider.onDaySummaryToggled,
                 ),
-                if (devProvider.daySummaryToggled)
-                  _buildWebhookUrlField(devProvider.webhookDaySummary),
+                if (devProvider.daySummaryToggled) _buildWebhookUrlField(devProvider.webhookDaySummary),
               ],
             ),
 
@@ -1956,37 +2194,31 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
             // Experimental features
             _buildSettingsGroup(
-              title: 'Experimental',
+              title: context.l10n.experimental,
               children: [
                 _buildToggleRow(
-                  title: 'Transcription Diagnostics',
-                  subtitle: 'Detailed diagnostic messages',
+                  title: context.l10n.transcriptionDiagnostics,
+                  subtitle: context.l10n.detailedDiagnosticMessages,
                   value: devProvider.transcriptionDiagnosticEnabled,
                   onChanged: (v) => devProvider.onTranscriptionDiagnosticChanged(v),
                 ),
                 _buildToggleRow(
-                  title: 'Auto-create Speakers',
-                  subtitle: 'Auto-create when name detected',
+                  title: context.l10n.autoCreateSpeakers,
+                  subtitle: context.l10n.autoCreateWhenNameDetected,
                   value: devProvider.autoCreateSpeakersEnabled,
                   onChanged: (v) => devProvider.onAutoCreateSpeakersChanged(v),
                 ),
                 _buildToggleRow(
-                  title: 'Follow-up Questions',
-                  subtitle: 'Suggest questions after conversations',
+                  title: context.l10n.followUpQuestions,
+                  subtitle: context.l10n.suggestQuestionsAfterConversations,
                   value: devProvider.followUpQuestionEnabled,
                   onChanged: (v) => devProvider.onFollowUpQuestionChanged(v),
                 ),
                 _buildToggleRow(
-                  title: 'Goal Tracker',
-                  subtitle: 'Track personal goals on homepage',
+                  title: context.l10n.goalTracker,
+                  subtitle: context.l10n.trackPersonalGoals,
                   value: devProvider.showGoalTrackerEnabled,
                   onChanged: (v) => devProvider.onShowGoalTrackerChanged(v),
-                ),
-                _buildToggleRow(
-                  title: 'Daily Reflection',
-                  subtitle: '9 PM reminder to reflect on your day',
-                  value: devProvider.dailyReflectionEnabled,
-                  onChanged: (v) => devProvider.onDailyReflectionChanged(v),
                 ),
               ],
             ),
@@ -2010,7 +2242,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Save Settings', style: TextStyle(fontWeight: FontWeight.w600)),
+                    : Text(context.l10n.saveSettings, style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -2019,7 +2251,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     );
   }
 
-  Widget _buildWebhookUrlField(TextEditingController controller, {String label = 'Endpoint URL'}) {
+  Widget _buildWebhookUrlField(TextEditingController controller, {String? label}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
@@ -2032,7 +2264,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           controller: controller,
           style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 13),
           decoration: InputDecoration(
-            labelText: label,
+            labelText: label ?? context.l10n.endpointUrl,
             labelStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 12),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: InputBorder.none,
@@ -2047,17 +2279,17 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSettingsGroup(
-          title: 'Links',
+          title: context.l10n.links,
           children: [
             _buildSettingsRow(
-              title: 'Privacy Policy',
+              title: context.l10n.privacyPolicy,
               onTap: () {
                 MixpanelManager().pageOpened('About Privacy Policy');
                 launchUrl(Uri.parse('https://www.omi.me/pages/privacy'));
               },
             ),
             _buildSettingsRow(
-              title: 'Visit Website',
+              title: context.l10n.visitWebsite,
               subtitle: 'https://omi.me',
               onTap: () {
                 MixpanelManager().pageOpened('About Visit Website');
@@ -2065,7 +2297,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Help or Inquiries',
+              title: context.l10n.helpOrInquiries,
               subtitle: 'team@basedhardware.com',
               onTap: () async {
                 final Uri emailUri = Uri(
@@ -2079,8 +2311,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
             _buildSettingsRow(
-              title: 'Join the Community',
-              subtitle: '8000+ members on Discord',
+              title: context.l10n.joinTheCommunity,
+              subtitle: context.l10n.discordMemberCount,
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');
                 launchUrl(Uri.parse('http://discord.omi.me'));
@@ -2093,10 +2325,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
         // User ID section
         _buildSettingsGroup(
-          title: 'User Information',
+          title: context.l10n.userInformation,
           children: [
             _buildSettingsRow(
-              title: 'User ID',
+              title: context.l10n.userId,
               subtitle: SharedPreferencesUtil().uid,
               trailing: OmiIconButton(
                 icon: FontAwesomeIcons.copy,
@@ -2108,7 +2340,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('User ID copied to clipboard'),
+                      content: Text(context.l10n.userIdCopiedToClipboard),
                       backgroundColor: Colors.grey.shade800,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2291,17 +2523,17 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             width: 1,
           ),
         ),
-        title: const Text(
-          'Sign Out?',
-          style: TextStyle(
+        title: Text(
+          context.l10n.signOutQuestion,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
-        content: const Text(
-          'Are you sure you want to sign out?',
-          style: TextStyle(
+        content: Text(
+          context.l10n.signOutConfirmation,
+          style: const TextStyle(
             color: ResponsiveHelper.textSecondary,
             fontSize: 14,
           ),
@@ -2309,9 +2541,9 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
+            child: Text(
+              context.l10n.cancel,
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
               ),
             ),
@@ -2327,7 +2559,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               }
             },
             child: Text(
-              'Sign Out',
+              context.l10n.signOut,
               style: TextStyle(
                 color: Colors.red.shade400,
               ),
@@ -2352,7 +2584,7 @@ class _ShortcutRecorderBadge extends StatefulWidget {
 
 class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
   final FocusNode _focusNode = FocusNode();
-  String _displayText = 'Press keys...';
+  String? _displayText;
   int? _keyCode;
   int? _modifiers;
   bool _isValid = false;
@@ -2363,11 +2595,45 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
   static const int controlKey = 0x1000;
 
   static final Map<int, int> _physicalKeyToCarbonKeyCode = {
-    0x04: 0, 0x05: 11, 0x06: 8, 0x07: 2, 0x08: 14, 0x09: 3, 0x0A: 5, 0x0B: 4,
-    0x0C: 34, 0x0D: 38, 0x0E: 40, 0x0F: 37, 0x10: 46, 0x11: 45, 0x12: 31, 0x13: 35,
-    0x14: 12, 0x15: 15, 0x16: 1, 0x17: 17, 0x18: 32, 0x19: 9, 0x1A: 13, 0x1B: 7,
-    0x1C: 16, 0x1D: 6, 0x1E: 18, 0x1F: 19, 0x20: 20, 0x21: 21, 0x22: 23, 0x23: 22,
-    0x24: 26, 0x25: 28, 0x26: 25, 0x27: 29, 0x28: 36, 0x2C: 49, 0x31: 42,
+    0x04: 0,
+    0x05: 11,
+    0x06: 8,
+    0x07: 2,
+    0x08: 14,
+    0x09: 3,
+    0x0A: 5,
+    0x0B: 4,
+    0x0C: 34,
+    0x0D: 38,
+    0x0E: 40,
+    0x0F: 37,
+    0x10: 46,
+    0x11: 45,
+    0x12: 31,
+    0x13: 35,
+    0x14: 12,
+    0x15: 15,
+    0x16: 1,
+    0x17: 17,
+    0x18: 32,
+    0x19: 9,
+    0x1A: 13,
+    0x1B: 7,
+    0x1C: 16,
+    0x1D: 6,
+    0x1E: 18,
+    0x1F: 19,
+    0x20: 20,
+    0x21: 21,
+    0x22: 23,
+    0x23: 22,
+    0x24: 26,
+    0x25: 28,
+    0x26: 25,
+    0x27: 29,
+    0x28: 36,
+    0x2C: 49,
+    0x31: 42,
   };
 
   @override
@@ -2395,7 +2661,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     final isCommand = HardwareKeyboard.instance.isMetaPressed;
     if (!isCommand) {
       setState(() {
-        _displayText = '⌘ required';
+        _displayText = context.l10n.commandRequired;
         _isValid = false;
       });
       return;
@@ -2415,7 +2681,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
 
     if (carbonKeyCode == null) {
       setState(() {
-        _displayText = 'Invalid key';
+        _displayText = context.l10n.invalidKey;
         _isValid = false;
       });
       return;
@@ -2426,7 +2692,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     if (isOption) parts.add('⌥');
     if (isShift) parts.add('⇧');
     parts.add('⌘');
-    parts.add(_getKeyName(event.logicalKey));
+    parts.add(_getKeyName(context, event.logicalKey));
 
     setState(() {
       _keyCode = carbonKeyCode;
@@ -2457,9 +2723,9 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
         key == LogicalKeyboardKey.controlRight;
   }
 
-  String _getKeyName(LogicalKeyboardKey key) {
+  String _getKeyName(BuildContext context, LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) return '↩︎';
-    if (key == LogicalKeyboardKey.space) return 'Space';
+    if (key == LogicalKeyboardKey.space) return context.l10n.spaceKey;
     if (key == LogicalKeyboardKey.backslash) return '\\';
     final label = key.keyLabel;
     return label.length == 1 ? label.toUpperCase() : label;
@@ -2478,7 +2744,7 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
           border: Border.all(color: ResponsiveHelper.purplePrimary, width: 1.5),
         ),
         child: Text(
-          _displayText,
+          _displayText ?? context.l10n.pressKeys,
           style: TextStyle(
             color: _isValid ? ResponsiveHelper.textPrimary : ResponsiveHelper.purplePrimary,
             fontSize: 13,
@@ -2491,4 +2757,3 @@ class _ShortcutRecorderBadgeState extends State<_ShortcutRecorderBadge> {
     );
   }
 }
-

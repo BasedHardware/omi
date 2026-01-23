@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Set, Tuple, Callable
 import av
 import numpy as np
 import opuslib  # type: ignore
-import webrtcvad  # type: ignore
 
 import lc3  # lc3py
 
@@ -22,8 +21,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
-# Suppress FFmpeg duration estimation warnings
-av.logging.set_level(av.logging.ERROR)
+from firebase_admin.auth import InvalidIdTokenError
 
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
@@ -45,11 +43,14 @@ from models.conversation import (
 )
 from models.message_event import (
     ConversationEvent,
+    FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+    FreemiumThresholdReachedEvent,
     LastConversationEvent,
     MessageEvent,
     MessageServiceStatusEvent,
     PhotoDescribedEvent,
     PhotoProcessingEvent,
+    SegmentsDeletedEvent,
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
@@ -77,12 +78,14 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
-from utils.subscription import has_transcription_credits
+from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
+from utils.aac import AACDecoder
+from utils.audio import AudioRingBuffer
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -95,65 +98,8 @@ router = APIRouter()
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 
-
-class AudioRingBuffer:
-    """Circular buffer storing last N seconds of PCM16 mono audio with timestamp tracking."""
-
-    def __init__(self, duration_seconds: float, sample_rate: int):
-        self.sample_rate = sample_rate
-        self.bytes_per_second = sample_rate * 2  # PCM16 mono
-        self.capacity = int(duration_seconds * self.bytes_per_second)
-        self.buffer = bytearray(self.capacity)
-        self.write_pos = 0
-        self.total_bytes_written = 0
-        self.last_write_timestamp: Optional[float] = None
-
-    def write(self, data: bytes, timestamp: float):
-        """Append audio data with timestamp."""
-        for byte in data:
-            self.buffer[self.write_pos] = byte
-            self.write_pos = (self.write_pos + 1) % self.capacity
-        self.total_bytes_written += len(data)
-        self.last_write_timestamp = timestamp
-
-    def get_time_range(self) -> Optional[Tuple[float, float]]:
-        """Return (start_ts, end_ts) of audio currently in buffer."""
-        if self.last_write_timestamp is None:
-            return None
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_duration = bytes_in_buffer / self.bytes_per_second
-        return (self.last_write_timestamp - buffer_duration, self.last_write_timestamp)
-
-    def extract(self, start_ts: float, end_ts: float) -> Optional[bytes]:
-        """Extract audio for absolute timestamp range."""
-        time_range = self.get_time_range()
-        if time_range is None:
-            return None
-
-        buffer_start_ts, buffer_end_ts = time_range
-        actual_start = max(start_ts, buffer_start_ts)
-        actual_end = min(end_ts, buffer_end_ts)
-
-        if actual_start >= actual_end:
-            return None
-
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_logical_start = (self.write_pos - bytes_in_buffer) % self.capacity
-
-        start_offset = int((actual_start - buffer_start_ts) * self.bytes_per_second)
-        end_offset = int((actual_end - buffer_start_ts) * self.bytes_per_second)
-
-        # Ensure even number of bytes (PCM16)
-        length = ((end_offset - start_offset) // 2) * 2
-        if length <= 0:
-            return None
-
-        result = bytearray(length)
-        for i in range(length):
-            pos = (buffer_logical_start + start_offset + i) % self.capacity
-            result[i] = self.buffer[pos]
-
-        return bytes(result)
+# Freemium: Send notification when credits threshold is reached
+FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
 
 
 class CustomSttMode(str, Enum):
@@ -161,62 +107,7 @@ class CustomSttMode(str, Enum):
     enabled = "enabled"
 
 
-class AACDecoder:
-
-    def __init__(self, uid: str = '', session_id: str = '', sample_rate: int = 16000, channels: int = 1):
-        self.uid = uid
-        self.session_id = session_id
-
-        # Initialize codec context immediately
-        self.codec_context = av.CodecContext.create('aac', 'r')
-
-        # Initialize resampler immediately
-        from av.audio.resampler import AudioResampler
-
-        target_layout = 'mono' if channels == 1 else 'stereo'
-        self.resampler = AudioResampler(format='s16', layout=target_layout, rate=sample_rate)
-
-    def decode(self, aac_data: bytes) -> bytes:
-        """Decode AAC frame using persistent codec context.
-
-        Args:
-            aac_data: Complete AAC frame with ADTS header
-
-        Returns:
-            PCM data as bytes
-        """
-        if not aac_data:
-            return b''
-
-        try:
-            # Create packet and decode
-            packet = av.Packet(aac_data)
-            frames = self.codec_context.decode(packet)
-
-            if not frames:
-                return b''
-
-            # Resample and collect PCM data
-            pcm_chunks = []
-            for frame in frames:
-                resampled_frames = self.resampler.resample(frame)
-                for resampled_frame in resampled_frames:
-                    frame_array = resampled_frame.to_ndarray()
-                    if frame_array.ndim > 1:
-                        frame_array = frame_array.T.flatten()
-                    pcm_chunks.append(frame_array.tobytes())
-
-            return b''.join(pcm_chunks)
-
-        except (EOFError, av.AVError):
-            # Expected for incomplete frames, return empty
-            return b''
-        except Exception as e:
-            print(f"[AAC] Decode error: {e}", self.uid, self.session_id)
-            return b''
-
-
-async def _listen(
+async def _stream_handler(
     websocket: WebSocket,
     uid: str,
     language: str = 'en',
@@ -230,9 +121,13 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
 ):
+    """
+    Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
+    This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
+    """
     session_id = str(uuid.uuid4())
     print(
-        '_listen',
+        '_stream_handler',
         uid,
         session_id,
         language,
@@ -250,12 +145,6 @@ async def _listen(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
         include_speech_profile = False
-
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid, session_id)
-        return
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -363,9 +252,12 @@ async def _listen(
     last_transcript_time: Optional[float] = None
     current_conversation_id = None
 
+    freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
+        nonlocal freemium_threshold_sent
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -386,22 +278,40 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            if not use_custom_stt and not has_transcription_credits(uid):
-                user_has_credits = False
+            # Freemium: Check remaining credits and notify when threshold reached
+            remaining_seconds = get_remaining_transcription_seconds(uid)
+
+            # Notify user when approaching limit (3 minutes remaining)
+            if (
+                remaining_seconds is not None
+                and remaining_seconds <= FREEMIUM_THRESHOLD_SECONDS
+                and not freemium_threshold_sent
+            ):
+                # Determine required action
+                # Currently: user must setup on-device STT
+                # Future: backend may auto-fallback to lower-tier cloud STT (action = ACTION_NONE)
+                await _asend_message_event(
+                    FreemiumThresholdReachedEvent(
+                        remaining_seconds=remaining_seconds,
+                        action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                    )
+                )
+                freemium_threshold_sent = True
+
+                # Also send push notification
                 try:
                     await send_credit_limit_notification(uid)
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}", uid, session_id)
 
-                if current_conversation_id and current_conversation_id not in locked_conversation_ids:
-                    conversation = conversations_db.get_conversation(uid, current_conversation_id)
-                    if conversation and conversation['status'] == ConversationStatus.in_progress:
-                        conversation_id = conversation['id']
-                        print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
-                        conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
-                        locked_conversation_ids.add(conversation_id)
-            elif not use_custom_stt:
+            # Update credits state
+            if remaining_seconds is not None and remaining_seconds <= 0:
+                user_has_credits = False
+            elif remaining_seconds is None or remaining_seconds > 0:
                 user_has_credits = True
+                # Reset threshold flag if credits were restored (new month, upgrade, etc.)
+                if remaining_seconds is None or remaining_seconds > FREEMIUM_THRESHOLD_SECONDS:
+                    freemium_threshold_sent = False
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)
@@ -711,13 +621,14 @@ async def _listen(
         photos: List[ConversationPhoto],
         finished_at: datetime,
     ):
-        starts, ends = (0, 0)
+        updated_segments: List[TranscriptSegment] = []
+        removed_ids: List[str] = []
 
         if segments:
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+            conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
+            _process_speaker_assigned_segments(updated_segments)
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -730,7 +641,7 @@ async def _listen(
                 conversation.source = ConversationSource.openglass
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
-        return conversation, (starts, ends)
+        return conversation, updated_segments, removed_ids
 
     # STT
     # Validate websocket_active before initiating STT
@@ -1447,7 +1358,11 @@ async def _listen(
             best_distance = float('inf')
 
             # Print all candidates with scores for tuning
-            print(f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people:", uid, session_id)
+            print(
+                f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people:",
+                uid,
+                session_id,
+            )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
                 print(f"  - {data['name']}: {distance:.4f}", uid, session_id)
@@ -1551,18 +1466,20 @@ async def _listen(
 
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg.speech_profile_processed
-                transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
+                transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
             conversation = Conversation(**conversation_data)
             result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue
-            conversation, (starts, ends) = result
+            conversation, updated_segments, removed_ids = result
+
+            if removed_ids:
+                _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
-                updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
-                await websocket.send_json(updates_segments)
+                await websocket.send_json([segment.dict() for segment in updated_segments])
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
@@ -1572,10 +1489,10 @@ async def _listen(
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
-                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
+                    await translate(updated_segments, conversation.id)
 
                 # Speaker detection
-                for segment in conversation.transcript_segments[starts:ends]:
+                for segment in updated_segments:
                     if segment.person_id or segment.is_user or segment.id in suggested_segments:
                         continue
 
@@ -2042,7 +1959,48 @@ async def _listen(
             # Variables might not be defined if an error occurred early
             print(f"Cleanup error (safe to ignore): {e}", uid, session_id)
 
-    print("_listen ended", uid, session_id)
+    print("_stream_handler ended", uid, session_id)
+
+
+async def _listen(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: Optional[STTService] = None,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
+):
+    """
+    WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
+    """
+    print("_listen", uid)
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"_listen: accept error {e}", uid)
+        return
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        stt_service,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("_listen ended", uid)
 
 
 @router.websocket("/v4/listen")
@@ -2076,3 +2034,79 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
     )
+
+
+@router.websocket("/v4/web/listen")
+async def web_listen_handler(
+    websocket: WebSocket,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
+):
+    """
+    WebSocket endpoint for web browser clients using first-message authentication.
+
+    First message must be: {"type": "auth", "token": "<firebase_token>"}
+    Response: {"type": "auth_response", "success": true/false}
+    """
+    print("web_listen_handler")
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"web_listen_handler: accept error {e}")
+        return
+
+    # Wait for auth message with timeout
+    try:
+        first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Auth timeout")
+        return
+    except WebSocketDisconnect:
+        return
+
+    # Authenticate via first message
+    try:
+        uid = auth.get_current_user_uid_from_ws_message(first_message)
+    except ValueError as e:
+        await websocket.close(code=1008, reason=str(e))
+        return
+    except InvalidIdTokenError:
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    except Exception as e:
+        print(f"web_listen_handler: auth error {e}")
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Auth error")
+        return
+
+    # Send success response
+    await websocket.send_json({"type": "auth_response", "success": True})
+    print("web_listen_handler authenticated", uid)
+
+    # Proceed with streaming (websocket already accepted, uid already validated)
+    custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("web_listen_handler ended", uid)

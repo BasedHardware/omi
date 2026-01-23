@@ -1,16 +1,19 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:omi/utils/mutex.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
+
+import 'package:collection/collection.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
+import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
+import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/services/devices/discovery/device_discoverer.dart';
-import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
-import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/mutex.dart';
 
 abstract class IDeviceService {
   void start();
@@ -23,6 +26,10 @@ abstract class IDeviceService {
   void unsubscribe(Object context);
 
   DateTime? getFirstConnectedAt();
+
+  // WiFi sync support - pause BLE reconnection during WiFi transfer
+  void setWifiSyncInProgress(bool value);
+  Future<void> disconnectDevice();
 }
 
 enum DeviceServiceStatus {
@@ -81,7 +88,7 @@ class DeviceService implements IDeviceService {
     String? desirableDeviceId,
     int timeout = 5,
   }) async {
-    debugPrint("Device discovering...");
+    Logger.debug("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
       logCommonErrorMessage("Device service is not ready, may busying or stop");
       return;
@@ -98,8 +105,8 @@ class DeviceService implements IDeviceService {
           final result = await d.discover(timeout: timeout);
           return result.devices;
         } catch (e, st) {
-          debugPrint('Discovery failed for ${d.name}: $e');
-          debugPrint('$st');
+          Logger.debug('Discovery failed for ${d.name}: $e');
+          Logger.debug('$st');
           return <BtDevice>[];
         }
       });
@@ -135,16 +142,16 @@ class DeviceService implements IDeviceService {
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      debugPrint("Device not in discovered list, checking stored device");
+      Logger.debug("Device not in discovered list, checking stored device");
       device = _getStoredDevice(id);
       if (device != null) {
-        debugPrint("Using stored device for direct reconnection: ${device.name}");
+        Logger.debug("Using stored device for direct reconnection: ${device.name}");
         // Add to devices list so it's available for future connections
         if (!_devices.any((d) => d.id == device!.id)) {
           _devices.add(device);
         }
       } else {
-        debugPrint("No stored device available for $id");
+        Logger.debug("No stored device available for $id");
         return;
       }
     }
@@ -153,7 +160,7 @@ class DeviceService implements IDeviceService {
     if (_connection != null) {
       await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
-      debugPrint("Failed to create device connection for ${device.id}");
+      Logger.debug("Failed to create device connection for ${device.id}");
     }
   }
 
@@ -200,7 +207,7 @@ class DeviceService implements IDeviceService {
   }
 
   void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
-    debugPrint("device connection state changed...$deviceId...$state");
+    Logger.debug("device connection state changed...$deviceId...$state");
     DebugLogManager.logEvent('device_connection_state', {
       'device_id': deviceId,
       'state': state.name,
@@ -222,7 +229,7 @@ class DeviceService implements IDeviceService {
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
     await _mutex.acquire();
     try {
-      debugPrint("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
       // Not force
       if (!force && _connection != null) {
@@ -243,7 +250,7 @@ class DeviceService implements IDeviceService {
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
-        debugPrint(e.cause);
+        Logger.debug(e.cause);
         return null;
       }
 
@@ -267,8 +274,26 @@ class DeviceService implements IDeviceService {
         return storedDevice;
       }
     } catch (e) {
-      debugPrint('Error getting stored device: $e');
+      Logger.debug('Error getting stored device: $e');
     }
     return null;
+  }
+
+  bool _isWifiSyncInProgress = false;
+  bool get isWifiSyncInProgress => _isWifiSyncInProgress;
+
+  @override
+  void setWifiSyncInProgress(bool value) {
+    _isWifiSyncInProgress = value;
+    Logger.debug("DeviceService: WiFi sync in progress: $value");
+  }
+
+  @override
+  Future<void> disconnectDevice() async {
+    if (_connection != null) {
+      Logger.debug("DeviceService: Disconnecting device...");
+      await _connection?.disconnect();
+      _connection = null;
+    }
   }
 }

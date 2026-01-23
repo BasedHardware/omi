@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -13,10 +16,10 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
-import 'package:provider/provider.dart';
 
 class SpeechProfileCardWidget extends StatelessWidget {
   const SpeechProfileCardWidget({super.key});
@@ -56,22 +59,22 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         ),
                         margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
                         padding: const EdgeInsets.all(16),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Row(
                                 children: [
-                                  Icon(Icons.multitrack_audio),
-                                  SizedBox(width: 16),
+                                  const Icon(Icons.multitrack_audio),
+                                  const SizedBox(width: 16),
                                   Text(
-                                    'Teach Omi your voice',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    context.l10n.teachOmiYourVoice,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                           ],
                         ),
                       ),
@@ -112,22 +115,22 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       padding: const EdgeInsets.all(16),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
                             child: Row(
                               children: [
-                                Icon(Icons.upload),
-                                SizedBox(width: 16),
+                                const Icon(Icons.upload),
+                                const SizedBox(width: 16),
                                 Text(
-                                  'Update omi firmware',
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                  context.l10n.updateOmiFirmware,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                               ],
                             ),
                           ),
-                          Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                         ],
                       ),
                     ),

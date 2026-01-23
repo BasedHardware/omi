@@ -1,9 +1,12 @@
 import 'package:flutter/cupertino.dart';
+
+import 'package:just_audio/just_audio.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/base_provider.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:omi/utils/logger.dart';
 
 class PeopleProvider extends BaseProvider {
   List<Person> people = SharedPreferencesUtil().cachedPeople;
@@ -26,7 +29,7 @@ class PeopleProvider extends BaseProvider {
     loading = false;
     people = value;
     SharedPreferencesUtil().cachedPeople = people;
-    debugPrint("${SharedPreferencesUtil().cachedPeople.length} people");
+    Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
     notifyListeners();
   }
 
@@ -114,7 +117,7 @@ class PeopleProvider extends BaseProvider {
       SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
       notifyListeners();
     } else {
-      debugPrint('Failed to delete speech sample at index: $sampleIdx');
+      Logger.debug('Failed to delete speech sample at index: $sampleIdx');
     }
   }
 

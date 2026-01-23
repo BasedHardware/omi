@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -10,6 +11,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 // Use speaker colors from person.dart for bubble colors
@@ -112,9 +114,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       );
     }
     // Always modulo by speakerImagePath.length to prevent index out of bounds
-    final imageIndex = person != null
-        ? person.colorIdx! % speakerImagePath.length
-        : speakerId % speakerImagePath.length;
+    final imageIndex =
+        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
     return Image.asset(
       speakerImagePath[imageIndex],
       width: 24,
@@ -484,7 +485,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               if (!isUser) ...[
                 // Avatar for other speakers (left side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: data.speakerId == omiSpeakerId
+                      ? null
+                      : () {
+                          widget.editSegment?.call(data.id, data.speakerId);
+                          MixpanelManager().tagSheetOpened();
+                        },
                   child: Column(
                     children: [
                       CircleAvatar(
@@ -504,8 +510,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 child: Column(
                   crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
-                    // Speaker name (only shown when toggled)
-                    if (!isUser && _showSpeakerNames) ...[
+                    if (!isUser) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
                         child: Row(
@@ -651,8 +656,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp and provider (only shown when toggled)
-                                  if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
+                                  // Timestamp and provider
+                                  if (widget.canDisplaySeconds || data.sttProvider != null) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -705,7 +710,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 const SizedBox(width: 8),
                 // Avatar for user (right side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: () {
+                    widget.editSegment?.call(data.id, data.speakerId);
+                    MixpanelManager().tagSheetOpened();
+                  },
                   child: Column(
                     children: [
                       CircleAvatar(
@@ -730,14 +738,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('Translation Notice'),
-              content: const Text(
-                'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
-                style: TextStyle(fontSize: 14),
+              title: Text(context.l10n.translationNotice),
+              content: Text(
+                context.l10n.translationNoticeMessage,
+                style: const TextStyle(fontSize: 14),
               ),
               actions: [
                 TextButton(
-                  child: const Text('OK'),
+                  child: Text(context.l10n.ok),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
@@ -836,17 +844,21 @@ String tryDecodingText(String text) {
   return _decodedTextCache[text]!;
 }
 
-String formatChatTimestamp(DateTime dateTime) {
+String formatChatTimestamp(DateTime dateTime, {BuildContext? context}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+  final timeStr = dateTimeFormat('h:mm a', dateTime);
 
   if (messageDate == today) {
     // Today, show time only
-    return dateTimeFormat('h:mm a', dateTime);
+    return timeStr;
   } else if (messageDate == today.subtract(const Duration(days: 1))) {
     // Yesterday
-    return 'Yesterday ${dateTimeFormat('h:mm a', dateTime)}';
+    if (context != null) {
+      return context.l10n.yesterdayAtTime(timeStr);
+    }
+    return 'Yesterday $timeStr';
   } else {
     // Other days
     return dateTimeFormat('MMM d, h:mm a', dateTime);

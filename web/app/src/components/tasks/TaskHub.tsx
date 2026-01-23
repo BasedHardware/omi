@@ -16,8 +16,14 @@ import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'hub' | 'list';
 
+// Detect if device is mobile (< 1024px)
+const getDefaultViewMode = (): ViewMode => {
+  if (typeof window === 'undefined') return 'hub';
+  return window.innerWidth < 1024 ? 'list' : 'hub';
+};
+
 export function TaskHub() {
-  const [viewMode, setViewMode] = useState<ViewMode>('hub');
+  const [viewMode, setViewMode] = useState<ViewMode>(getDefaultViewMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -74,6 +80,13 @@ export function TaskHub() {
     return () => setContext(null);
   }, [setContext]);
 
+  // Enter selection mode and select the specified task (for double-click)
+  // Defined early because it's used in taskGroupProps
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
   // Common props for all TaskGroup components
   const taskGroupProps = {
     onToggleComplete: toggleComplete,
@@ -85,6 +98,10 @@ export function TaskHub() {
     ...(isSelectMode && {
       selectedIds,
       onSelect: handleSelect,
+    }),
+    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+    ...(!isSelectMode && {
+      onEnterSelectionMode: enterSelectionModeWithId,
     }),
   };
 
@@ -532,6 +549,7 @@ export function TaskHub() {
                   onUpdateDescription={updateDescription}
                   onSetDueDate={setDueDate}
                   searchQuery={searchQuery}
+                  onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                 />
               ) : filteredView ? (
                 /* Filtered view (when date is selected in Hub view) */

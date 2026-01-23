@@ -1,24 +1,30 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/bee_connection.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
+import 'package:omi/services/devices/frame_connection.dart';
+import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/bee_connection.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/friend_pendant_connection.dart';
-import 'package:omi/services/devices/limitless_connection.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
+import 'package:omi/main.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
-import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
-import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/transports/watch_transport.dart';
+import 'package:omi/utils/logger.dart';
 
 class DeviceConnectionFactory {
   static DeviceConnection? create(BtDevice device) {
@@ -169,7 +175,7 @@ abstract class DeviceConnection {
       }
       return result;
     } catch (e) {
-      debugPrint('Transport ping failed: $e');
+      Logger.debug('Transport ping failed: $e');
       return false;
     }
   }
@@ -225,10 +231,10 @@ abstract class DeviceConnection {
 
   Future<List<int>> getBleButtonState() async {
     if (await isConnected()) {
-      debugPrint('button state called');
+      Logger.debug('button state called');
       return await performGetButtonState();
     }
-    debugPrint('button state error');
+    Logger.debug('button state error');
     return Future.value(<int>[]);
   }
 
@@ -289,7 +295,7 @@ abstract class DeviceConnection {
           .writeCharacteristic(speakerDataStreamServiceUuid, speakerDataStreamCharacteristicUuid, [mode & 0xFF]);
       return true;
     } catch (e) {
-      debugPrint('Failed to play haptic: $e');
+      Logger.debug('Failed to play haptic: $e');
       return false;
     }
   }
@@ -320,7 +326,7 @@ abstract class DeviceConnection {
           [command & 0xFF, numFile & 0xFF, offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]]);
       return true;
     } catch (e) {
-      debugPrint('Failed to write to storage: $e');
+      Logger.debug('Failed to write to storage: $e');
       return false;
     }
   }
@@ -466,22 +472,31 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<bool> setupWifiSync(String ssid, String password, String serverIp, int port) async {
-    if (await isConnected()) {
-      return await performSetupWifiSync(ssid, password, serverIp, port);
+  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password) async {
+    final connected = await isConnected();
+    debugPrint('DeviceConnection: setupWifiSync - isConnected: $connected, ssid: $ssid');
+    if (connected) {
+      final result = await performSetupWifiSync(ssid, password);
+      debugPrint('DeviceConnection: setupWifiSync - result: ${result.success}, error: ${result.errorCode}');
+      return result;
     }
-    _showDeviceDisconnectedNotification();
-    return false;
+    debugPrint('DeviceConnection: setupWifiSync - device disconnected');
+    return WifiSyncSetupResult.connectionFailed();
   }
 
-  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
-    return false;
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
+    return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
   }
 
   Future<bool> startWifiSync() async {
-    if (await isConnected()) {
-      return await performStartWifiSync();
+    final connected = await isConnected();
+    debugPrint('DeviceConnection: startWifiSync - isConnected: $connected');
+    if (connected) {
+      final result = await performStartWifiSync();
+      debugPrint('DeviceConnection: startWifiSync - performStartWifiSync returned: $result');
+      return result;
     }
+    debugPrint('DeviceConnection: startWifiSync - device disconnected, showing notification');
     _showDeviceDisconnectedNotification();
     return false;
   }
@@ -518,9 +533,11 @@ abstract class DeviceConnection {
   }
 
   void _showDeviceDisconnectedNotification() {
+    final ctx = MyApp.navigatorKey.currentContext;
+    final deviceName = device.name;
     NotificationService.instance.createNotification(
-      title: '${device.name} Disconnected',
-      body: 'Please reconnect to continue using your ${device.name}.',
+      title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',
+      body: ctx?.l10n.deviceDisconnectedBody(deviceName) ?? 'Please reconnect to continue using your $deviceName.',
     );
   }
 }

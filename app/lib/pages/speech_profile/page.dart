@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
@@ -13,12 +17,11 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:provider/provider.dart';
-
 import 'percentage_bar_progress.dart';
 
 class SpeechProfilePage extends StatefulWidget {
@@ -72,6 +75,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _questionAnimationController.dispose();
     super.dispose();
   }
@@ -79,20 +83,22 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
   final ScrollController _scrollController = ScrollController();
 
   void scrollDown() async {
-    if (_scrollController.hasClients) {
-      await Future.delayed(const Duration(milliseconds: 250));
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    }
+    await Future.delayed(const Duration(milliseconds: 250));
+
+    if (!mounted) return;
+    if (_scrollController.positions.isEmpty) return;
+
+    _scrollController.animateTo(
+      _scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     Future restartDeviceRecording() async {
-      debugPrint("restartDeviceRecording $mounted");
+      Logger.debug("restartDeviceRecording $mounted");
       if (mounted) {
         Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
         Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
@@ -102,7 +108,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
     }
 
     Future stopDeviceRecording() async {
-      debugPrint("stopDeviceRecording $mounted");
+      Logger.debug("stopDeviceRecording $mounted");
       if (mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
       }
@@ -147,9 +153,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Multiple speakers detected',
-                  'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.',
-                  okButtonText: 'Try Again',
+                  context.l10n.multipleSpeakersDetected,
+                  context.l10n.multipleSpeakersDescription,
+                  okButtonText: context.l10n.tryAgain,
                   singleButton: true,
                 ),
                 barrierDismissible: false,
@@ -164,9 +170,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Invalid recording detected',
-                  'There is not enough speech detected. Please speak more and try again.',
-                  okButtonText: 'Ok',
+                  context.l10n.invalidRecordingDetected,
+                  context.l10n.notEnoughSpeechDescription,
+                  okButtonText: context.l10n.ok,
                   singleButton: true,
                 ),
                 barrierDismissible: false,
@@ -181,9 +187,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Invalid recording detected',
-                  'Please make sure you speak for at least 5 seconds and not more than 90.',
-                  okButtonText: 'Ok',
+                  context.l10n.invalidRecordingDetected,
+                  context.l10n.speechDurationDescription,
+                  okButtonText: context.l10n.ok,
                   singleButton: true,
                 ),
                 barrierDismissible: false,
@@ -198,9 +204,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  'Connection Lost',
-                  'The connection was interrupted. Please check your internet connection and try again.',
-                  okButtonText: 'Try Again',
+                  context.l10n.connectionLost,
+                  context.l10n.connectionLostDescription,
+                  okButtonText: context.l10n.tryAgain,
                   singleButton: true,
                 ),
                 barrierDismissible: false,
@@ -226,8 +232,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                               context,
                               () => Navigator.pop(context),
                               () => Navigator.pop(context),
-                              'How to take a good sample?',
-                              '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in it\'s natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.',
+                              context.l10n.howToTakeGoodSample,
+                              context.l10n.goodSampleInstructions,
                               singleButton: true,
                             ),
                           );
@@ -240,9 +246,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                         onPressed: () {
                           routeToPage(context, const HomePageWrapper(), replace: true);
                         },
-                        child: const Text(
-                          'Skip',
-                          style: TextStyle(color: Colors.white, decoration: TextDecoration.underline),
+                        child: Text(
+                          context.l10n.skip,
+                          style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline),
                         ),
                       ),
               ],
@@ -279,21 +285,21 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(40, 40, 40, 48),
                     child: !provider.startedRecording
-                        ? const Column(
+                        ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Text(
-                                'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.',
+                                context.l10n.speechProfileIntro,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
                                   height: 1.4,
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
-                              SizedBox(height: 20),
+                              const SizedBox(height: 20),
                             ],
                           )
                         : provider.text.isEmpty
@@ -354,7 +360,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
                                   child: Text(
-                                    'No device connected. Will use phone microphone.',
+                                    context.l10n.noDeviceConnectedUseMic,
                                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                                     textAlign: TextAlign.center,
                                   ),
@@ -414,7 +420,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                       child: Text(
-                                        SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
+                                        SharedPreferencesUtil().hasSpeakerProfile ? context.l10n.doItAgain : context.l10n.getStarted,
                                         style: const TextStyle(color: Colors.black),
                                       ),
                                     ),
@@ -424,18 +430,18 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       onPressed: () {
                                         routeToPage(context, const UserSpeechSamples());
                                       },
-                                      child: const Text(
-                                        'Listen to my speech profile ➡️',
-                                        style: TextStyle(color: Colors.white, fontSize: 16),
+                                      child: Text(
+                                        context.l10n.listenToSpeechProfile,
+                                        style: const TextStyle(color: Colors.white, fontSize: 16),
                                       ))
                                   : const SizedBox(),
                               TextButton(
                                   onPressed: () {
                                     routeToPage(context, const UserPeoplePage());
                                   },
-                                  child: const Text(
-                                    'Recognizing others 👀',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  child: Text(
+                                    context.l10n.recognizingOthers,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   )),
                             ],
                           )
@@ -459,9 +465,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                     // Conversation processing already triggered in finalize()
                                     Navigator.pop(context);
                                   },
-                                  child: const Text(
-                                    "All done!",
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                  child: Text(
+                                    context.l10n.allDone,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ),
                               )
@@ -488,16 +494,16 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        'Keep going, you are doing great',
+                                        context.l10n.keepGoingGreat,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
                                         textAlign: TextAlign.center,
                                       ),
                                       const SizedBox(height: 8),
                                       TextButton(
                                         onPressed: () => provider.skipCurrentQuestion(),
-                                        child: const Text(
-                                          'Skip this question',
-                                          style: TextStyle(
+                                        child: Text(
+                                          context.l10n.skipThisQuestion,
+                                          style: const TextStyle(
                                             color: Colors.white70,
                                             fontSize: 14,
                                           ),

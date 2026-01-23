@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue } from 'react';
+import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,14 +8,17 @@ import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
 import { MemoryFilters } from './MemoryFilters';
 import { MemoryQuickAdd } from './MemoryQuickAdd';
-import { KnowledgeGraph } from './KnowledgeGraph';
-import { InsightsDashboard, LifeBalanceChart, TrendingSidebar } from './InsightsDashboard';
+import { LifeBalanceChart, TrendingSidebar } from './InsightsDashboard';
 import { useInsightsDashboard } from '@/hooks/useInsightsDashboard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+
+// Lazy load heavy components for better performance
+const KnowledgeGraph = lazy(() => import('./KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
+const InsightsDashboard = lazy(() => import('./InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
 
 type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -31,12 +34,12 @@ export function MemoriesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>('score');
+  const [sortBy, setSortBy] = useState<SortOption>('created_desc');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [highlightedMemoryId, setHighlightedMemoryId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -60,11 +63,21 @@ export function MemoriesPage() {
   // Chat context for passing selected memory info
   const { setContext } = useChatContext();
 
+  // Extract single selected ID as a primitive to avoid array reference in dependency array
+  const singleSelectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+
+  // Create memoized lookup map for O(1) memory access
+  const memoriesById = useMemo(() => {
+    const map = new Map<string, typeof memories[0]>();
+    memories.forEach(m => map.set(m.id, m));
+    return map;
+  }, [memories]);
+
   // Set chat context when a memory is highlighted or single selected
   useEffect(() => {
-    const targetId = highlightedMemoryId || (selectedIds.size === 1 ? Array.from(selectedIds)[0] : null);
+    const targetId = highlightedMemoryId || singleSelectedId;
     if (targetId) {
-      const memory = memories.find((m) => m.id === targetId);
+      const memory = memoriesById.get(targetId);
       if (memory) {
         setContext({
           type: 'memory',
@@ -78,7 +91,7 @@ export function MemoriesPage() {
     } else {
       setContext(null);
     }
-  }, [highlightedMemoryId, selectedIds, memories, setContext]);
+  }, [highlightedMemoryId, singleSelectedId, memoriesById, setContext]);
 
   // Clear chat context when component unmounts
   useEffect(() => {
@@ -88,8 +101,10 @@ export function MemoriesPage() {
   // Defer memories to prevent blocking UI during heavy computations
   const deferredMemories = useDeferredValue(memories);
 
-  // Get insights data for sidebar - uses deferred memories to not block UI
-  const { lifeBalance, risingTags, fadingTags } = useInsightsDashboard(deferredMemories);
+  // Get insights data for sidebar - defer computation when loading empty state
+  const insightsInput = loading && memories.length === 0 ? [] : deferredMemories;
+  const insights = useInsightsDashboard(insightsInput);
+  const { lifeBalance, risingTags, fadingTags } = insights;
 
   // Calculate tag stats from all memories
   const tagStats = useMemo(() => {
@@ -110,25 +125,17 @@ export function MemoriesPage() {
   const topTags = tagStats.slice(0, 12);
   const allTags = tagStats;
 
-  // Get recent memories count (last 7 days) - uses deferred value
-  const recentMemoriesCount = useMemo(() => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
-    return deferredMemories.filter((m) => m.created_at >= sevenDaysAgoStr).length;
-  }, [deferredMemories]);
-
-  // Get today's memories - uses deferred value
-  const todayMemories = useMemo(() => {
+  // Combined date calculations in a single pass through memories - uses deferred value
+  const { recentMemoriesCount, todayMemories, activityData } = useMemo(() => {
+    const now = new Date();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString();
-    return deferredMemories.filter((m) => m.created_at >= todayStr);
-  }, [deferredMemories]);
 
-  // Calculate activity data for chart (last 30 days) - uses deferred value
-  const activityData = useMemo(() => {
-    const now = new Date();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
+
     now.setHours(23, 59, 59, 999);
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
@@ -142,28 +149,46 @@ export function MemoriesPage() {
       dayCounts[date.toISOString().split('T')[0]] = 0;
     }
 
-    // Single pass through deferred memories
-    deferredMemories.forEach((m) => {
+    // Single pass through all memories
+    let recentCount = 0;
+    const todayMems: typeof deferredMemories = [];
+
+    for (const m of deferredMemories) {
+      // Check for recent (last 7 days)
+      if (m.created_at >= sevenDaysAgoStr) {
+        recentCount++;
+      }
+      // Check for today
+      if (m.created_at >= todayStr) {
+        todayMems.push(m);
+      }
+      // Count for activity chart (last 30 days)
       const dateKey = m.created_at.split('T')[0];
       if (dateKey in dayCounts) {
         dayCounts[dateKey]++;
       }
-    });
+    }
 
-    return Object.entries(dayCounts)
+    const activityDataResult = Object.entries(dayCounts)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
+
+    return {
+      recentMemoriesCount: recentCount,
+      todayMemories: todayMems,
+      activityData: activityDataResult,
+    };
   }, [deferredMemories]);
 
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
-    // If no filters and default sort, return original array (no copy needed)
+    // If no filters and backend's default sort (score), return original deferred array (no copy needed)
     if (!searchQuery && !selectedTag && sortBy === 'score') {
-      return memories;
+      return deferredMemories;
     }
 
     // Only filter what we need
-    let result = memories;
+    let result = deferredMemories;
 
     // Filter by search query
     if (searchQuery) {
@@ -176,10 +201,12 @@ export function MemoriesPage() {
       result = result.filter((m) => m.tags && m.tags.includes(selectedTag));
     }
 
-    // Only sort if needed (non-default sort)
+    // Apply sorting (skip only for 'score' which is backend's default)
     if (sortBy !== 'score') {
-      // Create copy only when sorting to avoid mutating original
-      result = [...result];
+      // Only create copy if we're still using original array reference
+      const needsCopy = result === deferredMemories;
+      result = needsCopy ? [...result] : result;
+
       switch (sortBy) {
         case 'created_desc':
           result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -194,11 +221,12 @@ export function MemoriesPage() {
     }
 
     return result;
-  }, [memories, searchQuery, selectedTag, sortBy]);
+  }, [deferredMemories, searchQuery, selectedTag, sortBy]);
 
   // Handle node selection from graph
-  const handleNodeSelect = useCallback((nodeId: string, memoryIds: string[]) => {
-    console.log('Selected node:', nodeId, 'with memories:', memoryIds);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleNodeSelect = useCallback((_nodeId: string, _memoryIds: string[]) => {
+    // Node selection handler - can be extended for future features
   }, []);
 
   // Handle tag click with transition for smooth loading
@@ -228,51 +256,53 @@ export function MemoriesPage() {
 
   // Handle selection toggle for a single memory
   const handleToggleSelect = useCallback((memoryId: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(memoryId)) {
-        next.delete(memoryId);
-      } else {
-        next.add(memoryId);
-      }
-      return next;
-    });
+    setSelectedIds((prev) =>
+      prev.includes(memoryId)
+        ? prev.filter(id => id !== memoryId)
+        : [...prev, memoryId]
+    );
   }, []);
 
   // Toggle select mode
   const toggleSelectMode = useCallback(() => {
     if (isSelectMode) {
       // Exiting select mode - clear selection
-      setSelectedIds(new Set());
+      setSelectedIds([]);
     }
     setIsSelectMode(!isSelectMode);
   }, [isSelectMode]);
 
+  // Enter selection mode and select the specified memory (for double-click)
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds([id]);
+  }, []);
+
   // Handle select all visible memories
   const handleSelectAll = useCallback(() => {
-    if (selectedIds.size === filteredMemories.length) {
+    if (selectedIds.length === filteredMemories.length) {
       // Deselect all
-      setSelectedIds(new Set());
+      setSelectedIds([]);
     } else {
       // Select all filtered memories
-      setSelectedIds(new Set(filteredMemories.map((m) => m.id)));
+      setSelectedIds(filteredMemories.map((m) => m.id));
     }
-  }, [filteredMemories, selectedIds.size]);
+  }, [filteredMemories, selectedIds.length]);
 
   // Handle bulk delete - show confirmation dialog
   const handleBulkDeleteClick = useCallback(() => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.length === 0) return;
     setShowDeleteConfirm(true);
-  }, [selectedIds.size]);
+  }, [selectedIds.length]);
 
   // Execute bulk delete after confirmation
   const executeBulkDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
       // Delete each selected memory
-      const deletePromises = Array.from(selectedIds).map((id) => removeMemory(id));
+      const deletePromises = selectedIds.map((id) => removeMemory(id));
       await Promise.all(deletePromises);
-      setSelectedIds(new Set());
+      setSelectedIds([]);
       setIsSelectMode(false);
       setShowDeleteConfirm(false);
     } finally {
@@ -282,26 +312,20 @@ export function MemoriesPage() {
 
   // Handle copy to clipboard
   const handleCopy = useCallback(async () => {
-    const selected = memories.filter(m => selectedIds.has(m.id));
+    const selected = memories.filter(m => selectedIds.includes(m.id));
     await copyMemoriesToClipboard(selected);
   }, [memories, selectedIds]);
 
   // Handle export
   const handleExport = useCallback((format: 'csv' | 'json' | 'markdown') => {
-    const selected = memories.filter(m => selectedIds.has(m.id));
+    const selected = memories.filter(m => selectedIds.includes(m.id));
     downloadMemories(selected, format);
   }, [memories, selectedIds]);
 
   // Clear selection
   const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
+    setSelectedIds([]);
   }, []);
-
-  // Clear selection when filters change
-  const handleTagClickWithClearSelection = (tag: string) => {
-    setSelectedIds(new Set());
-    handleTagClick(tag);
-  };
 
   // Calculate max activity for chart scaling
   const maxActivity = Math.max(...activityData.map((d) => d.count), 1);
@@ -312,10 +336,10 @@ export function MemoriesPage() {
       <PageHeader title="Memories" icon={Brain} />
 
       {/* Toolbar */}
-      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="py-3 px-4">
+      <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary w-full max-w-full">
+        <div className="py-3 px-4 max-w-full">
           {/* Row 1: View toggle + Select + Sort + Filter + Search + Refresh */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-w-full">
             {/* Left: View toggle */}
             <div className="flex items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
@@ -405,10 +429,10 @@ export function MemoriesPage() {
                   {showSortMenu && (
                     <>
                       <div
-                        className="fixed inset-0 z-10"
+                        className="fixed inset-0 z-40"
                         onClick={() => setShowSortMenu(false)}
                       />
-                      <div className="absolute left-0 top-full mt-1 z-20 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
+                      <div className="absolute left-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
                         {SORT_OPTIONS.map((option) => (
                           <button
                             key={option.value}
@@ -488,9 +512,9 @@ export function MemoriesPage() {
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row w-full">
+        <div className="h-full flex flex-col lg:flex-row w-full max-w-full overflow-x-hidden">
           {/* Left Column - Memories list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-w-0 order-1">
             {viewMode === 'list' ? (
               <>
                 {/* Quick add */}
@@ -500,14 +524,14 @@ export function MemoriesPage() {
                 {isSelectMode && (
                   <BulkActionBar
                     inline
-                    selectedCount={selectedIds.size}
+                    selectedCount={selectedIds.length}
                     onDelete={handleBulkDeleteClick}
                     onClear={clearSelection}
                     onCopy={handleCopy}
                     onExport={handleExport}
                     onSelectAll={handleSelectAll}
                     onDone={toggleSelectMode}
-                    allSelected={selectedIds.size === filteredMemories.length && filteredMemories.length > 0}
+                    allSelected={selectedIds.length === filteredMemories.length && filteredMemories.length > 0}
                     totalCount={filteredMemories.length}
                     hideComplete
                     hideSnooze
@@ -554,26 +578,46 @@ export function MemoriesPage() {
                     // Only pass selection props when in select mode
                     selectedIds={isSelectMode ? selectedIds : undefined}
                     onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
+                    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+                    onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                   />
                 )}
               </>
             ) : viewMode === 'graph' ? (
-              <KnowledgeGraph onNodeSelect={handleNodeSelect} />
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <span className="ml-2 text-text-tertiary">Loading graph...</span>
+                  </div>
+                }
+              >
+                <KnowledgeGraph onNodeSelect={handleNodeSelect} />
+              </Suspense>
             ) : (
-              <InsightsDashboard
-                memories={memories}
-                onTagSelect={(tags) => {
-                  // Use the first tag for filtering
-                  setSelectedTag(tags[0] || null);
-                  setViewMode('list');
-                }}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-primary" />
+                    <span className="ml-2 text-text-tertiary">Loading insights...</span>
+                  </div>
+                }
+              >
+                <InsightsDashboard
+                  insights={insights}
+                  onTagSelect={(tags) => {
+                    // Use the first tag for filtering
+                    setSelectedTag(tags[0] || null);
+                    setViewMode('list');
+                  }}
+                />
+              </Suspense>
             )}
           </div>
 
           {/* Right Column - Insights sidebar */}
           {viewMode === 'list' && (
-            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
+            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary space-y-4 lg:h-full lg:overflow-y-auto min-w-0 max-w-full order-2">
               {/* Loading state */}
               {loading && memories.length === 0 ? (
                 <div className="space-y-4">
@@ -749,7 +793,7 @@ export function MemoriesPage() {
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
         title="Delete Memories"
-        description={`Are you sure you want to delete ${selectedIds.size} ${selectedIds.size === 1 ? 'memory' : 'memories'}? This action cannot be undone.`}
+        description={`Are you sure you want to delete ${selectedIds.length} ${selectedIds.length === 1 ? 'memory' : 'memories'}? This action cannot be undone.`}
         confirmLabel={isDeleting ? 'Deleting...' : 'Delete'}
         cancelLabel="Cancel"
         variant="danger"

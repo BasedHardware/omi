@@ -660,15 +660,22 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             case "getAvailableCalendars":
                 let calendars = self.calendarMonitor?.getAvailableCalendars() ?? []
                 result(calendars)
-                
+
             case "updateCalendarSettings":
-                if let args = call.arguments as? [String: Any],
-                   let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool {
-                    self.calendarMonitor?.updateSettings(showEventsWithNoParticipants: showEventsWithNoParticipants)
+                let args = call.arguments as? [String: Any] ?? [:]
+                let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool
+                let showMeetingsInMenuBar = args["showMeetingsInMenuBar"] as? Bool
+
+                if showEventsWithNoParticipants == nil && showMeetingsInMenuBar == nil {
                     result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Settings required", details: nil))
+                    return
                 }
+
+                self.calendarMonitor?.updateSettings(
+                    showEventsWithNoParticipants: showEventsWithNoParticipants,
+                    showMeetingsInMenuBar: showMeetingsInMenuBar
+                )
+                result(nil)
 
             case "snoozeMeeting":
                 if let args = call.arguments as? [String: Any],

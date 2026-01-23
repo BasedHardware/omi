@@ -190,10 +190,10 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
     """
     Generate signed URLs for speech samples given their GCS paths.
     Uses the paths stored in Firestore instead of listing GCS blobs.
-    
+
     Args:
         paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
-    
+
     Returns:
         List of signed URLs
     """
@@ -505,6 +505,9 @@ def download_audio_chunks_and_merge(
             if timestamp in chunk_results:
                 merged_data.extend(chunk_results[timestamp])
 
+    # Free memory from chunk results immediately after merging
+    chunk_results.clear()
+
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
 
@@ -574,6 +577,7 @@ def get_or_create_merged_audio(
 
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
+    del pcm_data  # Free PCM data immediately after WAV conversion
 
     # Upload to cache in background thread with 3-day TTL
     def _upload_to_cache():
@@ -690,6 +694,74 @@ def precache_conversation_audio(
 # **********************************
 # ************* UTILS **************
 # **********************************
+
+
+def download_blob_bytes(bucket_name: str, path: str) -> bytes:
+    """
+    Download blob content as bytes from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        Blob content as bytes
+
+    Raises:
+        NotFound: If the blob doesn't exist
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    return blob.download_as_bytes()
+
+
+def delete_blob(bucket_name: str, path: str) -> bool:
+    """
+    Delete a blob from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        True if deleted, False if not found
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    try:
+        blob.delete()
+        return True
+    except NotFound:
+        return False
+
+
+def download_speech_profile_bytes(path: str) -> bytes:
+    """
+    Download speech profile/sample audio from GCS.
+
+    Args:
+        path: GCS path to the sample (e.g., '{uid}/people_profiles/{person_id}/{filename}.wav')
+
+    Returns:
+        Audio bytes (WAV format)
+
+    Raises:
+        NotFound: If the sample doesn't exist
+    """
+    return download_blob_bytes(speech_profiles_bucket, path)
+
+
+def delete_speech_profile_blob(path: str) -> bool:
+    """
+    Delete speech profile/sample from GCS.
+
+    Args:
+        path: GCS path to the sample
+
+    Returns:
+        True if deleted, False if not found
+    """
+    return delete_blob(speech_profiles_bucket, path)
 
 
 def _get_signed_url(blob, minutes):
