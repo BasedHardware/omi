@@ -279,6 +279,7 @@ class App {
   DateTime? createdAt;
   DateTime? updatedAt;
   double? score; // Computed ranking score for sorting (temporary debug field)
+  bool official;
 
   App({
     required this.id,
@@ -321,6 +322,7 @@ class App {
     this.createdAt,
     this.updatedAt,
     this.score,
+    this.official = false,
   });
 
   String getName() {
@@ -414,6 +416,7 @@ class App {
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
       score: json['score']?.toDouble(),
+      official: json['official'] ?? false,
     );
   }
 
@@ -505,6 +508,7 @@ class App {
       'price': price,
       'is_user_paid': isUserPaid,
       'payment_link': paymentLink,
+      'official': official,
     };
   }
 

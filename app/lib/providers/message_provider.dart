@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
@@ -113,6 +114,42 @@ class MessageProvider extends ChangeNotifier {
     }
     setIsUploadingFiles();
     notifyListeners();
+  }
+
+  Future<void> addFiles(List<File> files) async {
+    if (selectedFiles.length + files.length > 4) {
+      AppSnackbar.showSnackbarError('You can only select up to 4 files');
+      return;
+    }
+
+    List<File> filesToAdd = [];
+    List<String> typesToAdd = [];
+
+    for (var file in files) {
+      String ext = p.extension(file.path).toLowerCase().replaceAll('.', '');
+      if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'tiff', 'tif'].contains(ext)) {
+        typesToAdd.add('image');
+      } else {
+        typesToAdd.add('file');
+      }
+      filesToAdd.add(file);
+    }
+
+    if (filesToAdd.isNotEmpty) {
+      selectedFiles.addAll(filesToAdd);
+      selectedFileTypes.addAll(typesToAdd);
+      try {
+        await uploadFiles(filesToAdd, appProvider?.selectedChatAppId);
+      } catch (e) {
+        Logger.debug('Failed to upload files: $e');
+        if (selectedFiles.length >= filesToAdd.length) {
+          selectedFiles.removeRange(selectedFiles.length - filesToAdd.length, selectedFiles.length);
+          selectedFileTypes.removeRange(selectedFileTypes.length - filesToAdd.length, selectedFileTypes.length);
+        }
+        AppSnackbar.showSnackbarError('File upload failed. Please try again.');
+      }
+      notifyListeners();
+    }
   }
 
   bool isFileUploading(String id) {

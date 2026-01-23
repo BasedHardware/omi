@@ -238,3 +238,239 @@ def test_migrate_transient_download_failure_skips_updates(monkeypatch):
     assert result == person
     assert updates == []
     assert deletions == []
+
+
+# v2 -> v3 migration tests
+
+
+def test_migrate_v2_to_v3_returns_early_for_version_three(monkeypatch):
+    def fail_get_person(*_args, **_kwargs):
+        raise AssertionError("get_person should not be called for version >= 3")
+
+    monkeypatch.setattr(migration.users_db, "get_person", fail_get_person)
+
+    person = {"id": "person-1", "speech_samples_version": 3, "speech_samples": ["a.wav"]}
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person
+
+
+def test_migrate_v2_to_v3_returns_early_for_version_one(monkeypatch):
+    """v2→v3 should not process v1 samples (needs v1→v2 first)."""
+
+    def fail_get_person(*_args, **_kwargs):
+        raise AssertionError("get_person should not be called for version 1")
+
+    monkeypatch.setattr(migration.users_db, "get_person", fail_get_person)
+
+    person = {"id": "person-1", "speech_samples_version": 1, "speech_samples": ["a.wav"]}
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person
+
+
+def test_migrate_v2_to_v3_regenerates_embedding(monkeypatch):
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": ["good.wav"],
+        "speech_sample_transcripts": ["hello world"],
+        "speaker_embedding": [0.1, 0.2],  # old v1 embedding
+    }
+    updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_download(_path):
+        return b"audio-bytes"
+
+    def fake_extract(_bytes, _name):
+        return _FakeEmbedding([0.5, 0.6, 0.7])  # new v2 embedding
+
+    def fake_update(uid, person_id, samples, transcripts, version, speaker_embedding):
+        updates.append(
+            {
+                "uid": uid,
+                "person_id": person_id,
+                "samples": samples,
+                "transcripts": transcripts,
+                "version": version,
+                "speaker_embedding": speaker_embedding,
+            }
+        )
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration, "download_sample_audio", fake_download)
+    monkeypatch.setattr(migration, "extract_embedding_from_bytes", fake_extract)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_after_migration", fake_update)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert updates == [
+        {
+            "uid": "uid-1",
+            "person_id": "person-1",
+            "samples": ["good.wav"],
+            "transcripts": ["hello world"],
+            "version": 3,
+            "speaker_embedding": [0.5, 0.6, 0.7],
+        }
+    ]
+    assert result["speech_samples_version"] == 3
+    assert result["speaker_embedding"] == [0.5, 0.6, 0.7]
+
+
+def test_migrate_v2_to_v3_no_samples_just_updates_version(monkeypatch):
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": [],
+        "speech_sample_transcripts": [],
+    }
+    version_updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_update_version(_uid, _person_id, version):
+        version_updates.append(version)
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_version", fake_update_version)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert version_updates == [3]
+    assert result["speech_samples_version"] == 3
+
+
+def test_migrate_v2_to_v3_transient_failure_skips_update(monkeypatch):
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": ["flaky.wav"],
+        "speech_sample_transcripts": ["text"],
+    }
+    updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_download(_path):
+        raise Exception("network hiccup")
+
+    def fake_update(*_args, **_kwargs):
+        updates.append((_args, _kwargs))
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration, "download_sample_audio", fake_download)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_after_migration", fake_update)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person  # unchanged
+    assert updates == []
+
+
+def test_migrate_v2_to_v3_missing_first_sample_skips_update(monkeypatch):
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": ["missing.wav"],
+        "speech_sample_transcripts": ["text"],
+        "speaker_embedding": [0.1, 0.2],
+    }
+    updates = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_download(_path):
+        raise NotFound("missing")
+
+    def fake_update(*_args, **_kwargs):
+        updates.append((_args, _kwargs))
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration, "download_sample_audio", fake_download)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_after_migration", fake_update)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result == person
+    assert updates == []
+
+
+# v1 -> v3 composite migration tests
+
+
+def test_migrate_v1_to_v3_chains_both_migrations(monkeypatch):
+    """v1→v3 should run v1→v2 then v2→v3."""
+    person_v1 = {
+        "id": "person-1",
+        "speech_samples_version": 1,
+        "speech_samples": ["sample.wav"],
+    }
+    person_v2 = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": ["sample.wav"],
+        "speech_sample_transcripts": ["transcribed text"],
+        "speaker_embedding": [0.1, 0.2],
+    }
+    person_v3 = {
+        "id": "person-1",
+        "speech_samples_version": 3,
+        "speech_samples": ["sample.wav"],
+        "speech_sample_transcripts": ["transcribed text"],
+        "speaker_embedding": [0.5, 0.6],
+    }
+
+    call_order = []
+
+    async def fake_v1_to_v2(_uid, _person):
+        call_order.append("v1_to_v2")
+        return person_v2
+
+    async def fake_v2_to_v3(_uid, _person):
+        call_order.append("v2_to_v3")
+        return person_v3
+
+    monkeypatch.setattr(migration, "migrate_person_samples_v1_to_v2", fake_v1_to_v2)
+    monkeypatch.setattr(migration, "migrate_person_samples_v2_to_v3", fake_v2_to_v3)
+
+    result = _run(migration.migrate_person_samples_v1_to_v3("uid-1", person_v1))
+
+    assert call_order == ["v1_to_v2", "v2_to_v3"]
+    assert result["speech_samples_version"] == 3
+
+
+def test_migrate_v1_to_v3_returns_early_for_version_three(monkeypatch):
+    person = {"id": "person-1", "speech_samples_version": 3, "speech_samples": ["a.wav"]}
+    result = _run(migration.migrate_person_samples_v1_to_v3("uid-1", person))
+
+    assert result == person
+
+
+def test_migrate_v1_to_v3_stops_if_v1_to_v2_fails(monkeypatch):
+    """If v1→v2 has transient failure, v1→v3 should return without attempting v2→v3."""
+    person_v1 = {
+        "id": "person-1",
+        "speech_samples_version": 1,
+        "speech_samples": ["flaky.wav"],
+    }
+
+    async def fake_v1_to_v2(_uid, person):
+        # Simulate transient failure - returns unchanged person
+        return person
+
+    async def fake_v2_to_v3(_uid, _person):
+        raise AssertionError("v2_to_v3 should not be called if v1_to_v2 fails")
+
+    monkeypatch.setattr(migration, "migrate_person_samples_v1_to_v2", fake_v1_to_v2)
+    monkeypatch.setattr(migration, "migrate_person_samples_v2_to_v3", fake_v2_to_v3)
+
+    result = _run(migration.migrate_person_samples_v1_to_v3("uid-1", person_v1))
+
+    assert result["speech_samples_version"] == 1
