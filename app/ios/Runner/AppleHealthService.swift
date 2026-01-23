@@ -103,11 +103,12 @@ class AppleHealthService {
         var summary: [String: Any] = [:]
         let group = DispatchGroup()
 
-        // Get steps
+        // Get steps with daily breakdown
         group.enter()
-        fetchStepCount(startDate: startDate, endDate: endDate) { steps in
-            summary["totalSteps"] = steps ?? 0
-            summary["averageStepsPerDay"] = steps.map { $0 / days } ?? 0
+        fetchDailySteps(startDate: startDate, endDate: endDate) { dailySteps, total in
+            summary["totalSteps"] = total
+            summary["averageStepsPerDay"] = total / days
+            summary["dailySteps"] = dailySteps  // Array of {date, steps}
             group.leave()
         }
 
@@ -240,6 +241,61 @@ class AppleHealthService {
             }
             let steps = Int(sum.doubleValue(for: HKUnit.count()))
             completion(steps)
+        }
+
+        healthStore.execute(query)
+    }
+
+    private func fetchDailySteps(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]], Int) -> Void) {
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            completion([], 0)
+            return
+        }
+
+        let calendar = Calendar.current
+        var interval = DateComponents()
+        interval.day = 1
+
+        // Anchor to start of day
+        let anchorDate = calendar.startOfDay(for: startDate)
+
+        // Add date predicate for the query
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: stepType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: anchorDate,
+            intervalComponents: interval
+        )
+
+        query.initialResultsHandler = { _, results, error in
+            guard let statsCollection = results else {
+                completion([], 0)
+                return
+            }
+
+            var dailySteps: [[String: Any]] = []
+            var totalSteps = 0
+
+            statsCollection.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                let steps = statistics.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0
+                let stepsInt = Int(steps)
+                totalSteps += stepsInt
+
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                let dateString = dateFormatter.string(from: statistics.startDate)
+
+                dailySteps.append([
+                    "date": dateString,
+                    "dateMs": statistics.startDate.timeIntervalSince1970 * 1000,
+                    "steps": stepsInt
+                ])
+            }
+
+            completion(dailySteps, totalSteps)
         }
 
         healthStore.execute(query)
