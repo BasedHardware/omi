@@ -171,3 +171,24 @@ Future<bool> setGitHubDefaultRepo(String defaultRepo) async {
     return false;
   }
 }
+
+/// Sync Apple Health data to backend
+/// This sends health data collected from HealthKit to the server
+Future<bool> syncAppleHealthData(Map<String, dynamic> healthData) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/integrations/apple-health/sync',
+    headers: {},
+    method: 'PUT',
+    body: jsonEncode(healthData),
+  );
+
+  if (response == null) return false;
+
+  if (response.statusCode == 200) {
+    Logger.debug('Apple Health data synced successfully');
+    return true;
+  } else {
+    Logger.debug('syncAppleHealthData error ${response.statusCode}');
+    return false;
+  }
+}

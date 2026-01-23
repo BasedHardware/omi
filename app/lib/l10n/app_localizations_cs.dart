@@ -7784,4 +7784,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
 }

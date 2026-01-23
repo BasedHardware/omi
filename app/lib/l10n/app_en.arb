@@ -9766,5 +9766,6 @@
   "deviceDoesNotSupportWifiSwitchingToBle": "Device does not support WiFi sync, switching to Bluetooth",
   "@deviceDoesNotSupportWifiSwitchingToBle": {
     "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
-  }
+  },
+  "appleHealthNotAvailable": "Apple Health is not available on this device"
 }

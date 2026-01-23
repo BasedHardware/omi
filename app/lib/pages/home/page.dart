@@ -1086,8 +1086,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: const Icon(
-                            Icons.ios_share,
-                            size: 18,
+                            FontAwesomeIcons.arrowUpFromBracket,
+                            size: 16,
                             color: Colors.white70,
                           ),
                           onPressed: () {
@@ -1112,8 +1112,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            showCompleted ? Icons.check_circle : Icons.check_circle_outline,
-                            size: 18,
+                            FontAwesomeIcons.solidCircleCheck,
+                            size: 16,
                             color: showCompleted ? Colors.white : Colors.white70,
                           ),
                           onPressed: () {
