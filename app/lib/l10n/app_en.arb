@@ -9798,5 +9798,9 @@
   "genUiMapDefaultTitle": "Location",
   "@genUiMapDefaultTitle": {
     "description": "Fallback title for map cards"
+  },
+  "genUiOpenUrlFailed": "Unable to open the link.",
+  "@genUiOpenUrlFailed": {
+    "description": "Error when opening a URL from GenUI"
   }
 }

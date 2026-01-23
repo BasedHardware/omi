@@ -250,7 +250,7 @@ class GenUiMessageWidget extends StatelessWidget {
     final l10n = context.l10n;
     final url = payload['url']?.toString();
     if (url == null || url.isEmpty) {
-      _showSnackBar(context, l10n.genUiMapOpenFailed);
+      _showSnackBar(context, l10n.genUiOpenUrlFailed);
       return;
     }
 
@@ -259,11 +259,11 @@ class GenUiMessageWidget extends StatelessWidget {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        _showSnackBar(context, l10n.genUiMapOpenFailed);
+        _showSnackBar(context, l10n.genUiOpenUrlFailed);
       }
     } catch (e) {
       Logger.error('Failed to open url: $e');
-      _showSnackBar(context, l10n.genUiMapOpenFailed);
+      _showSnackBar(context, l10n.genUiOpenUrlFailed);
     }
   }
 
