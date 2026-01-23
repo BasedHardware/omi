@@ -139,13 +139,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
-  void _syncAppleHealthIfConnected() {
+  void _syncAppleHealthIfConnected() async {
     final appleHealthService = AppleHealthService();
     if (appleHealthService.isAvailable) {
       final integrationProvider = context.read<IntegrationProvider>();
       if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
-        // Fire-and-forget - don't await to avoid blocking UI
-        appleHealthService.syncHealthDataToBackend(days: 7);
+        debugPrint('🍎 [Apple Health] Starting auto-sync on chat open...');
+        final success = await appleHealthService.syncHealthDataToBackend(days: 7);
+        debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
     }
   }

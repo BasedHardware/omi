@@ -210,6 +210,7 @@ class AppleHealthSyncData(BaseModel):
     # Steps data
     total_steps: Optional[int] = Field(default=None, description="Total steps in period")
     average_steps_per_day: Optional[float] = Field(default=None, description="Average steps per day")
+    daily_steps: Optional[list] = Field(default=None, description="Daily steps breakdown [{date, steps}]")
 
     # Sleep data
     total_sleep_hours: Optional[float] = Field(default=None, description="Total sleep hours")
@@ -296,6 +297,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
             'total': data.total_steps,
             'average_per_day': data.average_steps_per_day or (data.total_steps / max(data.period_days, 1)),
             'period_days': data.period_days,
+            'daily': data.daily_steps or [],  # Daily breakdown [{date, steps}]
         }
 
     # Sleep

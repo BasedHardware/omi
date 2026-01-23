@@ -87,12 +87,13 @@ def get_apple_health_steps_tool(
     Use this tool when:
     - User asks about their steps, step count, or walking activity
     - User asks "how many steps did I take?" or "what's my step count?"
+    - User asks about steps on a specific day like "yesterday" or "Monday"
     - User wants to know about their daily walking or activity level
     - User asks about their fitness or activity data from iPhone/Apple Watch
     - **ALWAYS use this tool when the user asks about step information from Apple Health**
 
     Returns:
-        Formatted step count data with daily averages and totals.
+        Formatted step count data with daily breakdown, averages and totals.
     """
     uid, integration, err = prepare_apple_health_access(config)
     if err:
@@ -108,6 +109,7 @@ def get_apple_health_steps_tool(
         total_steps = steps_data.get('total', 0)
         avg_per_day = steps_data.get('average_per_day', 0)
         period_days = steps_data.get('period_days', 7)
+        daily_steps = steps_data.get('daily', [])
 
         # Get last sync time
         last_synced = integration.get('last_synced')
@@ -122,6 +124,17 @@ def get_apple_health_steps_tool(
         result = f"Apple Health Step Data (Last {period_days} days):\n\n"
         result += f"Total Steps: {total_steps:,}\n"
         result += f"Average Steps per Day: {avg_per_day:,.0f}\n"
+
+        # Include daily breakdown if available
+        if daily_steps:
+            result += "\nDaily Breakdown:\n"
+            # Sort by date descending (most recent first)
+            sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+            for day in sorted_days:
+                date_str = day.get('date', 'Unknown')
+                steps = day.get('steps', 0)
+                result += f"  {date_str}: {steps:,} steps\n"
+
         result += sync_info
 
         return result.strip()

@@ -197,6 +197,11 @@ class AppleHealthService {
         requestData['average_steps_per_day'] = summary['averageStepsPerDay'];
       }
 
+      // Daily steps breakdown
+      if (summary['dailySteps'] != null) {
+        requestData['daily_steps'] = summary['dailySteps'];
+      }
+
       // Sleep
       final sleep = summary['sleep'];
       if (sleep != null) {
