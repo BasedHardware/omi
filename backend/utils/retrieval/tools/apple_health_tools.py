@@ -154,6 +154,7 @@ def get_apple_health_sleep_tool(
     Use this tool when:
     - User asks about their sleep from Apple Health or iPhone/Apple Watch
     - User asks "how did I sleep?" or "what's my sleep data?"
+    - User asks about sleep on a specific day like "yesterday" or "last night"
     - User wants to know about their sleep duration, sleep quality, or sleep patterns
     - User asks about sleep stages (REM, deep sleep, core sleep)
     - **ALWAYS use this tool when the user asks about sleep information from Apple Health**
@@ -162,7 +163,7 @@ def get_apple_health_sleep_tool(
     Apple Health sleep data comes from iPhone or Apple Watch.
 
     Returns:
-        Formatted sleep data with total hours and session details.
+        Formatted sleep data with daily breakdown, total hours and session details.
     """
     uid, integration, err = prepare_apple_health_access(config)
     if err:
@@ -178,37 +179,21 @@ def get_apple_health_sleep_tool(
         total_sleep_hours = sleep_data.get('total_sleep_hours', 0)
         total_in_bed_hours = sleep_data.get('total_in_bed_hours', 0)
         sessions_count = sleep_data.get('sessions_count', 0)
-        sessions = sleep_data.get('sessions', [])
-
-        # Get user timezone
-        user_tz_str = notification_db.get_user_time_zone(uid)
-        try:
-            user_tz = ZoneInfo(user_tz_str)
-        except Exception:
-            user_tz = timezone.utc
+        daily_sleep = sleep_data.get('daily', [])
 
         result = f"Apple Health Sleep Data:\n\n"
         result += f"Total Sleep: {total_sleep_hours:.1f} hours\n"
-        result += f"Total Time in Bed: {total_in_bed_hours:.1f} hours\n"
-        result += f"Sleep Sessions: {sessions_count}\n"
+        result += f"Average per Night: {total_sleep_hours / max(len(daily_sleep), 1):.1f} hours\n"
 
-        if sessions:
-            result += "\nRecent Sleep Sessions:\n"
-            for i, session in enumerate(sessions[:5], 1):  # Show last 5 sessions
-                try:
-                    start_ms = session.get('startDate', 0)
-                    end_ms = session.get('endDate', 0)
-                    duration = session.get('durationMinutes', 0)
-                    sleep_type = session.get('type', 'unknown')
-
-                    if start_ms and end_ms:
-                        start_dt = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc).astimezone(user_tz)
-                        end_dt = datetime.fromtimestamp(end_ms / 1000, tz=timezone.utc).astimezone(user_tz)
-                        result += f"  {i}. {start_dt.strftime('%m/%d %I:%M %p')} - {end_dt.strftime('%I:%M %p')} ({duration:.0f} min, {sleep_type})\n"
-                    else:
-                        result += f"  {i}. {duration:.0f} minutes ({sleep_type})\n"
-                except Exception as e:
-                    result += f"  {i}. {session.get('durationMinutes', 0):.0f} minutes\n"
+        # Include daily breakdown if available
+        if daily_sleep:
+            result += "\nDaily Breakdown:\n"
+            # Sort by date descending (most recent first)
+            sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+            for day in sorted_days:
+                date_str = day.get('date', 'Unknown')
+                hours = day.get('sleepHours', 0)
+                result += f"  {date_str}: {hours:.1f} hours\n"
 
         # Get last sync time
         last_synced = integration.get('last_synced')
@@ -397,28 +382,48 @@ def get_apple_health_summary_tool(
         period_days = health_data.get('period_days', 7)
         result = f"Apple Health Summary (Last {period_days} days):\n\n"
 
-        # Steps
+        # Steps with daily breakdown
         steps = health_data.get('steps', {})
         if steps:
             result += f"STEPS\n"
             result += f"  Total: {steps.get('total', 0):,}\n"
-            result += f"  Daily Average: {steps.get('average_per_day', 0):,.0f}\n\n"
+            result += f"  Daily Average: {steps.get('average_per_day', 0):,.0f}\n"
+            daily_steps = steps.get('daily', [])
+            if daily_steps:
+                result += "  Daily:\n"
+                sorted_days = sorted(daily_steps, key=lambda x: x.get('date', ''), reverse=True)
+                for day in sorted_days:
+                    result += f"    {day.get('date', '?')}: {day.get('steps', 0):,}\n"
+            result += "\n"
 
-        # Active Energy
+        # Active Energy with daily breakdown
         active_energy = health_data.get('active_energy', {})
         if active_energy:
             total_cal = active_energy.get('total', 0)
             avg_cal = active_energy.get('average_per_day', 0)
             result += f"ACTIVE ENERGY\n"
             result += f"  Total: {total_cal:,.0f} kcal\n"
-            result += f"  Daily Average: {avg_cal:,.0f} kcal\n\n"
+            result += f"  Daily Average: {avg_cal:,.0f} kcal\n"
+            daily_energy = active_energy.get('daily', [])
+            if daily_energy:
+                result += "  Daily:\n"
+                sorted_days = sorted(daily_energy, key=lambda x: x.get('date', ''), reverse=True)
+                for day in sorted_days:
+                    result += f"    {day.get('date', '?')}: {day.get('calories', 0):,.0f} kcal\n"
+            result += "\n"
 
-        # Sleep
+        # Sleep with daily breakdown
         sleep = health_data.get('sleep', {})
         if sleep:
             result += f"SLEEP\n"
             result += f"  Total Hours: {sleep.get('total_sleep_hours', 0):.1f}\n"
-            result += f"  Sessions: {sleep.get('sessions_count', 0)}\n\n"
+            daily_sleep = sleep.get('daily', [])
+            if daily_sleep:
+                result += "  Daily:\n"
+                sorted_days = sorted(daily_sleep, key=lambda x: x.get('date', ''), reverse=True)
+                for day in sorted_days:
+                    result += f"    {day.get('date', '?')}: {day.get('sleepHours', 0):.1f} hrs\n"
+            result += "\n"
 
         # Heart Rate
         heart_rate = health_data.get('heart_rate', {})

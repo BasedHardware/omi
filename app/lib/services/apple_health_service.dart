@@ -209,6 +209,7 @@ class AppleHealthService {
         requestData['total_in_bed_hours'] = sleep['totalInBedHours'];
         requestData['sleep_sessions_count'] = sleep['sessionsCount'];
         requestData['sleep_sessions'] = sleep['sessions'];
+        requestData['daily_sleep'] = sleep['daily']; // Daily breakdown
       }
 
       // Heart rate
@@ -223,6 +224,7 @@ class AppleHealthService {
       if (summary['totalActiveEnergy'] != null) {
         requestData['total_active_energy'] = summary['totalActiveEnergy'];
         requestData['average_active_energy_per_day'] = summary['averageActiveEnergyPerDay'];
+        requestData['daily_active_energy'] = summary['dailyActiveEnergy']; // Daily breakdown
       }
 
       // Workouts

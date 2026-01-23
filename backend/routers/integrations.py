@@ -217,6 +217,7 @@ class AppleHealthSyncData(BaseModel):
     total_in_bed_hours: Optional[float] = Field(default=None, description="Total time in bed hours")
     sleep_sessions_count: Optional[int] = Field(default=None, description="Number of sleep sessions")
     sleep_sessions: Optional[list] = Field(default=None, description="Sleep session details")
+    daily_sleep: Optional[list] = Field(default=None, description="Daily sleep breakdown [{date, sleepHours}]")
 
     # Heart rate data
     heart_rate_average: Optional[float] = Field(default=None, description="Average heart rate")
@@ -226,6 +227,7 @@ class AppleHealthSyncData(BaseModel):
     # Active energy data
     total_active_energy: Optional[float] = Field(default=None, description="Total active energy kcal")
     average_active_energy_per_day: Optional[float] = Field(default=None, description="Average daily active energy")
+    daily_active_energy: Optional[list] = Field(default=None, description="Daily energy breakdown [{date, calories}]")
 
     # Workouts data
     workouts: Optional[list] = Field(default=None, description="List of workout records")
@@ -307,6 +309,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
             'total_in_bed_hours': data.total_in_bed_hours or 0,
             'sessions_count': data.sleep_sessions_count or 0,
             'sessions': data.sleep_sessions or [],
+            'daily': data.daily_sleep or [],  # Daily breakdown [{date, sleepHours}]
         }
 
     # Heart rate
@@ -323,6 +326,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
             'total': data.total_active_energy,
             'average_per_day': data.average_active_energy_per_day
             or (data.total_active_energy / max(data.period_days, 1)),
+            'daily': data.daily_active_energy or [],  # Daily breakdown [{date, calories}]
         }
 
     # Workouts

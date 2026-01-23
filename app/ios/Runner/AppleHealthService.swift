@@ -112,11 +112,12 @@ class AppleHealthService {
             group.leave()
         }
 
-        // Get active energy
+        // Get active energy with daily breakdown
         group.enter()
-        fetchActiveEnergy(startDate: startDate, endDate: endDate) { energy in
-            summary["totalActiveEnergy"] = energy ?? 0.0
-            summary["averageActiveEnergyPerDay"] = energy.map { $0 / Double(days) } ?? 0.0
+        fetchDailyActiveEnergy(startDate: startDate, endDate: endDate) { dailyEnergy, total in
+            summary["totalActiveEnergy"] = total
+            summary["averageActiveEnergyPerDay"] = total / Double(days)
+            summary["dailyActiveEnergy"] = dailyEnergy  // Array of {date, calories}
             group.leave()
         }
 
@@ -127,10 +128,15 @@ class AppleHealthService {
             group.leave()
         }
 
-        // Get sleep
+        // Get sleep with daily breakdown
         group.enter()
-        fetchSleepData(startDate: startDate, endDate: endDate) { sleepData in
-            summary["sleep"] = sleepData
+        fetchDailySleep(startDate: startDate, endDate: endDate) { dailySleep, totalHours, sessions in
+            summary["sleep"] = [
+                "totalSleepHours": totalHours,
+                "sessionsCount": sessions.count,
+                "sessions": sessions,
+                "daily": dailySleep  // Array of {date, sleepHours}
+            ]
             group.leave()
         }
 
@@ -296,6 +302,136 @@ class AppleHealthService {
             }
 
             completion(dailySteps, totalSteps)
+        }
+
+        healthStore.execute(query)
+    }
+
+    private func fetchDailyActiveEnergy(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]], Double) -> Void) {
+        guard let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            completion([], 0)
+            return
+        }
+
+        let calendar = Calendar.current
+        var interval = DateComponents()
+        interval.day = 1
+
+        let anchorDate = calendar.startOfDay(for: startDate)
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: energyType,
+            quantitySamplePredicate: predicate,
+            options: .cumulativeSum,
+            anchorDate: anchorDate,
+            intervalComponents: interval
+        )
+
+        query.initialResultsHandler = { _, results, error in
+            guard let statsCollection = results else {
+                completion([], 0)
+                return
+            }
+
+            var dailyEnergy: [[String: Any]] = []
+            var totalEnergy: Double = 0
+
+            statsCollection.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
+                let energy = statistics.sumQuantity()?.doubleValue(for: HKUnit.kilocalorie()) ?? 0
+                totalEnergy += energy
+
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd"
+                let dateString = dateFormatter.string(from: statistics.startDate)
+
+                dailyEnergy.append([
+                    "date": dateString,
+                    "dateMs": statistics.startDate.timeIntervalSince1970 * 1000,
+                    "calories": energy
+                ])
+            }
+
+            completion(dailyEnergy, totalEnergy)
+        }
+
+        healthStore.execute(query)
+    }
+
+    private func fetchDailySleep(startDate: Date, endDate: Date, completion: @escaping ([[String: Any]], Double, [[String: Any]]) -> Void) {
+        guard let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) else {
+            completion([], 0, [])
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+
+        let query = HKSampleQuery(
+            sampleType: sleepType,
+            predicate: predicate,
+            limit: HKObjectQueryNoLimit,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, error in
+            guard let samples = samples as? [HKCategorySample] else {
+                completion([], 0, [])
+                return
+            }
+
+            let calendar = Calendar.current
+            var dailySleepMap: [String: Double] = [:]
+            var totalSleepSeconds: Double = 0
+            var sleepSessions: [[String: Any]] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+
+            for sample in samples {
+                let duration = sample.endDate.timeIntervalSince(sample.startDate)
+                var isSleep = false
+
+                if #available(iOS 16.0, *) {
+                    switch sample.value {
+                    case HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                         HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                         HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                         HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
+                        isSleep = true
+                    default:
+                        break
+                    }
+                } else {
+                    if sample.value == HKCategoryValueSleepAnalysis.asleep.rawValue {
+                        isSleep = true
+                    }
+                }
+
+                if isSleep {
+                    totalSleepSeconds += duration
+                    // Aggregate by the date the sleep ended (woke up)
+                    let dateString = dateFormatter.string(from: sample.endDate)
+                    dailySleepMap[dateString, default: 0] += duration
+                }
+
+                sleepSessions.append([
+                    "startDate": sample.startDate.timeIntervalSince1970 * 1000,
+                    "endDate": sample.endDate.timeIntervalSince1970 * 1000,
+                    "durationMinutes": duration / 60.0,
+                    "type": self.sleepTypeString(sample.value)
+                ])
+            }
+
+            // Convert daily map to array
+            var dailySleep: [[String: Any]] = []
+            for (date, seconds) in dailySleepMap {
+                dailySleep.append([
+                    "date": date,
+                    "sleepHours": seconds / 3600.0
+                ])
+            }
+            // Sort by date descending
+            dailySleep.sort { ($0["date"] as? String ?? "") > ($1["date"] as? String ?? "") }
+
+            completion(dailySleep, totalSleepSeconds / 3600.0, sleepSessions)
         }
 
         healthStore.execute(query)
