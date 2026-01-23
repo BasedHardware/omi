@@ -123,6 +123,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
+    if (app.externalIntegration == null) return;
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
@@ -272,6 +273,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       await _refreshAppDetails();
     });
     if (app.worksExternally()) {
+      checkSetupCompleted();
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
@@ -1820,6 +1822,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
         app.enabled = true;
         appLoading = false;
       });
+      if (app.worksExternally()) {
+        checkSetupCompleted();
+      }
 
       // Automatically open app home page after installation if available
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
