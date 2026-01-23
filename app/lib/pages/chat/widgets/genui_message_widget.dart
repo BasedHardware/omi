@@ -254,10 +254,15 @@ class GenUiMessageWidget extends StatelessWidget {
       return;
     }
 
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showSnackBar(context, l10n.genUiMapOpenFailed);
+      }
+    } catch (e) {
+      Logger.error('Failed to open url: $e');
       _showSnackBar(context, l10n.genUiMapOpenFailed);
     }
   }

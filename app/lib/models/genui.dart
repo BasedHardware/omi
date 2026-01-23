@@ -146,8 +146,12 @@ class GenUiPayload {
     if (value == null) return null;
 
     if (value is String) {
-      final decoded = jsonDecode(value);
-      return tryParse(decoded);
+      try {
+        final decoded = jsonDecode(value);
+        return tryParse(decoded);
+      } catch (_) {
+        return null;
+      }
     }
 
     if (value is List) {
