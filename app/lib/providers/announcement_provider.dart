@@ -48,11 +48,10 @@ class AnnouncementProvider extends BaseProvider {
       if (_isNewerVersion(_currentAppVersion, _previousAppVersion)) {
         _hasAppUpgrade = true;
 
-        final allChangelogs = await getAppChangelogs(limit: 8);
-        _changelogs = allChangelogs.where((changelog) {
-          if (changelog.appVersion == null) return false;
-          return !_isNewerVersion(changelog.appVersion!, _currentAppVersion);
-        }).toList();
+        _changelogs = await getAppChangelogs(
+          limit: 8,
+          maxVersion: _currentAppVersion,
+        );
 
         final appFeatures = await getFeatureAnnouncements(
           version: _currentAppVersion,
