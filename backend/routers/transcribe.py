@@ -90,6 +90,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 
 from database.users import (
     get_user_transcription_preferences,
@@ -1249,11 +1250,18 @@ async def _stream_handler(
         if not speaker_id_enabled:
             return
 
-
-        # Load person embeddings for current user and all users who have shared their speech profile with this user
+        # Load person embeddings (migrate if needed for v2 API compatibility)
         try:
             people = user_db.get_people(uid)
             for person in people:
+                # Migrate if needed for v2 API compatibility
+                if person.get('speech_samples'):
+                    person = await maybe_migrate_person_samples(uid, person)
+
+                # Skip cache if migration failed (version still <3) to avoid mixing embedding spaces
+                if person.get('speech_samples_version', 1) < 3:
+                    continue
+
                 emb = person.get('speaker_embedding')
                 if emb:
                     person_embeddings_cache[person['id']] = {
