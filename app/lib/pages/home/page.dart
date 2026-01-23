@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
@@ -38,9 +39,11 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -404,10 +407,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
+    _checkForAnnouncements();
     super.initState();
 
     // After init
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+  }
+
+  void _checkForAnnouncements() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      await AnnouncementService().checkAndShowAnnouncements(
+        context,
+        announcementProvider,
+        connectedDevice: deviceProvider.connectedDevice,
+      );
+
+      // Register callback for device connection to check firmware announcements
+      deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+    });
+  }
+
+  void _onDeviceConnectedForAnnouncements(BtDevice device) async {
+    if (!mounted) return;
+
+    final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+    await AnnouncementService().showFirmwareUpdateAnnouncements(
+      context,
+      announcementProvider,
+      device.firmwareRevision,
+      device.modelNumber,
+    );
   }
 
   void _listenToFreemiumThreshold() {
@@ -1086,8 +1123,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: const Icon(
-                            Icons.ios_share,
-                            size: 18,
+                            FontAwesomeIcons.arrowUpFromBracket,
+                            size: 16,
                             color: Colors.white70,
                           ),
                           onPressed: () {
@@ -1112,8 +1149,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            showCompleted ? Icons.check_circle : Icons.check_circle_outline,
-                            size: 18,
+                            FontAwesomeIcons.solidCircleCheck,
+                            size: 16,
                             color: showCompleted ? Colors.white : Colors.white70,
                           ),
                           onPressed: () {
@@ -1178,6 +1215,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       captureProvider.removeListener(_onCaptureProviderChanged);
       captureProvider.onFreemiumSessionReset = null;
+    } catch (_) {}
+    // Remove device provider callback
+    try {
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      deviceProvider.onDeviceConnected = null;
     } catch (_) {}
     // Clean up freemium handler
     _freemiumHandler.dispose();

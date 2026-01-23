@@ -80,7 +80,7 @@ def test_add_sample_transaction_pads_transcripts_for_v1_samples():
         "",
         "we ride at dawn",
     ]
-    assert transaction.updated_data["speech_samples_version"] == 2
+    assert transaction.updated_data["speech_samples_version"] == 3
     assert "updated_at" in transaction.updated_data
 
 
@@ -111,7 +111,7 @@ def test_add_sample_transaction_already_aligned_transcripts():
         "second",
         "third",
     ]
-    assert transaction.updated_data["speech_samples_version"] == 2
+    assert transaction.updated_data["speech_samples_version"] == 3
 
 
 def test_add_sample_transaction_max_samples_reached():

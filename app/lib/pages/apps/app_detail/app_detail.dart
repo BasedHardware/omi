@@ -862,9 +862,24 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  app.author.decodeString,
-                                  style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        app.author.decodeString,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (app.official) ...[
+                                      const SizedBox(width: 4),
+                                      const FaIcon(
+                                        FontAwesomeIcons.solidCircleCheck,
+                                        size: 14,
+                                        color: Colors.deepPurpleAccent,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),

@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
 import 'package:omi/services/notion_service.dart';
@@ -18,6 +19,7 @@ import 'package:omi/utils/other/temp.dart';
 
 enum IntegrationApp {
   whoop,
+  appleHealth,
   notion,
   twitter,
   github,
@@ -34,6 +36,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'Gmail';
       case IntegrationApp.whoop:
         return 'Whoop';
+      case IntegrationApp.appleHealth:
+        return 'Apple Health';
       case IntegrationApp.notion:
         return 'Notion';
       case IntegrationApp.twitter:
@@ -51,6 +55,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'gmail';
       case IntegrationApp.whoop:
         return 'whoop';
+      case IntegrationApp.appleHealth:
+        return 'apple_health';
       case IntegrationApp.notion:
         return 'notion';
       case IntegrationApp.twitter:
@@ -72,6 +78,9 @@ extension IntegrationAppExtension on IntegrationApp {
         // Use logo from assets - file is whoop.png
         // Direct path works even if not in generated assets file
         return 'assets/integration_app_logos/whoop.png';
+      case IntegrationApp.appleHealth:
+        // Use logo from assets - file is apple-health-logo.png
+        return 'assets/integration_app_logos/apple-health-logo.png';
       case IntegrationApp.notion:
         // Use logo from assets - file is notion-logo.png (if available)
         // Direct path works even if not in generated assets file
@@ -93,6 +102,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return Icons.mail;
       case IntegrationApp.whoop:
         return Icons.favorite; // Heart icon for health/fitness
+      case IntegrationApp.appleHealth:
+        return Icons.favorite; // Heart icon for health
       case IntegrationApp.notion:
         return Icons.note; // Note icon for Notion
       case IntegrationApp.twitter:
@@ -110,6 +121,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return const Color(0xFFEA4335);
       case IntegrationApp.whoop:
         return const Color(0xFF00D9FF); // Whoop brand color (cyan)
+      case IntegrationApp.appleHealth:
+        return const Color(0xFFFF2D55); // Apple Health brand color (pink/red)
       case IntegrationApp.notion:
         return const Color(0xFF000000); // Notion brand color (black)
       case IntegrationApp.twitter:
@@ -120,7 +133,12 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-    return this != IntegrationApp.gmail;
+    if (this == IntegrationApp.gmail) return false;
+    // Apple Health is only available on iOS/macOS
+    if (this == IntegrationApp.appleHealth) {
+      return true; // Will check platform availability at runtime in the service
+    }
+    return true;
   }
 
   // String get comingSoonText {
@@ -201,6 +219,67 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (handled) {
         // After successful auth, settings will be opened in didChangeAppLifecycleState
         return;
+      }
+    }
+
+    if (app == IntegrationApp.appleHealth) {
+      await _handleAppleHealthConnect();
+      return;
+    }
+  }
+
+  Future<void> _handleAppleHealthConnect() async {
+    final service = AppleHealthService();
+
+    if (!service.isAvailable) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.appleHealthNotAvailable),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    final shouldAuth = await _showAuthDialog(IntegrationApp.appleHealth);
+    if (shouldAuth == true) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final integrationProvider = context.read<IntegrationProvider>();
+
+      final result = await service.connect();
+      if (result.isSuccess) {
+        // Sync health data to the backend
+        final synced = await service.syncHealthDataToBackend(days: 7);
+        if (synced) {
+          Logger.debug('✓ Apple Health data synced to backend');
+        } else {
+          Logger.debug('⚠ Failed to sync Apple Health data, but connection succeeded');
+        }
+
+        // Save the connection status to the backend (this is a fallback in case sync partially failed)
+        await integrationProvider.saveConnection(IntegrationApp.appleHealth.key, {});
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        await _loadFromBackend();
+      } else {
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
@@ -288,6 +367,35 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         await _handleDisconnect(app, TwitterService().disconnect);
       } else if (app == IntegrationApp.github) {
         await _handleDisconnect(app, GitHubService().disconnect);
+      } else if (app == IntegrationApp.appleHealth) {
+        await _handleAppleHealthDisconnect();
+      }
+    }
+  }
+
+  Future<void> _handleAppleHealthDisconnect() async {
+    final integrationProvider = context.read<IntegrationProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
+    if (success) {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.failedToDisconnect),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
