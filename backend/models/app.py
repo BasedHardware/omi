@@ -55,6 +55,7 @@ class ActionType(str, Enum):
     READ_CONVERSATIONS = "read_conversations"
     READ_TASKS = "read_tasks"
 
+
 class Action(BaseModel):
     action: ActionType
 
@@ -131,6 +132,7 @@ class AppBaseModel(BaseModel):
     thumbnail_urls: Optional[List[str]] = []
     is_influencer: Optional[bool] = False
     is_popular: Optional[bool] = False
+    official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
 
 
