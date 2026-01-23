@@ -8,7 +8,7 @@ from pydub import AudioSegment
 
 from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
-from database.users import get_person
+from database.users import get_person, share_speech_profile, revoke_speech_profile_share, get_profiles_shared_with_user, get_users_shared_with,
 from models.conversation import Conversation
 from models.other import UploadProfile
 from utils.other import endpoints as auth
@@ -101,3 +101,33 @@ def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str =
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)
+
+@router.post('/v1/speech-profile/share', tags=['v1'])
+def api_share_speech_profile(target_uid: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Share the current user's speech profile with another user"""
+    if not target_uid or target_uid == uid:
+        raise HTTPException(status_code=400, detail="Invalid target user ID.")
+    share_speech_profile(uid, target_uid)
+    return {"status": "ok"}
+
+@router.post('/v1/speech-profile/revoke', tags=['v1'])
+def api_revoke_speech_profile(target_uid: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Revoke a previously shared speech profile"""
+    if not target_uid or target_uid == uid:
+        raise HTTPException(status_code=400, detail="Invalid target user ID.")
+    result = revoke_speech_profile_share(uid, target_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+@router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
+def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
+    """List user IDs who have shared their speech profile with the current user"""
+    owners = get_profiles_shared_with_user(uid)
+    return {"shared_with_me": owners}
+
+@router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
+def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
+    """List user IDs with whom the current user has shared their speech profile"""
+    shared = get_users_shared_with(uid)
+    return {"i_have_shared_with": shared}

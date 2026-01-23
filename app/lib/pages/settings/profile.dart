@@ -27,6 +27,83 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+    void _showSpeechProfileSharingDialog(BuildContext context) async {
+      final TextEditingController controller = TextEditingController();
+      final scaffold = ScaffoldMessenger.of(context);
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Text(context.l10n.shareSpeechProfile),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.enterUserIdToShare),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(hintText: context.l10n.userId),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () async {
+                    final targetUid = controller.text.trim();
+                    if (targetUid.isEmpty) return;
+                    final ok = await shareSpeechProfile(targetUid);
+                    Navigator.pop(ctx);
+                    scaffold.showSnackBar(SnackBar(content: Text(ok ? context.l10n.profileSharedSuccess : context.l10n.profileSharedFail)));
+                  },
+                  child: Text(context.l10n.share),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    void _showSpeechProfileSharingStatus(BuildContext context) async {
+      final sharedWith = await getUsersIHaveSharedWith();
+      final sharedWithMe = await getProfilesSharedWithMe();
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: Text(context.l10n.speechProfileSharingStatus),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.l10n.youHaveSharedWith),
+                  ...sharedWith.map((uid) => Row(
+                    children: [
+                      Expanded(child: Text(uid)),
+                      IconButton(
+                        icon: const Icon(Icons.cancel, size: 18),
+                        onPressed: () async {
+                          await revokeSpeechProfile(uid);
+                          Navigator.pop(ctx);
+                          _showSpeechProfileSharingStatus(context);
+                        },
+                      ),
+                    ],
+                  )),
+                  const SizedBox(height: 16),
+                  Text(context.l10n.sharedWithYou),
+                  ...sharedWithMe.map((uid) => Text(uid)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(context.l10n.ok),
+              ),
+            ],
+          );
+        },
+      );
+    }
   @override
   void initState() {
     super.initState();
@@ -233,6 +310,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const SpeechProfilePage());
                     MixpanelManager().pageOpened('Profile Speech Profile');
                   },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.shareSpeechProfile,
+                  icon: const Icon(Icons.share, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () => _showSpeechProfileSharingDialog(context),
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.speechProfileSharingStatus,
+                  icon: const Icon(Icons.people, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () => _showSpeechProfileSharingStatus(context),
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(

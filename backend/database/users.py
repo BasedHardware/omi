@@ -998,3 +998,71 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+
+def set_speaker_label_mapping(uid: str, speaker_id: int, person_id: str):
+    """Persistently assign a person_id to a speaker_id for a user."""
+    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
+    mapping_ref.set({
+        'speaker_id': speaker_id,
+        'person_id': person_id,
+        'updated_at': datetime.now(timezone.utc),
+    })
+    return True
+
+def get_speaker_label_mapping(uid: str, speaker_id: int) -> str:
+    """Retrieve the person_id assigned to a speaker_id for a user, or None if not set."""
+    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
+    doc = mapping_ref.get()
+    if doc.exists:
+        data = doc.to_dict()
+        return data.get('person_id')
+    return None
+
+def clear_speaker_label_mapping(uid: str, speaker_id: int):
+    """Remove a persistent speaker label mapping for a user."""
+    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
+    mapping_ref.delete()
+    return True
+
+def share_speech_profile(owner_uid: str, target_uid: str):
+    """Share the owner's speech profile with another user (target_uid)."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    shared_ref.set({
+        'shared_with_uid': target_uid,
+        'created_at': datetime.now(timezone.utc),
+        'revoked_at': None,
+    })
+    return True
+
+def revoke_speech_profile_share(owner_uid: str, target_uid: str):
+    """Revoke a previously shared speech profile."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    if shared_ref.get().exists:
+        shared_ref.update({'revoked_at': datetime.now(timezone.utc)})
+        return True
+    return False
+
+def get_profiles_shared_with_user(target_uid: str):
+    """Return a list of user IDs who have shared their speech profile with target_uid and not revoked."""
+    users_ref = db.collection('users')
+    shared_with_me = []
+    for user_doc in users_ref.stream():
+        owner_uid = user_doc.id
+        shared_ref = users_ref.document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+        doc = shared_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            if not data.get('revoked_at'):
+                shared_with_me.append(owner_uid)
+    return shared_with_me
+
+def get_users_shared_with(owner_uid: str):
+    """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
+    docs = shared_ref.stream()
+    shared = []
+    for doc in docs:
+        data = doc.to_dict()
+        if not data.get('revoked_at'):
+            shared.append(data['shared_with_uid'])
+    return shared

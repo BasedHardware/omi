@@ -25,7 +25,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
-import database.users as user_db
+import database.users as user_db get_speaker_label_mapping
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
@@ -1243,7 +1243,8 @@ async def _stream_handler(
         if not speaker_id_enabled:
             return
 
-        # Load person embeddings
+
+        # Load person embeddings for current user and all users who have shared their speech profile with this user
         try:
             people = user_db.get_people(uid)
             for person in people:
@@ -1253,7 +1254,28 @@ async def _stream_handler(
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],
                     }
-            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings", uid, session_id)
+
+            # Shared profiles
+            from database.users import get_profiles_shared_with_user, get_people
+            shared_owners = get_profiles_shared_with_user(uid)
+            for owner_uid in shared_owners:
+                if owner_uid == uid:
+                    continue
+                try:
+                    shared_people = get_people(owner_uid)
+                    for person in shared_people:
+                        emb = person.get('speaker_embedding')
+                        if emb:
+                            # Use composite key to avoid collision
+                            key = f"{owner_uid}:{person['id']}"
+                            person_embeddings_cache[key] = {
+                                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                                'name': f"{person['name']} (from {owner_uid[:6]})",
+                            }
+                except Exception as e:
+                    print(f"Failed to load shared profile from {owner_uid}: {e}", uid, session_id)
+
+            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)", uid, session_id)
         except Exception as e:
             print(f"Speaker ID: failed to load embeddings: {e}", uid, session_id)
             return
@@ -1271,7 +1293,15 @@ async def _stream_handler(
 
             speaker_id = seg['speaker_id']
 
-            # Skip if already resolved
+            # Check persistent mapping before running similarity
+            persistent_person_id = get_speaker_label_mapping(uid, speaker_id)
+            if persistent_person_id:
+                person = user_db.get_person(uid, persistent_person_id)
+                if person:
+                    speaker_to_person_map[speaker_id] = (persistent_person_id, person.get('name', ''))
+                    continue
+
+            # Skip if already resolved in session
             if speaker_id in speaker_to_person_map:
                 continue
 
@@ -1790,6 +1820,10 @@ async def _stream_handler(
                                     print(
                                         f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
                                     )
+
+                                    # Persist mapping for future sessions (manual assignment bootstrap)
+                                    from database.users import set_speaker_label_mapping
+                                    set_speaker_label_mapping(uid, speaker_id, person_id)
 
                                     # Forward to pusher for speech sample extraction (non-blocking)
                                     # Only for real people (not 'user') and when private cloud sync is enabled
