@@ -2496,7 +2496,5 @@
   "chooseTransferMethod": "स्थानांतरण विधि चुनें",
   "fastTransferSpeed": "~150 KB/s WiFi के माध्यम से",
   "largeTimeGapDetected": "बड़ा समय अंतराल पाया गया ({gap})",
-  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})"
 }

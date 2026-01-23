@@ -2517,7 +2517,5 @@
   "chooseTransferMethod": "选择传输方式",
   "fastTransferSpeed": "通过WiFi ~150 KB/s",
   "largeTimeGapDetected": "检测到较大时间间隔 ({gap})",
-  "largeTimeGapsDetected": "检测到多个较大时间间隔 ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "检测到多个较大时间间隔 ({gaps})"
 }

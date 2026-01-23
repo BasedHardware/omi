@@ -2495,7 +2495,5 @@
   "chooseTransferMethod": "Izvēlieties pārsūtīšanas metodi",
   "fastTransferSpeed": "~150 KB/s caur WiFi",
   "largeTimeGapDetected": "Konstatēta liela laika starpība ({gap})",
-  "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})"
 }

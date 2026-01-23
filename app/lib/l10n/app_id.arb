@@ -2537,7 +2537,5 @@
   "chooseTransferMethod": "Pilih metode transfer",
   "fastTransferSpeed": "~150 KB/s melalui WiFi",
   "largeTimeGapDetected": "Terdeteksi jeda waktu besar ({gap})",
-  "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})"
 }

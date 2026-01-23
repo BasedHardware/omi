@@ -2495,7 +2495,5 @@
   "chooseTransferMethod": "Valitse siirtotapa",
   "fastTransferSpeed": "~150 KB/s WiFin kautta",
   "largeTimeGapDetected": "Havaittu suuri aikaväli ({gap})",
-  "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})"
 }

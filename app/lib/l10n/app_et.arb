@@ -2495,7 +2495,5 @@
   "chooseTransferMethod": "Valige ülekandemeetod",
   "fastTransferSpeed": "~150 KB/s WiFi kaudu",
   "largeTimeGapDetected": "Tuvastati suur ajavahe ({gap})",
-  "largeTimeGapsDetected": "Tuvastati suured ajavahed ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Tuvastati suured ajavahed ({gaps})"
 }

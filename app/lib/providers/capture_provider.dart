@@ -40,7 +40,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/main.dart';
 
@@ -1008,8 +1007,12 @@ class CaptureProvider extends ChangeNotifier
     }
 
     if (isDeviceRecordingActive || recordingState == RecordingState.deviceRecord) {
-      AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.deviceRecordingActive ??
-          'Your Omi device is recording. Stop it to record system audio.');
+      final context = MyApp.navigatorKey.currentContext;
+      if (context != null) {
+        AppSnackbar.showSnackbarError(context.l10n.deviceRecordingActive);
+      } else {
+        Logger.error('Failed to show device recording active snackbar: context is null.');
+      }
       return;
     }
 

@@ -2495,7 +2495,5 @@
   "chooseTransferMethod": "Välj överföringsmetod",
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "largeTimeGapDetected": "Stort tidsgap upptäckt ({gap})",
-  "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})"
 }

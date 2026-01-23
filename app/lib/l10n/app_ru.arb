@@ -2530,7 +2530,5 @@
   "chooseTransferMethod": "Выберите способ передачи",
   "fastTransferSpeed": "~150 КБ/с через WiFi",
   "largeTimeGapDetected": "Обнаружен большой временной разрыв ({gap})",
-  "largeTimeGapsDetected": "Обнаружены большие временные разрывы ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Обнаружены большие временные разрывы ({gaps})"
 }

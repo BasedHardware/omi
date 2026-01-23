@@ -2530,7 +2530,5 @@
   "chooseTransferMethod": "Aktarım yöntemi seçin",
   "fastTransferSpeed": "WiFi ile ~150 KB/s",
   "largeTimeGapDetected": "Büyük zaman farkı tespit edildi ({gap})",
-  "largeTimeGapsDetected": "Büyük zaman farkları tespit edildi ({gaps})",
-  "recordingOnDevice": "Recording on device",
-  "deviceRecordingActive": "Your Omi device is recording. Stop it to record system audio."
+  "largeTimeGapsDetected": "Büyük zaman farkları tespit edildi ({gaps})"
 }
