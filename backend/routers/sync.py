@@ -625,7 +625,6 @@ def upload_wav_as_audio_chunks(
     conversation_id: str,
     start_timestamp: float,
     chunk_duration: float = 5.0,
-    sample_rate: int = 16000,
 ):
     """
     Convert a WAV file to PCM chunks and upload them to cloud storage.
@@ -637,16 +636,25 @@ def upload_wav_as_audio_chunks(
         conversation_id: Conversation ID
         start_timestamp: Unix timestamp when the audio started
         chunk_duration: Duration of each chunk in seconds (default 5.0, same as websocket)
-        sample_rate: Audio sample rate (default 16000)
     """
     try:
         with wave.open(wav_path, 'rb') as wav_file:
+            n_channels = wav_file.getnchannels()
+            sampwidth = wav_file.getsampwidth()
+            framerate = wav_file.getframerate()
             n_frames = wav_file.getnframes()
+
+            # Validate WAV format matches expected PCM16 mono
+            if n_channels != 1 or sampwidth != 2:
+                print(
+                    f"Warning: WAV format mismatch for {wav_path} - expected mono PCM16, got {n_channels}ch {sampwidth*8}bit"
+                )
+
             pcm_data = wav_file.readframes(n_frames)
 
-        # Calculate chunk size in bytes
+        # Calculate chunk size in bytes using actual WAV parameters
         # PCM16 mono: 2 bytes per sample
-        bytes_per_second = sample_rate * 2
+        bytes_per_second = framerate * n_channels * sampwidth
         chunk_size = int(chunk_duration * bytes_per_second)
 
         # Split into chunks and upload
@@ -664,13 +672,6 @@ def upload_wav_as_audio_chunks(
         # Free memory
         del pcm_data
 
-        # Create audio files index from the uploaded chunks
-        audio_files = create_audio_files_from_chunks(uid, conversation_id)
-        if audio_files:
-            # Update conversation with audio_files
-            conversations_db.update_conversation(
-                uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
-            )
 
     except Exception as e:
         print(f"Error uploading audio chunks for conversation {conversation_id}: {e}")
@@ -822,6 +823,18 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             for path in segmented_paths
         ]
         chunk_threads(threads)
+
+
+        affected_conversation_ids = response['new_memories'] | response['updated_memories']
+        for conversation_id in affected_conversation_ids:
+            try:
+                audio_files = create_audio_files_from_chunks(uid, conversation_id)
+                if audio_files:
+                    conversations_db.update_conversation(
+                        uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
+                    )
+            except Exception as e:
+                print(f"Error updating audio_files for conversation {conversation_id}: {e}")
 
         # notify through FCM too ?
         return response
