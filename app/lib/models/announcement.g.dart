@@ -31,7 +31,7 @@ ChangelogContent _$ChangelogContentFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ChangelogContentToJson(ChangelogContent instance) =>
     <String, dynamic>{
       'title': instance.title,
-      'changes': instance.changes,
+      'changes': instance.changes.map((e) => e.toJson()).toList(),
     };
 
 FeatureStep _$FeatureStepFromJson(Map<String, dynamic> json) => FeatureStep(
@@ -62,7 +62,7 @@ FeatureContent _$FeatureContentFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$FeatureContentToJson(FeatureContent instance) =>
     <String, dynamic>{
       'title': instance.title,
-      'steps': instance.steps,
+      'steps': instance.steps.map((e) => e.toJson()).toList(),
     };
 
 AnnouncementCTA _$AnnouncementCTAFromJson(Map<String, dynamic> json) =>
@@ -93,7 +93,7 @@ Map<String, dynamic> _$AnnouncementContentToJson(
       'title': instance.title,
       'body': instance.body,
       'image_url': instance.imageUrl,
-      'cta': instance.cta,
+      'cta': instance.cta?.toJson(),
     };
 
 Announcement _$AnnouncementFromJson(Map<String, dynamic> json) => Announcement(

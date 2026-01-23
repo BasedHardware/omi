@@ -423,7 +423,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
             ),
             child: const Center(
               child: CircularProgressIndicator(
-                color: ResponsiveHelper.purplePrimary,
+                color: Colors.white54,
                 strokeWidth: 2,
               ),
             ),
@@ -462,24 +462,24 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Play button with glow effect
+          // Play button
           Container(
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: ResponsiveHelper.purplePrimary,
+              color: Colors.white,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.4),
-                  blurRadius: 20,
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
                   spreadRadius: 2,
                 ),
               ],
             ),
             child: const Icon(
               Icons.play_arrow_rounded,
-              color: Colors.white,
+              color: Colors.black,
               size: 36,
             ),
           ),
@@ -575,18 +575,11 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
               width: double.infinity,
               height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    ResponsiveHelper.purplePrimary,
-                    Color(0xFF8B5CF6),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -598,7 +591,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
                   Text(
                     isLastStep ? 'Got it' : 'Continue',
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Colors.black,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.3,
@@ -608,7 +601,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
                     const SizedBox(width: 8),
                     const Icon(
                       Icons.arrow_forward_rounded,
-                      color: Colors.white,
+                      color: Colors.black,
                       size: 20,
                     ),
                   ],
@@ -632,9 +625,9 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       height: 8,
       decoration: BoxDecoration(
         color: isActive
-            ? ResponsiveHelper.purplePrimary
+            ? Colors.white
             : isPast
-                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.5)
+                ? Colors.white54
                 : ResponsiveHelper.backgroundTertiary,
         borderRadius: BorderRadius.circular(4),
       ),

@@ -3,7 +3,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/models/announcement.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AnnouncementDialog extends StatelessWidget {
   final Announcement announcement;
@@ -172,23 +171,14 @@ class AnnouncementDialog extends StatelessWidget {
             color: const Color(0xFF2A2A2E),
             child: const Center(
               child: CircularProgressIndicator(
-                color: ResponsiveHelper.purplePrimary,
+                color: Colors.white54,
                 strokeWidth: 2,
               ),
             ),
           ),
           errorWidget: (context, url, error) => Container(
             height: 180,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                  ResponsiveHelper.purpleAccent.withValues(alpha: 0.3),
-                ],
-              ),
-            ),
+            color: const Color(0xFF2A2A2E),
             child: const Icon(
               Icons.campaign_outlined,
               color: Colors.white54,

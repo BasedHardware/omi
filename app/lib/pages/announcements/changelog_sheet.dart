@@ -423,7 +423,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: enabled ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary,
+          color: enabled ? const Color(0xFF2A2A2E) : ResponsiveHelper.backgroundTertiary,
           shape: BoxShape.circle,
         ),
         child: Icon(

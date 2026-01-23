@@ -25,7 +25,7 @@ class ChangelogItem {
   Map<String, dynamic> toJson() => _$ChangelogItemToJson(this);
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
+@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class ChangelogContent {
   final String title;
   final List<ChangelogItem> changes;
@@ -60,7 +60,7 @@ class FeatureStep {
   Map<String, dynamic> toJson() => _$FeatureStepToJson(this);
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
+@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class FeatureContent {
   final String title;
   final List<FeatureStep> steps;
@@ -89,7 +89,7 @@ class AnnouncementCTA {
   Map<String, dynamic> toJson() => _$AnnouncementCTAToJson(this);
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
+@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class AnnouncementContent {
   final String title;
   final String body;
