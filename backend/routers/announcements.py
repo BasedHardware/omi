@@ -27,7 +27,8 @@ router = APIRouter()
 async def get_changelogs(
     from_version: Optional[str] = Query(None, description="Previous app version (before upgrade)"),
     to_version: Optional[str] = Query(None, description="Current app version (after upgrade)"),
-    limit: int = Query(5, description="Maximum number of changelogs to return (used when from/to not provided)"),
+    max_version: Optional[str] = Query(None, description="Maximum version to include (filters out future versions)"),
+    limit: int = Query(5, description="Maximum number of changelogs to return"),
 ):
     """
     Get app changelog announcements.
@@ -35,7 +36,10 @@ async def get_changelogs(
     If from_version and to_version are provided:
         Returns changelogs where from_version < app_version <= to_version.
 
-    If not provided:
+    If max_version is provided (without from/to):
+        Returns the most recent `limit` changelogs where app_version <= max_version.
+
+    If none provided:
         Returns the most recent `limit` changelogs.
 
     Sorted by version descending (newest first).
@@ -44,7 +48,7 @@ async def get_changelogs(
     if from_version and to_version:
         changelogs = get_app_changelogs(from_version, to_version)
     else:
-        changelogs = get_recent_changelogs(limit=limit)
+        changelogs = get_recent_changelogs(limit=limit, max_version=max_version)
     return changelogs
 
 

@@ -7,6 +7,7 @@ import 'package:omi/models/announcement.dart';
 Future<List<Announcement>> getAppChangelogs({
   String? fromVersion,
   String? toVersion,
+  String? maxVersion,
   int limit = 5,
 }) async {
   String url;
@@ -16,6 +17,9 @@ Future<List<Announcement>> getAppChangelogs({
     url = "${Env.apiBaseUrl}v1/announcements/changelogs?from_version=$encodedFromVersion&to_version=$encodedToVersion";
   } else {
     url = "${Env.apiBaseUrl}v1/announcements/changelogs?limit=$limit";
+    if (maxVersion != null) {
+      url += "&max_version=${Uri.encodeComponent(maxVersion)}";
+    }
   }
 
   var res = await makeApiCall(
