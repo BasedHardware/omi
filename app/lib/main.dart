@@ -35,6 +35,7 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/calendar_provider.dart';
@@ -369,6 +370,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => FolderProvider()),
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
           ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
