@@ -130,7 +130,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
             transcripts.extend([''] * (existing_sample_count - len(transcripts)))
         transcripts.append(transcript)
         update_data['speech_sample_transcripts'] = transcripts
-        update_data['speech_samples_version'] = 2
+        update_data['speech_samples_version'] = 3
 
     transaction.update(person_ref, update_data)
     return True
