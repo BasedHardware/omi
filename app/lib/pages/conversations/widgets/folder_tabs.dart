@@ -11,6 +11,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class FolderTabs extends StatefulWidget {
@@ -87,7 +88,7 @@ class _FolderTabsState extends State<FolderTabs> {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: _FolderTab(
-        label: 'Starred',
+        label: context.l10n.starred,
         icon: '⭐',
         color: Colors.amber,
         isSelected: widget.showStarredOnly,
@@ -108,7 +109,7 @@ class _FolderTabsState extends State<FolderTabs> {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: _FolderTab(
-        label: 'Recap',
+        label: context.l10n.recap,
         icon: '🕐',
         color: Colors.green,
         isSelected: widget.showDailySummaries,
@@ -148,7 +149,7 @@ class _FolderTabsState extends State<FolderTabs> {
 
     // "All" tab always first - clears all filters when clicked
     tabs.add(_FolderTab(
-      label: 'All',
+      label: context.l10n.all,
       isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
       onTap: () {
         // Clear folder filter
@@ -383,7 +384,7 @@ class _FolderContextMenu extends StatelessWidget {
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
               scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Failed to delete folder')),
+                SnackBar(content: Text(context.l10n.failedToDeleteFolder)),
               );
             }
           });
@@ -443,7 +444,7 @@ class _FolderContextMenu extends StatelessWidget {
             // Edit option
             ListTile(
               leading: const Icon(Icons.edit_outlined, color: Colors.white),
-              title: const Text('Edit Folder', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.editFolder, style: const TextStyle(color: Colors.white)),
               onTap: () => _handleEdit(context),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -452,7 +453,7 @@ class _FolderContextMenu extends StatelessWidget {
             if (!folder.isSystem)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete Folder', style: TextStyle(color: Colors.red)),
+                title: Text(context.l10n.deleteFolder, style: const TextStyle(color: Colors.red)),
                 onTap: () => _handleDelete(context),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -463,9 +464,9 @@ class _FolderContextMenu extends StatelessWidget {
               width: double.infinity,
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                child: Text(
+                  context.l10n.cancel,
+                  style: const TextStyle(color: Colors.grey, fontSize: 16),
                 ),
               ),
             ),
@@ -527,7 +528,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Delete "${folder.name}"',
+                            context.l10n.deleteQuoted(folder.name),
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -536,7 +537,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Move ${folder.conversationCount} conversations to:',
+                            context.l10n.moveConversationsTo(folder.conversationCount),
                             style: const TextStyle(
                               fontSize: 13,
                               color: ResponsiveHelper.textTertiary,
@@ -565,8 +566,8 @@ class _DeleteFolderSheet extends StatelessWidget {
                     // No folder option
                     _MoveOption(
                       icon: '🚫',
-                      name: 'No folder',
-                      description: 'Remove from all folders',
+                      name: context.l10n.noFolder,
+                      description: context.l10n.removeFromAllFolders,
                       color: Colors.grey,
                       onTap: () => onDelete(null),
                     ),

@@ -11,6 +11,7 @@ import { NotificationProvider, useNotificationContext } from '@/components/notif
 import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
 
 // Dynamic imports for panels - not visible on initial load
 const ChatPanel = dynamic(() => import('@/components/chat/ChatPanel').then(mod => ({ default: mod.ChatPanel })), {
@@ -83,6 +84,8 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
       <NotificationProvider>
         {/* Handle notification routing from chatApp query param */}
         <ChatAppRouter />
+        {/* Prefetch memories in background for instant page load */}
+        <MemoriesPrefetcher />
         <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
           <Sidebar

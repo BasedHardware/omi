@@ -696,6 +696,74 @@ def precache_conversation_audio(
 # **********************************
 
 
+def download_blob_bytes(bucket_name: str, path: str) -> bytes:
+    """
+    Download blob content as bytes from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        Blob content as bytes
+
+    Raises:
+        NotFound: If the blob doesn't exist
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    return blob.download_as_bytes()
+
+
+def delete_blob(bucket_name: str, path: str) -> bool:
+    """
+    Delete a blob from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        True if deleted, False if not found
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    try:
+        blob.delete()
+        return True
+    except NotFound:
+        return False
+
+
+def download_speech_profile_bytes(path: str) -> bytes:
+    """
+    Download speech profile/sample audio from GCS.
+
+    Args:
+        path: GCS path to the sample (e.g., '{uid}/people_profiles/{person_id}/{filename}.wav')
+
+    Returns:
+        Audio bytes (WAV format)
+
+    Raises:
+        NotFound: If the sample doesn't exist
+    """
+    return download_blob_bytes(speech_profiles_bucket, path)
+
+
+def delete_speech_profile_blob(path: str) -> bool:
+    """
+    Delete speech profile/sample from GCS.
+
+    Args:
+        path: GCS path to the sample
+
+    Returns:
+        True if deleted, False if not found
+    """
+    return delete_blob(speech_profiles_bucket, path)
+
+
 def _get_signed_url(blob, minutes):
     if cached := get_cached_signed_url(blob.name):
         return cached

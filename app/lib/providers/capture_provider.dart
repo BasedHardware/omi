@@ -38,9 +38,11 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/main.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
     show
@@ -246,7 +248,8 @@ class CaptureProvider extends ChangeNotifier
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
-  bool _voiceSessionStartedByLegacyLongPress = false; // Track if session was started by legacy long press (3) vs new toggle (1), TODO: remove this flag later
+  bool _voiceSessionStartedByLegacyLongPress =
+      false; // Track if session was started by legacy long press (3) vs new toggle (1), TODO: remove this flag later
 
   StreamSubscription? _storageStream;
 
@@ -1000,7 +1003,8 @@ class CaptureProvider extends ChangeNotifier
           },
           onError: (error) {
             Logger.debug('System audio capture error: $error');
-            AppSnackbar.showSnackbarError('An error occurred during recording: $error');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureRecordingError(error) ??
+                'An error occurred during recording: $error');
             updateRecordingState(RecordingState.stop);
           },
           onSystemWillSleep: (wasRecording) {
@@ -1034,7 +1038,8 @@ class CaptureProvider extends ChangeNotifier
             if (recordingState == RecordingState.systemAudioRecord) {
               updateRecordingState(RecordingState.stop);
               AppSnackbar.showSnackbarError(
-                  'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
+                  MyApp.navigatorKey.currentContext?.l10n.captureRecordingStoppedDisplayIssue(reason) ??
+                      'Recording stopped: $reason. You may need to reconnect external displays or restart recording.');
             }
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
@@ -1050,11 +1055,14 @@ class CaptureProvider extends ChangeNotifier
       if (micStatus == 'undetermined' || micStatus == 'unavailable') {
         final granted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
         if (!granted) {
-          AppSnackbar.showSnackbarError('Microphone permission required');
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionRequired ??
+              'Microphone permission required');
           return false;
         }
       } else if (micStatus == 'denied') {
-        AppSnackbar.showSnackbarError('Grant microphone permission in System Preferences');
+        AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.captureMicrophonePermissionInSystemPreferences ??
+                'Grant microphone permission in System Preferences');
         return false;
       }
     }
@@ -1064,7 +1072,9 @@ class CaptureProvider extends ChangeNotifier
     if (screenStatus != 'granted') {
       final granted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
       if (!granted) {
-        AppSnackbar.showSnackbarError('Screen recording permission required');
+        AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.captureScreenRecordingPermissionRequired ??
+                'Screen recording permission required');
         return false;
       }
     }
@@ -1297,7 +1307,8 @@ class CaptureProvider extends ChangeNotifier
 
     if (err.toString().contains('Failed to find any displays or windows to capture')) {
       if (recordingState == RecordingState.systemAudioRecord) {
-        AppSnackbar.showSnackbarError('Display detection failed. Recording stopped.');
+        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.captureDisplayDetectionFailed ??
+            'Display detection failed. Recording stopped.');
         updateRecordingState(RecordingState.stop);
       }
     }

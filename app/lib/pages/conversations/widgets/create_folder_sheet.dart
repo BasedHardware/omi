@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Available folder colors for selection.
@@ -72,8 +73,8 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a folder name'),
+        SnackBar(
+          content: Text(context.l10n.pleaseEnterFolderName),
           backgroundColor: Colors.red,
         ),
       );
@@ -127,7 +128,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to ${isEditing ? 'update' : 'create'} folder'),
+            content: Text(isEditing ? context.l10n.failedToUpdateFolder : context.l10n.failedToCreateFolder),
             backgroundColor: Colors.red,
           ),
         );
@@ -160,7 +161,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  isEditing ? 'Edit Folder' : 'New Folder',
+                  isEditing ? context.l10n.editFolder : context.l10n.newFolder,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -181,7 +182,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                           ),
                         )
                       : Text(
-                          isEditing ? 'Save' : 'Create',
+                          isEditing ? context.l10n.save : context.l10n.create,
                           style: const TextStyle(
                             color: ResponsiveHelper.purplePrimary,
                             fontSize: 16,
@@ -208,12 +209,12 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                   fontSize: 16,
                   height: 1.3,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
-                  hintText: 'Folder name',
-                  hintStyle: TextStyle(
+                  hintText: context.l10n.folderName,
+                  hintStyle: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 16,
                   ),
@@ -240,12 +241,12 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
                   fontSize: 14,
                   height: 1.4,
                 ),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isDense: true,
-                  hintText: 'Description (optional)',
-                  hintStyle: TextStyle(
+                  hintText: context.l10n.descriptionOptional,
+                  hintStyle: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 14,
                   ),
@@ -258,9 +259,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             const SizedBox(height: 20),
 
             // Icon selection
-            const Text(
-              'Icon',
-              style: TextStyle(
+            Text(
+              context.l10n.icon,
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: ResponsiveHelper.textTertiary,
@@ -276,9 +277,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             const SizedBox(height: 16),
 
             // Color selection
-            const Text(
-              'Color',
-              style: TextStyle(
+            Text(
+              context.l10n.color,
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: ResponsiveHelper.textTertiary,

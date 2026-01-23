@@ -6,6 +6,7 @@ import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class CreateOptionsSheet extends StatelessWidget {
@@ -24,7 +25,7 @@ class CreateOptionsSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'What would you like to create?',
+            context.l10n.whatWouldYouLikeToCreate,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w400,
                   color: Theme.of(context).colorScheme.onSurface,
@@ -40,8 +41,8 @@ class CreateOptionsSheet extends StatelessWidget {
               titleAlignment: ListTileTitleAlignment.center,
               leading: const Icon(Icons.apps, color: Colors.white),
               title:
-                  Text('Create an App', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle: Text('Create and share your app', style: TextStyle(color: Colors.white.withOpacity(0.7))),
+                  Text(context.l10n.createAnApp, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle: Text(context.l10n.createAndShareYourApp, style: TextStyle(color: Colors.white.withOpacity(0.7))),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Submit App');
@@ -58,9 +59,9 @@ class CreateOptionsSheet extends StatelessWidget {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: const Icon(Icons.person_outline, color: Colors.white),
               titleAlignment: ListTileTitleAlignment.center,
-              title: Text('Create my Clone',
+              title: Text(context.l10n.createMyClone,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle: Text('Create your digital clone', style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              subtitle: Text(context.l10n.createYourDigitalClone, style: TextStyle(color: Colors.white.withOpacity(0.7))),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Create Persona');

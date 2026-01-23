@@ -4,6 +4,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_text_input.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopNameScreen extends StatefulWidget {
@@ -86,7 +87,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
     if (name.isEmpty) {
       setState(() {
         _isValid = false;
-        _errorMessage = 'Please enter your name';
+        _errorMessage = context.l10n.pleaseEnterYourName;
       });
       return;
     }
@@ -94,7 +95,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
     if (name.length < 2) {
       setState(() {
         _isValid = false;
-        _errorMessage = 'Name must be at least 2 characters';
+        _errorMessage = context.l10n.nameMustBeAtLeast2Characters;
       });
       return;
     }
@@ -139,9 +140,9 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                     ),
                   ),
                   const SizedBox(height: 32),
-                  const Text(
-                    'What\'s your name?',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.whatsYourName,
+                    style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -153,9 +154,9 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                   Container(
                     constraints: const BoxConstraints(maxWidth: 480),
                     padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: const Text(
-                      'Tell us how you\'d like to be addressed. This helps personalize your Omi experience.',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.tellUsHowYouWouldLikeToBeAddressed,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w400,
                         color: Color(0xFF9CA3AF),
@@ -174,7 +175,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                         OmiTextInput(
                           controller: _nameController,
                           focusNode: _focusNode,
-                          hint: 'Enter your name',
+                          hint: context.l10n.enterYourName,
                           onChanged: (_) {
                             if (_hasInteracted) setState(() {});
                           },
@@ -204,7 +205,7 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                           Align(
                             alignment: Alignment.centerRight,
                             child: Text(
-                              '${_nameController.text.length} characters',
+                              context.l10n.charactersCount(_nameController.text.length),
                               style: const TextStyle(
                                 color: Color(0xFF6B7280),
                                 fontSize: 12,
@@ -227,14 +228,14 @@ class _DesktopNameScreenState extends State<DesktopNameScreen> with SingleTicker
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     OmiButton(
-                      label: 'Continue',
+                      label: context.l10n.continueButton,
                       onPressed: _validateAndProceed,
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 OmiButton(
-                  label: 'Back',
+                  label: context.l10n.back,
                   type: OmiButtonType.text,
                   onPressed: widget.onBack,
                 ),

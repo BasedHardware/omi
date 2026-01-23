@@ -78,6 +78,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
   }
 
+  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
+    switch (state) {
+      case SpeechProfileLoadingState.uploading:
+        return context.l10n.uploadingVoiceProfile;
+      case SpeechProfileLoadingState.memorizing:
+        return context.l10n.memorizingYourVoice;
+      case SpeechProfileLoadingState.personalizing:
+        return context.l10n.personalizingExperience;
+      case SpeechProfileLoadingState.allSet:
+        return context.l10n.youreAllSet;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Future restartDeviceRecording() async {
@@ -399,7 +412,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         ),
                                       ),
                                       const SizedBox(width: 24),
-                                      Text(provider.loadingText,
+                                      Text(_getLoadingText(context, provider.loadingState),
                                           style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),

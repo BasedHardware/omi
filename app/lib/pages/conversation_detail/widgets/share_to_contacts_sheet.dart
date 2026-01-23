@@ -8,7 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -79,10 +81,11 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     final permissionGranted = await FlutterContacts.requestPermission();
 
     if (!permissionGranted) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _permissionDenied = true;
-        _errorMessage = 'Contacts permission is required to share via SMS';
+        _errorMessage = context.l10n.contactsPermissionRequiredForSms;
       });
       return;
     }
@@ -117,9 +120,10 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load contacts: $e';
+        _errorMessage = '${context.l10n.failedToLoadContacts}: $e';
       });
     }
   }
@@ -174,14 +178,14 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         if (!mounted) return;
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = 'Failed to prepare conversation for sharing. Please try again.';
+          _errorMessage = context.l10n.failedToPrepareConversationForSharing;
         });
         return;
       }
 
       // Build the share link and message
       final shareLink = 'https://h.omi.me/conversations/${widget.conversation.id}';
-      final message = "Here's what we just discussed: $shareLink";
+      final message = context.l10n.heresWhatWeDiscussed(shareLink);
 
       // Build recipients string (comma-separated phone numbers)
       final recipients = selected.map((c) => c.phoneNumber).join(',');
@@ -207,14 +211,14 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       } else {
         setState(() {
           _isPreparingShare = false;
-          _errorMessage = 'Could not open SMS app. Please try again.';
+          _errorMessage = context.l10n.couldNotOpenSmsApp;
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isPreparingShare = false;
-        _errorMessage = 'Error: $e';
+        _errorMessage = '${context.l10n.error}: $e';
       });
     }
   }
@@ -255,9 +259,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Share via SMS',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.shareViaSms,
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
@@ -271,7 +275,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Select contacts to share your conversation summary',
+                      context.l10n.selectContactsToShareSummary,
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey.shade400,
@@ -288,7 +292,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   onChanged: _filterContacts,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: 'Search contacts...',
+                    hintText: context.l10n.searchContactsHint,
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     prefixIcon: const Icon(Icons.search, color: Colors.grey),
                     filled: true,
@@ -315,7 +319,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${_selectedContacts.length} selected',
+                          context.l10n.contactsSelectedCount(_selectedContacts.length),
                           style: const TextStyle(
                             color: Colors.deepPurple,
                             fontWeight: FontWeight.w600,
@@ -331,9 +335,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                             }
                           });
                         },
-                        child: const Text(
-                          'Clear all',
-                          style: TextStyle(color: Colors.grey),
+                        child: Text(
+                          context.l10n.clearAllSelection,
+                          style: const TextStyle(color: Colors.grey),
                         ),
                       ),
                     ],
@@ -395,8 +399,10 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                               )
                             : Text(
                                 _selectedContacts.isEmpty
-                                    ? 'Select contacts to share'
-                                    : 'Share with ${_selectedContacts.length} contact${_selectedContacts.length > 1 ? 's' : ''}',
+                                    ? context.l10n.selectContactsToShare
+                                    : _selectedContacts.length > 1
+                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -429,7 +435,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             Icon(Icons.contacts, size: 64, color: Colors.grey.shade600),
             const SizedBox(height: 16),
             Text(
-              'Contacts permission required',
+              context.l10n.contactsPermissionRequired,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -438,7 +444,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             ),
             const SizedBox(height: 8),
             Text(
-              'Please grant contacts permission to share via SMS',
+              context.l10n.grantContactsPermissionForSms,
               style: TextStyle(color: Colors.grey.shade500),
               textAlign: TextAlign.center,
             ),
@@ -455,7 +461,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
               ),
-              child: const Text('Open Settings'),
+              child: Text(context.l10n.openSettings),
             ),
           ],
         ),
@@ -470,7 +476,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             Icon(Icons.search_off, size: 64, color: Colors.grey.shade600),
             const SizedBox(height: 16),
             Text(
-              _searchController.text.isEmpty ? 'No contacts with phone numbers found' : 'No contacts match your search',
+              _searchController.text.isEmpty
+                  ? context.l10n.noContactsWithPhoneNumbers
+                  : context.l10n.noContactsMatchSearch,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey.shade400,

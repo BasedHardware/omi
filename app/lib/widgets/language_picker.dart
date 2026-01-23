@@ -13,7 +13,7 @@ class LanguagePickerTile extends StatelessWidget {
     return Consumer<LocaleProvider>(
       builder: (context, localeProvider, child) {
         final currentLocale = localeProvider.locale;
-        final displayName = currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : 'System Default';
+        final displayName = currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : context.l10n.systemDefault;
 
         return ListTile(
           title: Text(

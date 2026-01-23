@@ -16,6 +16,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -233,8 +234,8 @@ class MemoryItem extends StatelessWidget {
 
   void _showConversationNotFoundError(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Conversation not found or has been deleted'),
+      SnackBar(
+        content: Text(context.l10n.conversationNotFoundOrDeleted),
         backgroundColor: Colors.red,
       ),
     );

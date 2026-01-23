@@ -8,8 +8,10 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 /// State enum for the AI app generation process
@@ -148,7 +150,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
   /// Generate app configuration from a prompt
   Future<bool> generateApp(String prompt) async {
     if (prompt.trim().isEmpty) {
-      _errorMessage = 'Please enter a description for your app';
+      _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenPleaseEnterDescription;
       notifyListeners();
       return false;
     }
@@ -171,7 +173,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
 
       if (appData == null) {
         _state = GenerationState.error;
-        _errorMessage = 'Failed to generate app. Please try again.';
+        _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenFailedToGenerateApp;
         notifyListeners();
         return false;
       }
@@ -189,7 +191,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
 
       // Step 4: Generating icon
       _state = GenerationState.generatingIcon;
-      _updateStep(GenerationStep.generatingIcon, 'Creating app icon...');
+      _updateStep(GenerationStep.generatingIcon, MyApp.navigatorKey.currentContext!.l10n.aiGenCreatingAppIcon);
 
       final iconBase64 = await generateAppIcon(
         _generatedName ?? 'App',
@@ -211,7 +213,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error generating app: $e');
       _state = GenerationState.error;
-      _errorMessage = 'An error occurred: ${e.toString()}';
+      _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenErrorOccurredWithDetails(e.toString());
       notifyListeners();
       return false;
     }
@@ -244,7 +246,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error regenerating icon: $e');
       _state = GenerationState.error;
-      _errorMessage = 'Failed to regenerate icon';
+      _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenFailedToRegenerateIcon;
       notifyListeners();
       return false;
     }
@@ -254,7 +256,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
   /// Returns the appId if successful, null otherwise
   Future<String?> submitGeneratedApp() async {
     if (!hasGeneratedApp || _generatedIconBytes == null) {
-      _errorMessage = 'Please generate an app first';
+      _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenPleaseGenerateAppFirst;
       notifyListeners();
       return null;
     }
@@ -303,7 +305,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       if (result.$1) {
         _createdAppId = result.$3;
         _state = GenerationState.completed;
-        AppSnackbar.showSnackbarSuccess('App created successfully! 🎉');
+        AppSnackbar.showSnackbarSuccess(MyApp.navigatorKey.currentContext!.l10n.aiGenAppCreatedSuccessfully);
 
         // Refresh apps list
         await appProvider?.getApps();
@@ -312,14 +314,15 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         return _createdAppId;
       } else {
         _state = GenerationState.error;
-        _errorMessage = result.$2.isNotEmpty ? result.$2 : 'Failed to create app';
+        _errorMessage =
+            result.$2.isNotEmpty ? result.$2 : MyApp.navigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
         notifyListeners();
         return null;
       }
     } catch (e) {
       Logger.debug('Error submitting app: $e');
       _state = GenerationState.error;
-      _errorMessage = 'An error occurred while creating the app';
+      _errorMessage = MyApp.navigatorKey.currentContext!.l10n.aiGenErrorWhileCreatingApp;
       notifyListeners();
       return null;
     }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -9,8 +10,10 @@ import 'package:omi/models/playback_state.dart';
 import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
 import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wifi/wifi_network_service.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
@@ -108,7 +111,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       appBar: AppBar(
         elevation: 0,
         automaticallyImplyLeading: true,
-        title: Text('Recording Details', style: Theme.of(context).textTheme.titleLarge),
+        title: Text(context.l10n.recordingDetails, style: Theme.of(context).textTheme.titleLarge),
         centerTitle: true,
         actions: [
           IconButton(
@@ -136,22 +139,23 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     }
   }
 
-  String _getStorageLocationLabel(WalStorage storage) {
+  String _getStorageLocationLabel(WalStorage storage, BuildContext context) {
     switch (storage) {
       case WalStorage.sdcard:
-        return 'SD Card';
+        return context.l10n.storageLocationSdCard;
       case WalStorage.flashPage:
-        return 'Limitless Pendant';
+        return context.l10n.storageLocationLimitlessPendant;
       case WalStorage.disk:
-        return 'Phone';
+        return context.l10n.storageLocationPhone;
       case WalStorage.mem:
-        return 'Phone (Memory)';
+        return context.l10n.storageLocationPhoneMemory;
     }
   }
 
   Widget _buildDeviceTransferUI() {
     final isFlashPage = widget.wal.storage == WalStorage.flashPage;
-    final storageLabel = isFlashPage ? 'Limitless Pendant' : 'SD Card';
+    final storageLabel =
+        isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
     final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
 
@@ -210,7 +214,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         Icon(storageIcon, color: storageColor, size: 14),
                         const SizedBox(width: 6),
                         Text(
-                          'Stored on $storageLabel',
+                          context.l10n.storedOnDevice(storageLabel),
                           style: TextStyle(
                             color: storageColor,
                             fontSize: 12,
@@ -252,7 +256,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
                       // Status text
                       Text(
-                        isTransferring ? 'Transferring...' : 'Transfer Required',
+                        isTransferring ? context.l10n.transferring : context.l10n.transferRequired,
                         style: Theme.of(context).textTheme.titleLarge!.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.w600,
@@ -261,8 +265,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       const SizedBox(height: 12),
                       Text(
                         isTransferring
-                            ? 'Downloading audio from your device\'s SD card'
-                            : 'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.',
+                            ? context.l10n.downloadingAudioFromSdCard
+                            : context.l10n.transferRequiredDescription,
                         style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                               color: Colors.grey.shade400,
                               fontSize: 14,
@@ -347,7 +351,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        isTransferring ? 'Cancel Transfer' : 'Transfer to Phone',
+                        isTransferring ? context.l10n.cancelTransfer : context.l10n.transferToPhone,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -408,7 +412,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         Icon(Icons.security, color: Colors.grey.shade400, size: 14),
                         const SizedBox(width: 6),
                         Text(
-                          'Private & secure on your device',
+                          context.l10n.privateAndSecureOnDevice,
                           style: TextStyle(
                             color: Colors.grey.shade400,
                             fontSize: 12,
@@ -533,7 +537,18 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
     final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
-    if (preferredMethod == 'ble' && wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+    bool wifiHardwareAvailable = false;
+    if (wifiSupported && widget.wal.storage == WalStorage.sdcard) {
+      wifiHardwareAvailable = await _checkWifiHardwareAvailable();
+      if (!wifiHardwareAvailable && preferredMethod == 'wifi') {
+        SharedPreferencesUtil().preferredSyncMethod = 'ble';
+        if (mounted) {
+          _showSnackBar(context.l10n.deviceDoesNotSupportWifiSwitchingToBle, Colors.orange);
+        }
+      }
+    }
+
+    if (preferredMethod == 'ble' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard) {
       if (!mounted) return;
       final result = await FastTransferSuggestionDialog.show(context);
       if (result == null) return;
@@ -542,13 +557,13 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         // User wants to switch to Fast Transfer
         SharedPreferencesUtil().preferredSyncMethod = 'wifi';
         if (!mounted) return;
-        _showSnackBar('Switched to Fast Transfer', Colors.green);
+        _showSnackBar(context.l10n.switchedToFastTransfer, Colors.green);
       }
     }
 
     final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
     if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
-      if (currentMethod == 'wifi' && wifiSupported) {
+      if (currentMethod == 'wifi' && wifiHardwareAvailable) {
         if (!mounted) return;
         final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
         if (!hasPermission) {
@@ -562,13 +577,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     try {
       final syncProvider = context.read<SyncProvider>();
       final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
 
       // Show WiFi connection sheet if using WiFi for SD card transfer
-      if (currentMethod == 'wifi' && wifiSupported && widget.wal.storage == WalStorage.sdcard && mounted) {
+      if (currentMethod == 'wifi' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard && mounted) {
         WifiConnectionListenerBridge? listener;
 
-        final controller = await WifiConnectionSheet.show(
+        final sheetController = await WifiConnectionSheet.show(
           context,
           deviceName: 'Omi',
           onCancel: () {
@@ -581,27 +595,54 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           },
         );
 
-        listener = WifiConnectionListenerBridge(controller);
+        listener = WifiConnectionListenerBridge(sheetController);
         await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
       } else {
         await syncProvider.transferWalToPhone(widget.wal);
       }
 
       if (mounted) {
-        _showSnackBar('Transfer complete! You can now play this recording.', Colors.green);
+        _showSnackBar(context.l10n.transferCompleteMessage, Colors.green);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Transfer failed: ${e.toString()}', Colors.red);
+        _showSnackBar(context.l10n.transferFailedMessage(e.toString()), Colors.red);
       }
+    }
+  }
+
+  Future<bool> _checkWifiHardwareAvailable() async {
+    try {
+      final connection = await ServiceManager.instance().device.ensureConnection(widget.wal.device);
+      if (connection == null) {
+        return true;
+      }
+
+      final ssid = WifiNetworkService.generateSsid(widget.wal.device);
+      final password = WifiNetworkService.generatePassword(widget.wal.device);
+
+      final result = await connection.setupWifiSync(ssid, password);
+
+      if (!result.success && result.errorCode == WifiSyncErrorCode.wifiHardwareNotAvailable) {
+        return false;
+      }
+
+      if (result.success) {
+        await connection.stopWifiSync();
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error checking WiFi hardware: $e');
+      return true;
     }
   }
 
   void _handleCancelTransfer() {
     final syncProvider = context.read<SyncProvider>();
     syncProvider.cancelSync();
-    _showSnackBar('Transfer cancelled', Colors.orange);
+    _showSnackBar(context.l10n.transferCancelled, Colors.orange);
     // Pop back since the WAL state will change
     Navigator.of(context).pop();
   }
@@ -633,7 +674,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.info_outline, color: Colors.white),
-              title: Text('Recording Info', style: Theme.of(sheetContext).textTheme.bodyMedium),
+              title: Text(context.l10n.recordingInfo, style: Theme.of(sheetContext).textTheme.bodyMedium),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _showFileDetailsDialog(context);
@@ -643,7 +684,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ListTile(
                 leading: Icon(Icons.download, color: isTransferring ? Colors.grey : Colors.white),
                 title: Text(
-                  isTransferring ? 'Transfer in progress...' : 'Transfer to Phone',
+                  isTransferring ? context.l10n.transferInProgress : context.l10n.transferToPhone,
                   style: Theme.of(sheetContext).textTheme.bodyMedium!.copyWith(
                         color: isTransferring ? Colors.grey : Colors.white,
                       ),
@@ -658,7 +699,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             ] else ...[
               ListTile(
                 leading: const Icon(Icons.share, color: Colors.white),
-                title: Text('Share Recording', style: Theme.of(sheetContext).textTheme.bodyMedium),
+                title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _handleShare(context.read<SyncProvider>());
@@ -668,7 +709,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             ListTile(
               leading: Icon(Icons.delete, color: isTransferring ? Colors.grey : Colors.red),
               title: Text(
-                'Delete Recording',
+                context.l10n.deleteRecording,
                 style: Theme.of(sheetContext).textTheme.bodyMedium!.copyWith(
                       color: isTransferring ? Colors.grey : Colors.red,
                     ),
@@ -689,9 +730,9 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   void _showDeleteDialog(BuildContext context) async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Delete Recording',
-      message: 'Are you sure you want to permanently delete this recording? This can\'t be undone.',
-      confirmLabel: 'Delete',
+      title: context.l10n.deleteRecording,
+      message: context.l10n.deleteRecordingConfirmation,
+      confirmLabel: context.l10n.delete,
       confirmColor: Colors.red,
     );
 
@@ -736,23 +777,28 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   ),
                 ),
               ),
-              _buildDetailRow('Recording ID', widget.wal.id),
-              _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
-              _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
-              _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),
-              _buildDetailRow('Storage Location', _getStorageLocationLabel(widget.wal.storage)),
-              _buildDetailRow('Estimated Size', estimatedSize),
-              _buildDetailRow('Device Model', widget.wal.deviceModel ?? 'Unknown'),
+              _buildDetailRow(context.l10n.recordingIdLabel, widget.wal.id),
+              _buildDetailRow(context.l10n.dateTimeLabel, dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
+              _buildDetailRow(context.l10n.durationLabel, secondsToHumanReadable(widget.wal.seconds, context)),
+              _buildDetailRow(context.l10n.audioFormatLabel, widget.wal.codec.toFormattedString()),
+              _buildDetailRow(context.l10n.storageLocationLabel, _getStorageLocationLabel(widget.wal.storage, context)),
+              _buildDetailRow(context.l10n.estimatedSizeLabel, estimatedSize),
+              _buildDetailRow(context.l10n.deviceModelLabel, widget.wal.deviceModel ?? context.l10n.unknownDevice),
               if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")
-                _buildDetailRow('Device ID', widget.wal.device),
-              _buildDetailRow('Status', widget.wal.status == WalStatus.synced ? 'Processed' : 'Unprocessed'),
+                _buildDetailRow(context.l10n.deviceIdLabel, widget.wal.device),
+              _buildDetailRow(
+                  context.l10n.statusLabel,
+                  widget.wal.status == WalStatus.synced
+                      ? context.l10n.statusProcessed
+                      : context.l10n.statusUnprocessed),
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('Close', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary)),
+            child: Text(context.l10n.close,
+                style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary)),
           ),
         ],
       ),

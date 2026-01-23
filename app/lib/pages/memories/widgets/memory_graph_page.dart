@@ -16,6 +16,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class GraphNode3D {
@@ -511,7 +512,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final file = await File('${tempDir.path}/memory_graph.png').create();
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
-      await Share.shareXFiles([XFile(file.path)], text: 'Check out my memory graph!');
+      await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
     }
@@ -547,13 +548,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.purpleAccent),
-            SizedBox(height: 16),
-            Text('Loading Knowledge Graph...', style: TextStyle(color: Colors.white70)),
+            const CircularProgressIndicator(color: Colors.purpleAccent),
+            const SizedBox(height: 16),
+            Text(context.l10n.loadingKnowledgeGraph, style: const TextStyle(color: Colors.white70)),
           ],
         ),
       );
@@ -572,7 +573,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _loadGraph,
-                child: const Text('Retry'),
+                child: Text(context.l10n.retry),
               ),
             ],
           ),
@@ -593,14 +594,14 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
             children: [
               const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
               const SizedBox(height: 16),
-              const Text('No knowledge graph yet', style: TextStyle(color: Colors.white70, fontSize: 18)),
+              Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
               const SizedBox(height: 12),
               Text(
                 _isRebuilding
-                    ? 'Building your knowledge graph from memories...'
-                    : 'Your knowledge graph will be built automatically as you create new memories.',
+                    ? context.l10n.buildingKnowledgeGraphFromMemories
+                    : context.l10n.knowledgeGraphWillBuildAutomatically,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white38, fontSize: 14),
+                style: const TextStyle(color: Colors.white38, fontSize: 14),
               ),
               const SizedBox(height: 24),
               if (_isRebuilding)
@@ -616,7 +617,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 ElevatedButton.icon(
                   onPressed: _rebuildGraph,
                   icon: const Icon(Icons.auto_fix_high),
-                  label: const Text('Build Graph'),
+                  label: Text(context.l10n.buildGraphButton),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purpleAccent.withOpacity(0.2),
                     foregroundColor: Colors.purpleAccent,

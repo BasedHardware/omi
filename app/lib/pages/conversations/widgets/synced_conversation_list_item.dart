@@ -196,7 +196,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        _getConversationDuration(),
+                        _getConversationDuration(context),
                         style: const TextStyle(color: Colors.white, fontSize: 11),
                         maxLines: 1,
                         textAlign: TextAlign.end,
@@ -211,13 +211,13 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     );
   }
 
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     if (conversation.transcriptSegments.isEmpty) return '';
 
     // Get the total duration in seconds
     int durationSeconds = conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 }

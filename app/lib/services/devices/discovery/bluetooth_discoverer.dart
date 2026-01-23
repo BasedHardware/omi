@@ -1,14 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'device_discoverer.dart';
 
 class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
@@ -39,6 +37,11 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
 
     try {
       await BluetoothAdapter.adapterState.where((v) => v == BluetoothAdapterStateHelper.on).first;
+
+      // Delay to allow Bluetooth permissions to settle on Android before scanning.
+      if (PlatformService.isAndroid) {
+        await Future.delayed(const Duration(seconds: 2));
+      }
 
       await BluetoothAdapter.startScan(
         timeout: Duration(seconds: timeout),

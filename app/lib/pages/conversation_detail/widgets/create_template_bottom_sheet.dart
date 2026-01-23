@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -94,7 +95,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
     setState(() {
       _isCreating = true;
-      _statusMessage = 'Generating description...';
+      _statusMessage = context.l10n.generatingDescription;
     });
 
     try {
@@ -108,14 +109,14 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
       final emoji = result.emoji;
 
       setState(() {
-        _statusMessage = 'Creating app icon...';
+        _statusMessage = context.l10n.creatingAppIcon;
       });
 
       // Create simple emoji icon
       final iconFile = await _createEmojiIcon(emoji);
 
       setState(() {
-        _statusMessage = 'Creating your app...';
+        _statusMessage = context.l10n.creatingYourApp;
       });
 
       // Prepare app data
@@ -165,7 +166,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
         if (mounted && createdApp != null) {
           setState(() {
-            _statusMessage = 'Installing app...';
+            _statusMessage = context.l10n.installingApp;
           });
 
           // Enable/install the app for the user
@@ -184,7 +185,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
           if (mounted) {
             // Close the create template bottom sheet
             Navigator.pop(context);
-            AppSnackbar.showSnackbarSuccess('App created and installed! 🚀');
+            AppSnackbar.showSnackbarSuccess(context.l10n.appCreatedAndInstalled);
 
             // Show the summarized apps sheet so user can use the new app
             showModalBottomSheet(
@@ -196,7 +197,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
           }
         } else if (mounted) {
           Navigator.pop(context);
-          AppSnackbar.showSnackbarSuccess('App created successfully! 🚀');
+          AppSnackbar.showSnackbarSuccess(context.l10n.appCreatedSuccessfully);
         }
       } else {
         // Error
@@ -205,8 +206,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
             _isCreating = false;
             _statusMessage = '';
           });
-          AppSnackbar.showSnackbarError(
-              submitResult.$2.isNotEmpty ? submitResult.$2 : 'Failed to create app. Please try again.');
+          AppSnackbar.showSnackbarError(submitResult.$2.isNotEmpty ? submitResult.$2 : context.l10n.failedToCreateApp);
         }
       }
     } catch (e) {
@@ -216,7 +216,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
           _isCreating = false;
           _statusMessage = '';
         });
-        AppSnackbar.showSnackbarError('Failed to create app. Please try again.');
+        AppSnackbar.showSnackbarError(context.l10n.failedToCreateApp);
       }
     }
   }
@@ -266,10 +266,10 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                     ),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Create Custom Template',
-                      style: TextStyle(
+                      context.l10n.createCustomTemplate,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -304,7 +304,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                     children: [
                       // Name field
                       Text(
-                        'Template Name',
+                        context.l10n.templateName,
                         style: TextStyle(
                           color: Colors.grey.shade300,
                           fontSize: 14,
@@ -317,7 +317,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                         enabled: !_isCreating,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'e.g., Meeting Action Items Extractor',
+                          hintText: context.l10n.templateNameHint,
                           hintStyle: TextStyle(color: Colors.grey.shade600),
                           filled: true,
                           fillColor: const Color(0xFF1F1F25),
@@ -329,10 +329,10 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a name for your app';
+                            return context.l10n.pleaseEnterAppName;
                           }
                           if (value.trim().length < 3) {
-                            return 'Name must be at least 3 characters';
+                            return context.l10n.nameMustBeAtLeast3Characters;
                           }
                           return null;
                         },
@@ -342,7 +342,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
                       // Prompt field
                       Text(
-                        'Conversation Prompt',
+                        context.l10n.conversationPrompt,
                         style: TextStyle(
                           color: Colors.grey.shade300,
                           fontSize: 14,
@@ -356,8 +356,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                         style: const TextStyle(color: Colors.white),
                         maxLines: 4,
                         decoration: InputDecoration(
-                          hintText:
-                              'e.g., Extract action items, decisions made, and key takeaways from the provided conversation.',
+                          hintText: context.l10n.conversationPromptHint,
                           hintStyle: TextStyle(color: Colors.grey.shade600),
                           filled: true,
                           fillColor: const Color(0xFF1F1F25),
@@ -369,10 +368,10 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a prompt for your app';
+                            return context.l10n.pleaseEnterAppPrompt;
                           }
                           if (value.trim().length < 10) {
-                            return 'Prompt must be at least 10 characters';
+                            return context.l10n.promptMustBeAtLeast10Characters;
                           }
                           return null;
                         },
@@ -409,9 +408,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Make public',
-                                    style: TextStyle(
+                                  Text(
+                                    context.l10n.makePublic,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
@@ -419,7 +418,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    _isPublic ? 'Anyone can discover your template' : 'Only you can use this template',
+                                    _isPublic
+                                        ? context.l10n.anyoneCanDiscoverTemplate
+                                        : context.l10n.onlyYouCanUseTemplate,
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -484,9 +485,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                       ),
                                     ],
                                   )
-                                : const Text(
-                                    'Create App',
-                                    style: TextStyle(
+                                : Text(
+                                    context.l10n.createApp,
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),

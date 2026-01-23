@@ -255,10 +255,10 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-        # Convert stored GCS paths to signed URLs for each person
-        for person in people:
+        # Convert GCS paths to signed URLs for each person
+        for i, person in enumerate(people):
             stored_paths = person.get('speech_samples', [])
-            person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+            people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
 

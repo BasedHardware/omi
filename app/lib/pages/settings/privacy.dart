@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PrivacyInfoPage extends StatelessWidget {
   const PrivacyInfoPage({super.key});
@@ -8,7 +9,7 @@ class PrivacyInfoPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Privacy Information'),
+        title: Text(context.l10n.privacyInformation),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
@@ -19,22 +20,22 @@ class PrivacyInfoPage extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: ListView(
           children: [
-            const Text(
-              'Your Privacy Matters to Us',
-              style: TextStyle(
+            Text(
+              context.l10n.yourPrivacyMattersToUs,
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:',
-              style: TextStyle(fontSize: 16),
+            Text(
+              context.l10n.privacyIntroText,
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'What We Track',
-              style: TextStyle(
+            Text(
+              context.l10n.whatWeTrack,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -73,9 +74,9 @@ class PrivacyInfoPage extends StatelessWidget {
             _buildBulletPoint('Advanced Mode: We track interactions with the advanced mode documentation.'),
             _buildBulletPoint('Use Without Device: We track interactions with the use without device onboarding.'),
             const SizedBox(height: 16),
-            const Text(
-              'Anonymity and Privacy',
-              style: TextStyle(
+            Text(
+              context.l10n.anonymityAndPrivacy,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -88,9 +89,9 @@ class PrivacyInfoPage extends StatelessWidget {
             _buildBulletPoint(
                 'No Selling of Data: We do not sell or share your data with any third parties. The data we collect is solely used to understand how you use the app and to make improvements.'),
             const SizedBox(height: 16),
-            const Text(
-              'Opt-In and Opt-Out Options',
-              style: TextStyle(
+            Text(
+              context.l10n.optInAndOptOutOptions,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -99,22 +100,22 @@ class PrivacyInfoPage extends StatelessWidget {
             _buildBulletPoint('Opt-In: You can choose to opt in to tracking to help us enhance your experience.'),
             _buildBulletPoint('Opt-Out: You can opt out of tracking at any time, and we will reset all your data.'),
             const SizedBox(height: 16),
-            const Text(
-              'Our Commitment',
-              style: TextStyle(
+            Text(
+              context.l10n.ourCommitment,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              context.l10n.commitmentText,
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              context.l10n.thankYouText,
+              style: const TextStyle(fontSize: 16),
             ),
           ],
         ),
