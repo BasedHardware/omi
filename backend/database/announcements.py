@@ -4,7 +4,7 @@ from typing import List, Optional
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
-from models.announcement import Announcement, AnnouncementType
+from models.announcement import Announcement, AnnouncementType, version_to_numeric
 
 
 def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
@@ -22,10 +22,17 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     Returns changelogs where from_version < app_version <= to_version.
     Sorted by app_version descending (newest first).
     """
+    from_version_numeric = version_to_numeric(from_version)
+    to_version_numeric = version_to_numeric(to_version)
+
     announcements_ref = db.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
         filter=FieldFilter("active", "==", True)
     )
+
+    if from_version_numeric is not None and to_version_numeric is not None:
+        query = query.where(filter=FieldFilter("app_version_numeric", ">", from_version_numeric))
+        query = query.where(filter=FieldFilter("app_version_numeric", "<=", to_version_numeric))
 
     docs = query.stream()
     changelogs = []
@@ -33,16 +40,11 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     for doc in docs:
         data = doc.to_dict()
         app_version = data.get("app_version")
-        # Skip entries without app_version, then filter by version range
-        if (
-            app_version
-            and _compare_versions(from_version, app_version) < 0
-            and _compare_versions(app_version, to_version) <= 0
-        ):
+        if app_version:
             changelogs.append(Announcement.from_dict(data))
 
     # Sort by version descending (newest first)
-    changelogs.sort(key=lambda x: _version_tuple(x.app_version), reverse=True)
+    changelogs.sort(key=lambda x: x.app_version_numeric or 0, reverse=True)
     return changelogs
 
 
@@ -57,6 +59,11 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
         filter=FieldFilter("active", "==", True)
     )
 
+    if max_version:
+        max_version_numeric = version_to_numeric(max_version)
+        if max_version_numeric is not None:
+            query = query.where(filter=FieldFilter("app_version_numeric", "<=", max_version_numeric))
+
     docs = query.stream()
     changelogs = []
 
@@ -64,13 +71,10 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
         data = doc.to_dict()
         app_version = data.get("app_version")
         if app_version:
-            # Filter out versions newer than max_version if specified
-            if max_version and _compare_versions(app_version, max_version) > 0:
-                continue
             changelogs.append(Announcement.from_dict(data))
 
     # Sort by version descending
-    changelogs.sort(key=lambda x: _version_tuple(x.app_version), reverse=True)
+    changelogs.sort(key=lambda x: x.app_version_numeric or 0, reverse=True)
 
     # Return only the most recent N changelogs
     return changelogs[:limit]
@@ -81,11 +85,15 @@ def get_firmware_features(firmware_version: str, device_model: Optional[str] = N
     Get feature announcements for a specific firmware version.
     Optionally filter by device model.
     """
+    firmware_version_numeric = version_to_numeric(firmware_version)
+    if firmware_version_numeric is None:
+        return []
+
     announcements_ref = db.collection("announcements")
     query = (
         announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
         .where(filter=FieldFilter("active", "==", True))
-        .where(filter=FieldFilter("firmware_version", "==", firmware_version))
+        .where(filter=FieldFilter("firmware_version_numeric", "==", firmware_version_numeric))
     )
 
     docs = query.stream()
@@ -109,11 +117,15 @@ def get_app_features(app_version: str) -> List[Announcement]:
     """
     Get feature announcements for a specific app version.
     """
+    app_version_numeric = version_to_numeric(app_version)
+    if app_version_numeric is None:
+        return []
+
     announcements_ref = db.collection("announcements")
     query = (
         announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.FEATURE.value))
         .where(filter=FieldFilter("active", "==", True))
-        .where(filter=FieldFilter("app_version", "==", app_version))
+        .where(filter=FieldFilter("app_version_numeric", "==", app_version_numeric))
     )
 
     docs = query.stream()
@@ -183,6 +195,11 @@ def get_all_announcements(
 
 def create_announcement(announcement: Announcement) -> Announcement:
     """Create a new announcement."""
+    if announcement.app_version and not announcement.app_version_numeric:
+        announcement.app_version_numeric = version_to_numeric(announcement.app_version)
+    if announcement.firmware_version and not announcement.firmware_version_numeric:
+        announcement.firmware_version_numeric = version_to_numeric(announcement.firmware_version)
+
     doc_ref = db.collection("announcements").document(announcement.id)
     doc_ref.set(announcement.to_dict())
     return announcement
@@ -194,6 +211,11 @@ def update_announcement(announcement_id: str, updates: dict) -> Optional[Announc
     doc = doc_ref.get()
     if not doc.exists:
         return None
+        
+    if 'app_version' in updates:
+        updates['app_version_numeric'] = version_to_numeric(updates['app_version'])
+    if 'firmware_version' in updates:
+        updates['firmware_version_numeric'] = version_to_numeric(updates['firmware_version'])
 
     doc_ref.update(updates)
     return get_announcement_by_id(announcement_id)
@@ -219,91 +241,3 @@ def deactivate_announcement(announcement_id: str) -> bool:
 
     doc_ref.update({"active": False})
     return True
-
-
-# Helper functions for version comparison
-def _parse_version(version: str) -> tuple:
-    """
-    Parse version string into semantic tuple, build number, and has_build flag.
-
-    Returns: (semantic_tuple, build_number, has_build)
-
-    Examples:
-    - '1.0.10' -> ((1, 0, 10), 0, False)
-    - 'v1.0.10' -> ((1, 0, 10), 0, False)
-    - '1.0.510+240' -> ((1, 0, 510), 240, True)
-    """
-    if not version:
-        return ((0, 0, 0), 0, False)
-
-    # Remove 'v' prefix if present
-    version = version.lstrip("v")
-
-    # Extract build number if present (e.g., '1.0.510+240')
-    build_number = 0
-    has_build = False
-    if "+" in version:
-        has_build = True
-        version, build_str = version.split("+", 1)
-        try:
-            build_number = int(build_str)
-        except ValueError:
-            build_number = 0
-
-    try:
-        parts = version.split(".")
-        version_parts = tuple(int(p) for p in parts)
-        # Pad to 3 components
-        while len(version_parts) < 3:
-            version_parts = version_parts + (0,)
-        return (version_parts[:3], build_number, has_build)
-    except (ValueError, AttributeError):
-        return ((0, 0, 0), 0, False)
-
-
-def _version_tuple(version: str) -> tuple:
-    """
-    Convert version string to tuple for sorting.
-    Returns full tuple including build number for proper sorting.
-    """
-    semantic, build, _ = _parse_version(version)
-    return semantic + (build,)
-
-
-def _compare_versions(v1: str, v2: str) -> int:
-    """
-    Two-pass version comparison.
-
-    Pass 1: Compare semantic versions (major.minor.patch)
-    Pass 2: If semantic versions are equal, compare build numbers
-            BUT if either version has no build number, consider them equal
-
-    This allows:
-    - '1.0.521' to match all builds like '1.0.521+607', '1.0.521+608', etc.
-    - '1.0.521+607' < '1.0.521+608' (when both have build numbers)
-    - '1.0.521' < '1.0.522' (semantic comparison)
-
-    Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
-    """
-    sem1, build1, has_build1 = _parse_version(v1)
-    sem2, build2, has_build2 = _parse_version(v2)
-
-    # First pass: semantic version comparison
-    if sem1 < sem2:
-        return -1
-    if sem1 > sem2:
-        return 1
-
-    # Semantic versions are equal
-    # Second pass: build number comparison (only if BOTH have build numbers)
-    if not has_build1 or not has_build2:
-        # If either version lacks a build number, consider them equal
-        # This means '1.0.521' matches '1.0.521+607'
-        return 0
-
-    # Both have build numbers, compare them
-    if build1 < build2:
-        return -1
-    if build1 > build2:
-        return 1
-    return 0
