@@ -153,7 +153,7 @@ static inline void notify_long_tap()
 
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
+#define LONG_PRESS_TIME 1000  // 1000 ms for long press
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -221,7 +221,8 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_INF("single tap detected\n");
         btn_last_event = event;
-        notify_tap();
+
+        turnoff_all();
     }
 
     // Double tap
@@ -235,7 +236,7 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_INF("long press detected\n");
         btn_last_event = event;
-        turnoff_all();
+        notify_long_tap();
     }
 
     // Releases, one time event
