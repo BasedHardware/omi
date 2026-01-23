@@ -14522,6 +14522,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Device does not support WiFi sync, switching to Bluetooth'**
   String get deviceDoesNotSupportWifiSwitchingToBle;
+
+  /// No description provided for @appleHealthNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Health is not available on this device'**
+  String get appleHealthNotAvailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
