@@ -38,6 +38,13 @@ from .whoop_tools import (
     get_whoop_recovery_tool,
     get_whoop_workout_tool,
 )
+from .apple_health_tools import (
+    get_apple_health_steps_tool,
+    get_apple_health_sleep_tool,
+    get_apple_health_heart_rate_tool,
+    get_apple_health_workouts_tool,
+    get_apple_health_summary_tool,
+)
 from .notion_tools import (
     search_notion_pages_tool,
 )
@@ -75,6 +82,11 @@ __all__ = [
     'get_whoop_sleep_tool',
     'get_whoop_recovery_tool',
     'get_whoop_workout_tool',
+    'get_apple_health_steps_tool',
+    'get_apple_health_sleep_tool',
+    'get_apple_health_heart_rate_tool',
+    'get_apple_health_workouts_tool',
+    'get_apple_health_summary_tool',
     'search_notion_pages_tool',
     'get_twitter_tweets_tool',
     'get_github_pull_requests_tool',

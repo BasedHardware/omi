@@ -1,7 +1,11 @@
 """
 Speaker sample migration utility.
 
-Provides functions for migrating v1 samples to v2 (with transcripts).
+Provides functions for migrating speaker samples across versions:
+- v1 → v2: Add transcripts to samples
+- v2 → v3: Regenerate embeddings using /v2/embedding API
+- v1 → v3: Full migration (transcripts + new embeddings)
+
 Uses in-process locking to prevent concurrent migrations.
 """
 
@@ -141,3 +145,131 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             person['speaker_embedding'] = None
 
         return person
+
+
+async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
+    """
+    Migrate person's speech samples from v2 to v3.
+
+    v2: speech_samples + transcripts with v1 embeddings
+    v3: speech_samples + transcripts with v2 embeddings (regenerated)
+
+    Uses in-process lock to prevent concurrent migration for same person.
+
+    Args:
+        uid: User ID
+        person: Person dict with 'id', 'speech_samples', 'speech_samples_version', etc.
+
+    Returns:
+        Updated person dict with migrated fields
+    """
+    version = person.get('speech_samples_version', 1)
+    if version >= 3:
+        return person
+    if version < 2:
+        # Need v1→v2 first
+        return person
+
+    person_id = person['id']
+    lock = await _get_migration_lock(uid, person_id)
+
+    async with lock:
+        # Re-check version inside lock (another call may have migrated)
+        fresh_person = users_db.get_person(uid, person_id)
+        if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
+            return fresh_person
+
+        samples = person.get('speech_samples', [])
+        if not samples:
+            # No samples, just update version
+            users_db.update_person_speech_samples_version(uid, person_id, 3)
+            person['speech_samples_version'] = 3
+            return person
+
+        # Regenerate embedding from the first (latest) sample using v2/embedding API
+        new_embedding = None
+        try:
+            first_sample_audio = await asyncio.to_thread(download_sample_audio, samples[0])
+            embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
+            new_embedding = embedding.flatten().tolist()
+        except NotFound:
+            # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
+            print(f"First sample not found during v2→v3 migration, skipping: {samples[0]}", uid, person_id)
+            return person
+        except Exception as e:
+            print(f"Error extracting speaker embedding during v2→v3 migration: {e}", uid, person_id)
+            # Transient error, don't migrate yet
+            return person
+
+        # Update version and embedding
+        users_db.update_person_speech_samples_after_migration(
+            uid,
+            person_id,
+            samples=person.get('speech_samples', []),
+            transcripts=person.get('speech_sample_transcripts', []),
+            version=3,
+            speaker_embedding=new_embedding,
+        )
+
+        person['speech_samples_version'] = 3
+        person['speaker_embedding'] = new_embedding
+
+        return person
+
+
+async def migrate_person_samples_v1_to_v3(uid: str, person: dict) -> dict:
+    """
+    Migrate person's speech samples from v1 to v3.
+
+    This is a composite migration: v1 → v2 → v3.
+
+    v1: Only speech_samples (paths), no transcripts, v1 embeddings
+    v3: speech_samples + transcripts with v2 embeddings
+
+    Args:
+        uid: User ID
+        person: Person dict with 'id', 'speech_samples', 'speech_samples_version', etc.
+
+    Returns:
+        Updated person dict with migrated fields
+    """
+    version = person.get('speech_samples_version', 1)
+    if version >= 3:
+        return person
+
+    # First do v1→v2 if needed
+    if version < 2:
+        person = await migrate_person_samples_v1_to_v2(uid, person)
+        # Check if v1→v2 succeeded
+        if person.get('speech_samples_version', 1) < 2:
+            return person  # Transient failure, retry later
+
+    # Now do v2→v3
+    return await migrate_person_samples_v2_to_v3(uid, person)
+
+
+async def maybe_migrate_person_samples(uid: str, person: dict) -> dict:
+    """
+    Migrate person's speech samples to v3 if needed.
+
+    Checks speech_samples_version and triggers appropriate migration:
+    - v1 → v3 (composite through v2)
+    - v2 → v3
+
+    Args:
+        uid: User ID
+        person: Person dict
+
+    Returns:
+        Updated person dict (may be unchanged if already v3 or migration fails)
+    """
+    version = person.get('speech_samples_version', 1)
+    if version >= 3:
+        return person
+
+    if version == 1:
+        return await migrate_person_samples_v1_to_v3(uid, person)
+    elif version == 2:
+        return await migrate_person_samples_v2_to_v3(uid, person)
+
+    return person
