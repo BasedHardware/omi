@@ -41,9 +41,10 @@ Future<List<Announcement>> getFeatureAnnouncements({
   required String versionType, // 'app' or 'firmware'
   String? deviceModel,
 }) async {
-  var url = "${Env.apiBaseUrl}v1/announcements/features?version=$version&version_type=$versionType";
+  final encodedVersion = Uri.encodeComponent(version);
+  var url = "${Env.apiBaseUrl}v1/announcements/features?version=$encodedVersion&version_type=$versionType";
   if (deviceModel != null) {
-    url += "&device_model=$deviceModel";
+    url += "&device_model=${Uri.encodeComponent(deviceModel)}";
   }
 
   var res = await makeApiCall(
