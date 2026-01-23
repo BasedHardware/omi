@@ -25,8 +25,7 @@ from firebase_admin.auth import InvalidIdTokenError
 
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
-import database.users as user_db get_speaker_label_mapping
-from database.users import get_user_transcription_preferences
+import database.users as user_db
 from database import redis_db
 from database.redis_db import (
     get_cached_user_geolocation,
@@ -92,6 +91,13 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 
+from database.users import (
+    get_user_transcription_preferences,
+    get_speaker_label_mapping,
+    get_profiles_shared_with_user,
+    get_people,
+    set_speaker_label_mapping
+)
 
 router = APIRouter()
 
@@ -1256,7 +1262,6 @@ async def _stream_handler(
                     }
 
             # Shared profiles
-            from database.users import get_profiles_shared_with_user, get_people
             shared_owners = get_profiles_shared_with_user(uid)
             for owner_uid in shared_owners:
                 if owner_uid == uid:
@@ -1822,7 +1827,6 @@ async def _stream_handler(
                                     )
 
                                     # Persist mapping for future sessions (manual assignment bootstrap)
-                                    from database.users import set_speaker_label_mapping
                                     set_speaker_label_mapping(uid, speaker_id, person_id)
 
                                     # Forward to pusher for speech sample extraction (non-blocking)

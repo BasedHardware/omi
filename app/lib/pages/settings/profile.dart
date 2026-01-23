@@ -13,6 +13,7 @@ import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/backend/http/api/speech_profile_sharing.dart';
 
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
@@ -29,7 +30,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
     void _showSpeechProfileSharingDialog(BuildContext context) async {
       final TextEditingController controller = TextEditingController();
-      final scaffold = ScaffoldMessenger.of(context);
       showDialog(
         context: context,
         builder: (ctx) {
@@ -50,8 +50,18 @@ class _ProfilePageState extends State<ProfilePage> {
                     final targetUid = controller.text.trim();
                     if (targetUid.isEmpty) return;
                     final ok = await shareSpeechProfile(targetUid);
+                    
+                    if (!context.mounted) return;
+                    
                     Navigator.pop(ctx);
-                    scaffold.showSnackBar(SnackBar(content: Text(ok ? context.l10n.profileSharedSuccess : context.l10n.profileSharedFail)));
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(ok
+                            ? context.l10n.profileSharedSuccess
+                            : context.l10n.profileSharedFail)
+                      )
+                    );
                   },
                   child: Text(context.l10n.share),
                 ),
@@ -80,11 +90,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       Expanded(child: Text(uid)),
                       IconButton(
                         icon: const Icon(Icons.cancel, size: 18),
-                        onPressed: () async {
-                          await revokeSpeechProfile(uid);
-                          Navigator.pop(ctx);
-                          _showSpeechProfileSharingStatus(context);
-                        },
+                       onPressed: () async {
+                            await revokeSpeechProfile(uid);
+                            
+                            if (!context.mounted) return;
+                            
+                            Navigator.pop(ctx);
+                            _showSpeechProfileSharingStatus(context);
+                          },
                       ),
                     ],
                   )),
