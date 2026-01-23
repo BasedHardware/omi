@@ -18,12 +18,15 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
+import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -81,6 +84,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
+      // Sync Apple Health data if connected (ensures fresh data for health queries)
+      _syncAppleHealthIfConnected();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -132,6 +137,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     scrollController.dispose();
     textFieldFocusNode.dispose();
     super.dispose();
+  }
+
+  void _syncAppleHealthIfConnected() {
+    final appleHealthService = AppleHealthService();
+    if (appleHealthService.isAvailable) {
+      final integrationProvider = context.read<IntegrationProvider>();
+      if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
+        // Fire-and-forget - don't await to avoid blocking UI
+        appleHealthService.syncHealthDataToBackend(days: 7);
+      }
+    }
   }
 
   @override
