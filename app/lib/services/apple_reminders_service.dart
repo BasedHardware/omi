@@ -1,5 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:omi/env/env.dart';
+
+import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class AppleRemindersService {
@@ -7,7 +10,33 @@ class AppleRemindersService {
 
   static final AppleRemindersService _instance = AppleRemindersService._internal();
   factory AppleRemindersService() => _instance;
-  AppleRemindersService._internal();
+  AppleRemindersService._internal() {
+    _initBackgroundSyncHandler();
+  }
+
+  void _initBackgroundSyncHandler() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'markExported') {
+        final actionItemId = call.arguments['action_item_id'] as String?;
+        if (actionItemId != null) {
+          await _markActionItemExported(actionItemId);
+        }
+      }
+    });
+  }
+
+  /// Mark an action item as exported after successful Apple Reminders sync
+  Future<void> _markActionItemExported(String actionItemId) async {
+    try {
+      await updateActionItem(
+        actionItemId,
+        exported: true,
+        exportPlatform: 'apple_reminders',
+      );
+    } catch (e) {
+      Logger.debug('Error marking action item as exported: $e');
+    }
+  }
 
   /// Check if Apple Reminders is available on this platform
   bool get isAvailable => PlatformService.isApple;
@@ -34,10 +63,10 @@ class AppleRemindersService {
 
       return result == true;
     } on PlatformException catch (e) {
-      print('Error adding reminder: ${e.message}');
+      Logger.debug('Error adding reminder: ${e.message}');
       return false;
     } catch (e) {
-      print('Unexpected error adding reminder: $e');
+      Logger.debug('Unexpected error adding reminder: $e');
       return false;
     }
   }
@@ -50,7 +79,7 @@ class AppleRemindersService {
       final result = await _channel.invokeMethod('hasPermission');
       return result == true;
     } catch (e) {
-      print('Error checking reminders permission: $e');
+      Logger.debug('Error checking reminders permission: $e');
       return false;
     }
   }
@@ -63,7 +92,7 @@ class AppleRemindersService {
       final result = await _channel.invokeMethod('requestPermission');
       return result == true;
     } catch (e) {
-      print('Error requesting reminders permission: $e');
+      Logger.debug('Error requesting reminders permission: $e');
       return false;
     }
   }
@@ -82,7 +111,7 @@ class AppleRemindersService {
       }
       return [];
     } catch (e) {
-      print('Error fetching reminders: $e');
+      Logger.debug('Error fetching reminders: $e');
       return [];
     }
   }
@@ -105,7 +134,7 @@ class AppleRemindersService {
 
       return result == true;
     } catch (e) {
-      print('Error completing reminder: $e');
+      Logger.debug('Error completing reminder: $e');
       return false;
     }
   }

@@ -1,8 +1,12 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/providers/action_items_provider.dart';
+
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Daily Score Widget - Shows task completion rate as a 0-5 score
 class DailyScoreWidget extends StatefulWidget {
@@ -25,8 +29,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
         // Get tasks due today only
         final todayTasks = provider.actionItems.where((item) {
           if (item.dueAt == null) return false;
-          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && 
-                 item.dueAt!.isBefore(todayEnd);
+          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && item.dueAt!.isBefore(todayEnd);
         }).toList();
 
         final totalTasks = todayTasks.length;
@@ -68,7 +71,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'DAILY SCORE',
+                        context.l10n.dailyScore,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -78,7 +81,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'A score to help you better\nfocus on execution.',
+                        context.l10n.dailyScoreDescription,
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.white.withOpacity(0.5),
@@ -97,7 +100,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Your score',
+                              context.l10n.yourScore,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
@@ -201,7 +204,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                 ),
               ),
               Text(
-                'Daily Score Breakdown',
+                context.l10n.dailyScoreBreakdown,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -209,12 +212,12 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildDetailRow('Today\'s Score', _formatScore(score), _getStatusColor(score)),
+              _buildDetailRow(context.l10n.todaysScore, _formatScore(score), _getStatusColor(score)),
               const SizedBox(height: 12),
-              _buildDetailRow('Tasks Completed', '$completed / $total', Colors.white70),
+              _buildDetailRow(context.l10n.tasksCompleted, '$completed / $total', Colors.white70),
               const SizedBox(height: 12),
               _buildDetailRow(
-                'Completion Rate',
+                context.l10n.completionRate,
                 total > 0 ? '${(completed / total * 100).toStringAsFixed(0)}%' : 'N/A',
                 Colors.white70,
               ),
@@ -229,7 +232,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'How it works',
+                      context.l10n.howItWorks,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -238,7 +241,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Your daily score is based on task completion. Complete your tasks to improve your score!',
+                      context.l10n.dailyScoreExplanation,
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.white.withOpacity(0.5),
@@ -253,9 +256,9 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Got it',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.gotIt,
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 15,
                     ),
@@ -338,6 +341,5 @@ class _SemicircleGaugePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SemicircleGaugePainter old) =>
-      old.score != score || old.color != color;
+  bool shouldRepaint(_SemicircleGaugePainter old) => old.score != score || old.color != color;
 }

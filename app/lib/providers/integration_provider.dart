@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/utils/logger.dart';
 
 class IntegrationProvider extends ChangeNotifier {
   final Map<String, bool> _integrations = {};
@@ -43,7 +45,7 @@ class IntegrationProvider extends ChangeNotifier {
 
       _hasLoaded = true;
     } catch (e) {
-      debugPrint('Error loading integrations from backend: $e');
+      Logger.debug('Error loading integrations from backend: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -59,7 +61,7 @@ class IntegrationProvider extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      debugPrint('Error saving integration: $e');
+      Logger.debug('Error saving integration: $e');
       return false;
     }
   }
@@ -73,7 +75,7 @@ class IntegrationProvider extends ChangeNotifier {
       }
       return success;
     } catch (e) {
-      debugPrint('Error deleting integration: $e');
+      Logger.debug('Error deleting integration: $e');
       return false;
     }
   }
@@ -84,6 +86,8 @@ class IntegrationProvider extends ChangeNotifier {
         return _integrations['google_calendar'] ?? false;
       case IntegrationApp.whoop:
         return _integrations['whoop'] ?? false;
+      case IntegrationApp.appleHealth:
+        return _integrations['apple_health'] ?? false;
       case IntegrationApp.notion:
         return _integrations['notion'] ?? false;
       case IntegrationApp.twitter:

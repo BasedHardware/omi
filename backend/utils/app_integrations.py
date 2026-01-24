@@ -317,7 +317,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=30)
+            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
             if response.status_code != 200:
                 print(
                     'trigger_realtime_integrations',

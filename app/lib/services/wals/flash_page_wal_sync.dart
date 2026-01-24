@@ -2,13 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
+import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:omi/utils/logger.dart';
 
 class FlashPageWalSyncImpl implements FlashPageWalSync {
   static const int pagesPerChunk = 25;
@@ -43,7 +46,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   void cancelSync() {
     if (_isSyncing) {
-      debugPrint("FlashPageSync: Cancel requested");
+      Logger.debug("FlashPageSync: Cancel requested");
       _cancelRequested = true;
     }
   }
@@ -56,7 +59,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final limitlessConnection = connection as LimitlessDeviceConnection;
       return await limitlessConnection.getStorageStatus();
     } catch (e) {
-      debugPrint('FlashPageSync: Not a Limitless device or getStorageStatus not available: $e');
+      Logger.debug('FlashPageSync: Not a Limitless device or getStorageStatus not available: $e');
       return null;
     }
   }
@@ -67,7 +70,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       try {
         await connection.acknowledgeProcessedData(upToIndex);
       } catch (e) {
-        debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
+        Logger.debug('FlashPageSync: Could not acknowledge processed data: $e');
       }
     }
   }
@@ -80,7 +83,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       try {
         await connection.enableRealTimeMode();
       } catch (e) {
-        debugPrint('FlashPageSync: Could not enable real-time mode: $e');
+        Logger.debug('FlashPageSync: Could not enable real-time mode: $e');
       }
     }
   }
@@ -161,10 +164,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncAll({
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
     if (wals.isEmpty) {
-      debugPrint("FlashPageSync: All downloaded!");
+      Logger.debug("FlashPageSync: All downloaded!");
       return null;
     }
 
@@ -173,6 +179,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
       wal.isSyncing = true;
       wal.syncStartedAt = DateTime.now();
+      wal.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
 
       final completed = await _syncWal(wal, progress);
@@ -190,7 +197,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
       // If cancelled, stop processing remaining WALs
       if (!completed && _cancelRequested) {
-        debugPrint("FlashPageSync: Stopping syncAll due to cancellation");
+        Logger.debug("FlashPageSync: Stopping syncAll due to cancellation");
         break;
       }
     }
@@ -199,7 +206,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     var walToSync = _wals.where((w) => w == wal).toList().first;
 
     walToSync.isSyncing = true;
@@ -234,14 +245,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
-        debugPrint("FlashPageSync: Could not get connection");
+        Logger.debug("FlashPageSync: Could not get connection");
         return false;
       }
 
       final limitlessConnection = connection as LimitlessDeviceConnection;
       limitlessConnection.clearBuffer();
       await limitlessConnection.enableBatchMode();
-      debugPrint("FlashPageSync: Batch mode enabled");
+      Logger.debug("FlashPageSync: Batch mode enabled");
 
       _isSyncing = true;
       listener.onWalUpdated();
@@ -339,15 +350,15 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
           if (filePath != null) {
             filesSaved++;
-            debugPrint(
+            Logger.debug(
                 "FlashPageSync: Saved batch #$filesSaved to disk (${accumulatedFrames.length} frames, ts=$batchMinTimestamp)");
 
             if (lastProcessedIndex != null) {
               try {
                 await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
-                debugPrint("FlashPageSync: Incremental ACK sent for page $lastProcessedIndex");
+                Logger.debug("FlashPageSync: Incremental ACK sent for page $lastProcessedIndex");
               } catch (e) {
-                debugPrint("FlashPageSync: Incremental ACK failed: $e");
+                Logger.debug("FlashPageSync: Incremental ACK failed: $e");
               }
             }
           }
@@ -363,13 +374,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         }
 
         if (emptyExtractions >= maxEmptyExtractions) {
-          debugPrint("FlashPageSync: No more data from device");
+          Logger.debug("FlashPageSync: No more data from device");
           syncComplete = true;
         }
 
         // Check for cancellation request
         if (_cancelRequested) {
-          debugPrint("FlashPageSync: Cancellation requested, saving progress and stopping");
+          Logger.debug("FlashPageSync: Cancellation requested, saving progress and stopping");
 
           // Save any accumulated frames before cancelling
           if (accumulatedFrames.isNotEmpty) {
@@ -380,7 +391,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             );
             if (filePath != null) {
               filesSaved++;
-              debugPrint("FlashPageSync: Saved batch before cancel #$filesSaved to disk");
+              Logger.debug("FlashPageSync: Saved batch before cancel #$filesSaved to disk");
             }
             accumulatedFrames.clear();
           }
@@ -389,16 +400,16 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           if (lastProcessedIndex != null) {
             try {
               await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
-              debugPrint("FlashPageSync: Cancel ACK sent for page $lastProcessedIndex");
+              Logger.debug("FlashPageSync: Cancel ACK sent for page $lastProcessedIndex");
 
               // Update WAL to reflect remaining pages (for next sync attempt)
               wal.storageOffset = lastProcessedIndex + 1;
               final remainingPages = endPage - lastProcessedIndex;
               wal.seconds = (remainingPages * secondsPerFlashPage).round();
-              debugPrint(
+              Logger.debug(
                   "FlashPageSync: Updated WAL - new start page: ${wal.storageOffset}, remaining: $remainingPages pages");
             } catch (e) {
-              debugPrint("FlashPageSync: Cancel ACK failed: $e");
+              Logger.debug("FlashPageSync: Cancel ACK failed: $e");
             }
           }
 
@@ -410,7 +421,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           listener.onWalUpdated();
 
           await limitlessConnection.enableRealTimeMode();
-          debugPrint("FlashPageSync: Cancelled. $filesSaved files saved before cancellation");
+          Logger.debug("FlashPageSync: Cancelled. $filesSaved files saved before cancellation");
           return false; // Cancelled, not completed
         }
 
@@ -425,14 +436,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         );
         if (filePath != null) {
           filesSaved++;
-          debugPrint("FlashPageSync: Saved final batch #$filesSaved to disk");
+          Logger.debug("FlashPageSync: Saved final batch #$filesSaved to disk");
 
           if (lastProcessedIndex != null) {
             try {
               await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
-              debugPrint("FlashPageSync: Final ACK sent for page $lastProcessedIndex");
+              Logger.debug("FlashPageSync: Final ACK sent for page $lastProcessedIndex");
             } catch (e) {
-              debugPrint("FlashPageSync: Final ACK failed: $e");
+              Logger.debug("FlashPageSync: Final ACK failed: $e");
             }
           }
         }
@@ -450,19 +461,19 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       if (lastProcessedIndex != null) {
         try {
           await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
-          debugPrint("FlashPageSync: Sent final ACK for index $lastProcessedIndex before switching to real-time");
+          Logger.debug("FlashPageSync: Sent final ACK for index $lastProcessedIndex before switching to real-time");
         } catch (e) {
-          debugPrint("FlashPageSync: Final cleanup ACK failed: $e");
+          Logger.debug("FlashPageSync: Final cleanup ACK failed: $e");
         }
       }
 
       await limitlessConnection.enableRealTimeMode();
 
-      debugPrint("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
+      Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
       progress?.onWalSyncedProgress(1.0);
       return true; // Completed successfully
     } catch (e) {
-      debugPrint("FlashPageSync: Error: $e");
+      Logger.debug("FlashPageSync: Error: $e");
       _isSyncing = false;
 
       // Clear sync progress info on error
@@ -504,14 +515,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
       return filePath;
     } catch (e) {
-      debugPrint("FlashPageSync: Save batch error: $e");
+      Logger.debug("FlashPageSync: Save batch error: $e");
       return null;
     }
   }
 
   Future<void> _registerChunkWithLocalSync(String fileName, int timestampMs, int frameCount, Wal sourceWal) async {
     if (_localSync == null) {
-      debugPrint("FlashPageSync: WARNING - Cannot register chunk, LocalWalSync not available");
+      Logger.debug("FlashPageSync: WARNING - Cannot register chunk, LocalWalSync not available");
       return;
     }
 
@@ -535,7 +546,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     );
 
     await _localSync!.addExternalWal(localWal);
-    debugPrint("FlashPageSync: Registered chunk (ts: $timestampMs, ${seconds}s) with LocalWalSync");
+    Logger.debug("FlashPageSync: Registered chunk (ts: $timestampMs, ${seconds}s) with LocalWalSync");
   }
 
   @override

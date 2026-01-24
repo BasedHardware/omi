@@ -111,7 +111,7 @@ export function AppDetail({ appId }: AppDetailProps) {
   const handleShare = async () => {
     if (!app) return;
 
-    const url = `${window.location.origin}/apps/${app.id}`;
+    const url = `${window.location.origin}/my-apps/${app.id}`;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -147,7 +147,7 @@ export function AppDetail({ appId }: AppDetailProps) {
       <div className="text-center py-12">
         <p className="text-text-tertiary">{error || 'App not found'}</p>
         <Link
-          href="/apps"
+          href="/my-apps"
           className="text-purple-primary hover:underline mt-2 inline-block"
         >
           Back to Apps
@@ -245,7 +245,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {isOwner && (
               <button
-                onClick={() => router.push(`/apps/${app.id}/edit`)}
+                onClick={() => router.push(`/my-apps/${app.id}/edit`)}
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
                   'border border-bg-quaternary',

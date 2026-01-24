@@ -1,11 +1,15 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/env/env.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/logger.dart';
 
 class UserReviewPage extends StatefulWidget {
   final VoidCallback goNext;
@@ -46,7 +50,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
       MixpanelManager().track('App Review Opened', properties: {'source': 'onboarding'});
       await Future.delayed(const Duration(milliseconds: 500));
     } else {
-      debugPrint('Could not launch review URL');
+      Logger.debug('Could not launch review URL');
     }
 
     setState(() {

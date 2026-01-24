@@ -1,8 +1,11 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/calendar_meeting_context.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Response from storing a meeting
 class StoreMeetingResponse {
@@ -50,7 +53,7 @@ Future<StoreMeetingResponse?> storeMeeting({
       'notes': notes,
     });
 
-    debugPrint('storeMeeting: Storing meeting $calendarEventId');
+    Logger.debug('storeMeeting: Storing meeting $calendarEventId');
 
     var response = await makeApiCall(
       url: '${Env.apiBaseUrl}v1/calendar/meetings',
@@ -60,21 +63,21 @@ Future<StoreMeetingResponse?> storeMeeting({
     );
 
     if (response == null) {
-      debugPrint('storeMeeting: No response from API');
+      Logger.debug('storeMeeting: No response from API');
       return null;
     }
 
     if (response.statusCode == 200) {
       final result = StoreMeetingResponse.fromJson(jsonDecode(response.body));
-      debugPrint('storeMeeting: Success - meeting_id: ${result.meetingId}');
+      Logger.debug('storeMeeting: Success - meeting_id: ${result.meetingId}');
       return result;
     } else {
-      debugPrint('storeMeeting: Failed with status ${response.statusCode}: ${response.body}');
+      Logger.debug('storeMeeting: Failed with status ${response.statusCode}: ${response.body}');
       return null;
     }
   } catch (e, stackTrace) {
-    debugPrint('storeMeeting: Exception: $e');
-    debugPrint('storeMeeting: Stack trace: $stackTrace');
+    Logger.debug('storeMeeting: Exception: $e');
+    Logger.debug('storeMeeting: Stack trace: $stackTrace');
     return null;
   }
 }
@@ -94,11 +97,11 @@ Future<CalendarMeetingContext?> getMeeting(String meetingId) async {
     if (response.statusCode == 200) {
       return CalendarMeetingContext.fromJson(jsonDecode(response.body));
     } else {
-      debugPrint('getMeeting: Failed with status ${response.statusCode}');
+      Logger.debug('getMeeting: Failed with status ${response.statusCode}');
       return null;
     }
   } catch (e) {
-    debugPrint('getMeeting: Exception: $e');
+    Logger.debug('getMeeting: Exception: $e');
     return null;
   }
 }
@@ -133,11 +136,11 @@ Future<List<CalendarMeetingContext>> listMeetings({
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => CalendarMeetingContext.fromJson(json)).toList();
     } else {
-      debugPrint('listMeetings: Failed with status ${response.statusCode}');
+      Logger.debug('listMeetings: Failed with status ${response.statusCode}');
       return [];
     }
   } catch (e) {
-    debugPrint('listMeetings: Exception: $e');
+    Logger.debug('listMeetings: Exception: $e');
     return [];
   }
 }

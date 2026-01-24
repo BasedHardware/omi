@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Response model for task integrations
 class TaskIntegrationsResponse {
@@ -37,7 +37,7 @@ Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
     var body = utf8.decode(response.bodyBytes);
     return TaskIntegrationsResponse.fromJson(jsonDecode(body));
   } else {
-    debugPrint('getTaskIntegrations error ${response.statusCode}');
+    Logger.debug('getTaskIntegrations error ${response.statusCode}');
     return null;
   }
 }
@@ -58,7 +58,7 @@ Future<String?> getDefaultTaskIntegration() async {
     var data = jsonDecode(body);
     return data['default_app'] as String?;
   } else {
-    debugPrint('getDefaultTaskIntegration error ${response.statusCode}');
+    Logger.debug('getDefaultTaskIntegration error ${response.statusCode}');
     return null;
   }
 }
@@ -77,7 +77,7 @@ Future<bool> setDefaultTaskIntegration(String appKey) async {
   if (response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('setDefaultTaskIntegration error ${response.statusCode}');
+    Logger.debug('setDefaultTaskIntegration error ${response.statusCode}');
     return false;
   }
 }
@@ -96,7 +96,7 @@ Future<bool> saveTaskIntegration(String appKey, Map<String, dynamic> details) as
   if (response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('saveTaskIntegration error ${response.statusCode}');
+    Logger.debug('saveTaskIntegration error ${response.statusCode}');
     return false;
   }
 }
@@ -115,7 +115,7 @@ Future<bool> deleteTaskIntegration(String appKey) async {
   if (response.statusCode == 204 || response.statusCode == 200) {
     return true;
   } else {
-    debugPrint('deleteTaskIntegration error ${response.statusCode}');
+    Logger.debug('deleteTaskIntegration error ${response.statusCode}');
     return false;
   }
 }
@@ -136,7 +136,7 @@ Future<String?> getOAuthUrl(String appKey) async {
     var data = jsonDecode(body);
     return data['auth_url'] as String?;
   } else {
-    debugPrint('getOAuthUrl error ${response.statusCode}');
+    Logger.debug('getOAuthUrl error ${response.statusCode}');
     return null;
   }
 }
@@ -167,7 +167,7 @@ Future<Map<String, dynamic>?> createTaskViaIntegration(
     var body = utf8.decode(response.bodyBytes);
     return jsonDecode(body) as Map<String, dynamic>;
   } else {
-    debugPrint('createTaskViaIntegration error ${response.statusCode}');
+    Logger.debug('createTaskViaIntegration error ${response.statusCode}');
     return null;
   }
 }
@@ -188,7 +188,7 @@ Future<List<Map<String, dynamic>>?> getAsanaWorkspaces() async {
     var data = jsonDecode(body);
     return (data['workspaces'] as List).cast<Map<String, dynamic>>();
   } else {
-    debugPrint('getAsanaWorkspaces error ${response.statusCode}');
+    Logger.debug('getAsanaWorkspaces error ${response.statusCode}');
     return null;
   }
 }
@@ -209,7 +209,7 @@ Future<List<Map<String, dynamic>>?> getAsanaProjects(String workspaceGid) async 
     var data = jsonDecode(body);
     return (data['projects'] as List).cast<Map<String, dynamic>>();
   } else {
-    debugPrint('getAsanaProjects error ${response.statusCode}');
+    Logger.debug('getAsanaProjects error ${response.statusCode}');
     return null;
   }
 }
@@ -230,7 +230,7 @@ Future<List<Map<String, dynamic>>?> getClickUpTeams() async {
     var data = jsonDecode(body);
     return (data['teams'] as List).cast<Map<String, dynamic>>();
   } else {
-    debugPrint('getClickUpTeams error ${response.statusCode}');
+    Logger.debug('getClickUpTeams error ${response.statusCode}');
     return null;
   }
 }
@@ -251,7 +251,7 @@ Future<List<Map<String, dynamic>>?> getClickUpSpaces(String teamId) async {
     var data = jsonDecode(body);
     return (data['spaces'] as List).cast<Map<String, dynamic>>();
   } else {
-    debugPrint('getClickUpSpaces error ${response.statusCode}');
+    Logger.debug('getClickUpSpaces error ${response.statusCode}');
     return null;
   }
 }
@@ -272,7 +272,7 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
     var data = jsonDecode(body);
     return (data['lists'] as List).cast<Map<String, dynamic>>();
   } else {
-    debugPrint('getClickUpLists error ${response.statusCode}');
+    Logger.debug('getClickUpLists error ${response.statusCode}');
     return null;
   }
 }

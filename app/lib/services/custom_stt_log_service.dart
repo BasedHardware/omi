@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/logger.dart';
+
 enum CustomSttLogLevel { info, warning, error }
 
 class CustomSttLogEntry {
@@ -39,12 +41,16 @@ class CustomSttLogService {
   bool get hasLogs => _logs.isNotEmpty;
 
   String get logsAsText => logs.map((l) {
-    final prefix = l.level == CustomSttLogLevel.error ? '[ERROR] ' : l.level == CustomSttLogLevel.warning ? '[WARN] ' : '';
-    return '$prefix${l.formatted}';
-  }).join('\n');
+        final prefix = l.level == CustomSttLogLevel.error
+            ? '[ERROR] '
+            : l.level == CustomSttLogLevel.warning
+                ? '[WARN] '
+                : '';
+        return '$prefix${l.formatted}';
+      }).join('\n');
 
   void log(CustomSttLogLevel level, String source, String message) {
-    debugPrint("[$source] $message");
+    Logger.debug("[$source] $message");
     _logs.add(CustomSttLogEntry(
       timestamp: DateTime.now(),
       level: level,

@@ -2,13 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/wals.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/wals.dart';
+import 'package:omi/utils/logger.dart';
 
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
@@ -111,7 +115,7 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 
   void _onPlaybackFinished() {
-    debugPrint('Audio playback finished');
+    Logger.debug('Audio playback finished');
     _resetPlaybackState();
   }
 
@@ -170,7 +174,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     );
 
     if (result.status == ShareResultStatus.success) {
-      debugPrint('Audio file shared successfully');
+      Logger.debug('Audio file shared successfully');
     }
   }
 

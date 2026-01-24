@@ -1,10 +1,13 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/ui/atoms/omi_badge.dart';
 import 'package:omi/ui/atoms/omi_load_more_button.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class DesktopAppGrid extends StatefulWidget {
   final List<App> apps;
@@ -301,7 +304,7 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
     );
   }
 
-  Widget _buildInstalledBadge() => const OmiBadge(label: 'Installed');
+  Widget _buildInstalledBadge() => OmiBadge(label: context.l10n.installed);
 
   Widget _buildAppInfo() {
     return Column(
@@ -391,7 +394,7 @@ class _DesktopAppCardState extends State<_DesktopAppCard> {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          'Install',
+          context.l10n.install,
           style: widget.responsive.responsiveTextStyle(
             baseFontSize: 11,
             minFontSize: 10,

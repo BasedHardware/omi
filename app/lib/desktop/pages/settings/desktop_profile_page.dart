@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/payments/payments_page.dart';
@@ -19,9 +22,9 @@ import 'package:omi/ui/atoms/omi_profile_avatar.dart';
 import 'package:omi/ui/atoms/omi_section.dart';
 import 'package:omi/ui/atoms/omi_settings_tile.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class DesktopProfilePage extends StatefulWidget {
   const DesktopProfilePage({super.key});
@@ -150,15 +153,15 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
               if (_isReloading)
                 Container(
                   color: Colors.black54,
-                  child: const Center(
+                  child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
-                        SizedBox(height: 16),
+                        const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                        const SizedBox(height: 16),
                         Text(
-                          'Loading profile...',
-                          style: TextStyle(
+                          context.l10n.loadingProfile,
+                          style: const TextStyle(
                             color: ResponsiveHelper.textPrimary,
                             fontSize: 16,
                           ),
@@ -187,7 +190,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
         ),
         const SizedBox(width: 16),
         Text(
-          'Profile Settings',
+          context.l10n.profileSettings,
           style: responsive.headlineLarge.copyWith(
             fontWeight: FontWeight.w400,
           ),
@@ -200,7 +203,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
     return OmiInfoCard(
       children: [
         Text(
-          userName.isNotEmpty ? userName : 'User',
+          userName.isNotEmpty ? userName : context.l10n.user,
           style: responsive.headlineMedium.copyWith(
             fontWeight: FontWeight.w600,
           ),
@@ -211,7 +214,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
         // User email
         Text(
-          userEmail.isNotEmpty ? userEmail : 'No email set',
+          userEmail.isNotEmpty ? userEmail : context.l10n.noEmailSet,
           style: responsive.bodyLarge.copyWith(
             color: ResponsiveHelper.textTertiary,
           ),
@@ -235,7 +238,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'User ID',
+                context.l10n.userId,
                 style: responsive.bodySmall.copyWith(
                   fontWeight: FontWeight.w500,
                   color: ResponsiveHelper.textTertiary,
@@ -264,7 +267,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                       Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: const Text('User ID copied to clipboard'),
+                          content: Text(context.l10n.userIdCopiedToClipboard),
                           backgroundColor: ResponsiveHelper.backgroundTertiary,
                           behavior: SnackBarBehavior.floating,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -288,12 +291,12 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
         children: [
           // Your Information Section
           OmiSection(
-            title: 'Your Information',
+            title: context.l10n.yourInformation,
             icon: FontAwesomeIcons.user,
             children: [
               OmiSettingsTile(
-                title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
-                subtitle: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
+                title: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.setYourName : context.l10n.changeYourName,
+                subtitle: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
                 icon: FontAwesomeIcons.user,
                 onTap: () async {
                   MixpanelManager().pageOpened('Profile Change Name');
@@ -314,7 +317,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                       : 'Not set';
 
                   return OmiSettingsTile(
-                    title: 'Primary Language',
+                    title: context.l10n.primaryLanguage,
                     subtitle: languageName,
                     icon: FontAwesomeIcons.language,
                     onTap: () async {
@@ -327,8 +330,8 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                 },
               ),
               OmiSettingsTile(
-                title: 'Persona',
-                subtitle: 'Manage your ${Env.appName} persona',
+                title: context.l10n.persona,
+                subtitle: context.l10n.manageYourOmiPersona,
                 icon: FontAwesomeIcons.userGear,
                 onTap: () {
                   Navigator.of(context).push(
@@ -347,12 +350,12 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
           // Voice & People Section
           OmiSection(
-            title: 'Voice & People',
+            title: context.l10n.voiceAndPeople,
             icon: FontAwesomeIcons.microphone,
             children: [
               OmiSettingsTile(
-                title: 'Speech Profile',
-                subtitle: 'Teach ${Env.appName} your voice',
+                title: context.l10n.speechProfile,
+                subtitle: context.l10n.teachOmiYourVoice,
                 icon: FontAwesomeIcons.waveSquare,
                 onTap: () {
                   routeToPage(context, const SpeechProfilePage());
@@ -360,8 +363,8 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
                 },
               ),
               OmiSettingsTile(
-                title: 'Identifying Others',
-                subtitle: 'Tell ${Env.appName} who said it 🗣️',
+                title: context.l10n.identifyingOthers,
+                subtitle: context.l10n.tellOmiWhoSaidIt,
                 icon: FontAwesomeIcons.users,
                 onTap: () {
                   routeToPage(context, const UserPeoplePage());
@@ -374,12 +377,12 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
           // Payment Section
           OmiSection(
-            title: 'Payment',
+            title: context.l10n.payment,
             icon: FontAwesomeIcons.creditCard,
             children: [
               OmiSettingsTile(
-                title: 'Payment Methods',
-                subtitle: 'Add or change your payment method',
+                title: context.l10n.paymentMethods,
+                subtitle: context.l10n.addOrChangeYourPaymentMethod,
                 icon: FontAwesomeIcons.wallet,
                 onTap: () {
                   routeToPage(context, const PaymentsPage());
@@ -392,11 +395,11 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
           // Preferences Section
           OmiSection(
-            title: 'Preferences',
+            title: context.l10n.preferences,
             icon: FontAwesomeIcons.sliders,
             children: [
               _buildPreferenceTile(
-                title: 'Help improve ${Env.appName} by sharing anonymized analytics data',
+                title: context.l10n.helpImproveOmiBySharing,
                 value: SharedPreferencesUtil().optInAnalytics,
                 onChanged: (value) {
                   setState(() {
@@ -416,12 +419,12 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
           // Account Section
           OmiSection(
-            title: 'Account',
+            title: context.l10n.account,
             icon: FontAwesomeIcons.userShield,
             children: [
               OmiSettingsTile(
-                title: 'Delete Account',
-                subtitle: 'Delete your account and all data',
+                title: context.l10n.deleteAccount,
+                subtitle: context.l10n.deleteYourAccountAndAllData,
                 icon: FontAwesomeIcons.triangleExclamation,
                 iconColor: ResponsiveHelper.errorColor,
                 textColor: ResponsiveHelper.errorColor,

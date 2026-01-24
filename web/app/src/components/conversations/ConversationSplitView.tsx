@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
@@ -51,6 +51,9 @@ export function ConversationSplitView() {
   const searchParams = useSearchParams();
   const urlConversationId = searchParams.get('id');
   const [selectedId, setSelectedId] = useState<string | null>(urlConversationId);
+
+  // Track if we should prevent auto-select (e.g., when user explicitly navigates to list view)
+  const preventAutoSelect = useRef(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,16 +146,29 @@ export function ConversationSplitView() {
     }
   }, [selectedConversation, setContext]);
 
-  // Update selected ID when URL changes (e.g., navigating from recaps)
+  // Track the previous URL conversation ID to detect when it changes
+  const prevUrlConversationIdRef = useRef(urlConversationId);
+
+  // Update selected ID when URL changes (e.g., navigating from recaps or bottom nav)
   useEffect(() => {
+    const prevUrlId = prevUrlConversationIdRef.current;
+    prevUrlConversationIdRef.current = urlConversationId;
+
+    // URL has a conversation ID - select it
     if (urlConversationId) {
       setSelectedId(urlConversationId);
+      preventAutoSelect.current = false; // Allow auto-select on future loads
+    }
+    // URL changed from having an ID to not having one (user clicked Conversations in nav)
+    else if (prevUrlId !== null && urlConversationId === null) {
+      setSelectedId(null);
+      preventAutoSelect.current = true; // Prevent auto-select to stay on list view
     }
   }, [urlConversationId]);
 
-  // Auto-select first conversation on load (only if no URL param)
+  // Auto-select first conversation on load (only if no URL param and not explicitly showing list)
   useEffect(() => {
-    if (!selectedId && !urlConversationId && !listLoading) {
+    if (!selectedId && !urlConversationId && !listLoading && !preventAutoSelect.current) {
       const firstGroup = Object.values(groupedConversations)[0];
       if (firstGroup && firstGroup.length > 0) {
         setSelectedId(firstGroup[0].id);
@@ -226,6 +242,7 @@ export function ConversationSplitView() {
 
   const handleConversationClick = useCallback((conversation: Conversation) => {
     setSelectedId(conversation.id);
+    preventAutoSelect.current = false; // Re-enable auto-select for future visits
   }, []);
 
   // Handle star toggle
@@ -703,7 +720,10 @@ export function ConversationSplitView() {
                 conversation={selectedConversation}
                 loading={detailLoading}
                 userName={user?.displayName || undefined}
-                onBack={() => setSelectedId(null)}
+                onBack={() => {
+                  setSelectedId(null);
+                  preventAutoSelect.current = true; // Stay on list view when using back button
+                }}
                 onConversationUpdate={updateSelectedConversation}
                 onDelete={() => {
                   setSelectedId(null);

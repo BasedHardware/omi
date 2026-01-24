@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
  * data, needs to free that block.
  */
 #define MAX_BLOCK_SIZE BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
-#define BLOCK_COUNT 8
+#define BLOCK_COUNT 4
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 
@@ -188,8 +188,12 @@ void set_mic_callback(mix_handler callback)
 void mic_pause()
 {
     LOG_INF("Pausing microphone");
-    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
     if (mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
+        if (ret < 0) {
+            LOG_ERR("STOP trigger failed: %d", ret);
+            return;
+        }
         mic_running = false;
     }
 }
@@ -197,10 +201,19 @@ void mic_pause()
 void mic_resume()
 {
     LOG_INF("Resuming microphone");
-    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (!mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
+        if (ret < 0) {
+            LOG_ERR("START trigger failed: %d", ret);
+            return;
+        }
         mic_running = true;
     }
+}
+
+bool mic_is_running()
+{
+    return mic_running;
 }
 
 void mic_off()

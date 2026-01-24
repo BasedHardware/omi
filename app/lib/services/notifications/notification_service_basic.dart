@@ -1,27 +1,25 @@
 import 'dart:async';
 
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/theme/brand_colors.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Basic notification service for platforms without Firebase Messaging support
 /// Currently used for Windows - provides local notifications only
 class _BasicNotificationService implements NotificationInterface {
   _BasicNotificationService._();
 
-  // Use dynamic brand color for notifications
-  static final _notificationColor = BrandColors.getColorsForFlavor().primary;
-
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: '${Env.appName} Notifications',
-    channelDescription: 'Notification channel for ${Env.appName}',
-    defaultColor: _notificationColor,
+    channelName: 'Omi Notifications',
+    channelDescription: 'Notification channel for Omi',
+    defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
 
@@ -30,7 +28,7 @@ class _BasicNotificationService implements NotificationInterface {
   @override
   Future<void> initialize() async {
     await _initializeAwesomeNotifications();
-    debugPrint('Basic notification service initialized (Firebase Messaging not available on this platform)');
+    Logger.debug('Basic notification service initialized (Firebase Messaging not available on this platform)');
   }
 
   Future<void> _initializeAwesomeNotifications() async {
@@ -43,7 +41,7 @@ class _BasicNotificationService implements NotificationInterface {
             channelKey: channel.channelKey,
             channelName: channel.channelName,
             channelDescription: channel.channelDescription,
-            defaultColor: _notificationColor,
+            defaultColor: const Color(0xFF9D50DD),
             ledColor: Colors.white,
           )
         ],
@@ -56,7 +54,7 @@ class _BasicNotificationService implements NotificationInterface {
         ],
         debug: false);
 
-    debugPrint('initializeNotifications: $initialized');
+    Logger.debug('initializeNotifications: $initialized');
   }
 
   @override
@@ -98,7 +96,7 @@ class _BasicNotificationService implements NotificationInterface {
   @override
   Future<void> register() async {
     // Platform-specific notification registration not available on this platform
-    debugPrint('Notification registration not available on this platform');
+    Logger.debug('Notification registration not available on this platform');
   }
 
   @override
@@ -110,13 +108,13 @@ class _BasicNotificationService implements NotificationInterface {
   @override
   Future<void> saveFcmToken(String? token) async {
     // Firebase Cloud Messaging not supported on this platform
-    debugPrint('FCM token save skipped - Firebase Messaging not supported on this platform');
+    Logger.debug('FCM token save skipped - Firebase Messaging not supported on this platform');
   }
 
   @override
   void saveNotificationToken() {
     // Firebase Cloud Messaging not supported on this platform
-    debugPrint('Notification token save skipped - Firebase Messaging not supported on this platform');
+    Logger.debug('Notification token save skipped - Firebase Messaging not supported on this platform');
   }
 
   @override
@@ -132,9 +130,9 @@ class _BasicNotificationService implements NotificationInterface {
     Map<String, String?>? payload,
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
-    debugPrint('createNotification: $allowed');
+    Logger.debug('createNotification: $allowed');
     if (!allowed) return;
-    debugPrint('createNotification ~ Creating notification: $title');
+    Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
   }
 
@@ -145,7 +143,7 @@ class _BasicNotificationService implements NotificationInterface {
   Future<void> listenForMessages() async {
     // Firebase Cloud Messaging not supported on this platform
     // Local notifications still work, but no remote messaging
-    debugPrint('Firebase message listening not available on this platform');
+    Logger.debug('Firebase message listening not available on this platform');
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();

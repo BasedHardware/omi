@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:shimmer/shimmer.dart';
 
 class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
@@ -51,7 +54,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading capability apps: $e');
+      Logger.debug('Error loading capability apps: $e');
       if (mounted) {
         setState(() {
           _categoryGroups = [];

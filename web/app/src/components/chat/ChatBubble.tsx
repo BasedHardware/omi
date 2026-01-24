@@ -11,7 +11,7 @@ export function ChatBubble() {
     <button
       onClick={toggleChat}
       className={cn(
-        'fixed bottom-6 right-6 z-50',
+        'fixed bottom-20 lg:bottom-6 right-6 z-50',
         'w-14 h-14 rounded-full',
         'flex items-center justify-center',
         'shadow-lg shadow-purple-primary/25',

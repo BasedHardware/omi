@@ -279,10 +279,10 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 0.7
+    cpu: 1.5
     memory: 2Gi
   limits:
-    cpu: 1
+    cpu: 2
     memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -361,3 +361,7 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: type
+              operator: In
+              values:
+                - high-cpu

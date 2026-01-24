@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:omi/pages/payments/payment_method_provider.dart';
-import 'package:omi/pages/payments/stripe_connect_setup.dart';
-import 'package:omi/pages/payments/widgets/payment_method_card.dart';
-import 'package:omi/pages/payments/paypal_setup_page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
+
 import 'package:provider/provider.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'package:omi/pages/payments/payment_method_provider.dart';
+import 'package:omi/pages/payments/paypal_setup_page.dart';
+import 'package:omi/pages/payments/stripe_connect_setup.dart';
+import 'package:omi/pages/payments/widgets/payment_method_card.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'models/payment_method_config.dart';
 
 class PaymentsPage extends StatefulWidget {
@@ -26,6 +28,12 @@ class _PaymentsPageState extends State<PaymentsPage> {
     });
   }
 
+  String _getPaymentSubtitle({required bool isActive, required bool isConnected}) {
+    if (isActive) return context.l10n.paymentStatusActive;
+    if (isConnected) return context.l10n.paymentStatusConnected;
+    return context.l10n.paymentStatusNotConnected;
+  }
+
   Widget _buildInfoCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -37,18 +45,18 @@ class _PaymentsPageState extends State<PaymentsPage> {
           width: 1,
         ),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.info_outline,
             color: Colors.white70,
             size: 24,
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Connect a payment method below to start receiving payouts for your apps.',
-              style: TextStyle(
+              context.l10n.connectPaymentMethodInfo,
+              style: const TextStyle(
                 color: Colors.white70,
                 fontSize: 14,
               ),
@@ -66,7 +74,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
-          title: const Text('Payments', style: TextStyle(color: Colors.white)),
+          title: Text(context.l10n.payments, style: const TextStyle(color: Colors.white)),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.pop(context),
@@ -80,9 +88,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Selected Payment Method',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.selectedPaymentMethod,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w500,
@@ -102,9 +110,9 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             _buildActiveMethodCard(activeMethod, provider),
                             const SizedBox(height: 24)
                           ],
-                          const Text(
-                            'Available Payment Methods',
-                            style: TextStyle(
+                          Text(
+                            context.l10n.availablePaymentMethods,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.w500,
@@ -128,6 +136,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
   Widget _buildActiveMethodCard(PaymentMethodType method, PaymentMethodProvider provider) {
     final config = method == PaymentMethodType.stripe
         ? PaymentMethodConfig.stripe(
+            title: context.l10n.paymentMethodStripe,
+            subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
             onManageTap: () {
               routeToPage(context, const StripeConnectSetup());
             },
@@ -135,6 +145,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
             isConnected: true,
           )
         : PaymentMethodConfig.paypal(
+            title: context.l10n.paymentMethodPayPal,
+            subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
             onManageTap: () {
               routeToPage(context, const PaypalSetupPage());
             },
@@ -159,6 +171,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
       if (provider.isStripeConnected && activeMethod != PaymentMethodType.stripe)
         (
           PaymentMethodConfig.stripe(
+            title: context.l10n.paymentMethodStripe,
+            subtitle: _getPaymentSubtitle(isActive: false, isConnected: true),
             onManageTap: () {
               MixpanelManager().track('Manage Stripe');
               routeToPage(context, const StripeConnectSetup());
@@ -175,6 +189,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
       if (provider.isPayPalConnected && activeMethod != PaymentMethodType.paypal)
         (
           PaymentMethodConfig.paypal(
+            title: context.l10n.paymentMethodPayPal,
+            subtitle: _getPaymentSubtitle(isActive: false, isConnected: true),
             onManageTap: () {
               MixpanelManager().track('Manage PayPal');
               routeToPage(context, const PaypalSetupPage());
@@ -191,6 +207,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
       if (!provider.isStripeConnected)
         (
           PaymentMethodConfig.stripe(
+            title: context.l10n.paymentMethodStripe,
+            subtitle: _getPaymentSubtitle(isActive: false, isConnected: false),
             onManageTap: () {
               MixpanelManager().track('Manage Stripe');
               routeToPage(context, const StripeConnectSetup());
@@ -202,6 +220,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
       if (!provider.isPayPalConnected)
         (
           PaymentMethodConfig.paypal(
+            title: context.l10n.paymentMethodPayPal,
+            subtitle: _getPaymentSubtitle(isActive: false, isConnected: false),
             onManageTap: () {
               MixpanelManager().track('Manage PayPal');
               routeToPage(context, const PaypalSetupPage());

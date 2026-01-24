@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/custom_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/logger.dart';
 
 class FieldyDeviceConnection extends CustomDeviceConnection {
   FieldyDeviceConnection(super.device, super.transport);
@@ -58,7 +60,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
       if (data.isNotEmpty) return data[0];
       return -1;
     } catch (e) {
-      debugPrint('Fieldy: Error reading battery level: $e');
+      Logger.debug('Fieldy: Error reading battery level: $e');
       return -1;
     }
   }
@@ -70,7 +72,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(serviceUuid, audioCharacteristicUuid);
 
-      debugPrint('Subscribed to audioBytes stream from Fieldy Device');
+      Logger.debug('Subscribed to audioBytes stream from Fieldy Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) {
           // Each BLE notification contains 6 Opus frames of 40 bytes each (240 bytes total)
@@ -84,7 +86,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
             if (frame[0] == 0xb8) {
               onAudioBytesReceived(frame);
             } else {
-              debugPrint(
+              Logger.debug(
                   'Fieldy: Warning - Frame at offset $offset doesn\'t start with 0xb8: ${frame[0].toRadixString(16)}');
               onAudioBytesReceived(frame);
             }
@@ -94,7 +96,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
 
           if (offset < value.length) {
             final remaining = value.sublist(offset);
-            debugPrint('Fieldy: Note - Found ${remaining.length}-byte frame (not 40 bytes)');
+            Logger.debug('Fieldy: Note - Found ${remaining.length}-byte frame (not 40 bytes)');
             if (remaining.isNotEmpty && remaining[0] == 0xb8) {
               onAudioBytesReceived(remaining);
             }
@@ -104,7 +106,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('Fieldy: Error setting up audio listener: $e');
+      Logger.debug('Fieldy: Error setting up audio listener: $e');
       return null;
     }
   }
@@ -120,7 +122,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
           deviceInfo['modelNumber'] = String.fromCharCodes(modelValue);
         }
       } catch (e) {
-        debugPrint('Fieldy: Error reading model number: $e');
+        Logger.debug('Fieldy: Error reading model number: $e');
       }
 
       try {
@@ -130,7 +132,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
       } catch (e) {
-        debugPrint('Fieldy: Error reading firmware revision: $e');
+        Logger.debug('Fieldy: Error reading firmware revision: $e');
       }
 
       try {
@@ -140,7 +142,7 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
           deviceInfo['hardwareRevision'] = String.fromCharCodes(hardwareValue);
         }
       } catch (e) {
-        debugPrint('Fieldy: Error reading hardware revision: $e');
+        Logger.debug('Fieldy: Error reading hardware revision: $e');
       }
 
       try {
@@ -150,10 +152,10 @@ class FieldyDeviceConnection extends CustomDeviceConnection {
           deviceInfo['manufacturerName'] = String.fromCharCodes(manufacturerValue);
         }
       } catch (e) {
-        debugPrint('Fieldy: Error reading manufacturer name: $e');
+        Logger.debug('Fieldy: Error reading manufacturer name: $e');
       }
     } catch (e) {
-      debugPrint('Fieldy: Error getting device info: $e');
+      Logger.debug('Fieldy: Error getting device info: $e');
     }
 
     deviceInfo['modelNumber'] ??= 'Fieldy';

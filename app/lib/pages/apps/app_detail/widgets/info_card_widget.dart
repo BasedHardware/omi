@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/widgets/extensions/string.dart';
 
 class InfoCardWidget extends StatelessWidget {

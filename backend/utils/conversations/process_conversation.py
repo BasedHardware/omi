@@ -4,6 +4,7 @@ import re
 import threading
 import uuid
 import logging
+import asyncio
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -66,6 +67,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
 
 
@@ -497,6 +499,14 @@ def _save_action_items(uid: str, conversation: Conversation):
                     due_at=action_item.due_at.isoformat(),
                 )
 
+        # Auto-sync to task integration
+        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+        def _run_auto_sync():
+            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+        threading.Thread(target=_run_auto_sync, daemon=True).start()
+
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
@@ -589,11 +599,6 @@ def process_conversation(
 
             if user_folders and conversation.structured:
                 folder_id, confidence, reasoning = assign_conversation_to_folder(
-                    transcript=(
-                        conversation.get_transcript(False, people=people)
-                        if hasattr(conversation, 'get_transcript')
-                        else ''
-                    ),
                     title=conversation.structured.title or '',
                     overview=conversation.structured.overview or '',
                     category=conversation.structured.category.value if conversation.structured.category else 'other',
@@ -686,11 +691,12 @@ def process_conversation(
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
+        # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
-        threading.Thread(
-            target=_send_important_conversation_notification_if_needed,
-            args=(uid, conversation),
-        ).start()
+        # threading.Thread(
+        #     target=_send_important_conversation_notification_if_needed,
+        #     args=(uid, conversation),
+        # ).start()
 
     # TODO: trigger external integrations here too
 

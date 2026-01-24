@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
@@ -9,11 +12,10 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-
-import 'package:provider/provider.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -139,19 +141,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
               final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
               String timeoutText;
               if (timeoutDuration == -1) {
-                timeoutText = "Conversation will only end manually.";
+                timeoutText = context.l10n.conversationEndsManually;
               } else {
                 final minutes = timeoutDuration ~/ 60;
                 timeoutText =
-                    "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech.";
+                    context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's');
               }
 
               return ConfirmationDialog(
-                title: "Finished Conversation?",
+                title: context.l10n.finishedConversation,
                 description:
-                    "Are you sure you want to stop recording and summarize the conversation now?\n\nHints: $timeoutText",
+                    "${context.l10n.stopRecordingConfirmation}\n\n${context.l10n.hints(timeoutText)}",
                 checkboxValue: !showSummarizeConfirmation,
-                checkboxText: "Don't ask me again",
+                checkboxText: context.l10n.dontAskAgain,
                 onCheckboxChanged: (value) {
                   setState(() {
                     showSummarizeConfirmation = !value;
@@ -310,13 +312,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     );
   }
 
-  String _getTimeoutDisplayText() {
+  String _getTimeoutDisplayText(BuildContext context) {
     final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
     if (timeoutDuration == -1) {
-      return "Conversation will only end manually 🤫";
+      return "${context.l10n.conversationEndsManually} 🤫";
     } else {
       final minutes = timeoutDuration ~/ 60;
-      return "Conversation is summarized after $minutes minute${minutes == 1 ? '' : 's'} of no speech 🤫";
+      return "${context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's')} 🤫";
     }
   }
 }

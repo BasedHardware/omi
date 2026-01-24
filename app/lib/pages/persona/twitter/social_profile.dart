@@ -1,13 +1,17 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {
   final PersonaProfileRouting routing;
@@ -70,7 +74,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                         const Spacer(flex: 5),
                         const Spacer(flex: 1),
                         Text(
-                          'What\'s your X handle?',
+                          context.l10n.xHandleTitle,
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -79,7 +83,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'We will pre-train your Omi clone\nbased on your account\'s activity',
+                          context.l10n.xHandleDescription,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: Colors.white.withValues(alpha: 0.55),
                             shadows: [
@@ -138,7 +142,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                 width: 1,
                               ),
                             ),
-                            hintText: '@nikshevchenko',
+                            hintText: context.l10n.xHandleHint,
                             hintStyle: TextStyle(
                               color: Colors.white.withValues(alpha: 0.38),
                               fontWeight: FontWeight.bold,
@@ -160,10 +164,10 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please enter your X handle';
+                              return context.l10n.xHandlePleaseEnter;
                             }
                             if (value.trim().length < 3 || value.trim().length > 15) {
-                              return 'Please enter a valid X handle';
+                              return context.l10n.xHandlePleaseEnterValid;
                             }
                             return null;
                           },
@@ -176,7 +180,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             if (_formKey.currentState!.validate()) {
                               provider.setIsLoading(true);
                               if (FirebaseAuth.instance.currentUser == null) {
-                                debugPrint('User is not signed in, signing in anonymously');
+                                Logger.debug('User is not signed in, signing in anonymously');
                                 await AuthService.instance.signInAnonymously();
                               }
                               var handle = _controller.text.trim();
@@ -205,9 +209,9 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
-                              : const Text(
-                                  'Next',
-                                  style: TextStyle(
+                              : Text(
+                                  context.l10n.nextButton,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -220,9 +224,9 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                                   FocusScope.of(context).unfocus();
                                   routeToPage(context, const OnboardingWrapper());
                                 },
-                                child: const Text(
-                                  'Connect Omi Device',
-                                  style: TextStyle(
+                                child: Text(
+                                  context.l10n.connectOmiDevice,
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 18,

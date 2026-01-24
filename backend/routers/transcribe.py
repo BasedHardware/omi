@@ -21,6 +21,8 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
+from firebase_admin.auth import InvalidIdTokenError
+
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -48,6 +50,7 @@ from models.message_event import (
     MessageServiceStatusEvent,
     PhotoDescribedEvent,
     PhotoProcessingEvent,
+    SegmentsDeletedEvent,
     SpeakerLabelSuggestionEvent,
     TranslationEvent,
 )
@@ -88,6 +91,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
     SPEAKER_MATCH_THRESHOLD,
 )
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 
 
 router = APIRouter()
@@ -104,7 +108,7 @@ class CustomSttMode(str, Enum):
     enabled = "enabled"
 
 
-async def _listen(
+async def _stream_handler(
     websocket: WebSocket,
     uid: str,
     language: str = 'en',
@@ -118,9 +122,13 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
 ):
+    """
+    Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
+    This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
+    """
     session_id = str(uuid.uuid4())
     print(
-        '_listen',
+        '_stream_handler',
         uid,
         session_id,
         language,
@@ -138,12 +146,6 @@ async def _listen(
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
         include_speech_profile = False
-
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid, session_id)
-        return
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -620,13 +622,14 @@ async def _listen(
         photos: List[ConversationPhoto],
         finished_at: datetime,
     ):
-        starts, ends = (0, 0)
+        updated_segments: List[TranscriptSegment] = []
+        removed_ids: List[str] = []
 
         if segments:
-            conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
+            conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(conversation.transcript_segments[starts:ends])
+            _process_speaker_assigned_segments(updated_segments)
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -639,7 +642,7 @@ async def _listen(
                 conversation.source = ConversationSource.openglass
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
-        return conversation, (starts, ends)
+        return conversation, updated_segments, removed_ids
 
     # STT
     # Validate websocket_active before initiating STT
@@ -1241,10 +1244,18 @@ async def _listen(
         if not speaker_id_enabled:
             return
 
-        # Load person embeddings
+        # Load person embeddings (migrate if needed for v2 API compatibility)
         try:
             people = user_db.get_people(uid)
             for person in people:
+                # Migrate if needed for v2 API compatibility
+                if person.get('speech_samples'):
+                    person = await maybe_migrate_person_samples(uid, person)
+
+                # Skip cache if migration failed (version still <3) to avoid mixing embedding spaces
+                if person.get('speech_samples_version', 1) < 3:
+                    continue
+
                 emb = person.get('speaker_embedding')
                 if emb:
                     person_embeddings_cache[person['id']] = {
@@ -1464,18 +1475,20 @@ async def _listen(
 
                 for seg in newly_processed_segments:
                     current_session_segments[seg.id] = seg.speech_profile_processed
-                transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
+                transcript_segments, _, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
             # Update transcript segments
             conversation = Conversation(**conversation_data)
             result = _update_in_progress_conversation(conversation, transcript_segments, photos_to_process, finished_at)
             if not result or not result[0]:
                 continue
-            conversation, (starts, ends) = result
+            conversation, updated_segments, removed_ids = result
+
+            if removed_ids:
+                _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
-                updates_segments = [segment.dict() for segment in conversation.transcript_segments[starts:ends]]
-                await websocket.send_json(updates_segments)
+                await websocket.send_json([segment.dict() for segment in updated_segments])
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
@@ -1485,10 +1498,10 @@ async def _listen(
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
-                    await translate(conversation.transcript_segments[starts:ends], conversation.id)
+                    await translate(updated_segments, conversation.id)
 
                 # Speaker detection
-                for segment in conversation.transcript_segments[starts:ends]:
+                for segment in updated_segments:
                     if segment.person_id or segment.is_user or segment.id in suggested_segments:
                         continue
 
@@ -1949,7 +1962,48 @@ async def _listen(
             # Variables might not be defined if an error occurred early
             print(f"Cleanup error (safe to ignore): {e}", uid, session_id)
 
-    print("_listen ended", uid, session_id)
+    print("_stream_handler ended", uid, session_id)
+
+
+async def _listen(
+    websocket: WebSocket,
+    uid: str,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    stt_service: Optional[STTService] = None,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
+):
+    """
+    WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
+    """
+    print("_listen", uid)
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"_listen: accept error {e}", uid)
+        return
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        stt_service,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("_listen ended", uid)
 
 
 @router.websocket("/v4/listen")
@@ -1983,3 +2037,79 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
     )
+
+
+@router.websocket("/v4/web/listen")
+async def web_listen_handler(
+    websocket: WebSocket,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
+):
+    """
+    WebSocket endpoint for web browser clients using first-message authentication.
+
+    First message must be: {"type": "auth", "token": "<firebase_token>"}
+    Response: {"type": "auth_response", "success": true/false}
+    """
+    print("web_listen_handler")
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"web_listen_handler: accept error {e}")
+        return
+
+    # Wait for auth message with timeout
+    try:
+        first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Auth timeout")
+        return
+    except WebSocketDisconnect:
+        return
+
+    # Authenticate via first message
+    try:
+        uid = auth.get_current_user_uid_from_ws_message(first_message)
+    except ValueError as e:
+        await websocket.close(code=1008, reason=str(e))
+        return
+    except InvalidIdTokenError:
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    except Exception as e:
+        print(f"web_listen_handler: auth error {e}")
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Auth error")
+        return
+
+    # Send success response
+    await websocket.send_json({"type": "auth_response", "success": True})
+    print("web_listen_handler authenticated", uid)
+
+    # Proceed with streaming (websocket already accepted, uid already validated)
+    custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
+
+    await _stream_handler(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+    print("web_listen_handler ended", uid)

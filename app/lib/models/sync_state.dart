@@ -1,5 +1,5 @@
-import 'package:omi/services/wals.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/wals.dart';
 
 enum SyncStatus {
   idle,
@@ -9,6 +9,35 @@ enum SyncStatus {
   error,
 }
 
+extension SyncMethodExtension on SyncMethod {
+  String get displayName {
+    switch (this) {
+      case SyncMethod.ble:
+        return 'Bluetooth';
+      case SyncMethod.wifi:
+        return 'Fast Transfer';
+    }
+  }
+
+  String get shortName {
+    switch (this) {
+      case SyncMethod.ble:
+        return 'BLE';
+      case SyncMethod.wifi:
+        return 'WiFi';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case SyncMethod.ble:
+        return 'Syncing via Bluetooth';
+      case SyncMethod.wifi:
+        return 'Syncing via WiFi';
+    }
+  }
+}
+
 class SyncState {
   final SyncStatus status;
   final double progress;
@@ -16,6 +45,7 @@ class SyncState {
   final Wal? failedWal;
   final List<SyncedConversationPointer> syncedConversations;
   final double? speedKBps; // Download speed in KB/s
+  final SyncMethod? syncMethod; // Current sync method (BLE or WiFi)
 
   const SyncState({
     this.status = SyncStatus.idle,
@@ -24,6 +54,7 @@ class SyncState {
     this.failedWal,
     this.syncedConversations = const [],
     this.speedKBps,
+    this.syncMethod,
   });
 
   SyncState copyWith({
@@ -33,6 +64,8 @@ class SyncState {
     Wal? failedWal,
     List<SyncedConversationPointer>? syncedConversations,
     double? speedKBps,
+    SyncMethod? syncMethod,
+    bool clearSyncMethod = false,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -41,6 +74,7 @@ class SyncState {
       failedWal: failedWal,
       syncedConversations: syncedConversations ?? this.syncedConversations,
       speedKBps: speedKBps,
+      syncMethod: clearSyncMethod ? null : (syncMethod ?? this.syncMethod),
     );
   }
 
@@ -57,13 +91,15 @@ class SyncState {
         errorMessage: null,
         failedWal: null,
         syncedConversations: [],
+        clearSyncMethod: true,
       );
 
-  SyncState toSyncing({double progress = 0.0, double? speedKBps}) => copyWith(
+  SyncState toSyncing({double progress = 0.0, double? speedKBps, SyncMethod? syncMethod}) => copyWith(
         status: SyncStatus.syncing,
         progress: progress,
         errorMessage: null,
         speedKBps: speedKBps,
+        syncMethod: syncMethod,
       );
 
   SyncState toFetchingConversations() => copyWith(

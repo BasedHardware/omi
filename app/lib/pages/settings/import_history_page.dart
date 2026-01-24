@@ -3,12 +3,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/imports.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 class ImportHistoryPage extends StatefulWidget {
   const ImportHistoryPage({super.key});
@@ -47,7 +50,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         _startPollingIfNeeded();
       }
     } catch (e) {
-      debugPrint('Error loading import jobs: $e');
+      Logger.debug('Error loading import jobs: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -80,7 +83,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         }
       }
     } catch (e) {
-      debugPrint('Error refreshing jobs: $e');
+      Logger.debug('Error refreshing jobs: $e');
     }
   }
 
@@ -90,14 +93,14 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       setState(() => _isUploading = true);
 
       // Pick ZIP file
-      debugPrint('Opening file picker for ZIP...');
+      Logger.debug('Opening file picker for ZIP...');
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip'],
       );
 
       if (result == null || result.files.isEmpty) {
-        debugPrint('User cancelled file picker');
+        Logger.debug('User cancelled file picker');
         if (mounted) {
           setState(() => _isUploading = false);
         }
@@ -105,7 +108,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       }
 
       final filePath = result.files.single.path;
-      debugPrint('Selected file path: $filePath');
+      Logger.debug('Selected file path: $filePath');
 
       if (filePath == null) {
         if (mounted) {
@@ -125,9 +128,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final file = File(filePath);
 
       // Start import
-      debugPrint('Starting Limitless import...');
+      Logger.debug('Starting Limitless import...');
       final response = await startLimitlessImport(file);
-      debugPrint('Import response: ${response?.jobId}');
+      Logger.debug('Import response: ${response?.jobId}');
 
       if (mounted) {
         setState(() => _isUploading = false);
@@ -174,24 +177,24 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         }
       }
     } on PlatformException catch (e) {
-      debugPrint('FilePicker PlatformException: ${e.code} - ${e.message}');
+      Logger.debug('FilePicker PlatformException: ${e.code} - ${e.message}');
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening file picker: ${e.message}'),
+            content: Text(context.l10n.importErrorOpeningFilePicker(e.message ?? '')),
             backgroundColor: Colors.red.shade700,
           ),
         );
       }
     } catch (e, stackTrace) {
-      debugPrint('Import error: $e');
-      debugPrint('Stack trace: $stackTrace');
+      Logger.debug('Import error: $e');
+      Logger.debug('Stack trace: $stackTrace');
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(context.l10n.importErrorGeneric(e.toString())),
             backgroundColor: Colors.red.shade700,
           ),
         );
@@ -205,12 +208,12 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Delete All Limitless Conversations?',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.deleteAllLimitlessConversations,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Text(
-          'This will permanently delete all conversations imported from Limitless. This action cannot be undone.',
+          context.l10n.deleteAllLimitlessWarning,
           style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
         actions: [
@@ -255,7 +258,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 12),
-                  Expanded(child: Text('Deleted $deletedCount Limitless conversations')),
+                  Expanded(child: Text(context.l10n.deletedLimitlessConversations(deletedCount))),
                 ],
               ),
               backgroundColor: Colors.green.shade700,
@@ -266,11 +269,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Failed to delete conversations')),
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(context.l10n.failedToDeleteConversations)),
                 ],
               ),
               backgroundColor: Colors.red.shade700,
@@ -348,7 +351,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'Coming Soon',
+                            context.l10n.comingSoon,
                             style: TextStyle(
                               color: Colors.grey.shade400,
                               fontSize: 10,
@@ -415,7 +418,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         _buildImportSourceCard(
           name: 'Limitless',
           logoPath: 'assets/competitor-logos/limitless-logo.jpg',
-          description: 'Select the .zip file to import!',
+          description: context.l10n.selectZipFileToImport,
           isAvailable: true,
           onTap: _isUploading ? () {} : _startLimitlessImport,
         ),
@@ -441,7 +444,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  'Other devices coming soon',
+                  context.l10n.otherDevicesComingSoon,
                   style: TextStyle(
                     color: Colors.grey.shade500,
                     fontSize: 14,
@@ -465,22 +468,22 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       case ImportJobStatus.pending:
         statusIcon = Icons.hourglass_empty;
         statusColor = Colors.orange;
-        statusText = 'Pending';
+        statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
         statusIcon = Icons.sync;
         statusColor = Colors.blue;
-        statusText = 'Processing';
+        statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
         statusIcon = Icons.done;
         statusColor = Colors.green;
-        statusText = 'Completed';
+        statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
         statusIcon = Icons.error;
         statusColor = Colors.red;
-        statusText = 'Failed';
+        statusText = context.l10n.statusFailed;
         break;
     }
 
@@ -492,11 +495,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final jobDate = DateTime(job.createdAt!.year, job.createdAt!.month, job.createdAt!.day);
 
       if (jobDate == today) {
-        dateTimeStr =
-            'Today at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
+        dateTimeStr = context.l10n.todayAtTime(
+            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
       } else if (jobDate == today.subtract(const Duration(days: 1))) {
-        dateTimeStr =
-            'Yesterday at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
+        dateTimeStr = context.l10n.yesterdayAtTime(
+            '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}');
       } else {
         dateTimeStr =
             '${job.createdAt!.day}/${job.createdAt!.month}/${job.createdAt!.year} at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
@@ -568,7 +571,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${job.conversationsCreated} conversations',
+                        context.l10n.nConversations(job.conversationsCreated!),
                         style: TextStyle(
                           color: Colors.green.shade400,
                           fontSize: 12,
@@ -589,13 +592,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               final estimatedSeconds = (remainingFiles * 0.5).ceil(); // ~0.5 seconds per file (light import)
               String estimatedTime;
               if (estimatedSeconds < 60) {
-                estimatedTime = 'Less than a minute';
+                estimatedTime = context.l10n.lessThanAMinute;
               } else if (estimatedSeconds < 3600) {
                 final minutes = (estimatedSeconds / 60).ceil();
-                estimatedTime = '~$minutes minute${minutes == 1 ? '' : 's'}';
+                estimatedTime = context.l10n.estimatedMinutes(minutes);
               } else {
                 final hours = (estimatedSeconds / 3600).ceil();
-                estimatedTime = '~$hours hour${hours == 1 ? '' : 's'}';
+                estimatedTime = context.l10n.estimatedHours(hours);
               }
 
               return Column(
@@ -605,7 +608,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Estimated: $estimatedTime remaining',
+                        context.l10n.estimatedTimeRemaining(estimatedTime),
                         style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                       ),
                       Text(
@@ -730,11 +733,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Always show the header
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Text(
-            'Import History',
-            style: TextStyle(
+            context.l10n.importHistory,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -758,7 +761,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
-                    'No imports yet',
+                    context.l10n.noImportsYet,
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                   ),
                 ),
@@ -777,9 +780,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: const Text(
-          'Import Data',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.importData,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),
@@ -815,7 +818,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             child: PullDownButton(
               itemBuilder: (context) => [
                 PullDownMenuItem(
-                  title: 'Delete Imported Data',
+                  title: context.l10n.deleteImportedData,
                   iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                   onTap: () {
                     _showDeleteLimitlessDialog();

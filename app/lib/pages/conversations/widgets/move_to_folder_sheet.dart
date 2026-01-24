@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class MoveToFolderSheet extends StatelessWidget {
   final String conversationId;
@@ -47,9 +50,9 @@ class MoveToFolderSheet extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Move to Folder',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.moveToFolder,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: ResponsiveHelper.textPrimary,
@@ -69,12 +72,12 @@ class MoveToFolderSheet extends StatelessWidget {
 
               // Folder list
               if (provider.folders.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(24),
+                Padding(
+                  padding: const EdgeInsets.all(24),
                   child: Center(
                     child: Text(
-                      'No folders available',
-                      style: TextStyle(color: ResponsiveHelper.textTertiary),
+                      context.l10n.noFoldersAvailable,
+                      style: const TextStyle(color: ResponsiveHelper.textTertiary),
                     ),
                   ),
                 )

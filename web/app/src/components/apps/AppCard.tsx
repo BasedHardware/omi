@@ -46,7 +46,7 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
 
   return (
     <Link
-      href={`/apps/${app.id}`}
+      href={`/my-apps/${app.id}`}
       className={cn(
         'noise-overlay block p-4 rounded-xl',
         'bg-white/[0.02] border border-white/[0.06]',

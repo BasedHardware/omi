@@ -1,8 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Desktop multi-goal widget supporting up to 3 goals with minimalistic UI
 class DesktopGoalsWidget extends StatefulWidget {
@@ -15,17 +20,35 @@ class DesktopGoalsWidget extends StatefulWidget {
 class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBindingObserver {
   List<Goal> _goals = [];
   bool _isLoading = true;
-  
+
   static const String _goalsStorageKey = 'goals_tracker_local_goals';
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
-  
+
   // Available emojis for goals
   static const List<String> _availableEmojis = [
-    '🎯', '💪', '📚', '💰', '🏃', '🧘', '💡', '🔥', '⭐', '🚀',
-    '💎', '🏆', '📈', '❤️', '🎨', '🎵', '✈️', '🏠', '🌱', '⏰',
+    '🎯',
+    '💪',
+    '📚',
+    '💰',
+    '🏃',
+    '🧘',
+    '💡',
+    '🔥',
+    '⭐',
+    '🚀',
+    '💎',
+    '🏆',
+    '📈',
+    '❤️',
+    '🎨',
+    '🎵',
+    '✈️',
+    '🏠',
+    '🌱',
+    '⏰',
   ];
-  
+
   Map<String, String> _goalEmojis = {};
   String _selectedEmoji = '🎯';
 
@@ -61,15 +84,15 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
-      
+
       if (emojisJson != null) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
         _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
       }
-      
+
       // Fetch goals from backend (source of truth for cross-device sync)
       final backendGoals = await getAllGoals();
-      
+
       if (backendGoals.isNotEmpty && mounted) {
         setState(() {
           _goals = backendGoals;
@@ -92,7 +115,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
               return;
             }
           } catch (e) {
-            debugPrint('[GOALS] Error parsing local goals: $e');
+            Logger.debug('[GOALS] Error parsing local goals: $e');
           }
         }
         if (mounted) {
@@ -100,7 +123,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
         }
       }
     } catch (e) {
-      debugPrint('[GOALS] Error loading goals: $e');
+      Logger.debug('[GOALS] Error loading goals: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -113,16 +136,29 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
     } catch (e) {
-      debugPrint('[GOALS] Error saving goals: $e');
+      Logger.debug('[GOALS] Error saving goals: $e');
     }
   }
-  
+
   String _getSmartEmoji(String title) {
     final lowerTitle = title.toLowerCase();
-    
+
     final Map<List<String>, String> keywordMap = {
       ['revenue', 'money', 'income', 'profit', 'sales', '\$', 'dollar', 'earn']: '💰',
-      ['users', 'customers', 'clients', 'subscribers', 'followers', 'growth', 'million', '1m', '10k', '100k', 'mrr', 'arr']: '🚀',
+      [
+        'users',
+        'customers',
+        'clients',
+        'subscribers',
+        'followers',
+        'growth',
+        'million',
+        '1m',
+        '10k',
+        '100k',
+        'mrr',
+        'arr'
+      ]: '🚀',
       ['startup', 'launch', 'business', 'company']: '🏆',
       ['invest', 'stock', 'crypto', 'trading']: '📈',
       ['workout', 'gym', 'exercise', 'lift', 'muscle', 'strength', 'pushup', 'pullup']: '💪',
@@ -156,7 +192,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       ['grow', 'improve', 'better', 'progress']: '🌱',
       ['star', 'success', 'excellent']: '⭐',
     };
-    
+
     for (final entry in keywordMap.entries) {
       for (final keyword in entry.key) {
         if (lowerTitle.contains(keyword)) {
@@ -164,10 +200,10 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
         }
       }
     }
-    
+
     return '🎯';
   }
-  
+
   String _getGoalEmoji(String goalId) {
     return _goalEmojis[goalId] ?? '🎯';
   }
@@ -176,7 +212,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximum $_maxGoals goals allowed'),
+          content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -202,7 +238,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
   void _showGoalDialog(Goal? existingGoal) {
     final isNew = existingGoal == null;
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -210,7 +246,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           backgroundColor: ResponsiveHelper.backgroundSecondary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
-            isNew ? 'Add Goal' : 'Edit Goal',
+            isNew ? context.l10n.addGoal : context.l10n.editGoal,
             style: const TextStyle(
               color: ResponsiveHelper.textPrimary,
               fontSize: 18,
@@ -226,8 +262,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 // Emoji selector (only for editing)
                 if (!isNew) ...[
                   Text(
-                    'Icon',
-                    style: TextStyle(
+                    context.l10n.icon,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textTertiary,
                       fontSize: 12,
                     ),
@@ -252,13 +288,11 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                               height: 40,
                               margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
-                                color: isSelected 
+                                color: isSelected
                                     ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
                                     : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
                                 borderRadius: BorderRadius.circular(10),
-                                border: isSelected 
-                                    ? Border.all(color: ResponsiveHelper.purplePrimary, width: 2)
-                                    : null,
+                                border: isSelected ? Border.all(color: ResponsiveHelper.purplePrimary, width: 2) : null,
                               ),
                               child: Center(
                                 child: Text(emoji, style: const TextStyle(fontSize: 20)),
@@ -273,8 +307,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 ],
                 // Title field
                 Text(
-                  'Goal title',
-                  style: TextStyle(
+                  context.l10n.goalTitle,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textTertiary,
                     fontSize: 12,
                   ),
@@ -302,8 +336,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Current',
-                            style: TextStyle(
+                            context.l10n.current,
+                            style: const TextStyle(
                               color: ResponsiveHelper.textTertiary,
                               fontSize: 12,
                             ),
@@ -332,8 +366,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Target',
-                            style: TextStyle(
+                            context.l10n.target,
+                            style: const TextStyle(
                               color: ResponsiveHelper.textTertiary,
                               fontSize: 12,
                             ),
@@ -371,13 +405,13 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                 style: TextButton.styleFrom(
                   foregroundColor: ResponsiveHelper.errorColor,
                 ),
-                child: const Text('Delete'),
+                child: Text(context.l10n.delete),
               ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'Cancel',
-                style: TextStyle(color: ResponsiveHelper.textTertiary),
+                context.l10n.cancel,
+                style: const TextStyle(color: ResponsiveHelper.textTertiary),
               ),
             ),
             ElevatedButton(
@@ -392,7 +426,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: Text(isNew ? 'Add Goal' : 'Save'),
+              child: Text(isNew ? context.l10n.addGoal : context.l10n.saveGoal),
             ),
           ],
         ),
@@ -462,7 +496,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           targetValue: target,
           currentValue: current,
         );
-        
+
         if (created != null && mounted) {
           final index = _goals.indexWhere((g) => g.id == newGoal.id);
           if (index >= 0) {
@@ -477,7 +511,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
       await _saveGoalsLocally();
     } catch (e) {
-      debugPrint('[GOALS] Error saving goal: $e');
+      Logger.debug('[GOALS] Error saving goal: $e');
     }
   }
 
@@ -528,9 +562,9 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Goals',
-                style: TextStyle(
+              Text(
+                context.l10n.goals,
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -565,8 +599,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                             Icon(Icons.add_rounded, size: 16, color: ResponsiveHelper.textTertiary),
                             const SizedBox(width: 8),
                             Text(
-                              'Tap to add a goal',
-                              style: TextStyle(
+                              context.l10n.tapToAddGoal,
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: ResponsiveHelper.textTertiary,
                               ),

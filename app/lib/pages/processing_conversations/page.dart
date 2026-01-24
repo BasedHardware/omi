@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ProcessingConversationPage extends StatefulWidget {
   final ServerConversation conversation;
@@ -74,7 +77,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                 const SizedBox(width: 4),
                 Text(hasPhotos ? "📸" : "🎙️"),
                 const SizedBox(width: 4),
-                const Expanded(child: Text("In progress")),
+                Expanded(child: Text(context.l10n.inProgress)),
               ],
             ),
           ),
@@ -90,12 +93,12 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                 tabs: [
                   Tab(
                     text: convoSource == ConversationSource.openglass
-                        ? 'Photos'
+                        ? context.l10n.photos
                         : convoSource == ConversationSource.screenpipe
-                            ? 'Raw Data'
-                            : 'Content',
+                            ? context.l10n.rawData
+                            : context.l10n.content,
                   ),
-                  const Tab(text: 'Summary')
+                  Tab(text: context.l10n.summary)
                 ],
                 indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
               ),
@@ -114,10 +117,10 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                             getTranscriptWidget(
                                 false, widget.conversation.transcriptSegments, widget.conversation.photos, null),
                           if (!hasPhotos && widget.conversation.transcriptSegments.isEmpty)
-                            const Column(
+                            Column(
                               children: [
-                                SizedBox(height: 80),
-                                Center(child: Text("No content to display")),
+                                const SizedBox(height: 80),
+                                Center(child: Text(context.l10n.noContentToDisplay)),
                               ],
                             ),
                           const SizedBox(height: 32),
@@ -131,7 +134,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16.0),
                               child: Text(
-                                widget.conversation.transcriptSegments.isEmpty ? "No summary" : "Processing",
+                                widget.conversation.transcriptSegments.isEmpty ? context.l10n.noSummary : context.l10n.statusProcessing,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontSize: 16),
                               ),

@@ -13,6 +13,8 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
+from utils.speaker_sample import verify_and_transcribe_sample
+from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 
 
@@ -248,7 +250,13 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
-        # Check current sample count once
+        # Run lazy migration for samples before checking count
+        # (migration may drop invalid samples, freeing up space)
+        person = users_db.get_person(uid, person_id)
+        if person:
+            person = await maybe_migrate_person_samples(uid, person)
+
+        # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 1:
             print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
@@ -400,12 +408,24 @@ async def extract_speaker_samples(
                 )
                 continue
 
+            # Get expected text from segment for comparison
+            expected_text = seg.get('text', '')
+
+            # Convert PCM to WAV for Deepgram
+            wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
+
+            # Verify sample quality and get transcript using centralized function
+            transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
+            if not is_valid:
+                print(f"Sample failed quality check: {reason}", uid, conversation_id)
+                continue  # Try next segment
+
             # Upload and store
             path = await asyncio.to_thread(
                 upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = users_db.add_person_speech_sample(uid, person_id, path)
+            success = users_db.add_person_speech_sample(uid, person_id, path, transcript=transcript)
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
@@ -415,9 +435,8 @@ async def extract_speaker_samples(
                     conversation_id,
                 )
 
-                # Extract and store speaker embedding
+                # Extract and store speaker embedding (reuse wav_bytes from verification)
                 try:
-                    wav_bytes = _pcm_to_wav_bytes(sample_audio, sample_rate)
                     embedding = await asyncio.to_thread(extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()

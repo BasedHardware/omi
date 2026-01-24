@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 // Bold color palette - matching wrapped_2025_page.dart
 class WrappedColors {
@@ -145,15 +146,15 @@ class YearInNumbersShareTemplate extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ShareBadge(
-            text: 'Top $percentile% User',
+            text: context.l10n.wrappedTopPercentUser(percentile.toString()),
             badgeColor: WrappedColors.mint,
           ),
           const SizedBox(height: 80),
-          _buildStat(_formatNumber(totalMinutes), 'minutes'),
+          _buildStat(_formatNumber(totalMinutes), context.l10n.wrappedMinutes),
           const SizedBox(height: 60),
-          _buildStat(_formatNumber(totalConvs), 'conversations'),
+          _buildStat(_formatNumber(totalConvs), context.l10n.wrappedConversations),
           const SizedBox(height: 60),
-          _buildStat(_formatNumber(daysActive), 'days active'),
+          _buildStat(_formatNumber(daysActive), context.l10n.wrappedDaysActive),
         ],
       ),
     );
@@ -205,9 +206,9 @@ class TopCategoryShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: 'You Talked About',
-            badgeColor: Color(0xFF2A9D8F),
+          ShareBadge(
+            text: context.l10n.wrappedYouTalkedAbout,
+            badgeColor: const Color(0xFF2A9D8F),
           ),
           const SizedBox(height: 60),
           // Mini pie chart representation
@@ -319,8 +320,8 @@ class ActionsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: 'Action Items',
+          ShareBadge(
+            text: context.l10n.wrappedActionItems,
             badgeColor: WrappedColors.indigo,
             emoji: '✓',
           ),
@@ -335,9 +336,9 @@ class ActionsShareTemplate extends StatelessWidget {
               decoration: TextDecoration.none,
             ),
           ),
-          const Text(
-            'tasks created',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedTasksCreated,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 48,
               fontWeight: FontWeight.w600,
@@ -355,9 +356,9 @@ class ActionsShareTemplate extends StatelessWidget {
               decoration: TextDecoration.none,
             ),
           ),
-          const Text(
-            'completed',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedCompleted,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 48,
               fontWeight: FontWeight.w600,
@@ -373,7 +374,7 @@ class ActionsShareTemplate extends StatelessWidget {
               borderRadius: BorderRadius.circular(40),
             ),
             child: Text(
-              '$completionRate% completion rate',
+              context.l10n.wrappedCompletionRate(completionRate.toString()),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 36,
@@ -511,7 +512,7 @@ class BestMomentsShareTemplate extends StatelessWidget {
       days: moments,
       headerLine1: 'Best',
       headerLine2: 'Moments',
-      badgeText: 'Best Moments',
+      badgeText: context.l10n.wrappedBestMoments,
       badgeColor: WrappedColors.coral,
     );
   }
@@ -535,9 +536,9 @@ class MyBuddiesShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: 'My Buddies',
-            badgeColor: Color(0xFF6B5B95),
+          ShareBadge(
+            text: context.l10n.wrappedMyBuddies,
+            badgeColor: const Color(0xFF6B5B95),
             emoji: '👥',
           ),
           const SizedBox(height: 50),
@@ -645,16 +646,16 @@ class ObsessionsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: "Couldn't Stop Talking About",
+          ShareBadge(
+            text: context.l10n.wrappedCouldntStopTalkingAbout,
             badgeColor: WrappedColors.coral,
           ),
           const SizedBox(height: 50),
-          _buildItem('📺', 'SHOW', show),
-          _buildItem('🎬', 'MOVIE', movie),
-          _buildItem('📚', 'BOOK', book),
-          _buildItem('⭐', 'CELEBRITY', celebrity),
-          _buildItem('🍕', 'FOOD', food),
+          _buildItem('📺', context.l10n.wrappedShow, show),
+          _buildItem('🎬', context.l10n.wrappedMovie, movie),
+          _buildItem('📚', context.l10n.wrappedBook, book),
+          _buildItem('⭐', context.l10n.wrappedCelebrity, celebrity),
+          _buildItem('🍕', context.l10n.wrappedFood, food),
         ],
       ),
     );
@@ -726,9 +727,9 @@ class MovieRecsShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: 'Movie Recs For Friends',
-            badgeColor: Color(0xFF1a0a2e),
+          ShareBadge(
+            text: context.l10n.wrappedMovieRecs,
+            badgeColor: const Color(0xFF1a0a2e),
             emoji: '🎬',
           ),
           const SizedBox(height: 50),
@@ -804,18 +805,18 @@ class StruggleShareTemplate extends StatelessWidget {
             style: TextStyle(fontSize: 100, decoration: TextDecoration.none),
           ),
           const SizedBox(height: 40),
-          const Text(
-            'Biggest',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedBiggest,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 48,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
             ),
           ),
-          const Text(
-            'Struggle',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedStruggle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 100,
               fontWeight: FontWeight.w900,
@@ -837,7 +838,7 @@ class StruggleShareTemplate extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'But you pushed through 💪',
+            context.l10n.wrappedButYouPushedThrough,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 32,
@@ -874,18 +875,18 @@ class BiggestWinShareTemplate extends StatelessWidget {
             style: TextStyle(fontSize: 100, decoration: TextDecoration.none),
           ),
           const SizedBox(height: 40),
-          const Text(
-            'Biggest',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedBiggest,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 48,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
             ),
           ),
-          const Text(
-            'Win',
-            style: TextStyle(
+          Text(
+            context.l10n.wrappedWin,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 100,
               fontWeight: FontWeight.w900,
@@ -907,7 +908,7 @@ class BiggestWinShareTemplate extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'You did it! 🎉',
+            context.l10n.wrappedYouDidIt,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 32,
@@ -939,8 +940,8 @@ class TopPhrasesShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ShareBadge(
-            text: 'Top 5 Phrases',
+          ShareBadge(
+            text: context.l10n.wrappedTopPhrases,
             badgeColor: WrappedColors.orange,
             emoji: '💬',
           ),
@@ -1108,7 +1109,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'Top $percentile% User',
+                    context.l10n.wrappedTopPercentUser(percentile.toString()),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -1122,7 +1123,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
             const SizedBox(height: 30),
 
             // Stats Row
-            _buildStatsRow(),
+            _buildStatsRow(context),
             const SizedBox(height: 30),
 
             // Buddies + Obsessions Row (same height)
@@ -1130,9 +1131,9 @@ class FinalCollageShareTemplate extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: _buildBuddiesTile()),
+                  Expanded(child: _buildBuddiesTile(context)),
                   const SizedBox(width: 20),
-                  Expanded(child: _buildObsessionsTile()),
+                  Expanded(child: _buildObsessionsTile(context)),
                 ],
               ),
             ),
@@ -1143,16 +1144,16 @@ class FinalCollageShareTemplate extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: _buildStruggleTile()),
+                  Expanded(child: _buildStruggleTile(context)),
                   const SizedBox(width: 20),
-                  Expanded(child: _buildWinTile()),
+                  Expanded(child: _buildWinTile(context)),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
             // Top Phrases (vertical)
-            _buildPhrasesTile(),
+            _buildPhrasesTile(context),
 
             const Spacer(),
 
@@ -1181,7 +1182,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1191,9 +1192,9 @@ class FinalCollageShareTemplate extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem(_formatNumber(totalMinutes), 'mins'),
-          _buildStatItem(_formatNumber(totalConvs), 'convos'),
-          _buildStatItem(_formatNumber(daysActive), 'days'),
+          _buildStatItem(_formatNumber(totalMinutes), context.l10n.wrappedMins),
+          _buildStatItem(_formatNumber(totalConvs), context.l10n.wrappedConvos),
+          _buildStatItem(_formatNumber(daysActive), context.l10n.wrappedDays),
         ],
       ),
     );
@@ -1250,9 +1251,9 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildBuddiesTile() {
+  Widget _buildBuddiesTile(BuildContext context) {
     return _buildTile(
-      title: 'MY BUDDIES',
+      title: context.l10n.wrappedMyBuddiesLabel,
       color: const Color(0xFF6B5B95),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1286,9 +1287,9 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildObsessionsTile() {
+  Widget _buildObsessionsTile(BuildContext context) {
     return _buildTile(
-      title: 'OBSESSIONS',
+      title: context.l10n.wrappedObsessionsLabel,
       color: WrappedColors.coral,
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1329,7 +1330,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildStruggleTile() {
+  Widget _buildStruggleTile(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1339,13 +1340,13 @@ class FinalCollageShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Text('😤', style: TextStyle(fontSize: 28, decoration: TextDecoration.none)),
-              SizedBox(width: 12),
+              const Text('😤', style: TextStyle(fontSize: 28, decoration: TextDecoration.none)),
+              const SizedBox(width: 12),
               Text(
-                'STRUGGLE',
-                style: TextStyle(
+                context.l10n.wrappedStruggleLabel,
+                style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1371,7 +1372,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildWinTile() {
+  Widget _buildWinTile(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1381,13 +1382,13 @@ class FinalCollageShareTemplate extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Text('🏆', style: TextStyle(fontSize: 28, decoration: TextDecoration.none)),
-              SizedBox(width: 12),
+              const Text('🏆', style: TextStyle(fontSize: 28, decoration: TextDecoration.none)),
+              const SizedBox(width: 12),
               Text(
-                'WIN',
-                style: TextStyle(
+                context.l10n.wrappedWinLabel,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1413,11 +1414,11 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildPhrasesTile() {
+  Widget _buildPhrasesTile(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       child: _buildTile(
-        title: 'TOP PHRASES',
+        title: context.l10n.wrappedTopPhrasesLabel,
         color: WrappedColors.orange,
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

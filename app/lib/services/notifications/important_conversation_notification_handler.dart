@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:flutter/material.dart';
+
+import 'package:omi/main.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Event data for important conversation completion
 class ImportantConversationEvent {
@@ -41,12 +44,12 @@ class ImportantConversationNotificationHandler {
     final navigateTo = data['navigate_to'] as String?;
 
     if (conversationId == null) {
-      debugPrint('[ImportantConversationNotification] Invalid data: missing conversation_id');
+      Logger.debug('[ImportantConversationNotification] Invalid data: missing conversation_id');
       return;
     }
 
-    debugPrint('[ImportantConversationNotification] Important conversation completed: $conversationId');
-    debugPrint('[ImportantConversationNotification] Navigate to: $navigateTo');
+    Logger.debug('[ImportantConversationNotification] Important conversation completed: $conversationId');
+    Logger.debug('[ImportantConversationNotification] Navigate to: $navigateTo');
 
     // Track notification received
     MixpanelManager().importantConversationNotificationReceived(conversationId);
@@ -74,12 +77,14 @@ class ImportantConversationNotificationHandler {
     try {
       final notificationId = conversationId.hashCode;
 
+      final ctx = MyApp.navigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: 'Important Conversation',
-          body: 'You just had an important convo. Tap to share the summary with others.',
+          title: ctx?.l10n.importantConversationTitle ?? 'Important Conversation',
+          body: ctx?.l10n.importantConversationBody ??
+              'You just had an important convo. Tap to share the summary with others.',
           payload: {
             'conversation_id': conversationId,
             'navigate_to': navigateTo,
@@ -89,9 +94,9 @@ class ImportantConversationNotificationHandler {
         ),
       );
 
-      debugPrint('[ImportantConversationNotification] Showed notification for conversation: $conversationId');
+      Logger.debug('[ImportantConversationNotification] Showed notification for conversation: $conversationId');
     } catch (e) {
-      debugPrint('[ImportantConversationNotification] Error showing notification: $e');
+      Logger.debug('[ImportantConversationNotification] Error showing notification: $e');
     }
   }
 }

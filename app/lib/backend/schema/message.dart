@@ -128,7 +128,7 @@ class ServerMessage {
 
   List<MessageConversation> memories;
   bool askForNps;
-  
+
   /// User rating for this message: 1 = thumbs up, -1 = thumbs down, null = no rating
   int? rating;
 

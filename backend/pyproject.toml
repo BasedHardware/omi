@@ -1,3 +1,6 @@
 [tool.black]
 line-length = 120
 skip-string-normalization = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopEmptyConversations extends StatelessWidget {
   const DesktopEmptyConversations({super.key});
@@ -13,10 +15,10 @@ class DesktopEmptyConversations extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const OmiEmptyState(
+          OmiEmptyState(
             icon: Icons.forum_rounded,
-            title: 'No conversations yet',
-            message: 'Start capturing conversations with your Omi device to see them here.',
+            title: context.l10n.noConversationsYet,
+            message: context.l10n.startCapturingConversations,
             iconSize: 48,
             iconPadding: 24,
             color: ResponsiveHelper.purplePrimary,
@@ -35,18 +37,21 @@ class DesktopEmptyConversations extends StatelessWidget {
             child: Column(
               children: [
                 _buildTipItem(
+                  context,
                   icon: Icons.phone_android_rounded,
-                  text: 'Use your mobile app to capture audio',
+                  text: context.l10n.useMobileAppToCapture,
                 ),
                 const SizedBox(height: 16),
                 _buildTipItem(
+                  context,
                   icon: Icons.auto_awesome_rounded,
-                  text: 'Conversations are processed automatically',
+                  text: context.l10n.conversationsProcessedAutomatically,
                 ),
                 const SizedBox(height: 16),
                 _buildTipItem(
+                  context,
                   icon: Icons.insights_rounded,
-                  text: 'Get insights and summaries instantly',
+                  text: context.l10n.getInsightsInstantly,
                 ),
               ],
             ),
@@ -56,7 +61,8 @@ class DesktopEmptyConversations extends StatelessWidget {
     );
   }
 
-  Widget _buildTipItem({
+  Widget _buildTipItem(
+    BuildContext context, {
     required IconData icon,
     required String text,
   }) {

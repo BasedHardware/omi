@@ -358,16 +358,16 @@ export function RecapDetailPanel({
     return Array.from(ids);
   }, [recap]);
 
-  // Prefetch all conversations in background when recap loads
+  // Prefetch all conversations in parallel when recap loads
   // This warms the API cache so child components get instant data
   useEffect(() => {
     if (allConversationIds.length === 0) return;
 
-    // Fire and forget - just warm the cache
+    // Fire all requests in parallel instead of sequentially
     // The API-level cache will deduplicate and cache results
-    allConversationIds.forEach(id => {
-      getConversation(id).catch(() => {}); // Ignore errors silently
-    });
+    Promise.all(
+      allConversationIds.map(id => getConversation(id).catch(() => {}))
+    );
   }, [allConversationIds]);
 
   // Handle click on source conversation - opens preview panel

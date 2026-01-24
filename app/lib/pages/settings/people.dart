@@ -1,15 +1,17 @@
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/functions.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class UserPeoplePage extends StatelessWidget {
   const UserPeoplePage({super.key});
@@ -36,7 +38,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
     }.withPostFrameCallback();
   }
 
-  Widget _showPersonDialogForm(formKey, nameController) {
+  Widget _showPersonDialogForm(BuildContext context, formKey, nameController) {
     return Platform.isIOS
         ? Material(
             color: Colors.transparent,
@@ -53,12 +55,12 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                 child: CupertinoTextFormFieldRow(
                   padding: const EdgeInsets.only(top: 16),
                   controller: nameController,
-                  placeholder: 'Name',
+                  placeholder: context.l10n.name,
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
                   placeholderStyle: const TextStyle(color: Colors.white),
                   style: const TextStyle(color: Colors.white),
-                  validator: _nameValidator,
+                  validator: _nameValidator(context),
                 ),
               ),
             ),
@@ -70,24 +72,26 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               keyboardType: TextInputType.name,
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
-                labelText: 'Name',
+                labelText: context.l10n.name,
                 labelStyle: const TextStyle(color: Colors.white),
                 focusColor: Colors.white,
                 focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
               ),
-              validator: _nameValidator,
+              validator: _nameValidator(context),
             ),
           );
   }
 
-  String? _nameValidator(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter a name';
-    }
-    if (value.length < 2 || value.length > 40) {
-      return 'Name must be between 2 and 40 characters';
-    }
-    return null;
+  String? Function(String?) _nameValidator(BuildContext context) {
+    return (String? value) {
+      if (value == null || value.isEmpty) {
+        return context.l10n.pleaseEnterName;
+      }
+      if (value.length < 2 || value.length > 40) {
+        return context.l10n.nameMustBeBetweenCharacters;
+      }
+      return null;
+    };
   }
 
   List<Widget> _showPersonDialogActions(
@@ -149,12 +153,12 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
       builder: (BuildContext context) => Platform.isIOS
           ? CupertinoAlertDialog(
               title: Text(person == null ? context.l10n.addNewPerson : context.l10n.editPerson),
-              content: _showPersonDialogForm(formKey, nameController),
+              content: _showPersonDialogForm(context, formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             )
           : AlertDialog(
               title: Text(person == null ? context.l10n.addNewPerson : context.l10n.editPerson),
-              content: _showPersonDialogForm(formKey, nameController),
+              content: _showPersonDialogForm(context, formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             ),
     );
@@ -172,8 +176,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         context,
         () => Navigator.pop(context, false),
         () => Navigator.pop(context, true),
-        'Delete Sample?',
-        'Are you sure you want to delete ${person.name}\'s sample?',
+        context.l10n.deleteSampleQuestion,
+        context.l10n.deleteSampleConfirmation(person.name),
         okButtonText: context.l10n.confirm,
       ),
     );
@@ -190,8 +194,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         context,
         () => Navigator.pop(context, false),
         () => Navigator.pop(context, true),
-        'Confirm Deletion',
-        'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.',
+        context.l10n.confirmDeletion,
+        context.l10n.deletePersonConfirmation(person.name),
         okButtonText: context.l10n.confirm,
       ),
     );
@@ -225,9 +229,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                             () => Navigator.pop(context),
                             () => Navigator.pop(context),
                             singleButton: true,
-                            'How it works?',
-                            'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!',
-                            okButtonText: 'Got it',
+                            context.l10n.howItWorksTitle,
+                            context.l10n.howPeopleWorks,
+                            okButtonText: context.l10n.gotIt,
                           ),
                         );
                       })
@@ -296,11 +300,31 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                             ),
                                             onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title: Text(j == 0
-                                              ? context.l10n.speechProfile
-                                              : context.l10n.sampleNumber(j)),
+                                          title:
+                                              Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
                                           onTap: () => _confirmDeleteSample(index, person, j, provider),
-                                          subtitle: Text('Tap to delete'),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (person.speechSampleTranscripts != null &&
+                                                  j < person.speechSampleTranscripts!.length &&
+                                                  person.speechSampleTranscripts![j].isNotEmpty)
+                                                Padding(
+                                                  padding: const EdgeInsets.only(bottom: 4),
+                                                  child: Text(
+                                                    '"${person.speechSampleTranscripts![j]}"',
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontStyle: FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ),
+                                              Text(
+                                                context.l10n.tapToDelete,
+                                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                              ),
+                                            ],
+                                          ),
                                         )),
                                   ],
                                 ),

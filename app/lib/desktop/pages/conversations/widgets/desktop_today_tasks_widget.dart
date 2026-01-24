@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 /// Desktop widget showing top 3 today's tasks with "Show all ->" button
 class DesktopTodayTasksWidget extends StatelessWidget {
@@ -52,9 +55,9 @@ class DesktopTodayTasksWidget extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Today',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.today,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -68,8 +71,8 @@ class DesktopTodayTasksWidget extends StatelessWidget {
                         context.read<HomeProvider>().setIndex(3);
                       },
                       child: Text(
-                        'Show all →',
-                        style: TextStyle(
+                        context.l10n.showAll,
+                        style: const TextStyle(
                           color: ResponsiveHelper.textTertiary,
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -85,9 +88,9 @@ class DesktopTodayTasksWidget extends StatelessWidget {
                 child: displayTasks.isEmpty
                     ? Center(
                         child: Text(
-                          'No tasks for today.\nAsk Omi for more tasks or create manually.',
+                          context.l10n.noTasksForToday,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: ResponsiveHelper.textTertiary,
                             fontSize: 13,
                           ),
@@ -95,9 +98,11 @@ class DesktopTodayTasksWidget extends StatelessWidget {
                       )
                     : ListView(
                         padding: EdgeInsets.zero,
-                        children: displayTasks.map(
-                          (task) => _TaskItem(task: task, provider: provider),
-                        ).toList(),
+                        children: displayTasks
+                            .map(
+                              (task) => _TaskItem(task: task, provider: provider),
+                            )
+                            .toList(),
                       ),
               ),
             ],
@@ -135,9 +140,7 @@ class _TaskItemState extends State<_TaskItem> {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: _isHovered
-                ? ResponsiveHelper.backgroundTertiary.withOpacity(0.5)
-                : Colors.transparent,
+            color: _isHovered ? ResponsiveHelper.backgroundTertiary.withOpacity(0.5) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -151,27 +154,19 @@ class _TaskItemState extends State<_TaskItem> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: widget.task.completed
-                        ? ResponsiveHelper.purplePrimary
-                        : ResponsiveHelper.textTertiary,
+                    color: widget.task.completed ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
                     width: 2,
                   ),
-                  color: widget.task.completed
-                      ? ResponsiveHelper.purplePrimary
-                      : Colors.transparent,
+                  color: widget.task.completed ? ResponsiveHelper.purplePrimary : Colors.transparent,
                 ),
-                child: widget.task.completed
-                    ? const Icon(Icons.check, size: 12, color: Colors.white)
-                    : null,
+                child: widget.task.completed ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
               ),
               // Task text
               Expanded(
                 child: Text(
                   widget.task.description,
                   style: TextStyle(
-                    color: widget.task.completed
-                        ? ResponsiveHelper.textTertiary
-                        : ResponsiveHelper.textPrimary,
+                    color: widget.task.completed ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
                     fontSize: 14,
                     decoration: widget.task.completed ? TextDecoration.lineThrough : null,
                     height: 1.4,

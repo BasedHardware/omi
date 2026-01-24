@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopMessageActionMenu extends StatelessWidget {
@@ -56,25 +58,25 @@ class DesktopMessageActionMenu extends StatelessWidget {
 
             // Action buttons with desktop styling
             _buildActionButton(
-              title: 'Copy',
+              title: context.l10n.copy,
               icon: Icons.copy_outlined,
               onTap: onCopy,
             ),
             const SizedBox(height: 4),
             _buildActionButton(
-              title: 'Select Text',
+              title: context.l10n.selectText,
               icon: Icons.text_fields_outlined,
               onTap: onSelectText,
             ),
             const SizedBox(height: 4),
             _buildActionButton(
-              title: 'Share',
+              title: context.l10n.share,
               icon: Icons.share_outlined,
               onTap: onShare,
             ),
             const SizedBox(height: 4),
             _buildActionButton(
-              title: 'Report',
+              title: context.l10n.report,
               icon: Icons.report_outlined,
               onTap: onReport,
               isDestructive: true,

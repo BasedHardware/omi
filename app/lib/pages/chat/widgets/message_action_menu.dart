@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'markdown_message_widget.dart';
 
@@ -48,29 +49,29 @@ class MessageActionMenu extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _buildActionButton(
-              title: 'Copy',
+              title: context.l10n.copy,
               icon: Icons.copy,
               onTap: onCopy,
             ),
             _buildActionButton(
-              title: 'Select Text',
+              title: context.l10n.selectText,
               icon: Icons.description_outlined,
               onTap: onSelectText,
             ),
             _buildActionButton(
-              title: 'Share',
+              title: context.l10n.share,
               icon: Icons.share,
               onTap: onShare,
             ),
             if (onThumbsDown != null) ...[
               _buildActionButton(
-                title: 'Not Helpful',
+                title: context.l10n.notHelpful,
                 icon: Icons.thumb_down_alt_outlined,
                 onTap: onThumbsDown,
               ),
             ],
             _buildActionButton(
-              title: 'Report',
+              title: context.l10n.report,
               icon: Icons.report_gmailerrorred,
               onTap: onReport,
               isDestructive: true,

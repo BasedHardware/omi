@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:shimmer/shimmer.dart';
 
 class GitHubSettingsPage extends StatefulWidget {
   const GitHubSettingsPage({super.key});
@@ -297,7 +299,7 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
                                 ),
                               if (repo.isPrivate) const SizedBox(width: 8),
                               Text(
-                                'Updated ${_formatDate(repo.updatedAt)}',
+                                context.l10n.updatedDate(_formatDate(context, repo.updatedAt)),
                                 style: const TextStyle(
                                   color: Color(0xFF8E8E93),
                                   fontSize: 12,
@@ -323,24 +325,24 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
     );
   }
 
-  String _formatDate(String dateStr) {
+  String _formatDate(BuildContext context, String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
       final now = DateTime.now();
       final difference = now.difference(date);
 
       if (difference.inDays == 0) {
-        return 'today';
+        return context.l10n.today.toLowerCase();
       } else if (difference.inDays == 1) {
-        return 'yesterday';
+        return context.l10n.yesterday.toLowerCase();
       } else if (difference.inDays < 7) {
-        return '${difference.inDays} days ago';
+        return context.l10n.daysAgo(difference.inDays);
       } else if (difference.inDays < 30) {
         final weeks = (difference.inDays / 7).floor();
-        return weeks == 1 ? '1 week ago' : '$weeks weeks ago';
+        return context.l10n.weeksAgo(weeks);
       } else {
         final months = (difference.inDays / 30).floor();
-        return months == 1 ? '1 month ago' : '$months months ago';
+        return context.l10n.monthsAgo(months);
       }
     } catch (e) {
       return dateStr;

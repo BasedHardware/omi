@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
@@ -18,7 +18,7 @@ interface MemoryListProps {
   onAccept?: (id: string) => Promise<boolean>;
   onReject?: (id: string) => Promise<boolean>;
   highlightedMemoryId?: string | null;
-  selectedIds?: Set<string>;
+  selectedIds?: string[];
   onToggleSelect?: (id: string) => void;
   // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
@@ -40,38 +40,59 @@ export function MemoryList({
   onEnterSelectionMode,
 }: MemoryListProps) {
   const [loadingMore, setLoadingMore] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Infinite scroll using IntersectionObserver
+  // Virtual scrolling setup with dynamic measurement
+  const virtualizer = useVirtualizer({
+    count: memories.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 100, // Initial estimate, will be measured dynamically
+    overscan: 5, // Render 5 extra items above/below viewport
+    gap: 12, // 12px gap between items (equivalent to gap-3)
+    measureElement: (element) => element.getBoundingClientRect().height,
+  });
+
+  // Infinite scroll - trigger when approaching end of virtual items
   useEffect(() => {
-    if (!bottomRef.current || loading || loadingMore || !hasMore) return;
+    const virtualItems = virtualizer.getVirtualItems();
+    if (!virtualItems.length) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          setLoadingMore(true);
-          onLoadMore().finally(() => {
-            setLoadingMore(false);
-          });
-        }
-      },
-      { threshold: 0.1 }
-    );
+    const lastItem = virtualItems[virtualItems.length - 1];
+    if (!lastItem) return;
 
-    observer.observe(bottomRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, onLoadMore]);
+    // Trigger load more when within 5 items of the end
+    if (
+      lastItem.index >= memories.length - 5 &&
+      hasMore &&
+      !loading &&
+      !loadingMore
+    ) {
+      setLoadingMore(true);
+      onLoadMore().finally(() => {
+        setLoadingMore(false);
+      });
+    }
+  }, [
+    memories.length,
+    hasMore,
+    loading,
+    loadingMore,
+    onLoadMore,
+    virtualizer,
+  ]);
 
   // Scroll to highlighted memory
   useEffect(() => {
     if (highlightedMemoryId) {
-      const element = document.getElementById(`memory-${highlightedMemoryId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const index = memories.findIndex((m) => m.id === highlightedMemoryId);
+      if (index !== -1) {
+        virtualizer.scrollToIndex(index, {
+          align: 'center',
+          behavior: 'smooth',
+        });
       }
     }
-  }, [highlightedMemoryId]);
+  }, [highlightedMemoryId, memories, virtualizer]);
 
   // Empty state
   if (!loading && memories.length === 0) {
@@ -88,40 +109,57 @@ export function MemoryList({
     );
   }
 
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
     <div
       ref={containerRef}
-      className="flex flex-col gap-3 overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
+      className="flex flex-col overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
       style={{ maxHeight: 'calc(100vh - 350px)' }}
     >
-      <AnimatePresence mode="popLayout">
-        {memories.map((memory) => (
-          <motion.div
-            key={memory.id}
-            layout
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.15 }}
-          >
-            <MemoryCard
-              memory={memory}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onToggleVisibility={onToggleVisibility}
-              onAccept={onAccept}
-              onReject={onReject}
-              isHighlighted={highlightedMemoryId === memory.id}
-              isSelected={selectedIds?.has(memory.id)}
-              onToggleSelect={onToggleSelect}
-              onEnterSelectionMode={onEnterSelectionMode}
-            />
-          </motion.div>
-        ))}
-      </AnimatePresence>
+      {/* Virtual scrolling container */}
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {/* Only render visible items */}
+        {virtualItems.map((virtualItem) => {
+          const memory = memories[virtualItem.index];
+          if (!memory) return null;
 
-      {/* Infinite scroll trigger */}
-      <div ref={bottomRef} className="h-1" />
+          return (
+            <div
+              key={memory.id}
+              id={`memory-${memory.id}`}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <MemoryCard
+                memory={memory}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onToggleVisibility={onToggleVisibility}
+                onAccept={onAccept}
+                onReject={onReject}
+                isHighlighted={highlightedMemoryId === memory.id}
+                isSelected={selectedIds?.includes(memory.id)}
+                onToggleSelect={onToggleSelect}
+                onEnterSelectionMode={onEnterSelectionMode}
+              />
+            </div>
+          );
+        })}
+      </div>
 
       {/* Loading indicator */}
       {(loading || loadingMore) && (
@@ -159,11 +197,6 @@ export function MemoryListSkeleton() {
             <div className="flex-1 space-y-2">
               <div className="h-4 bg-bg-quaternary rounded w-3/4" />
               <div className="h-4 bg-bg-quaternary rounded w-1/2" />
-              <div className="flex gap-2 mt-2">
-                <div className="h-5 bg-bg-quaternary rounded w-16" />
-                <div className="h-5 bg-bg-quaternary rounded w-20" />
-                <div className="h-5 bg-bg-quaternary rounded w-14" />
-              </div>
             </div>
           </div>
         </div>

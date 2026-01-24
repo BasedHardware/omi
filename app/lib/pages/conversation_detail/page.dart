@@ -1,11 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:tuple/tuple.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
-// import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -16,24 +21,25 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:tuple/tuple.dart';
-import 'package:pull_down_button/pull_down_button.dart';
-
 import 'conversation_detail_provider.dart';
+import 'test_prompts.dart';
+import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
+
+// import 'package:omi/backend/preferences.dart';
+
 // import 'share.dart';
-import 'test_prompts.dart';
 // import 'package:omi/pages/settings/developer.dart';
 // import 'package:omi/backend/http/webhooks.dart';
 
@@ -65,6 +71,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
+  bool _isDownloadingAudio = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -160,7 +167,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             tabName = 'Action Items';
             break;
           default:
-            debugPrint('Invalid tab index: ${_controller!.index}');
+            Logger.debug('Invalid tab index: ${_controller!.index}');
             selectedTab = ConversationTab.summary;
         }
         if (tabName != null) {
@@ -243,7 +250,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     showShareToContactsBottomSheet(context, provider.conversation);
   }
 
-
   String _getTabTitle(BuildContext context, ConversationTab tab) {
     switch (tab) {
       case ConversationTab.transcript:
@@ -320,6 +326,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
+      case 'download_audio':
+        await _downloadAudio(context, provider);
+        break;
       // case 'export_transcript':
       //   showShareBottomSheet(context, provider.conversation, (fn) {});
       //   break;
@@ -395,6 +404,144 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       SnackBar(content: Text(context.l10n.contentCopied)),
     );
     HapticFeedback.lightImpact();
+  }
+
+  Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isDownloadingAudio = true;
+    });
+
+    final audioFileCount = provider.conversation.audioFiles.length;
+    final startTime = DateTime.now();
+
+    // Track share start
+    MixpanelManager().audioShareStarted(
+      conversationId: provider.conversation.id,
+      audioFileCount: audioFileCount,
+    );
+
+    AudioDownloadState currentState = AudioDownloadState.preparing;
+    double currentProgress = 0.0;
+    void Function(void Function())? updateSheet;
+
+    // Show the progress sheet
+    final sheetContext = context;
+    showModalBottomSheet(
+      context: sheetContext,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          updateSheet = setState;
+          return AudioDownloadProgressSheet(
+            state: currentState,
+            progress: currentProgress,
+          );
+        },
+      ),
+    );
+
+    AudioDownloadService? service;
+    try {
+      service = AudioDownloadService();
+
+      final file = await service.downloadAndCombineAudio(
+        provider.conversation,
+        onProgress: (progress) {
+          currentProgress = progress;
+          updateSheet?.call(() {});
+        },
+        onStageChange: (stage) {
+          switch (stage) {
+            case AudioDownloadStage.preparing:
+              currentState = AudioDownloadState.preparing;
+              break;
+            case AudioDownloadStage.downloading:
+              currentState = AudioDownloadState.downloading;
+              break;
+            case AudioDownloadStage.processing:
+              currentState = AudioDownloadState.processing;
+              break;
+          }
+          updateSheet?.call(() {});
+        },
+      );
+
+      if (file != null) {
+        currentState = AudioDownloadState.success;
+        updateSheet?.call(() {});
+
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Audio: ${provider.conversation.structured.title}',
+        );
+
+        // Track successful completion
+        final durationSeconds = DateTime.now().difference(startTime).inSeconds;
+        MixpanelManager().audioShareCompleted(
+          conversationId: provider.conversation.id,
+          audioFileCount: audioFileCount,
+          wasCombined: audioFileCount > 1,
+          durationSeconds: durationSeconds,
+        );
+
+        await service.cleanup();
+      } else {
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+
+        // Track failure (no audio available)
+        MixpanelManager().audioShareFailed(
+          conversationId: provider.conversation.id,
+          errorMessage: 'No audio files available',
+        );
+      }
+    } catch (e) {
+      Logger.debug('Error downloading audio: $e');
+
+      // Track failure
+      MixpanelManager().audioShareFailed(
+        conversationId: provider.conversation.id,
+        errorMessage: e.toString(),
+      );
+
+      currentState = AudioDownloadState.error;
+      updateSheet?.call(() {});
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (mounted) {
+        Navigator.of(sheetContext).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.audioDownloadFailed),
+            action: SnackBarAction(
+              label: context.l10n.retry,
+              onPressed: () => _downloadAudio(context, provider),
+            ),
+          ),
+        );
+      }
+    } finally {
+      service?.dispose();
+      if (mounted) {
+        setState(() {
+          _isDownloadingAudio = false;
+        });
+      }
+    }
   }
 
   // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
@@ -542,7 +689,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                     }
                                   } catch (e) {
-                                    debugPrint('Failed to toggle starred status: $e');
+                                    Logger.debug('Failed to toggle starred status: $e');
                                   } finally {
                                     if (mounted) {
                                       setState(() {
@@ -690,6 +837,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                             ),
+                            if (provider.conversation.hasAudio())
+                              PullDownMenuItem(
+                                title: context.l10n.shareAudio,
+                                iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                onTap: _isDownloadingAudio
+                                    ? null
+                                    : () => _handleMenuSelection(context, 'download_audio', provider),
+                              ),
                             // PullDownMenuItem(
                             //   title: 'Trigger Integration',
                             //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
@@ -985,7 +1140,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               focusNode: _searchFocusNode,
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
-                                hintText: 'Search transcript or summary...',
+                                hintText: context.l10n.searchTranscriptOrSummary,
                                 hintStyle: TextStyle(color: Colors.grey[400]),
                                 prefixIcon: const Icon(Icons.search, color: Colors.white70),
                                 suffixIcon: _searchQuery.isNotEmpty
@@ -1482,7 +1637,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
           _pendingStates.remove(itemDescription);
         });
       }
-      debugPrint('Error updating action item state: $e');
+      Logger.debug('Error updating action item state: $e');
     }
   }
 }

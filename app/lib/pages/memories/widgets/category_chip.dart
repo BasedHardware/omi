@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 
 class CategoryChip extends StatelessWidget {

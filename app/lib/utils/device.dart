@@ -1,8 +1,10 @@
 import 'dart:io';
+
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:version/version.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:version/version.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 class DeviceUtils {
   static Future<(String, bool, String)> shouldUpdateFirmware({

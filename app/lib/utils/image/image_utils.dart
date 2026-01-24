@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+
 import 'package:image/image.dart' as img;
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/models.dart';
 

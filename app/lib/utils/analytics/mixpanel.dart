@@ -1,5 +1,6 @@
 import 'package:mixpanel_analytics/mixpanel_analytics.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -1117,6 +1118,48 @@ class MixpanelManager {
     track('Audio Playback Seeked', properties: {
       'conversation_id': conversationId,
       'to_position_seconds': toPositionSeconds,
+    });
+  }
+
+  void audioShareStarted({
+    required String conversationId,
+    required int audioFileCount,
+  }) {
+    track('Audio Share Started', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+    });
+  }
+
+  void audioShareCompleted({
+    required String conversationId,
+    required int audioFileCount,
+    required bool wasCombined,
+    required int durationSeconds,
+  }) {
+    track('Audio Share Completed', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+      'was_combined': wasCombined,
+      'duration_seconds': durationSeconds,
+    });
+  }
+
+  void audioShareFailed({
+    required String conversationId,
+    String? errorMessage,
+  }) {
+    track('Audio Share Failed', properties: {
+      'conversation_id': conversationId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void audioShareCancelled({
+    required String conversationId,
+  }) {
+    track('Audio Share Cancelled', properties: {
+      'conversation_id': conversationId,
     });
   }
 

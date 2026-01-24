@@ -31,6 +31,8 @@ class Person {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<String>? speechSamples;
+  final List<String>? speechSampleTranscripts;
+  final int speechSamplesVersion;
   final int? colorIdx;
 
   Person({
@@ -39,6 +41,8 @@ class Person {
     required this.createdAt,
     required this.updatedAt,
     this.speechSamples,
+    this.speechSampleTranscripts,
+    this.speechSamplesVersion = 1,
     this.colorIdx,
   });
 
@@ -49,6 +53,10 @@ class Person {
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
       speechSamples: json['speech_samples'] != null ? List<String>.from(json['speech_samples']) : [],
+      speechSampleTranscripts: json['speech_sample_transcripts'] != null
+          ? List<String>.from(json['speech_sample_transcripts'])
+          : null,
+      speechSamplesVersion: json['speech_samples_version'] ?? 1,
       colorIdx: json['color_idx'] ?? json['id'].hashCode % speakerColors.length,
     );
   }
@@ -60,6 +68,8 @@ class Person {
       'created_at': createdAt.toUtc().toIso8601String(),
       'updated_at': updatedAt.toUtc().toIso8601String(),
       'speech_samples': speechSamples ?? [],
+      'speech_sample_transcripts': speechSampleTranscripts,
+      'speech_samples_version': speechSamplesVersion,
       'color_idx': colorIdx,
     };
   }

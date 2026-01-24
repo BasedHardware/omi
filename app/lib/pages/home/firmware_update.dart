@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'firmware_update_dialog.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
   final BtDevice? device;
@@ -152,7 +155,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   Widget _buildProgressSection() {
     final progress = isInstalling ? installProgress : downloadProgress;
-    final statusText = isDownloading ? 'Downloading Firmware' : 'Installing Firmware';
+    final statusText = isDownloading ? context.l10n.downloadingFirmware : context.l10n.installingFirmware;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +232,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
-                    'Do not close the app or turn off the device. This could corrupt your device.',
+                    context.l10n.firmwareUpdateWarning,
                     style: TextStyle(
                       color: Colors.orange.shade200,
                       fontSize: 14,
@@ -274,9 +277,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
-                  'Firmware Updated',
-                  style: TextStyle(
+                Text(
+                  context.l10n.firmwareUpdated,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: Colors.white,
@@ -284,7 +287,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Please restart your ${widget.device?.name ?? "Omi device"} to complete the update.',
+                  context.l10n.restartDeviceToComplete(widget.device?.name ?? "Omi device"),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
@@ -311,10 +314,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
-                'Done',
-                style: TextStyle(
+                context.l10n.done,
+                style: const TextStyle(
                   color: Colors.black,
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -341,7 +344,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: Row(
               children: [
                 Text(
-                  'Your device is up to date',
+                  context.l10n.yourDeviceIsUpToDate,
                   style: TextStyle(
                     color: Colors.grey.shade400,
                     fontSize: 14,
@@ -367,7 +370,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             children: [
               _buildVersionItem(
                 icon: FontAwesomeIcons.microchip,
-                label: 'Current Version',
+                label: context.l10n.currentVersion,
                 version: widget.device!.firmwareRevision,
                 chipColor: shouldUpdate ? const Color(0xFF3D2A2A) : null,
               ),
@@ -375,7 +378,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildVersionItem(
                   icon: FontAwesomeIcons.cloudArrowDown,
-                  label: 'Latest Version',
+                  label: context.l10n.latestVersion,
                   version: '${latestFirmwareDetails['version']}',
                   chipColor: const Color(0xFF1A3D2E),
                 ),
@@ -387,7 +390,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         // Changelog
         if (hasChangelog) ...[
           const SizedBox(height: 24),
-          _buildSectionHeader("What's New"),
+          _buildSectionHeader(context.l10n.whatsNew),
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFF1C1C1E),
@@ -473,7 +476,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    otaUpdateSteps.isEmpty ? 'Install Update' : 'Update Now',
+                    otaUpdateSteps.isEmpty ? context.l10n.installUpdate : context.l10n.updateNow,
                     style: const TextStyle(
                       color: Colors.black,
                       fontSize: 17,
@@ -510,7 +513,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Update Guide',
+                    context.l10n.updateGuide,
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 15,
@@ -530,18 +533,18 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionHeader('Checking for Updates', subtitle: 'Please wait...'),
+        _buildSectionHeader(context.l10n.checkingForUpdates, subtitle: context.l10n.pleaseWait),
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFF1C1C1E),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Padding(
-            padding: EdgeInsets.all(48),
+          child: Padding(
+            padding: const EdgeInsets.all(48),
             child: Center(
               child: Column(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 32,
                     height: 32,
                     child: CircularProgressIndicator(
@@ -549,10 +552,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   ),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
                   Text(
-                    'Checking firmware version...',
-                    style: TextStyle(
+                    context.l10n.checkingFirmwareVersion,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
                     ),
@@ -581,9 +584,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
-          title: const Text(
-            'Firmware Update',
-            style: TextStyle(
+          title: Text(
+            context.l10n.firmwareUpdate,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
@@ -24,9 +25,8 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-    bool autoConnect = false,
   }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 1));
 
     // Subscribe to audio stream

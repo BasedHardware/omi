@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
@@ -10,9 +14,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:provider/provider.dart';
 
 class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
@@ -39,7 +42,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
@@ -50,10 +54,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
   @override
   void dispose() {
+    final speechProvider = context.read<SpeechProfileProvider>();
+
+    speechProvider.forceCompletionTimer?.cancel();
+    speechProvider.forceCompletionTimer = null;
+    speechProvider.close();
+
+    _scrollController.dispose();
     _questionAnimationController.dispose();
-    // if (mounted) {
-    //   context.read<SpeechProfileProvider>().close();
-    // }
+
     super.dispose();
   }
 
@@ -70,10 +79,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
   }
 
+  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
+    switch (state) {
+      case SpeechProfileLoadingState.uploading:
+        return context.l10n.uploadingVoiceProfile;
+      case SpeechProfileLoadingState.memorizing:
+        return context.l10n.memorizingYourVoice;
+      case SpeechProfileLoadingState.personalizing:
+        return context.l10n.personalizingExperience;
+      case SpeechProfileLoadingState.allSet:
+        return context.l10n.youreAllSet;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Future restartDeviceRecording() async {
-      debugPrint("restartDeviceRecording $mounted");
+      Logger.debug("restartDeviceRecording $mounted");
 
       // Restart device recording, clear transcripts
       if (mounted) {
@@ -86,7 +108,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
 
     Future stopAllRecording() async {
-      debugPrint("stopAllRecording $mounted");
+      Logger.debug("stopAllRecording $mounted");
       if (mounted) {
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         // Stop any active device recording
@@ -108,9 +130,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
               } else if (info == 'NEXT_QUESTION') {
-                // Animate question change
-                _questionAnimationController.reset();
-                _questionAnimationController.forward();
+                if (!mounted) return;
+
+                _questionAnimationController
+                  ..reset()
+                  ..forward();
               }
             },
             showError: (error) {
@@ -334,7 +358,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         provider.finalize();
                                       });
 
-                                      // Start question animation
+                                      if (!mounted) return;
                                       _questionAnimationController.forward();
                                     },
                                     child: Text(
@@ -389,7 +413,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         ),
                                       ),
                                       const SizedBox(width: 24),
-                                      Text(provider.loadingText,
+                                      Text(_getLoadingText(context, provider.loadingState),
                                           style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),

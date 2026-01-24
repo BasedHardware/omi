@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/daily_summary_settings_page.dart';
+import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
@@ -302,21 +303,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     ConversationTimeoutDialog.show(context);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // NOTIFICATIONS SECTION
-            _buildSectionContainer(
-              children: [
-                _buildProfileItem(
-                  title: 'Daily Summary',
-                  subtitle: 'Configure your daily action items digest',
-                  icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const DailySummarySettingsPage());
                   },
                 ),
               ],

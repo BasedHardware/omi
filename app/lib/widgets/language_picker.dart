@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class LanguagePickerTile extends StatelessWidget {
   const LanguagePickerTile({super.key});
@@ -11,7 +13,7 @@ class LanguagePickerTile extends StatelessWidget {
     return Consumer<LocaleProvider>(
       builder: (context, localeProvider, child) {
         final currentLocale = localeProvider.locale;
-        final displayName = currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : 'System Default';
+        final displayName = currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : context.l10n.systemDefault;
 
         return ListTile(
           title: Text(

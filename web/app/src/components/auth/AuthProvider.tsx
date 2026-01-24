@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import {
   auth,
@@ -19,6 +19,10 @@ interface AuthContextType {
   signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
+  // Login panel state
+  isLoginPanelOpen: boolean;
+  openLoginPanel: () => void;
+  closeLoginPanel: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +30,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoginPanelOpen, setIsLoginPanelOpen] = useState(false);
   const previousUserRef = useRef<User | null>(null);
+
+  const openLoginPanel = useCallback(() => setIsLoginPanelOpen(true), []);
+  const closeLoginPanel = useCallback(() => setIsLoginPanelOpen(false), []);
 
   useEffect(() => {
     // Initialize Mixpanel
@@ -93,6 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInWithApple: handleSignInWithApple,
     signOut: handleSignOut,
     getToken: handleGetToken,
+    isLoginPanelOpen,
+    openLoginPanel,
+    closeLoginPanel,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

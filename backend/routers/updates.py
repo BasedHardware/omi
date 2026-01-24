@@ -10,18 +10,17 @@ from fastapi.responses import Response
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
 
-
 router = APIRouter()
 
 
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
-    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm
+    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}-cm
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)-cm$'
+    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}-{cm|auto}
+    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)-(?:cm|auto)$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
@@ -167,8 +166,12 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
         tag_name = release.get("tag_name", "")
 
-        # Check if it's a desktop release
-        if not tag_name.endswith("-desktop-cm") and not tag_name.endswith(f"-{platform}-cm"):
+        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, or -desktop-auto)
+        if not (
+            tag_name.endswith("-desktop-cm")
+            or tag_name.endswith(f"-{platform}-cm")
+            or tag_name.endswith("-desktop-auto")
+        ):
             continue
 
         # Parse version info

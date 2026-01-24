@@ -1,6 +1,11 @@
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/env/env.dart';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
+
+import 'package:omi/main.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Shared handler for action item notifications
 class ActionItemNotificationHandler {
@@ -26,18 +31,19 @@ class ActionItemNotificationHandler {
 
       // Only schedule if reminder time is in the future
       if (reminderTime.isBefore(DateTime.now())) {
-        debugPrint('[ActionItem] Reminder time is in the past, skipping: $actionItemId');
+        Logger.debug('[ActionItem] Reminder time is in the past, skipping: $actionItemId');
         return;
       }
 
       // Use action item ID hash as notification ID
       final notificationId = actionItemId.hashCode;
 
+      final ctx = MyApp.navigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '⏰ ${Env.appName} Reminder',
+          title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? 'Omi Reminder'}',
           body: description,
           payload: {
             'action_item_id': actionItemId,
@@ -50,7 +56,7 @@ class ActionItemNotificationHandler {
         schedule: NotificationCalendar.fromDate(date: reminderTime),
       );
     } catch (e) {
-      debugPrint('[ActionItem] Error scheduling notification: $e');
+      Logger.debug('[ActionItem] Error scheduling notification: $e');
     }
   }
 
@@ -60,7 +66,7 @@ class ActionItemNotificationHandler {
       final notificationId = actionItemId.hashCode;
       await _awesomeNotifications.cancel(notificationId);
     } catch (e) {
-      debugPrint('[ActionItem] Error cancelling notification: $e');
+      Logger.debug('[ActionItem] Error cancelling notification: $e');
     }
   }
 
@@ -74,7 +80,7 @@ class ActionItemNotificationHandler {
     final dueAt = data['due_at'];
 
     if (actionItemId == null || description == null || dueAt == null) {
-      debugPrint('[ActionItem] Invalid reminder data');
+      Logger.debug('[ActionItem] Invalid reminder data');
       return;
     }
 
@@ -96,7 +102,7 @@ class ActionItemNotificationHandler {
     final dueAt = data['due_at'];
 
     if (actionItemId == null || description == null || dueAt == null) {
-      debugPrint('[ActionItem] Invalid update data');
+      Logger.debug('[ActionItem] Invalid update data');
       return;
     }
 
@@ -115,7 +121,7 @@ class ActionItemNotificationHandler {
     final actionItemId = data['action_item_id'];
 
     if (actionItemId == null) {
-      debugPrint('[ActionItem] Invalid deletion data');
+      Logger.debug('[ActionItem] Invalid deletion data');
       return;
     }
 

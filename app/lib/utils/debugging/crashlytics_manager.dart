@@ -1,7 +1,11 @@
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/utils/platform/platform_service.dart';
+
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+
 import 'package:omi/utils/debugging/crash_reporter.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class CrashlyticsManager implements CrashReporter {
   static final CrashlyticsManager _instance = CrashlyticsManager._internal();
@@ -14,7 +18,12 @@ class CrashlyticsManager implements CrashReporter {
   }
 
   static Future<void> init() async {
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    // Disable Crashlytics collection in debug mode
+    if (kDebugMode) {
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+    } else {
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+    }
   }
 
   @override

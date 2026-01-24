@@ -1,21 +1,26 @@
 import 'dart:ui';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/other/debouncer.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'widgets/desktop_app_detail.dart';
-import 'package:omi/ui/atoms/omi_search_input.dart';
+
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'widgets/desktop_app_detail.dart';
 
 class DesktopAppsPage extends StatefulWidget {
   final VoidCallback? onNavigateToCreateApp;
@@ -118,7 +123,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
         }
       }
     } catch (e) {
-      debugPrint('Error during initialization: $e');
+      Logger.debug('Error during initialization: $e');
       setState(() {
         _isLoadingData = false;
       });
@@ -141,6 +146,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       );
     }
 
+    if (!mounted) return;
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     await appProvider.getApps();
 
@@ -162,7 +168,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     try {
       context.read<AppProvider>().removeListener(_handleAppProviderChange);
     } catch (e) {
-      debugPrint('Could not remove AppProvider listener: $e');
+      Logger.debug('Could not remove AppProvider listener: $e');
     }
 
     _searchController.dispose();
@@ -206,10 +212,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
                   final loadingWidget = _isReloading
                       ? Container(
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                          color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
                           child: Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -219,7 +222,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                 ),
                                 SizedBox(height: responsive.spacing(baseSpacing: 16)),
                                 Text(
-                                  'Reloading apps...',
+                                  context.l10n.reloadingApps,
                                   style: responsive.bodyLarge.copyWith(
                                     color: ResponsiveHelper.textSecondary,
                                   ),
@@ -233,10 +236,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                   return Stack(
                     children: [
                       Container(
-                        decoration: BoxDecoration(
-                          color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
                         child: Column(
                           children: [
                             _buildHeader(responsive, appProvider),
@@ -264,10 +264,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                                   child: BackdropFilter(
                                     filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
                                     child: Container(
-                                      decoration: BoxDecoration(
-                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
+                                      color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
                                     ),
                                   ),
                                 ),
@@ -302,10 +299,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildLoadingState(ResponsiveHelper responsive) {
     return Container(
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -315,7 +309,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             ),
             SizedBox(height: responsive.spacing(baseSpacing: 16)),
             Text(
-              'Loading apps...',
+              context.l10n.loadingApps,
               style: responsive.bodyLarge.copyWith(
                 color: ResponsiveHelper.textSecondary,
               ),
@@ -337,61 +331,28 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
-          Row(
-            children: [
-              // Title
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Apps',
-                      style: responsive.headlineLarge.copyWith(
-                        color: ResponsiveHelper.textPrimary,
-                        fontWeight: FontWeight.w600,
+          Consumer<ConnectivityProvider>(
+            builder: (context, connectivityProvider, _) {
+              if (!connectivityProvider.isConnected) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off_rounded, color: ResponsiveHelper.errorColor, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        context.l10n.noInternetConnection,
+                        style: responsive.bodyMedium.copyWith(
+                          color: ResponsiveHelper.errorColor,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: responsive.spacing(baseSpacing: 4)),
-                    Consumer<ConnectivityProvider>(
-                      builder: (context, connectivityProvider, _) {
-                        if (!connectivityProvider.isConnected) {
-                          return Text(
-                            'No internet connection',
-                            style: responsive.bodyMedium.copyWith(
-                              color: ResponsiveHelper.errorColor,
-                            ),
-                          );
-                        }
-
-                        return Text(
-                          'Browse, install, and create apps',
-                          style: responsive.bodyMedium.copyWith(
-                            color: ResponsiveHelper.textTertiary,
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              // Create App button
-              OmiButton(
-                label: 'Create App',
-                icon: Icons.add_rounded,
-                onPressed: () {
-                  MixpanelManager().pageOpened('Submit App');
-                  _navigateToCreateApp(context);
-                },
-                type: OmiButtonType.primary,
-              ),
-            ],
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
           ),
-
-          SizedBox(height: responsive.spacing(baseSpacing: 20)),
-
-          // Search and filter row - matching mobile style
           _buildSearchAndFiltersRow(responsive, appProvider),
         ],
       ),
@@ -425,7 +386,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                 MixpanelManager().memorySearchCleared(appProvider.apps.length);
                 _searchFocusNode.unfocus();
               },
-              hint: 'Search apps...',
+              hint: context.l10n.searchApps,
             ),
           ),
         ),
@@ -434,7 +395,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
         // My Apps button
         _buildFilterButton(
-          label: 'My Apps',
+          label: context.l10n.myApps,
           icon: FontAwesomeIcons.solidUser,
           isSelected: isMyAppsSelected,
           onTap: () {
@@ -450,7 +411,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
         // Installed Apps button
         _buildFilterButton(
-          label: 'Installed Apps',
+          label: context.l10n.installedApps,
           icon: FontAwesomeIcons.download,
           isSelected: isInstalledSelected,
           onTap: () {
@@ -460,6 +421,17 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             appProvider.applyFilters();
             MixpanelManager().appsTypeFilter('Installed Apps', !wasSelected);
           },
+        ),
+
+        const SizedBox(width: 8),
+        OmiButton(
+          label: context.l10n.createApp,
+          icon: Icons.add_rounded,
+          onPressed: () {
+            MixpanelManager().pageOpened('Submit App');
+            _navigateToCreateApp(context);
+          },
+          type: OmiButtonType.primary,
         ),
       ],
     );
@@ -556,7 +528,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                 ),
                 SizedBox(height: responsive.spacing(baseSpacing: 16)),
                 Text(
-                  'Loading apps...',
+                  context.l10n.loadingApps,
                   style: responsive.bodyLarge.copyWith(
                     color: ResponsiveHelper.textSecondary,
                   ),
@@ -612,7 +584,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             Row(
               children: [
                 Text(
-                  title.isEmpty ? 'Apps' : title,
+                  title.isEmpty ? context.l10n.apps : title,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
@@ -634,19 +606,19 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                           color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'All',
-                              style: TextStyle(
+                              context.l10n.all,
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: ResponsiveHelper.textTertiary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            SizedBox(width: 2),
-                            Icon(
+                            const SizedBox(width: 2),
+                            const Icon(
                               Icons.chevron_right,
                               color: ResponsiveHelper.textTertiary,
                               size: 16,
@@ -812,7 +784,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  app.enabled ? 'Open' : 'Install',
+                  app.enabled ? context.l10n.open : context.l10n.install,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -854,16 +826,16 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
   Widget _buildEmptyState(ResponsiveHelper responsive, AppProvider appProvider) {
     final title = appProvider.isSearchActive()
-        ? 'No apps found'
+        ? context.l10n.noAppsFound
         : context.read<ConnectivityProvider>().isConnected
-            ? 'No apps available'
-            : 'Unable to load apps';
+            ? context.l10n.noAppsAvailable
+            : context.l10n.unableToLoadApps;
 
     final message = appProvider.isSearchActive()
-        ? 'Try adjusting your search terms or filters'
+        ? context.l10n.tryAdjustingSearchTermsOrFilters
         : context.read<ConnectivityProvider>().isConnected
-            ? 'Check back later for new apps'
-            : 'Please check your internet connection and try again';
+            ? context.l10n.checkBackLaterForNewApps
+            : context.l10n.pleaseCheckInternetConnectionAndTryAgain;
 
     return Center(
       child: Container(
@@ -896,4 +868,3 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     }
   }
 }
-

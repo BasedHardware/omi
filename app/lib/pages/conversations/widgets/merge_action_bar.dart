@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/conversations/widgets/merge_confirmation_dialog.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class MergeActionBar extends StatefulWidget {
   const MergeActionBar({super.key});
@@ -99,7 +101,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 150),
                         child: Text(
-                          context.l10n.selectedCount(count),
+                          context.l10n.selectedCount(count, ''),
                           key: ValueKey(count),
                           style: const TextStyle(
                             color: Colors.white,
@@ -180,7 +182,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
               ),
               duration: const Duration(seconds: 3),
               action: SnackBarAction(
-                label: 'OK',
+                label: context.l10n.ok,
                 textColor: Colors.white70,
                 onPressed: () {},
               ),

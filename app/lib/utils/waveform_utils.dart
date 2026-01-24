@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
+
+import 'package:omi/utils/logger.dart';
 
 class WavInfo {
   final int sampleRate;
@@ -23,7 +26,7 @@ class WaveformUtils {
   static final Map<String, List<double>> _waveformCache = {};
 
   static Future<List<double>?> generateWaveform(String cacheKey, String? wavFilePath) async {
-    debugPrint('Generating waveform for key $cacheKey');
+    Logger.debug('Generating waveform for key $cacheKey');
 
     if (_waveformCache.containsKey(cacheKey)) {
       return _waveformCache[cacheKey];
@@ -38,17 +41,17 @@ class WaveformUtils {
       _waveformCache[cacheKey] = waveformData;
       return waveformData;
     } catch (e) {
-      debugPrint('Error generating waveform for key $cacheKey: $e');
+      Logger.debug('Error generating waveform for key $cacheKey: $e');
       return _generateFallbackWaveform();
     }
   }
 
   static Future<List<double>> _generateWaveformFromWavFile(String wavFilePath) async {
-    debugPrint('Generating waveform from WAV file: $wavFilePath');
+    Logger.debug('Generating waveform from WAV file: $wavFilePath');
 
     final file = File(wavFilePath);
     if (!file.existsSync()) {
-      debugPrint('WAV file does not exist');
+      Logger.debug('WAV file does not exist');
       return _generateFallbackWaveform();
     }
 
@@ -56,11 +59,11 @@ class WaveformUtils {
     final wavInfo = _parseWavHeader(wavData);
 
     if (wavInfo == null) {
-      debugPrint('Failed to parse WAV header');
+      Logger.debug('Failed to parse WAV header');
       return _generateFallbackWaveform();
     }
 
-    debugPrint(
+    Logger.debug(
         'WAV Info: ${wavInfo.sampleRate}Hz, ${wavInfo.channels} channels, ${wavInfo.bitsPerSample} bits, data size: ${wavInfo.dataSize}');
 
     final pcmData = wavData.sublist(wavInfo.dataOffset, wavInfo.dataOffset + wavInfo.dataSize);
@@ -70,7 +73,7 @@ class WaveformUtils {
       return _generateFallbackWaveform();
     }
 
-    debugPrint('Extracted ${samples.length} samples from WAV file');
+    Logger.debug('Extracted ${samples.length} samples from WAV file');
     return _generateWaveformFromSamples(samples);
   }
 
@@ -105,7 +108,7 @@ class WaveformUtils {
         }
         break;
       default:
-        debugPrint('Unsupported bits per sample: ${wavInfo.bitsPerSample}');
+        Logger.debug('Unsupported bits per sample: ${wavInfo.bitsPerSample}');
         return [];
     }
 
@@ -123,19 +126,19 @@ class WaveformUtils {
 
   static WavInfo? _parseWavHeader(Uint8List wavData) {
     if (wavData.length < 44) {
-      debugPrint('WAV file too small');
+      Logger.debug('WAV file too small');
       return null;
     }
 
     final riffHeader = String.fromCharCodes(wavData.sublist(0, 4));
     if (riffHeader != 'RIFF') {
-      debugPrint('Invalid RIFF header: $riffHeader');
+      Logger.debug('Invalid RIFF header: $riffHeader');
       return null;
     }
 
     final waveFormat = String.fromCharCodes(wavData.sublist(8, 12));
     if (waveFormat != 'WAVE') {
-      debugPrint('Invalid WAVE format: $waveFormat');
+      Logger.debug('Invalid WAVE format: $waveFormat');
       return null;
     }
 
@@ -157,7 +160,7 @@ class WaveformUtils {
         bitsPerSample = ByteData.sublistView(wavData, offset + 22, offset + 24).getUint16(0, Endian.little);
 
         if (audioFormat != 1) {
-          debugPrint('Unsupported audio format: $audioFormat (only PCM supported)');
+          Logger.debug('Unsupported audio format: $audioFormat (only PCM supported)');
           return null;
         }
         break;
@@ -168,7 +171,7 @@ class WaveformUtils {
     }
 
     if (fmtChunkSize == 0) {
-      debugPrint('fmt chunk not found');
+      Logger.debug('fmt chunk not found');
       return null;
     }
 
@@ -192,7 +195,7 @@ class WaveformUtils {
       if (chunkSize % 2 == 1) offset++;
     }
 
-    debugPrint('data chunk not found');
+    Logger.debug('data chunk not found');
     return null;
   }
 

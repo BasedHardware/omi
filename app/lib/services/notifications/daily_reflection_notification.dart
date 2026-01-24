@@ -1,5 +1,10 @@
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
+
+import 'package:omi/main.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Handler for daily reflection notifications
 /// Schedules a notification every day at 9 PM local time
@@ -22,7 +27,7 @@ class DailyReflectionNotification {
     try {
       final allowed = await _awesomeNotifications.isNotificationAllowed();
       if (!allowed) {
-        debugPrint('[DailyReflection] Notifications not allowed');
+        Logger.debug('[DailyReflection] Notifications not allowed');
         return;
       }
 
@@ -30,12 +35,13 @@ class DailyReflectionNotification {
       await cancelNotification();
 
       // Schedule notification for 9 PM every day
+      final ctx = MyApp.navigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '🌙 Time for Daily Reflection',
-          body: 'Tell me about your day',
+          title: '🌙 ${ctx?.l10n.dailyReflectionNotificationTitle ?? 'Time for Daily Reflection'}',
+          body: ctx?.l10n.dailyReflectionNotificationBody ?? 'Tell me about your day',
           badge: 0,
           payload: {
             'navigate_to': '/chat/omi',
@@ -56,9 +62,9 @@ class DailyReflectionNotification {
         ),
       );
 
-      debugPrint('[DailyReflection] Scheduled daily notification for 9 PM');
+      Logger.debug('[DailyReflection] Scheduled daily notification for 9 PM');
     } catch (e) {
-      debugPrint('[DailyReflection] Error scheduling notification: $e');
+      Logger.debug('[DailyReflection] Error scheduling notification: $e');
     }
   }
 
@@ -66,9 +72,9 @@ class DailyReflectionNotification {
   static Future<void> cancelNotification() async {
     try {
       await _awesomeNotifications.cancel(notificationId);
-      debugPrint('[DailyReflection] Cancelled notification');
+      Logger.debug('[DailyReflection] Cancelled notification');
     } catch (e) {
-      debugPrint('[DailyReflection] Error cancelling notification: $e');
+      Logger.debug('[DailyReflection] Error cancelling notification: $e');
     }
   }
 

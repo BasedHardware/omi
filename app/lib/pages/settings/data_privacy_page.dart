@@ -1,14 +1,16 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/widgets/data_protection_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class DataPrivacyPage extends StatefulWidget {
   const DataPrivacyPage({super.key});
@@ -77,38 +79,37 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     );
   }
 
-  String _getAccessDescription(App app) {
+  String _getAccessDescription(BuildContext context, App app) {
     List<String> accessTypes = [];
     if (app.hasConversationsAccess()) {
-      accessTypes.add('Conversations');
+      accessTypes.add(context.l10n.conversations);
     }
     if (app.hasMemoriesAccess()) {
-      accessTypes.add('Memories');
+      accessTypes.add(context.l10n.memories);
     }
 
     String accessDescription = '';
     if (accessTypes.isNotEmpty) {
-      accessDescription = 'Accesses ${accessTypes.join(' & ')}';
+      accessDescription = context.l10n.accessesDataTypes(accessTypes.join(' & '));
     }
 
     final trigger = app.externalIntegration?.getTriggerOnString();
     String triggerDescription = '';
     if (trigger != null && trigger != 'Unknown') {
-      triggerDescription = 'triggered by ${trigger.toLowerCase()}';
+      triggerDescription = context.l10n.triggeredByType(trigger.toLowerCase());
     }
 
     if (accessDescription.isNotEmpty && triggerDescription.isNotEmpty) {
-      return '$accessDescription and is $triggerDescription.';
+      return context.l10n.accessesAndTriggeredBy(accessDescription, triggerDescription);
     }
     if (accessDescription.isNotEmpty) {
       return '$accessDescription.';
     }
     if (triggerDescription.isNotEmpty) {
-      var sentence = 'Is $triggerDescription.';
-      return sentence[0].toUpperCase() + sentence.substring(1);
+      return context.l10n.isTriggeredBy(triggerDescription);
     }
 
-    return 'No specific data access configured.';
+    return context.l10n.noSpecificDataAccessConfigured;
   }
 
   @override
@@ -214,7 +215,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                                     ),
                                     title: Text(app.getName()),
                                     subtitle: Text(
-                                      _getAccessDescription(app),
+                                      _getAccessDescription(context, app),
                                       style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                                     ),
                                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),

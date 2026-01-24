@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
 import { useNotifications, UseNotificationsReturn } from '@/hooks/useNotifications';
 import { getInstalledApps, type App } from '@/lib/api';
 import type { OmiNotification } from '@/types/notification';
@@ -66,18 +66,22 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     [notificationHook]
   );
 
+  // Memoize context value to prevent cascading re-renders of all consumers
+  const value = useMemo(
+    () => ({
+      ...notificationHook,
+      navigateToNotification,
+      isOpen,
+      openNotificationCenter,
+      closeNotificationCenter,
+      toggleNotificationCenter,
+      getAppImage,
+    }),
+    [notificationHook, navigateToNotification, isOpen, openNotificationCenter, closeNotificationCenter, toggleNotificationCenter, getAppImage]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{
-        ...notificationHook,
-        navigateToNotification,
-        isOpen,
-        openNotificationCenter,
-        closeNotificationCenter,
-        toggleNotificationCenter,
-        getAppImage,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

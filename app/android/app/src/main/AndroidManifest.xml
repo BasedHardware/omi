@@ -11,14 +11,6 @@
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
 
-    <uses-feature
-        android:name="android.software.companion_device_setup"
-        android:required="false" />
-
-    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
-    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
-    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
-
     <!-- New Bluetooth permissions in Android 12
     https://developer.android.com/about/versions/12/features/bluetooth-permissions -->
     <uses-permission
@@ -49,6 +41,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -96,38 +89,6 @@
             android:name=".NotificationOnKillService"
             android:enabled="true"
             android:exported="false"/>
-
-        <!-- Receiver for CompanionDeviceManager presence events (Android 13+) -->
-        <receiver
-            android:name=".CompanionDevicePresenceReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.companion.CompanionDeviceManager.ACTION_DEVICE_APPEARED" />
-                <action android:name="android.companion.CompanionDeviceManager.ACTION_DEVICE_DISAPPEARED" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Background service for CompanionDeviceManager (Android 12+) -->
-        <!-- This service is bound by the system when companion device appears/disappears -->
-        <service
-            android:name=".CompanionDeviceBackgroundService"
-            android:exported="true"
-            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
-            <intent-filter>
-                <action android:name="android.companion.CompanionDeviceService" />
-            </intent-filter>
-        </service>
-
-        <!-- Receiver for notification dismiss events -->
-        <receiver
-            android:name=".NotificationDismissedReceiver"
-            android:exported="false" />
-
-        <!-- Foreground service for keeping BLE connections alive -->
-        <service
-            android:name=".ConnectionForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
 
         <activity
             android:name=".MainActivity"
@@ -177,6 +138,15 @@
                     android:host="try.omi.me"
                     android:scheme="https"
                     android:pathPattern="/apps/.*" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:path="/unlimited" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

@@ -106,7 +106,7 @@ export function UpcomingTasksCard({
             </button>
 
             {/* Task description */}
-            <span className="flex-1 min-w-0 text-sm text-text-secondary truncate">
+            <span className="flex-1 min-w-0 text-sm text-text-secondary">
               {task.description}
             </span>
 

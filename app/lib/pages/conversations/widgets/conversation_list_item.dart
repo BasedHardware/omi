@@ -3,6 +3,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -12,6 +16,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -68,6 +73,24 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
+          // If in selection mode, toggle selection only if eligible
+          if (isSelectionMode) {
+            if (!isEligible) {
+              // Show feedback that this conversation cannot be merged
+              HapticFeedback.lightImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(context.l10n.conversationCannotBeMerged),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            HapticFeedback.selectionClick();
+            provider.toggleConversationSelection(widget.conversation.id);
+            return;
+          }
+
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -111,14 +134,109 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
           }
         },
-        child: Padding(
-          padding:
-              EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-          child: Container(
-            width: double.maxFinite,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(16.0),
+        onLongPress: () {
+          // Enter selection mode on long press
+          if (!isSelectionMode && !isMerging) {
+            HapticFeedback.mediumImpact();
+            provider.enterSelectionMode();
+            provider.toggleConversationSelection(widget.conversation.id);
+          }
+        },
+        child: Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(
+                  top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: double.maxFinite,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.deepPurple.withValues(alpha: 0.3)
+                        : (isSelectionMode && !isEligible)
+                            ? Colors.grey.shade800
+                            : const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(24.0),
+                    border: isSelected
+                        ? Border.all(color: Colors.deepPurple, width: 2)
+                        : (isSelectionMode && !isEligible)
+                            ? Border.all(color: Colors.grey.shade600, width: 1)
+                            : null,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24.0),
+                    child: Dismissible(
+                      key: UniqueKey(),
+                      direction: isSelectionMode || isMerging ? DismissDirection.none : DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20.0),
+                        color: Colors.red,
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      confirmDismiss: (direction) async {
+                        HapticFeedback.mediumImpact();
+                        bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+
+                        if (!showDeleteConfirmation) return Future.value(true);
+
+                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+
+                        if (connectivityProvider.isConnected) {
+                          return await showDialog(
+                            context: context,
+                            builder: (ctx) => getDialog(
+                              context,
+                              () => Navigator.of(context).pop(false),
+                              () => Navigator.of(context).pop(true),
+                              context.l10n.deleteConversationTitle,
+                              context.l10n.deleteConversationMessage,
+                              okButtonText: context.l10n.confirm,
+                            ),
+                          );
+                        } else {
+                          return showDialog(
+                            builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () => Navigator.pop(context),
+                                context.l10n.unableToDeleteConversation,
+                                context.l10n.pleaseCheckInternetConnectionAndTryAgain,
+                                singleButton: true,
+                                okButtonText: context.l10n.ok),
+                            context: context,
+                          );
+                        }
+                      },
+                      onDismissed: (direction) async {
+                        var conversation = widget.conversation;
+                        var conversationIdx = widget.conversationIdx;
+                        MixpanelManager().conversationSwipedToDelete(conversation);
+                        provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                      },
+                      child: Padding(
+                        padding: PlatformService.isMobile
+                            ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
+                            : const EdgeInsetsDirectional.all(16),
+                        child: PlatformService.isMobile
+                            ? _buildMobileLayout(context)
+                            : Column(
+                                mainAxisSize: MainAxisSize.max,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _getConversationHeader(),
+                                  const SizedBox(height: 16),
+                                  _buildConversationBody(context),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16.0),
@@ -169,9 +287,66 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     mainAxisSize: MainAxisSize.max,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
+                      Text(
+                        widget.conversation.discarded
+                            ? widget.conversation.getTranscript(maxCount: 100)
+                            : widget.conversation.structured.title.decodeString,
+                        style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      // Duration and time below title (or New status)
+                      isNew
+                          ? Row(
+                              children: [
+                                ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Text(
+                                  dateTimeFormat(
+                                    'h:mm a',
+                                    widget.conversation.startedAt ?? widget.conversation.createdAt,
+                                    locale: Localizations.localeOf(context).languageCode,
+                                  ),
+                                  style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  maxLines: 1,
+                                ),
+                                if (_getConversationDuration(context).isNotEmpty) ...[
+                                  const Text(
+                                    ' • ',
+                                    style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  ),
+                                  Text(
+                                    _getConversationDuration(context),
+                                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                    maxLines: 1,
+                                  ),
+                                ],
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
+                            ),
                     ],
                   ),
                 ),
@@ -199,7 +374,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    "${widget.conversation.photos.length} photos",
+                    context.l10n.conversationPhotosCount(widget.conversation.photos.length),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                   )
                 ]),
@@ -292,9 +467,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               color: Colors.black.withValues(alpha: 0.01),
               borderRadius: const BorderRadius.all(Radius.circular(8)),
             ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
+            child: Text(
+              context.l10n.upgradeToUnlimited,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -309,13 +484,52 @@ class _ConversationListItemState extends State<ConversationListItem> {
   _getConversationHeader() {
     final categoryColors = _getCategoryColors();
 
-    return Row(
-      children: [
-        // Category Badge with Icon and colored background
-        Container(
-          decoration: BoxDecoration(
-            color: categoryColors['bgColor'],
-            borderRadius: BorderRadius.circular(4),
+          const SizedBox(width: 12),
+
+          // 🕒 Timestamp + Duration or New + Starred
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: isNew
+                ? ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        dateTimeFormat(
+                          'h:mm a',
+                          widget.conversation.startedAt ?? widget.conversation.createdAt,
+                          locale: Localizations.localeOf(context).languageCode,
+                        ),
+                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
+                        maxLines: 1,
+                      ),
+                      if (_getConversationDuration(context).isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF35343B),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _getConversationDuration(context),
+                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                              maxLines: 1,
+                            ),
+                          ),
+                        ),
+                      if (widget.conversation.starred)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: FaIcon(
+                            FontAwesomeIcons.solidStar,
+                            size: 12,
+                            color: Colors.amber,
+                          ),
+                        ),
+                    ],
+                  ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           child: Row(
@@ -465,7 +679,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 
   String _getTimeAgo() {
@@ -485,5 +699,95 @@ class _ConversationListItemState extends State<ConversationListItem> {
     } else {
       return 'Just now';
     }
+  const ConversationNewStatusIndicator({super.key, required this.text});
+
+  @override
+  State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
+}
+
+class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000), // Blink every half second
+      vsync: this,
+    )..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnim,
+      child: Text(widget.text),
+    );
+  }
+}
+
+/// Animated merging indicator that pulses to show conversations are being merged
+class MergingIndicator extends StatefulWidget {
+  const MergingIndicator({super.key});
+
+  @override
+  State<MergingIndicator> createState() => _MergingIndicatorState();
+}
+
+class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+    _opacityAnim = Tween<double>(begin: 1.0, end: 0.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacityAnim,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.merge_rounded,
+            color: Colors.white,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            context.l10n.mergingStatus,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

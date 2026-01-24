@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -10,9 +11,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/wals.dart';
-import 'package:omi/utils/platform/platform_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/utils/logger.dart';
 
 class SharedPreferencesUtil {
   static final SharedPreferencesUtil _instance = SharedPreferencesUtil._internal();
@@ -47,7 +46,7 @@ class SharedPreferencesUtil {
     }
   }
 
-  bool get hasPersonaCreated => getBool('hasPersonaCreated') ?? false;
+  bool get hasPersonaCreated => getBool('hasPersonaCreated');
 
   set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
 
@@ -100,8 +99,8 @@ class SharedPreferencesUtil {
     try {
       return CustomSttConfig.fromJson(jsonDecode(configJson));
     } catch (e, stack) {
-      debugPrint('Error parsing customSttConfig: $e');
-      debugPrint('Stack: $stack');
+      Logger.debug('Error parsing customSttConfig: $e');
+      Logger.debug('Stack: $stack');
       return CustomSttConfig.defaultConfig;
     }
   }
@@ -119,7 +118,7 @@ class SharedPreferencesUtil {
     try {
       return CustomSttConfig.fromJson(jsonDecode(json));
     } catch (e) {
-      debugPrint('Error loading config for ${provider.name}: $e');
+      Logger.debug('Error loading config for ${provider.name}: $e');
       return null;
     }
   }
@@ -182,6 +181,29 @@ class SharedPreferencesUtil {
 
   bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
 
+  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 3 (balanced)
+  set notificationFrequency(int value) => saveInt('notificationFrequency', value);
+
+  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 3);
+
+  // Task category order for drag-and-drop sorting persistence
+  // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
+  set taskCategoryOrder(Map<String, List<String>> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskCategoryOrder', encoded);
+  }
+
+  Map<String, List<String>> get taskCategoryOrder {
+    final encoded = getString('taskCategoryOrder');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as List).cast<String>()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
@@ -235,7 +257,7 @@ class SharedPreferencesUtil {
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
 
-  bool get optInAnalytics => getBool('optInAnalytics') ?? (PlatformService.isDesktop ? false : true);
+  bool get optInAnalytics => getBool('optInAnalytics');
 
   set optInAnalytics(bool value) => saveBool('optInAnalytics', value);
 
@@ -264,6 +286,16 @@ class SharedPreferencesUtil {
   bool get unlimitedLocalStorageEnabled => getBool('unlimitedLocalStorageEnabled');
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
+
+  // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
+  String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
+
+  set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
+
+  // Whether the user has been shown the Fast Transfer explanation dialog
+  bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
+
+  set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 
@@ -494,7 +526,7 @@ class SharedPreferencesUtil {
   }
 
   ServerConversation? get modifiedConversationDetails {
-    final String conversation = getString('modifiedConversationDetails') ?? '';
+    final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;
     return ServerConversation.fromJson(jsonDecode(conversation));
   }
@@ -521,20 +553,20 @@ class SharedPreferencesUtil {
 
   set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
 
-  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled');
 
   // Calendar UI Settings
   set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
 
-  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants');
 
   set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
 
-  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar');
 
   set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
 
-  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds');
 
   //--------------------------------- Auth ------------------------------------//
 
@@ -563,6 +595,34 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
+
+  //--------------------------- Announcements ---------------------------------//
+
+  // Last known app version - used to detect app upgrades
+  // Empty string means fresh install
+  String get lastKnownAppVersion => getString('lastKnownAppVersion');
+
+  set lastKnownAppVersion(String value) => saveString('lastKnownAppVersion', value);
+
+  // Last known firmware version - used to detect firmware upgrades
+  String get lastKnownFirmwareVersion => getString('lastKnownFirmwareVersion');
+
+  set lastKnownFirmwareVersion(String value) => saveString('lastKnownFirmwareVersion', value);
+
+  // Last time general announcements were checked
+  DateTime? get lastAnnouncementCheckTime {
+    final str = getString('lastAnnouncementCheckTime');
+    if (str.isEmpty) return null;
+    return DateTime.tryParse(str);
+  }
+
+  set lastAnnouncementCheckTime(DateTime? value) {
+    if (value == null) {
+      remove('lastAnnouncementCheckTime');
+    } else {
+      saveString('lastAnnouncementCheckTime', value.toUtc().toIso8601String());
+    }
+  }
 
   //--------------------------- Setters & Getters -----------------------------//
 

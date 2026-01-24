@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import 'package:opus_dart/opus_dart.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
-import 'package:opus_dart/opus_dart.dart';
+import 'package:omi/utils/logger.dart';
 
 abstract class IAudioTranscoder {
   Uint8List transcode(Uint8List audioData);
@@ -109,7 +112,7 @@ class OpusToWavTranscoder implements IAudioTranscoder {
         final pcmSamples = _decoder.decode(input: frame);
         allPcmSamples.addAll(pcmSamples);
       } catch (e) {
-        debugPrint('[OpusToWav] Failed to decode frame: $e');
+        Logger.debug('[OpusToWav] Failed to decode frame: $e');
       }
     }
     return WavBytesUtil.getUInt8ListBytes(allPcmSamples, sampleRate);
@@ -193,7 +196,7 @@ class OpusToRawPcmTranscoder implements IAudioTranscoder {
         final pcmSamples = _decoder.decode(input: frame);
         allPcmSamples.addAll(pcmSamples);
       } catch (e) {
-        debugPrint('[OpusToRawPcm] Failed to decode frame: $e');
+        Logger.debug('[OpusToRawPcm] Failed to decode frame: $e');
       }
     }
     // Convert to bytes (little-endian 16-bit)
@@ -238,7 +241,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
         final pcmSamples = _decoder.decode(input: Uint8List.fromList(frame));
         allPcmSamples.addAll(pcmSamples);
       } catch (e) {
-        debugPrint('[OpusFramesToWav] Failed to decode frame at offset $offset: $e');
+        Logger.debug('[OpusFramesToWav] Failed to decode frame at offset $offset: $e');
       }
       offset += frameSizeBytes;
     }
@@ -249,7 +252,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
         final pcmSamples = _decoder.decode(input: Uint8List.fromList(remainingFrame));
         allPcmSamples.addAll(pcmSamples);
       } catch (e) {
-        debugPrint('[OpusFramesToWav] Failed to decode remaining frame: $e');
+        Logger.debug('[OpusFramesToWav] Failed to decode remaining frame: $e');
       }
     }
 
@@ -264,7 +267,7 @@ class OpusFramesToWavTranscoder implements IAudioTranscoder {
         final pcmSamples = _decoder.decode(input: frame);
         allPcmSamples.addAll(pcmSamples);
       } catch (e) {
-        debugPrint('[OpusFramesToWav] Failed to decode frame: $e');
+        Logger.debug('[OpusFramesToWav] Failed to decode frame: $e');
       }
     }
     return WavBytesUtil.getUInt8ListBytes(allPcmSamples, sampleRate);

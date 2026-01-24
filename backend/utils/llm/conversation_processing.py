@@ -65,7 +65,6 @@ def build_folders_context(folders: List[dict]) -> str:
 
 
 def assign_conversation_to_folder(
-    transcript: str,
     title: str,
     overview: str,
     category: str,
@@ -75,7 +74,6 @@ def assign_conversation_to_folder(
     Use AI to assign a conversation to the most appropriate folder.
 
     Args:
-        transcript: The conversation transcript
         title: The conversation title
         overview: The conversation overview/summary
         category: The conversation category
@@ -99,39 +97,26 @@ def assign_conversation_to_folder(
 Title: {title}
 Category: {category}
 Overview: {overview}
-
-Transcript excerpt (first 500 chars):
-{transcript[:500] if transcript else 'No transcript'}
 """.strip()
 
-    prompt_text = '''You are an expert at organizing conversations into folders.
+    prompt_text = '''You are a folder assignment system. Match the conversation to the folder that best represents its overall theme.
 
-The user has organized their folders with descriptions that explain what belongs in each:
-
+FOLDERS:
 {folders_context}
-
-Based on the **primary topic and intent** of the conversation below, choose the folder whose description best matches.
 
 CONVERSATION:
 {conversation_context}
 
-DECISION PROCESS:
-1. What is the main subject being discussed?
-2. Which folder description aligns best with this subject?
-3. If multiple folders could apply, choose based on the **primary purpose** of the conversation
-4. If no folder clearly matches (confidence < 0.5), use the DEFAULT folder
-
-Example reasoning:
-- A conversation about "meeting with trainer to plan an AI fitness app" could match both Health and Technology
-- Since the primary purpose is building an app, Technology is the better match
+INSTRUCTIONS:
+- Match based on the dominant theme of the conversation (what it's fundamentally about)
+- The folder should feel like a natural home for this conversation
+- Only assign to a non-default folder if the theme clearly matches
+- When in doubt, use the DEFAULT folder
 
 Provide:
-- folder_id: The ID of the best matching folder (from the list above)
-- confidence: A score from 0.0 to 1.0 indicating match strength
-  * 0.8-1.0: Clear match - conversation clearly fits the folder description
-  * 0.5-0.8: Reasonable match - conversation relates to the folder description
-  * Below 0.5: Weak match - use the DEFAULT folder instead
-- reasoning: Brief explanation of your choice
+- folder_id: The best matching folder ID from the list above
+- confidence: Match strength (0.0-1.0). Use 0.9+ only for clear thematic matches, below 0.7 means use DEFAULT
+- reasoning: One sentence explaining the match
 
 {format_instructions}'''
 
@@ -154,7 +139,7 @@ Provide:
             return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
 
         # If confidence is too low, use default folder
-        if response.confidence < 0.5 and default_folder_id:
+        if response.confidence < 0.7 and default_folder_id:
             return (
                 default_folder_id,
                 response.confidence,

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Widget showing top 3 today's tasks with "Show all ->" button
 class TodayTasksWidget extends StatelessWidget {
@@ -56,9 +59,9 @@ class TodayTasksWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Today',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.today,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -71,7 +74,7 @@ class TodayTasksWidget extends StatelessWidget {
                         context.read<HomeProvider>().setIndex(1);
                       },
                       child: Text(
-                        'Show all →',
+                        context.l10n.showAll,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.5),
                           fontSize: 13,
@@ -87,7 +90,7 @@ class TodayTasksWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
-                    'No tasks for today. Ask Omi for more tasks or create manually.',
+                    context.l10n.noTasksForToday,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.4),
                       fontSize: 14,
@@ -137,9 +140,7 @@ class _TaskItem extends StatelessWidget {
                 ),
                 color: task.completed ? Colors.amber : Colors.transparent,
               ),
-              child: task.completed
-                  ? const Icon(Icons.check, size: 14, color: Colors.black)
-                  : null,
+              child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
             ),
           ),
           // Task text

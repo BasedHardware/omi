@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
@@ -86,8 +87,11 @@ class HttpPoolManager {
     throw lastError ?? Exception('Request failed with unknown error');
   }
 
-  Future<http.StreamedResponse> sendStreaming(http.BaseRequest request) {
-    return _client.send(request);
+  Future<http.StreamedResponse> sendStreaming(
+    http.BaseRequest request, {
+    Duration timeout = const Duration(minutes: 5),
+  }) {
+    return _client.send(request).timeout(timeout);
   }
 
   void dispose() {

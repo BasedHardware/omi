@@ -3,9 +3,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -13,7 +18,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
@@ -143,7 +148,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       await _audioPlayer!.setAudioSource(playlist, preload: true);
       _isAudioInitialized = true;
     } catch (e) {
-      debugPrint('Error initializing audio: $e');
+      Logger.debug('Error initializing audio: $e');
     } finally {
       if (mounted) {
         setState(() {

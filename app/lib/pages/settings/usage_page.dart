@@ -2,20 +2,22 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -165,7 +167,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         } else if (periodTitle == l10n.allTime) {
           periodText = l10n.sharePeriodAllTime;
         } else {
-          periodText = 'Omi has:';
+          periodText = l10n.omiHas;
         }
         shareText = '$baseText\n\n$periodText\n${funStats.join('\n')}';
       } else {
@@ -410,7 +412,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           if (!isUnlimited) ...[
             const SizedBox(height: 4),
             Text(
-              '1,200 premium mins + unlimited on-device',
+              context.l10n.basicPlanDescription,
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
             const SizedBox(height: 16),
@@ -433,18 +435,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                       )
-                    : const Row(
+                    : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Upgrade to Unlimited',
-                            style: TextStyle(
+                            context.l10n.upgradeToUnlimited,
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          SizedBox(width: 8),
-                          Icon(Icons.arrow_forward, size: 18),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.arrow_forward, size: 18),
                         ],
                       ),
               ),
@@ -534,7 +536,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
     final numberFormatter = NumberFormat.decimalPattern('en_US');
     final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
-    final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} minutes';
+    final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} ${context.l10n.minutes}';
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -816,6 +818,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               if (index >= processedHistory.length) return const SizedBox();
               final point = processedHistory[index];
               final dateTime = DateTime.parse(point.date).toLocal();
+              final locale = Localizations.localeOf(context).languageCode;
               String text;
 
               switch (period) {
@@ -827,23 +830,23 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     interval = 2;
                   }
                   if (index % interval == 0) {
-                    text = DateFormat.Hm().format(dateTime);
+                    text = DateFormat.Hm(locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'monthly':
                   if (index % 7 == 0) {
-                    text = DateFormat('d').format(dateTime);
+                    text = DateFormat('d', locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'yearly':
-                  text = DateFormat('MMM').format(dateTime);
+                  text = DateFormat('MMM', locale).format(dateTime);
                   break;
                 case 'all_time':
-                  text = DateFormat.y().format(dateTime).substring(2);
+                  text = DateFormat.y(locale).format(dateTime).substring(2);
                   break;
                 default:
                   return const SizedBox();
@@ -1018,11 +1021,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                           TextSpan(
                             children: [
                               TextSpan(
-                                text: 'Premium minutes used. ',
+                                text: '${context.l10n.premiumMinutesUsed} ',
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                               ),
                               TextSpan(
-                                text: 'Setup on-device',
+                                text: context.l10n.setupOnDevice,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade400,
@@ -1030,7 +1033,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                                 ),
                               ),
                               TextSpan(
-                                text: ' for unlimited free transcription.',
+                                text: ' ${context.l10n.forUnlimitedFreeTranscription}',
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                               ),
                             ],
@@ -1050,11 +1053,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                           TextSpan(
                             children: [
                               TextSpan(
-                                text: '${minutesLimit - minutesUsed} premium mins left. ',
+                                text: '${context.l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                               ),
                               TextSpan(
-                                text: 'On-device',
+                                text: context.l10n.onDevice,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade400,
@@ -1062,7 +1065,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                                 ),
                               ),
                               TextSpan(
-                                text: ' always available.',
+                                text: ' ${context.l10n.alwaysAvailable}',
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                               ),
                             ],

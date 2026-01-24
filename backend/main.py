@@ -40,6 +40,7 @@ from routers import (
     wrapped,
     folders,
     goals,
+    announcements,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -131,6 +132,7 @@ app.include_router(wrapped.router)
 app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
+app.include_router(announcements.router)
 
 
 methods_timeout = {
@@ -141,6 +143,7 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+
 
 modal_app = App(
     name='backend',

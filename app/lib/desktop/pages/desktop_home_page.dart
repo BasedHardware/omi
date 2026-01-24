@@ -2,24 +2,21 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intercom_flutter/intercom_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:upgrader/upgrader.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/settings/desktop_settings_modal.dart';
 import 'package:omi/desktop/pages/settings/desktop_shortcuts_page.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/services/shortcut_service.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/models/subscription.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'apps/desktop_apps_page.dart';
-import 'apps/desktop_add_app_page.dart';
-import 'conversations/desktop_conversations_page.dart';
-import 'chat/desktop_chat_page.dart';
-import 'memories/desktop_memories_page.dart';
-import 'actions/desktop_actions_page.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -27,19 +24,26 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/shortcut_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:provider/provider.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:window_manager/window_manager.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import '../../pages/conversations/sync_page.dart';
+import 'actions/desktop_actions_page.dart';
+import 'apps/desktop_add_app_page.dart';
+import 'apps/desktop_apps_page.dart';
+import 'chat/desktop_chat_page.dart';
+import 'conversations/desktop_conversations_page.dart';
+import 'memories/desktop_memories_page.dart';
 
 enum MacWindowButtonType { close, minimize, maximize }
 
@@ -154,7 +158,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     } else {
       return;
     }
-    debugPrint(event);
+    Logger.debug(event);
     PlatformManager.instance.crashReporter.logInfo(event);
   }
 
@@ -193,7 +197,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
       navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
-      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      Logger.debug("initState ${navigateToUri?.pathSegments.join("...")}");
       var segments = navigateToUri?.pathSegments ?? [];
       if (segments.isNotEmpty) {
         pageAlias = segments[0];
@@ -474,35 +478,35 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           // Main navigation items
                           _buildNavItem(
                             icon: FontAwesomeIcons.house,
-                            label: 'Conversations',
+                            label: context.l10n.conversations,
                             index: 0,
                             isSelected: homeProvider.selectedIndex == 0,
                             onTap: () => _navigateToIndex(0, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.solidComments,
-                            label: 'Chat',
+                            label: context.l10n.chat,
                             index: 1,
                             isSelected: homeProvider.selectedIndex == 1,
                             onTap: () => _navigateToIndex(1, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.brain,
-                            label: 'Memories',
+                            label: context.l10n.memories,
                             index: 2,
                             isSelected: homeProvider.selectedIndex == 2,
                             onTap: () => _navigateToIndex(2, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.squareCheck,
-                            label: 'Actions',
+                            label: context.l10n.tasks,
                             index: 3,
                             isSelected: homeProvider.selectedIndex == 3,
                             onTap: () => _navigateToIndex(3, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.gripVertical,
-                            label: 'Apps',
+                            label: context.l10n.apps,
                             index: 4,
                             isSelected: homeProvider.selectedIndex == 4,
                             onTap: () => _navigateToIndex(4, homeProvider),
@@ -527,7 +531,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                 margin: const EdgeInsets.only(top: 12),
                                 child: _buildSecondaryNavItem(
                                   icon: Icons.download_rounded,
-                                  label: 'Sync Available',
+                                  label: context.l10n.syncAvailable,
                                   onTap: () => routeToPage(context, const SyncPage()),
                                   showAccent: true,
                                 ),
@@ -549,15 +553,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           // Secondary navigation items (same style as main nav)
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.gear,
-                            label: 'Settings',
-                                    onTap: () {
+                            label: context.l10n.settings,
+                            onTap: () {
                               MixpanelManager().pageOpened('Settings');
                               DesktopSettingsModal.show(context);
                             },
                           ),
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.gift,
-                            label: 'Refer a Friend',
+                            label: context.l10n.referAFriend,
                             onTap: () {
                               MixpanelManager().pageOpened('Refer a Friend');
                               launchUrl(Uri.parse('https://affiliate.omi.me'));
@@ -565,7 +569,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.circleQuestion,
-                            label: 'Help',
+                            label: context.l10n.help,
                             onTap: () {
                               if (PlatformService.isIntercomSupported) {
                                 Intercom.instance.displayHelpCenter();
@@ -630,7 +634,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Assets.images.herologo.image(
                   fit: BoxFit.contain,
@@ -658,14 +662,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     decoration: BoxDecoration(
                       color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
+                      border: Border.all(
                         color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                                          width: 1,
-                                        ),
-                                      ),
-                    child: const Text(
-                      'Pro',
-                      style: TextStyle(
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      context.l10n.pro,
+                      style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: ResponsiveHelper.purplePrimary,
@@ -705,29 +709,29 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 : null,
           ),
           child: Row(
-                                        children: [
-                                          Icon(
+            children: [
+              Icon(
                 icon,
                 color: showAccent ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
-                                            size: 16,
-                                          ),
+                size: 16,
+              ),
               const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Text(
+              Expanded(
+                child: Text(
                   label,
-                                              style: TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
                     color: showAccent ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
-                              );
-                            }
+    );
+  }
 
   // Bottom nav items with same style as main navigation
   Widget _buildBottomNavItem({
@@ -764,9 +768,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       fontWeight: FontWeight.w400,
                       color: ResponsiveHelper.textSecondary,
                     ),
-                    ),
                   ),
-                ],
+                ),
+              ],
             ),
           ),
         ),
@@ -784,43 +788,43 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                MixpanelManager()
-                    .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
-                onTap();
-              },
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            MixpanelManager()
+                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
+            onTap();
+          },
           borderRadius: BorderRadius.circular(10),
           hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-              child: Container(
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                decoration: BoxDecoration(
+            decoration: BoxDecoration(
               color: isSelected ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8) : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      icon,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
                   color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
                   size: 17,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                          color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                      color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
       ),
     );
   }
@@ -903,18 +907,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.bolt,
                     color: Colors.white,
                     size: 13,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Text(
-                    'Upgrade to Pro',
-                    style: TextStyle(
+                    context.l10n.upgradeToPro,
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -940,28 +944,28 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(12),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () async {
-                  MixpanelManager().track('Get Omi Device Clicked');
-                  final url = Uri.parse('https://www.omi.me');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  }
-                },
-                child: Container(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () async {
+                MixpanelManager().track('Get Omi Device Clicked');
+                final url = Uri.parse('https://www.omi.me');
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Container(
                 padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
+                decoration: BoxDecoration(
                   color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
+                  border: Border.all(
+                    color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
+                    width: 1,
                   ),
+                ),
                 child: Row(
-                    children: [
+                  children: [
                     // Omi device image
                     SizedBox(
                       width: 40,
@@ -973,37 +977,37 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     const SizedBox(width: 12),
                     // Text content
                     Expanded(
-                        child: Column(
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                            const Text(
-                            'Get Omi Device',
-                              style: TextStyle(
+                          Text(
+                            context.l10n.getOmiDevice,
+                            style: const TextStyle(
                               fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w600,
                               color: ResponsiveHelper.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Wearable AI companion',
-                                    style: TextStyle(
+                            context.l10n.wearableAiCompanion,
+                            style: TextStyle(
                               fontSize: 11,
                               color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
                             ),
                           ),
                         ],
-                        ),
+                      ),
                     ),
-                      // Close button for unlimited users
-                      if (isUnlimited)
+                    // Close button for unlimited users
+                    if (isUnlimited)
                       GestureDetector(
                         onTap: () {
-                              setState(() {
-                                _showGetOmiWidget = false;
-                              });
-                              SharedPreferencesUtil().showGetOmiCard = false;
-                            },
+                          setState(() {
+                            _showGetOmiWidget = false;
+                          });
+                          SharedPreferencesUtil().showGetOmiCard = false;
+                        },
                         child: Icon(
                           Icons.close,
                           color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
@@ -1011,14 +1015,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                         ),
                       ),
                     if (!isUnlimited)
-                const Icon(
+                      const Icon(
                         FontAwesomeIcons.chevronRight,
                         color: ResponsiveHelper.textTertiary,
-                  size: 12,
+                        size: 12,
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
             ),
           ),
         );

@@ -1,8 +1,13 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/backend/http/api/goals.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
@@ -18,17 +23,35 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   List<Goal> _goals = [];
   bool _isLoading = true;
   bool _isExpanded = false;
-  
+
   static const String _goalsStorageKey = 'goals_tracker_local_goals';
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
-  
+
   // Available emojis for goals
   static const List<String> _availableEmojis = [
-    '🎯', '💪', '📚', '💰', '🏃', '🧘', '💡', '🔥', '⭐', '🚀',
-    '💎', '🏆', '📈', '❤️', '🎨', '🎵', '✈️', '🏠', '🌱', '⏰',
+    '🎯',
+    '💪',
+    '📚',
+    '💰',
+    '🏃',
+    '🧘',
+    '💡',
+    '🔥',
+    '⭐',
+    '🚀',
+    '💎',
+    '🏆',
+    '📈',
+    '❤️',
+    '🎨',
+    '🎵',
+    '✈️',
+    '🏠',
+    '🌱',
+    '⏰',
   ];
-  
+
   // Local emoji storage (goalId -> emoji)
   Map<String, String> _goalEmojis = {};
   String _selectedEmoji = '🎯';
@@ -43,7 +66,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadGoals();
   }
-  
+
   void refresh() {
     _loadGoals();
   }
@@ -69,15 +92,15 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
-      
+
       if (emojisJson != null) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
         _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
       }
-      
+
       // Fetch goals from backend (source of truth for cross-device sync)
       final backendGoals = await getAllGoals();
-      
+
       if (backendGoals.isNotEmpty && mounted) {
         setState(() {
           _goals = backendGoals;
@@ -100,7 +123,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
               return;
             }
           } catch (e) {
-            debugPrint('[GOALS] Error parsing local goals: $e');
+            Logger.debug('[GOALS] Error parsing local goals: $e');
           }
         }
         if (mounted) {
@@ -108,7 +131,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      debugPrint('[GOALS] Error loading goals: $e');
+      Logger.debug('[GOALS] Error loading goals: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -122,21 +145,34 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
     } catch (e) {
-      debugPrint('[GOALS] Error saving goals: $e');
+      Logger.debug('[GOALS] Error saving goals: $e');
     }
   }
-  
+
   String _getSmartEmoji(String title) {
     final lowerTitle = title.toLowerCase();
-    
+
     // Keyword to emoji mapping - order matters (more specific first)
     final Map<List<String>, String> keywordMap = {
       // Money/Business goals
       ['revenue', 'money', 'income', 'profit', 'sales', '\$', 'dollar', 'earn']: '💰',
-      ['users', 'customers', 'clients', 'subscribers', 'followers', 'growth', 'million', '1m', '10k', '100k', 'mrr', 'arr']: '🚀',
+      [
+        'users',
+        'customers',
+        'clients',
+        'subscribers',
+        'followers',
+        'growth',
+        'million',
+        '1m',
+        '10k',
+        '100k',
+        'mrr',
+        'arr'
+      ]: '🚀',
       ['startup', 'launch', 'business', 'company']: '🏆',
       ['invest', 'stock', 'crypto', 'trading']: '📈',
-      
+
       // Health/Fitness goals
       ['workout', 'gym', 'exercise', 'lift', 'muscle', 'strength', 'pushup', 'pullup']: '💪',
       ['run', 'marathon', 'jog', 'cardio', 'steps', 'walk', 'mile', 'km']: '🏃',
@@ -145,43 +181,43 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       ['sleep', 'rest', 'hours']: '😴',
       ['water', 'hydrat', 'drink']: '💧',
       ['health', 'wellness', 'healthy']: '❤️',
-      
+
       // Learning/Education goals
       ['read', 'book', 'pages', 'chapter']: '📚',
       ['learn', 'study', 'course', 'class', 'skill', 'certif']: '🎓',
       ['code', 'program', 'develop', 'app', 'software', 'tech']: '💻',
       ['language', 'spanish', 'french', 'chinese', 'english', 'german']: '🗣️',
-      
+
       // Creative goals
       ['write', 'blog', 'article', 'post', 'content', 'words']: '✍️',
       ['video', 'youtube', 'tiktok', 'film']: '🎬',
       ['music', 'song', 'piano', 'guitar', 'sing']: '🎵',
       ['art', 'draw', 'paint', 'design', 'create']: '🎨',
       ['photo', 'picture', 'camera']: '📸',
-      
-      // Productivity goals  
+
+      // Productivity goals
       ['task', 'todo', 'complete', 'finish', 'done']: '✅',
       ['habit', 'daily', 'streak', 'consistent', 'routine']: '🔥',
       ['time', 'hour', 'minute', 'focus', 'pomodoro', 'productive']: '⏰',
       ['project', 'ship', 'deliver', 'deadline']: '🎯',
-      
+
       // Travel/Lifestyle goals
       ['travel', 'trip', 'visit', 'country', 'city', 'vacation']: '✈️',
       ['home', 'house', 'apartment', 'move', 'buy']: '🏠',
       ['save', 'saving', 'budget', 'emergency fund']: '🏦',
-      
+
       // Social/Relationship goals
       ['friend', 'social', 'network', 'connect', 'meet']: '👥',
       ['family', 'kids', 'parent']: '👨‍👩‍👧',
       ['date', 'relationship', 'love']: '💕',
-      
+
       // General achievement
       ['goal', 'target', 'achieve', 'accomplish']: '🎯',
       ['win', 'first', 'best', 'top', 'champion']: '🏆',
       ['grow', 'improve', 'better', 'progress']: '🌱',
       ['star', 'success', 'excellent']: '⭐',
     };
-    
+
     // Check each keyword group
     for (final entry in keywordMap.entries) {
       for (final keyword in entry.key) {
@@ -190,11 +226,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         }
       }
     }
-    
+
     // Default emoji if no match
     return '🎯';
   }
-  
+
   String _getGoalEmoji(String goalId) {
     return _goalEmojis[goalId] ?? '🎯';
   }
@@ -203,7 +239,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Maximum $_maxGoals goals allowed'),
+          content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -241,7 +277,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   Widget _buildGoalEditSheet(Goal? existingGoal) {
     final isNew = existingGoal == null;
-    
+
     return StatefulBuilder(
       builder: (context, setSheetState) => Padding(
         padding: EdgeInsets.only(
@@ -267,7 +303,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   ),
                 ),
                 Text(
-                  isNew ? 'Add Goal' : 'Edit Goal',
+                  isNew ? context.l10n.addGoal : context.l10n.editGoal,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -281,7 +317,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Icon',
+                        context.l10n.icon,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.5),
                           fontSize: 12,
@@ -306,13 +342,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 height: 44,
                                 margin: const EdgeInsets.only(right: 8),
                                 decoration: BoxDecoration(
-                                  color: isSelected 
-                                      ? Colors.white.withOpacity(0.15) 
-                                      : Colors.white.withOpacity(0.05),
+                                  color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: isSelected 
-                                      ? Border.all(color: Colors.white.withOpacity(0.3), width: 2)
-                                      : null,
+                                  border:
+                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
                                 ),
                                 child: Center(
                                   child: Text(emoji, style: const TextStyle(fontSize: 22)),
@@ -331,7 +364,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Goal title',
+                      context.l10n.goalTitle,
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.5),
                         fontSize: 12,
@@ -353,117 +386,117 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-              const SizedBox(height: 16),
-              // Current & Target fields with labels above
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Current',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _currentController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Target',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 12,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _targetController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withOpacity(0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              // Action buttons
-              Row(
-                children: [
-                  if (!isNew) ...[
+                const SizedBox(height: 16),
+                // Current & Target fields with labels above
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Expanded(
-                      child: TextButton(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.current,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _currentController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.target,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _targetController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Action buttons
+                Row(
+                  children: [
+                    if (!isNew) ...[
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await _deleteGoal(existingGoal);
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(context.l10n.delete),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      flex: isNew ? 1 : 2,
+                      child: ElevatedButton(
                         onPressed: () async {
                           Navigator.pop(context);
-                          await _deleteGoal(existingGoal);
+                          await _saveGoal(existingGoal);
                         },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF22C55E),
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: const Text('Delete'),
+                        child: Text(isNew ? context.l10n.addGoal : context.l10n.save),
                       ),
                     ),
-                    const SizedBox(width: 12),
                   ],
-                  Expanded(
-                    flex: isNew ? 1 : 2,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        await _saveGoal(existingGoal);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF22C55E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(isNew ? 'Add Goal' : 'Save'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -530,7 +563,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         targetValue: target,
         currentValue: current,
       );
-      
+
       if (created != null) {
         final index = _goals.indexWhere((g) => g.id == newGoal.id);
         if (index >= 0 && mounted) {
@@ -604,9 +637,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Goals',
-                  style: TextStyle(
+                Text(
+                  context.l10n.goals,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -637,7 +670,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
                       const SizedBox(width: 8),
                       Text(
-                        'Tap to add a goal',
+                        context.l10n.tapToAddGoal,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.white.withOpacity(0.4),

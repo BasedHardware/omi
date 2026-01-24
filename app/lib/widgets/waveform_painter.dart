@@ -1,5 +1,6 @@
-import 'dart:math';
 import 'dart:math' as math;
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 class WaveformPainter extends CustomPainter {

@@ -145,6 +145,35 @@ export function invalidateCache(pattern: string): void {
 }
 
 /**
+ * Invalidate a specific cache key (granular invalidation)
+ * More efficient than pattern matching when you know the exact key
+ * @param key - Exact cache key to invalidate
+ */
+export function invalidateCacheKey(key: string): void {
+  if (cache.has(key)) {
+    cache.delete(key);
+    persistCache();
+  }
+}
+
+/**
+ * Invalidate multiple specific cache keys (batch granular invalidation)
+ * @param keys - Array of exact cache keys to invalidate
+ */
+export function invalidateCacheKeys(keys: string[]): void {
+  let deleted = false;
+  for (const key of keys) {
+    if (cache.has(key)) {
+      cache.delete(key);
+      deleted = true;
+    }
+  }
+  if (deleted) {
+    persistCache();
+  }
+}
+
+/**
  * Subscribe to cache invalidation events
  * @returns Unsubscribe function
  */

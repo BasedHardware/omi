@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class CustomAuthSignUp extends StatefulWidget {
   const CustomAuthSignUp({super.key});
 
@@ -17,24 +19,24 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
   final _passwordController = TextEditingController();
 
   // Function to validate email
-  String? _validateEmail(String? value) {
+  String? _validateEmail(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your email';
+      return context.l10n.enterEmailError;
     }
     final RegExp emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email';
+      return context.l10n.invalidEmailError;
     }
     return null;
   }
 
   // Function to validate password
-  String? _validatePassword(String? value) {
+  String? _validatePassword(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your password';
+      return context.l10n.enterPasswordError;
     }
     if (value.length < 8) {
-      return 'Password must be at least 8 characters long';
+      return context.l10n.passwordMinLengthError;
     }
     return null;
   }
@@ -52,7 +54,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
 
       // You can show a success message or navigate to another page here
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signup Successful!')),
+        SnackBar(content: Text(context.l10n.signInSuccess)),
       );
     }
   }
@@ -95,7 +97,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Sign In',
+                        context.l10n.signInTitle,
                         style: TextStyle(
                           fontSize: 28.0,
                           fontWeight: FontWeight.bold,
@@ -106,27 +108,27 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                       TextFormField(
                         controller: _emailController,
                         decoration: InputDecoration(
-                          labelText: 'Email',
+                          labelText: context.l10n.emailLabel,
                           prefixIcon: const Icon(Icons.email),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
-                        validator: _validateEmail,
+                        validator: (value) => _validateEmail(value, context),
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: context.l10n.passwordLabel,
                           prefixIcon: const Icon(Icons.lock),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
                         obscureText: true,
-                        validator: _validatePassword,
+                        validator: (value) => _validatePassword(value, context),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -140,9 +142,9 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                             ),
                             backgroundColor: Colors.blueAccent[700],
                           ),
-                          child: const Text(
-                            'Sign In',
-                            style: TextStyle(fontSize: 18.0),
+                          child: Text(
+                            context.l10n.signInButton,
+                            style: const TextStyle(fontSize: 18.0),
                           ),
                         ),
                       ),
@@ -151,9 +153,9 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         onPressed: () {
                           // Navigate to login page
                         },
-                        child: const Text(
-                          'Already have an account? Log In',
-                          style: TextStyle(color: Colors.grey),
+                        child: Text(
+                          context.l10n.alreadyHaveAccountLogin,
+                          style: const TextStyle(color: Colors.grey),
                         ),
                       ),
                     ],

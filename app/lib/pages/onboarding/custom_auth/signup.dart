@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class CustomAuthSignUp extends StatefulWidget {
   const CustomAuthSignUp({super.key});
 
@@ -19,40 +21,40 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
   final _repeatPasswordController = TextEditingController();
 
   // Function to validate name
-  String? _validateName(String? value) {
+  String? _validateName(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your name';
+      return context.l10n.enterNameError;
     }
     return null;
   }
 
   // Function to validate email
-  String? _validateEmail(String? value) {
+  String? _validateEmail(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your email';
+      return context.l10n.enterEmailError;
     }
     final RegExp emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!emailRegex.hasMatch(value)) {
-      return 'Please enter a valid email';
+      return context.l10n.invalidEmailError;
     }
     return null;
   }
 
   // Function to validate password
-  String? _validatePassword(String? value) {
+  String? _validatePassword(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter your password';
+      return context.l10n.enterPasswordError;
     }
     if (value.length < 8) {
-      return 'Password must be at least 8 characters long';
+      return context.l10n.passwordMinLengthError;
     }
     return null;
   }
 
   // Function to validate repeat password
-  String? _validateRepeatPassword(String? value) {
+  String? _validateRepeatPassword(String? value, BuildContext context) {
     if (value != _passwordController.text) {
-      return 'Passwords do not match';
+      return context.l10n.passwordsDoNotMatch;
     }
     return null;
   }
@@ -71,7 +73,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
 
       // You can show a success message or navigate to another page here
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signup Successful!')),
+        SnackBar(content: Text(context.l10n.signUpSuccess)),
       );
     }
   }
@@ -116,7 +118,7 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Create Account',
+                        context.l10n.createAccountTitle,
                         style: TextStyle(
                           fontSize: 28.0,
                           fontWeight: FontWeight.bold,
@@ -127,52 +129,52 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                       TextFormField(
                         controller: _nameController,
                         decoration: InputDecoration(
-                          labelText: 'Name',
+                          labelText: context.l10n.nameLabel,
                           prefixIcon: const Icon(Icons.person),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
-                        validator: _validateName,
+                        validator: (value) => _validateName(value, context),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _emailController,
                         decoration: InputDecoration(
-                          labelText: 'Email',
+                          labelText: context.l10n.emailLabel,
                           prefixIcon: const Icon(Icons.email),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
-                        validator: _validateEmail,
+                        validator: (value) => _validateEmail(value, context),
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: context.l10n.passwordLabel,
                           prefixIcon: const Icon(Icons.lock),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
                         obscureText: true,
-                        validator: _validatePassword,
+                        validator: (value) => _validatePassword(value, context),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _repeatPasswordController,
                         decoration: InputDecoration(
-                          labelText: 'Repeat Password',
+                          labelText: context.l10n.repeatPasswordLabel,
                           prefixIcon: const Icon(Icons.lock_outline),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
                         obscureText: true,
-                        validator: _validateRepeatPassword,
+                        validator: (value) => _validateRepeatPassword(value, context),
                       ),
                       const SizedBox(height: 24),
                       SizedBox(
@@ -186,9 +188,9 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                             ),
                             backgroundColor: Colors.blueAccent[700],
                           ),
-                          child: const Text(
-                            'Sign Up',
-                            style: TextStyle(fontSize: 18.0),
+                          child: Text(
+                            context.l10n.signUpButton,
+                            style: const TextStyle(fontSize: 18.0),
                           ),
                         ),
                       ),
@@ -197,9 +199,9 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
                         onPressed: () {
                           // Navigate to login page
                         },
-                        child: const Text(
-                          'Already have an account? Log In',
-                          style: TextStyle(color: Colors.grey),
+                        child: Text(
+                          context.l10n.alreadyHaveAccountLogin,
+                          style: const TextStyle(color: Colors.grey),
                         ),
                       ),
                     ],
