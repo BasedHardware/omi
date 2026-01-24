@@ -836,7 +836,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
         'review': data.get('review', ''),
         'updated_at': datetime.now(timezone.utc).isoformat(),
         'rated_at': old_review['rated_at'],
-        'username': old_review.get('username', ''),
+        'username': data.get('username', old_review.get('username', '')),
         'response': old_review.get('response', ''),
         'uid': uid,
     }
