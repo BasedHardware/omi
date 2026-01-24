@@ -130,20 +130,10 @@ class AudioDownloadService {
   }
 
   String _generateSafeFilename(ServerConversation conversation) {
-    var title = conversation.structured.title.trim();
-
-    if (title.isEmpty) {
-      title = 'conversation';
-    }
-
-    title = title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(RegExp(r'\s+'), '_');
-
-    if (title.length > 50) {
-      title = title.substring(0, 50);
-    }
-
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return 'omi_${title}_$timestamp.wav';
+    final now = DateTime.now();
+    final timestamp =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+    return 'omi_$timestamp.wav';
   }
 
   Future<void> cleanup() async {
