@@ -28,7 +28,7 @@ class AppReview {
       ratedAt: DateTime.parse(json['rated_at']).toLocal(),
       score: json['score'],
       review: json['review'],
-      username: json['user_name'] ?? '',
+      username: json['username'] ?? json['user_name'] ?? '',
       response: json['response'] ?? '',
       updatedAt: (json['updated_at'] == "" || json['updated_at'] == null)
           ? null
