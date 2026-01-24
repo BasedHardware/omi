@@ -7742,38 +7742,38 @@ class AppLocalizationsAr extends AppLocalizations {
   String get downloadAudio => 'Download Audio';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'تم تحميل الصوت بنجاح';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'فشل تحميل الصوت';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'جاري تحميل الصوت...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'مشاركة الصوت';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'تحضير الصوت';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'الحصول على ملفات الصوت';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'جاري تحميل الصوت';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'معالجة الصوت';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'دمج ملفات الصوت';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'الصوت جاهز';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'فتح قائمة المشاركة';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'فشلت مشاركة الصوت';
 }

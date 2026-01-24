@@ -413,6 +413,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       _isDownloadingAudio = true;
     });
 
+    final audioFileCount = provider.conversation.audioFiles.length;
+    final startTime = DateTime.now();
+
+    // Track share start
+    MixpanelManager().audioShareStarted(
+      conversationId: provider.conversation.id,
+      audioFileCount: audioFileCount,
+    );
+
     AudioDownloadState currentState = AudioDownloadState.preparing;
     double currentProgress = 0.0;
     void Function(void Function())? updateSheet;
@@ -476,14 +485,35 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           text: 'Audio: ${provider.conversation.structured.title}',
         );
 
+        // Track successful completion
+        final durationSeconds = DateTime.now().difference(startTime).inSeconds;
+        MixpanelManager().audioShareCompleted(
+          conversationId: provider.conversation.id,
+          audioFileCount: audioFileCount,
+          wasCombined: audioFileCount > 1,
+          durationSeconds: durationSeconds,
+        );
+
         await service.cleanup();
       } else {
         if (mounted) {
           Navigator.of(sheetContext).pop();
         }
+
+        // Track failure (no audio available)
+        MixpanelManager().audioShareFailed(
+          conversationId: provider.conversation.id,
+          errorMessage: 'No audio files available',
+        );
       }
     } catch (e) {
       Logger.debug('Error downloading audio: $e');
+
+      // Track failure
+      MixpanelManager().audioShareFailed(
+        conversationId: provider.conversation.id,
+        errorMessage: e.toString(),
+      );
 
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});

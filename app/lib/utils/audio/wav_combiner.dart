@@ -56,9 +56,8 @@ class WavCombiner {
       sink.add(header);
 
       for (final file in wavFiles) {
-        final bytes = await file.readAsBytes();
-        final audioData = bytes.sublist(44);
-        sink.add(audioData);
+        final stream = file.openRead(44);
+        await sink.addStream(stream);
       }
     } finally {
       await sink.close();
