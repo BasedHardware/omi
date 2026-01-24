@@ -21,7 +21,9 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/widgets/audio_download_progress_sheet.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -69,6 +71,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
+  bool _isDownloadingAudio = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -323,6 +326,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
+      case 'download_audio':
+        await _downloadAudio(context, provider);
+        break;
       // case 'export_transcript':
       //   showShareBottomSheet(context, provider.conversation, (fn) {});
       //   break;
@@ -398,6 +404,112 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       SnackBar(content: Text(context.l10n.contentCopied)),
     );
     HapticFeedback.lightImpact();
+  }
+
+  Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isDownloadingAudio = true;
+    });
+
+    AudioDownloadState currentState = AudioDownloadState.preparing;
+    double currentProgress = 0.0;
+    void Function(void Function())? updateSheet;
+
+    // Show the progress sheet
+    final sheetContext = context;
+    showModalBottomSheet(
+      context: sheetContext,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          updateSheet = setState;
+          return AudioDownloadProgressSheet(
+            state: currentState,
+            progress: currentProgress,
+          );
+        },
+      ),
+    );
+
+    try {
+      final service = AudioDownloadService();
+
+      final file = await service.downloadAndCombineAudio(
+        provider.conversation,
+        onProgress: (progress) {
+          currentProgress = progress;
+          updateSheet?.call(() {});
+        },
+        onStageChange: (stage) {
+          switch (stage) {
+            case AudioDownloadStage.preparing:
+              currentState = AudioDownloadState.preparing;
+              break;
+            case AudioDownloadStage.downloading:
+              currentState = AudioDownloadState.downloading;
+              break;
+            case AudioDownloadStage.processing:
+              currentState = AudioDownloadState.processing;
+              break;
+          }
+          updateSheet?.call(() {});
+        },
+      );
+
+      if (file != null) {
+        currentState = AudioDownloadState.success;
+        updateSheet?.call(() {});
+
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Audio: ${provider.conversation.structured.title}',
+        );
+
+        await service.cleanup();
+      } else {
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+      }
+    } catch (e) {
+      Logger.debug('Error downloading audio: $e');
+
+      currentState = AudioDownloadState.error;
+      updateSheet?.call(() {});
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (mounted) {
+        Navigator.of(sheetContext).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.audioDownloadFailed),
+            action: SnackBarAction(
+              label: context.l10n.retry,
+              onPressed: () => _downloadAudio(context, provider),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloadingAudio = false;
+        });
+      }
+    }
   }
 
   // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
@@ -693,6 +805,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                             ),
+                            if (provider.conversation.hasAudio())
+                              PullDownMenuItem(
+                                title: context.l10n.shareAudio,
+                                iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                onTap: _isDownloadingAudio
+                                    ? null
+                                    : () => _handleMenuSelection(context, 'download_audio', provider),
+                              ),
                             // PullDownMenuItem(
                             //   title: 'Trigger Integration',
                             //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
