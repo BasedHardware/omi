@@ -7804,4 +7804,43 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+
+  @override
+  String get downloadAudio => 'Download Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio downloaded successfully';
+
+  @override
+  String get audioDownloadFailed => 'Failed to download audio';
+
+  @override
+  String get downloadingAudio => 'Downloading audio...';
+
+  @override
+  String get shareAudio => 'Share Audio';
+
+  @override
+  String get preparingAudio => 'Preparing Audio';
+
+  @override
+  String get gettingAudioFiles => 'Getting audio files...';
+
+  @override
+  String get downloadingAudioProgress => 'Downloading Audio';
+
+  @override
+  String get processingAudio => 'Processing Audio';
+
+  @override
+  String get combiningAudioFiles => 'Combining audio files...';
+
+  @override
+  String get audioReady => 'Audio Ready';
+
+  @override
+  String get openingShareSheet => 'Opening share sheet...';
+
+  @override
+  String get audioShareFailed => 'Share Failed';
 }

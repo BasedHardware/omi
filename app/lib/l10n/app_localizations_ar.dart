@@ -7737,4 +7737,43 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+
+  @override
+  String get downloadAudio => 'Download Audio';
+
+  @override
+  String get audioDownloadSuccess => 'تم تحميل الصوت بنجاح';
+
+  @override
+  String get audioDownloadFailed => 'فشل تحميل الصوت';
+
+  @override
+  String get downloadingAudio => 'جاري تحميل الصوت...';
+
+  @override
+  String get shareAudio => 'مشاركة الصوت';
+
+  @override
+  String get preparingAudio => 'تحضير الصوت';
+
+  @override
+  String get gettingAudioFiles => 'الحصول على ملفات الصوت';
+
+  @override
+  String get downloadingAudioProgress => 'جاري تحميل الصوت';
+
+  @override
+  String get processingAudio => 'معالجة الصوت';
+
+  @override
+  String get combiningAudioFiles => 'دمج ملفات الصوت';
+
+  @override
+  String get audioReady => 'الصوت جاهز';
+
+  @override
+  String get openingShareSheet => 'فتح قائمة المشاركة';
+
+  @override
+  String get audioShareFailed => 'فشلت مشاركة الصوت';
 }

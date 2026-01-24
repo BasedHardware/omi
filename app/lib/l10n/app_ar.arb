@@ -2462,5 +2462,17 @@
   "chooseTransferMethod": "اختر طريقة النقل",
   "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi",
   "largeTimeGapDetected": "تم اكتشاف فجوة زمنية كبيرة ({gap})",
-  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})"
+  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})",
+  "shareAudio": "مشاركة الصوت",
+  "preparingAudio": "تحضير الصوت",
+  "gettingAudioFiles": "الحصول على ملفات الصوت",
+  "downloadingAudioProgress": "جاري تحميل الصوت",
+  "processingAudio": "معالجة الصوت",
+  "combiningAudioFiles": "دمج ملفات الصوت",
+  "audioReady": "الصوت جاهز",
+  "openingShareSheet": "فتح قائمة المشاركة",
+  "audioShareFailed": "فشلت مشاركة الصوت",
+  "audioDownloadSuccess": "تم تحميل الصوت بنجاح",
+  "audioDownloadFailed": "فشل تحميل الصوت",
+  "downloadingAudio": "جاري تحميل الصوت..."
 }
