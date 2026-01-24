@@ -445,8 +445,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       ),
     );
 
+    AudioDownloadService? service;
     try {
-      final service = AudioDownloadService();
+      service = AudioDownloadService();
 
       final file = await service.downloadAndCombineAudio(
         provider.conversation,
@@ -534,6 +535,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         );
       }
     } finally {
+      service?.dispose();
       if (mounted) {
         setState(() {
           _isDownloadingAudio = false;
