@@ -9767,5 +9767,18 @@
   "@deviceDoesNotSupportWifiSwitchingToBle": {
     "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
   },
-  "appleHealthNotAvailable": "Apple Health is not available on this device"
+  "appleHealthNotAvailable": "Apple Health is not available on this device",
+  "downloadAudio": "Download Audio",
+  "audioDownloadSuccess": "Audio downloaded successfully",
+  "audioDownloadFailed": "Failed to download audio",
+  "downloadingAudio": "Downloading audio...",
+  "shareAudio": "Share Audio",
+  "preparingAudio": "Preparing Audio",
+  "gettingAudioFiles": "Getting audio files...",
+  "downloadingAudioProgress": "Downloading Audio",
+  "processingAudio": "Processing Audio",
+  "combiningAudioFiles": "Combining audio files...",
+  "audioReady": "Audio Ready",
+  "openingShareSheet": "Opening share sheet...",
+  "audioShareFailed": "Share Failed"
 }
