@@ -139,15 +139,20 @@ Future _init() async {
   await ServiceManager.init();
 
   // Firebase
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
-  } else {
-    if (F.env == Environment.prod) {
+  try {
+    if (PlatformService.isWindows) {
+      // Windows does not support flavors
       await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
     } else {
-      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
+      if (F.env == Environment.prod) {
+        await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
+      } else {
+        await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
+      }
     }
+  } catch (e) {
+    // Firebase may already be initialized by native SDK (macOS)
+    debugPrint('Firebase initialization: $e');
   }
 
   await PlatformManager.initializeServices();
