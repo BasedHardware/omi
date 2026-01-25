@@ -51,6 +51,9 @@ int main(void)
     }
     shell_execute_cmd(NULL, "ble on");
     printk("Starting omi EVT test...\n");
+    // Start shell over UART
+    const struct shell *shell_ptr = shell_backend_uart_get_ptr();
+    shell_start(shell_ptr);
 
     ret = pm_device_runtime_get(buttons);
     if (ret < 0) {
