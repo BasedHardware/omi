@@ -46,11 +46,10 @@ int main(void)
     int ret;
     bool button_pressed = false;
     if (init_module() < 0) {
-        shell_execute_cmd(NULL, "sys off");
+        printk("Failed to initialize modules\n");
         return -1;
     }
-    shell_execute_cmd(NULL, "ble on");
-    printk("Starting omi EVT test...\n");
+
     // Start shell over UART
     const struct shell *shell_ptr = shell_backend_uart_get_ptr();
     if (shell_ptr) {
@@ -58,6 +57,8 @@ int main(void)
     } else {
         printk("UART shell backend not found.\n");
     }
+
+    printk("Starting omi EVT test...\n");
 
     ret = pm_device_runtime_get(buttons);
     if (ret < 0) {
