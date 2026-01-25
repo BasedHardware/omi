@@ -53,7 +53,10 @@ int main(void)
     // Start shell over UART
     const struct shell *shell_ptr = shell_backend_uart_get_ptr();
     if (shell_ptr) {
-        shell_start(shell_ptr);
+        ret = shell_start(shell_ptr);
+        if (ret < 0) {
+            printk("Failed to start shell (%d)\n", ret);
+        }
     } else {
         printk("UART shell backend not found.\n");
     }
