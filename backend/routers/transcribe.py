@@ -1309,10 +1309,20 @@ async def _stream_handler(
             # Check persistent mapping before running similarity
             persistent_person_id = get_speaker_label_mapping(uid, speaker_id)
             if persistent_person_id:
-                person = user_db.get_person(uid, persistent_person_id)
-                if person:
-                    speaker_to_person_map[speaker_id] = (persistent_person_id, person.get('name', ''))
-                    continue
+                if ':' in persistent_person_id:
+                    owner_uid, actual_person_id = persistent_person_id.split(':', 1)
+                    person = user_db.get_person(owner_uid, actual_person_id)
+                    if person:
+                        speaker_to_person_map[speaker_id] = (
+                            persistent_person_id,
+                            f"{person['name']} (from {owner_uid[:6]})"
+                        )
+                        continue
+                else:
+                    person = user_db.get_person(uid, persistent_person_id)
+                    if person:
+                        speaker_to_person_map[speaker_id] = (persistent_person_id, person.get('name', ''))
+                        continue
 
             # Skip if already resolved in session
             if speaker_id in speaker_to_person_map:
