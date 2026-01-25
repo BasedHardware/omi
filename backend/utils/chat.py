@@ -20,32 +20,36 @@ from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 
 
-def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> Tuple[Optional[str], bool]:
-    """Determine language selection for voice message transcription."""
+def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
+    """
+    Determine language selection for voice message transcription.
+
+    Returns a single language string: either a specific language code (e.g., 'en', 'es')
+    or 'multi' for auto-detection mode.
+    """
     if request_language:
         normalized = request_language.strip()
         if normalized:
             request_lower = normalized.lower()
             if request_lower == 'auto' or request_lower == 'multi':
-                return None, True
-            return normalized, False
+                return 'multi'
+            return normalized
 
     user_language = user_db.get_user_language_preference(uid)
     if user_language:
         transcription_prefs = user_db.get_user_transcription_preferences(uid)
         single_language_mode = transcription_prefs.get('single_language_mode', False)
         if single_language_mode:
-            return user_language, False
-        return None, True
+            return user_language
+        return 'multi'
 
-    return None, True
+    return 'multi'
 
 
 def transcribe_voice_message_segment(
     path: str,
     uid: str,
-    language: Optional[str] = None,
-    detect_language: bool = False,
+    language: str = 'multi',
 ) -> Tuple[Optional[str], Optional[str]]:
     url = get_syncing_file_temporal_signed_url(path)
 
@@ -55,20 +59,11 @@ def transcribe_voice_message_segment(
 
     threading.Thread(target=delete_file).start()
 
-    if language:
-        language_normalized = language.strip()
-        if language_normalized.lower() == 'auto' or language_normalized.lower() == 'multi':
-            language = None
-            detect_language = True
+    if not language:
+        language = resolve_voice_message_language(uid, None)
 
-    if not language and not detect_language:
-        language, detect_language = resolve_voice_message_language(uid, None)
-
-    detected_language = None
-    if detect_language:
-        words, detected_language = deepgram_prerecorded(url, diarize=False, detect_language=True)
-    else:
-        words = deepgram_prerecorded(url, diarize=False, language=language)
+    is_multi = language == 'multi'
+    words, detected_language = deepgram_prerecorded(url, diarize=False, language=language, return_language=is_multi)
     if not words:
         print('no words')
         return None, detected_language
@@ -90,8 +85,7 @@ def transcribe_voice_message_segment(
 def process_voice_message_segment(
     path: str,
     uid: str,
-    language: Optional[str] = None,
-    detect_language: bool = False,
+    language: str = 'multi',
 ):
     url = get_syncing_file_temporal_signed_url(path)
 
@@ -101,13 +95,10 @@ def process_voice_message_segment(
 
     threading.Thread(target=delete_file).start()
 
-    if not language and not detect_language:
-        language, detect_language = resolve_voice_message_language(uid, None)
+    if not language:
+        language = resolve_voice_message_language(uid, None)
 
-    if detect_language:
-        words, _ = deepgram_prerecorded(url, diarize=False, detect_language=True)
-    else:
-        words = deepgram_prerecorded(url, diarize=False, language=language)
+    words = deepgram_prerecorded(url, diarize=False, language=language)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
@@ -169,8 +160,7 @@ def process_voice_message_segment(
 async def process_voice_message_segment_stream(
     path: str,
     uid: str,
-    language: Optional[str] = None,
-    detect_language: bool = False,
+    language: str = 'multi',
 ) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
 
@@ -180,13 +170,10 @@ async def process_voice_message_segment_stream(
 
     threading.Thread(target=delete_file).start()
 
-    if not language and not detect_language:
-        language, detect_language = resolve_voice_message_language(uid, None)
+    if not language:
+        language = resolve_voice_message_language(uid, None)
 
-    if detect_language:
-        words, _ = deepgram_prerecorded(url, diarize=False, detect_language=True)
-    else:
-        words = deepgram_prerecorded(url, diarize=False, language=language)
+    words = deepgram_prerecorded(url, diarize=False, language=language)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:

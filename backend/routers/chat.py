@@ -321,13 +321,11 @@ async def create_voice_message_stream(
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
-    resolved_language, detect_language = resolve_voice_message_language(uid, language)
+    resolved_language = resolve_voice_message_language(uid, language)
 
     # process
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(
-            list(wav_paths)[0], uid, language=resolved_language, detect_language=detect_language
-        ):
+        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid, language=resolved_language):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
@@ -369,15 +367,14 @@ async def transcribe_voice_message(
     # Process all WAV files and collect transcripts
     transcripts = []
     detected_languages = []
-    resolved_language, detect_language = resolve_voice_message_language(uid, language)
+    resolved_language = resolve_voice_message_language(uid, language)
+    is_multi = resolved_language == 'multi'
     for wav_path in wav_paths:
         try:
-            transcript, detected_language = transcribe_voice_message_segment(
-                wav_path, uid, language=resolved_language, detect_language=detect_language
-            )
+            transcript, detected_language = transcribe_voice_message_segment(wav_path, uid, language=resolved_language)
             if transcript:
                 transcripts.append(transcript)
-            if detect_language and detected_language:
+            if is_multi and detected_language:
                 detected_languages.append(detected_language)
         except Exception as e:
             print(f"Error transcribing {wav_path}: {e}")
@@ -397,7 +394,7 @@ async def transcribe_voice_message(
                 except:
                     pass
 
-    if detect_language:
+    if is_multi:
         unique_languages = {lang for lang in detected_languages if lang}
         detected_language = None
         if len(unique_languages) == 1:
