@@ -1168,7 +1168,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         fontWeight: FontWeight.w600,
                       ),
                       decoration: InputDecoration(
-                        hintText: '0.00',
+                        hintText: context.l10n.pricePlaceholder,
                         hintStyle: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 20,

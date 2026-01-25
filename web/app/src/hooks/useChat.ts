@@ -124,9 +124,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
             case 'message':
               // Handle related memory messages if needed
-              if (chunk.message) {
-                console.log('Related memory:', chunk.message);
-              }
+              // chunk.message contains related memory data
               break;
 
             case 'error':

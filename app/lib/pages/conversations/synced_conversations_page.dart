@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'widgets/synced_conversation_list_item.dart';
 
@@ -13,7 +14,7 @@ class SyncedConversationsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Processed Conversations'),
+        title: Text(context.l10n.processedConversations),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
@@ -27,14 +28,14 @@ class SyncedConversationsPage extends StatelessWidget {
                   conversations: syncProvider.syncedConversationsPointers
                       .where((e) => e.type == SyncedConversationType.updatedConversation)
                       .toList(),
-                  title: 'Updated Conversations',
+                  title: context.l10n.updatedConversations,
                   showReprocess: true,
                 ),
                 ConversationsListWidget(
                   conversations: syncProvider.syncedConversationsPointers
                       .where((e) => e.type == SyncedConversationType.newConversation)
                       .toList(),
-                  title: 'New Conversations',
+                  title: context.l10n.newConversations,
                   showReprocess: false,
                 ),
               ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopConversationHeader extends StatefulWidget {
@@ -58,7 +59,7 @@ class _DesktopConversationHeaderState extends State<DesktopConversationHeader> w
                 bottom: responsive.spacing(baseSpacing: 8),
               ),
               child: Text(
-                'Welcome back',
+                context.l10n.welcomeBackSimple,
                 style: TextStyle(
                   fontSize: responsive.responsiveFontSize(baseFontSize: 16),
                   fontWeight: FontWeight.w500,
@@ -69,7 +70,7 @@ class _DesktopConversationHeaderState extends State<DesktopConversationHeader> w
 
             // Main title
             Text(
-              'Your Conversations',
+              context.l10n.yourConversations,
               style: TextStyle(
                 fontSize: responsive.responsiveFontSize(baseFontSize: 32),
                 fontWeight: FontWeight.w600,
@@ -83,7 +84,7 @@ class _DesktopConversationHeaderState extends State<DesktopConversationHeader> w
 
             // Subtitle
             Text(
-              'Review and manage your captured conversations',
+              context.l10n.reviewAndManageConversations,
               style: TextStyle(
                 fontSize: responsive.responsiveFontSize(baseFontSize: 16),
                 color: ResponsiveHelper.textSecondary,

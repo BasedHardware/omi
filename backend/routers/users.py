@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Union, Optional
 import hashlib
 import os
 
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -38,7 +39,7 @@ from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
@@ -51,6 +52,8 @@ from utils.subscription import (
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from models.notification_message import NotificationMessage
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -255,10 +258,10 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-        # Convert stored GCS paths to signed URLs for each person
-        for person in people:
+        # Convert GCS paths to signed URLs for each person
+        for i, person in enumerate(people):
             stored_paths = person.get('speech_samples', [])
-            person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+            people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -295,7 +298,7 @@ def delete_person_speech_sample_endpoint(
         raise HTTPException(status_code=404, detail="Sample not found")
 
     path_to_delete = speech_samples[sample_index]
-    
+
     # Extract filename from path for GCS deletion
     filename = path_to_delete.split('/')[-1]
 
@@ -304,6 +307,7 @@ def delete_person_speech_sample_endpoint(
 
     # Remove from Firestore
     from database.users import remove_person_speech_sample
+
     remove_person_speech_sample(uid, person_id, path_to_delete)
 
     return {'status': 'ok'}
@@ -362,7 +366,7 @@ def set_chat_message_analytics(
 ):
     """
     Submit feedback rating for a chat message.
-    
+
     Args:
         message_id: ID of the message being rated
         value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
@@ -375,15 +379,15 @@ def set_chat_message_analytics(
     """
     # Always store feedback in Firestore analytics collection
     set_chat_message_rating_score(uid, message_id, value, reason)
-    
+
     # Also update the rating directly on the message document for persistence
     rating_value = None if value == 0 else value
     chat_db.update_message_rating(uid, message_id, rating_value)
-    
+
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
         from utils.observability import submit_langsmith_feedback
-        
+
         # Look up the message to get langsmith_run_id
         message_result = chat_db.get_message(uid, message_id)
         if message_result:
@@ -391,14 +395,14 @@ def set_chat_message_analytics(
             langsmith_run_id = getattr(message, 'langsmith_run_id', None)
             if not langsmith_run_id and isinstance(message, dict):
                 langsmith_run_id = message.get('langsmith_run_id')
-            
+
             if langsmith_run_id:
                 # Map value to score: 1 (thumbs up) -> 1.0, -1 (thumbs down) -> 0.0
                 score = 1.0 if value == 1 else (0.0 if value == -1 else 0.5)
-                
+
                 # Build comment from reason if provided
                 comment = reason if reason else None
-                
+
                 # Submit feedback to LangSmith (non-blocking, errors are logged)
                 submit_langsmith_feedback(
                     run_id=langsmith_run_id,
@@ -409,7 +413,7 @@ def set_chat_message_analytics(
     except Exception as e:
         # Don't fail the request if LangSmith feedback fails
         print(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
-    
+
     return {'status': 'ok'}
 
 
@@ -859,13 +863,6 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
     This bypasses the time check and sends a summary immediately.
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
-    from datetime import datetime, time
-    import pytz
-    from utils.llm.external_integrations import generate_comprehensive_daily_summary
-    from models.conversation import Conversation
-    from utils.notifications import send_notification
-    from models.notification_message import NotificationMessage
-
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
 
@@ -890,14 +887,24 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
                 start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
                 end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
             else:
-                # Use today
+                # Use past 24 hours
                 now_in_user_tz = datetime.now(user_tz)
-                date_str = now_in_user_tz.strftime('%Y-%m-%d')
-                start_of_day = user_tz.localize(datetime.combine(now_in_user_tz.date(), time.min))
-                end_of_day = now_in_user_tz
+                end_date_utc = now_in_user_tz.astimezone(pytz.utc)
+                start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
 
-            start_date_utc = start_of_day.astimezone(pytz.utc)
-            end_date_utc = end_of_day.astimezone(pytz.utc)
+                # Determine display date based on current hour
+                if now_in_user_tz.hour < 12:
+                    display_date = now_in_user_tz.date() - timedelta(days=1)
+                else:
+                    display_date = now_in_user_tz.date()
+                date_str = display_date.strftime('%Y-%m-%d')
+                # Skip the conversion below since we already have UTC times
+                start_of_day = None
+                end_of_day = None
+
+            if start_of_day and end_of_day:
+                start_date_utc = start_of_day.astimezone(pytz.utc)
+                end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
     else:
@@ -907,9 +914,16 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
             end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
         else:
-            date_str = now_utc.strftime('%Y-%m-%d')
-            start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
+            # Use past 24 hours
             end_date_utc = now_utc
+            start_date_utc = now_utc - timedelta(hours=24)
+
+            # Determine display date based on current hour
+            if now_utc.hour < 12:
+                display_date = now_utc.date() - timedelta(days=1)
+            else:
+                display_date = now_utc.date()
+            date_str = display_date.strftime('%Y-%m-%d')
 
     # Get conversations for the date
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)

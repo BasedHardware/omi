@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Desktop battery info widget with premium minimal design
@@ -39,7 +40,7 @@ class DesktopBatteryInfoWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Disconnected',
+                  context.l10n.disconnected,
                   style: TextStyle(
                     fontSize: responsive.responsiveFontSize(baseFontSize: 12),
                     fontWeight: FontWeight.w500,

@@ -164,7 +164,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncAll({
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
     if (wals.isEmpty) {
       Logger.debug("FlashPageSync: All downloaded!");
@@ -176,6 +179,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
       wal.isSyncing = true;
       wal.syncStartedAt = DateTime.now();
+      wal.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
 
       final completed = await _syncWal(wal, progress);
@@ -202,7 +206,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+    IWifiConnectionListener? connectionListener,
+  }) async {
     var walToSync = _wals.where((w) => w == wal).toList().first;
 
     walToSync.isSyncing = true;

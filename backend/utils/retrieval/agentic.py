@@ -45,6 +45,11 @@ from utils.retrieval.tools import (
     get_whoop_sleep_tool,
     get_whoop_recovery_tool,
     get_whoop_workout_tool,
+    get_apple_health_steps_tool,
+    get_apple_health_sleep_tool,
+    get_apple_health_heart_rate_tool,
+    get_apple_health_workouts_tool,
+    get_apple_health_summary_tool,
     search_notion_pages_tool,
     get_twitter_tweets_tool,
     get_github_pull_requests_tool,
@@ -219,10 +224,11 @@ def execute_agentic_chat(
     """
     # Build system prompt
     system_prompt = _get_agentic_qa_prompt(uid, app)
-    
+
     # Get prompt metadata for tracing/versioning
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
+
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         print(f"⚠️ Could not get prompt metadata: {e}")
@@ -247,6 +253,11 @@ def execute_agentic_chat(
         get_whoop_sleep_tool,
         get_whoop_recovery_tool,
         get_whoop_workout_tool,
+        get_apple_health_steps_tool,
+        get_apple_health_sleep_tool,
+        get_apple_health_heart_rate_tool,
+        get_apple_health_workouts_tool,
+        get_apple_health_summary_tool,
         search_notion_pages_tool,
         get_twitter_tweets_tool,
         get_github_pull_requests_tool,
@@ -355,10 +366,11 @@ async def execute_agentic_chat_stream(
     """
     # Build system prompt with file context and page context
     system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
-    
+
     # Get prompt metadata for tracing/versioning
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
+
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         print(f"⚠️ Could not get prompt metadata: {e}")
@@ -383,6 +395,11 @@ async def execute_agentic_chat_stream(
         get_whoop_sleep_tool,
         get_whoop_recovery_tool,
         get_whoop_workout_tool,
+        get_apple_health_steps_tool,
+        get_apple_health_sleep_tool,
+        get_apple_health_heart_rate_tool,
+        get_apple_health_workouts_tool,
+        get_apple_health_summary_tool,
         search_notion_pages_tool,
         get_twitter_tweets_tool,
         get_github_pull_requests_tool,

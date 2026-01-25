@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class McpApiKeyCreatedDialog extends StatelessWidget {
   final McpApiKeyCreated apiKey;
@@ -12,11 +13,11 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Key Created'),
+      title: Text(context.l10n.keyCreated),
       content: SingleChildScrollView(
         child: ListBody(
           children: <Widget>[
-            const Text('Your new key has been created. Please copy it now. You will not be able to see it again.'),
+            Text(context.l10n.keyCreatedMessage),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -34,20 +35,20 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
       ),
       actions: <Widget>[
         TextButton(
-          child: const Text('Done'),
+          child: Text(context.l10n.done),
           onPressed: () {
             Navigator.of(context).pop();
           },
         ),
         ElevatedButton(
-          child: const Text('Copy'),
+          child: Text(context.l10n.copy),
           style: ElevatedButton.styleFrom(
             foregroundColor: Colors.white,
             backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: apiKey.key));
-            AppSnackbar.showSnackbar('Key copied to clipboard.');
+            AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.keyWord));
           },
         ),
       ],

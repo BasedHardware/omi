@@ -12,6 +12,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AppMetadataWidget extends StatelessWidget {
   final File? imageFile;
@@ -71,7 +72,7 @@ class AppMetadataWidget extends StatelessWidget {
                             Padding(
                               padding: const EdgeInsets.only(left: 8.0),
                               child: Text(
-                                'App ID',
+                                context.l10n.appIdLabel,
                                 style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                               ),
                             ),
@@ -98,9 +99,9 @@ class AppMetadataWidget extends StatelessWidget {
                                       Clipboard.setData(
                                           ClipboardData(text: context.read<AddAppProvider>().updateAppId!));
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('App ID copied to clipboard'),
-                                          duration: Duration(seconds: 2),
+                                        SnackBar(
+                                          content: Text(context.l10n.appIdCopiedToClipboard),
+                                          duration: const Duration(seconds: 2),
                                         ),
                                       );
                                     },
@@ -184,13 +185,13 @@ class AppMetadataWidget extends StatelessWidget {
                             TextFormField(
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter app name';
+                                  return context.l10n.pleaseEnterAppName;
                                 }
                                 return null;
                               },
                               controller: appNameController,
                               decoration: InputDecoration(
-                                labelText: 'App Name*',
+                                labelText: '${context.l10n.appNameLabel}*',
                                 labelStyle: TextStyle(color: Colors.grey.shade400),
                                 floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14.0),
@@ -234,9 +235,9 @@ class AppMetadataWidget extends StatelessWidget {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               const SizedBox(height: 12),
-                                              const Text(
-                                                'App Category',
-                                                style: TextStyle(color: Colors.white, fontSize: 18),
+                                              Text(
+                                                context.l10n.appCategoryModalTitle,
+                                                style: const TextStyle(color: Colors.white, fontSize: 18),
                                               ),
                                               const SizedBox(height: 18),
                                               ListView.separated(
@@ -301,7 +302,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        (category?.isNotEmpty == true ? category : 'Category*') ?? 'Category*',
+                                        (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ?? '${context.l10n.categoryLabel}*',
                                         style: TextStyle(
                                             color: category != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                             fontSize: 16),
@@ -350,13 +351,13 @@ class AppMetadataWidget extends StatelessWidget {
                               minLines: 4,
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please provide a valid description';
+                                  return context.l10n.pleaseProvideValidDescription;
                                 }
                                 return null;
                               },
                               controller: appDescriptionController,
                               decoration: InputDecoration(
-                                labelText: 'Description*',
+                                labelText: '${context.l10n.descriptionLabel}*',
                                 labelStyle: TextStyle(color: Colors.grey.shade400),
                                 floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
                                 alignLabelWithHint: true,
@@ -419,19 +420,24 @@ class AppMetadataWidget extends StatelessWidget {
                                           const SizedBox(
                                             height: 12,
                                           ),
-                                          const Text(
-                                            'App Pricing',
-                                            style: TextStyle(color: Colors.white, fontSize: 18),
+                                          Text(
+                                            context.l10n.appPricingLabel,
+                                            style: const TextStyle(color: Colors.white, fontSize: 18),
                                           ),
                                           const SizedBox(
                                             height: 18,
                                           ),
                                           ListView(
                                             shrinkWrap: true,
-                                            children: ['Free', 'Paid'].map((e) {
+                                            children: [
+                                              {'label': context.l10n.pricingFree, 'isPaid': false},
+                                              {'label': context.l10n.pricingPaid, 'isPaid': true},
+                                            ].map((option) {
+                                              final isPaid = option['isPaid'] as bool;
+                                              final label = option['label'] as String;
                                               return InkWell(
                                                 onTap: () {
-                                                  provider.setIsPaid(e == 'Paid');
+                                                  provider.setIsPaid(isPaid);
                                                   Navigator.pop(context);
                                                 },
                                                 child: Container(
@@ -443,14 +449,14 @@ class AppMetadataWidget extends StatelessWidget {
                                                         width: 6,
                                                       ),
                                                       Text(
-                                                        e,
+                                                        label,
                                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                                       ),
                                                       const Spacer(),
                                                       Checkbox(
-                                                        value: provider.isPaid == (e == 'Paid'),
+                                                        value: provider.isPaid == isPaid,
                                                         onChanged: (value) {
-                                                          provider.setIsPaid(e == 'Paid');
+                                                          provider.setIsPaid(isPaid);
                                                           Navigator.pop(context);
                                                         },
                                                         side: BorderSide(color: Colors.grey.shade300),
@@ -484,7 +490,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   width: 12,
                                 ),
                                 Text(
-                                  (appPricing?.isNotEmpty == true ? appPricing : 'None Selected') ?? 'None Selected',
+                                  (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ?? context.l10n.noneSelected,
                                   style: TextStyle(
                                       color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                       fontSize: 16),

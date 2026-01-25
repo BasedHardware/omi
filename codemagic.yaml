@@ -166,6 +166,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: true
@@ -328,6 +329,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: true
@@ -519,6 +521,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -708,6 +711,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -875,6 +879,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -1019,6 +1024,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -1589,8 +1595,10 @@ workflows:
       email:
         recipients:
           - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -1750,6 +1758,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false

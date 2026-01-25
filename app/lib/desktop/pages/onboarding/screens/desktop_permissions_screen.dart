@@ -6,6 +6,7 @@ import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/molecules/omi_selectable_tile.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopPermissionsScreen extends StatefulWidget {
@@ -100,7 +101,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
           actions: [
             TextButton(
               child: Text(
-                'Cancel',
+                context.l10n.cancel,
                 style: TextStyle(
                   color: Colors.grey.shade500,
                   fontSize: 16,
@@ -109,7 +110,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
               onPressed: () => Navigator.of(context).pop(),
             ),
             OmiButton(
-              label: 'Continue',
+              label: context.l10n.continueButton,
               onPressed: () {
                 Navigator.of(context).pop();
                 onContinue();
@@ -159,9 +160,9 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                               ),
                             ),
                             const SizedBox(height: 24),
-                            const Text(
-                              'Grant permissions',
-                              style: TextStyle(
+                            Text(
+                              context.l10n.grantPermissions,
+                              style: const TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.white,
@@ -173,9 +174,9 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                             Container(
                               constraints: const BoxConstraints(maxWidth: 480),
                               padding: const EdgeInsets.symmetric(horizontal: 40),
-                              child: const Text(
-                                'Enable features for the best Omi experience on your device.',
-                                style: TextStyle(
+                              child: Text(
+                                context.l10n.enableFeaturesForBestExperience,
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w400,
                                   color: Color(0xFF9CA3AF),
@@ -204,15 +205,14 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Microphone Access',
-                                subtitle: 'Record audio conversations',
+                                title: context.l10n.microphoneAccess,
+                                subtitle: context.l10n.recordAudioConversations,
                                 selected: provider.hasMicrophonePermission,
                                 onTap: () {
                                   if (!provider.hasMicrophonePermission) {
                                     _showPermissionDialog(
-                                      title: 'Microphone Access',
-                                      description:
-                                          'Omi needs microphone access to record your conversations and provide transcriptions.',
+                                      title: context.l10n.microphoneAccess,
+                                      description: context.l10n.microphoneAccessDescription,
                                       onContinue: () async {
                                         await provider.askForMicrophonePermissions();
                                       },
@@ -232,15 +232,14 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Screen Recording',
-                                subtitle: 'Capture system audio from meetings',
+                                title: context.l10n.screenRecording,
+                                subtitle: context.l10n.captureSystemAudioFromMeetings,
                                 selected: provider.hasScreenCapturePermission,
                                 onTap: () {
                                   if (!provider.hasScreenCapturePermission) {
                                     _showPermissionDialog(
-                                      title: 'Screen Recording',
-                                      description:
-                                          'Omi needs screen recording permission to capture system audio from your browser-based meetings.',
+                                      title: context.l10n.screenRecording,
+                                      description: context.l10n.screenRecordingDescription,
                                       onContinue: () async {
                                         await provider.askForScreenCapturePermissions();
                                       },
@@ -260,15 +259,14 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Accessibility',
-                                subtitle: 'Detect browser-based meetings',
+                                title: context.l10n.accessibility,
+                                subtitle: context.l10n.detectBrowserBasedMeetings,
                                 selected: provider.hasAccessibilityPermission,
                                 onTap: () {
                                   if (!provider.hasAccessibilityPermission) {
                                     _showPermissionDialog(
-                                      title: 'Accessibility',
-                                      description:
-                                          'Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.',
+                                      title: context.l10n.accessibility,
+                                      description: context.l10n.accessibilityDescription,
                                       onContinue: () async {
                                         await provider.askForAccessibilityPermissions();
                                       },
@@ -292,12 +290,12 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                             children: [
                               OmiButton(
                                 label: provider.isLoading
-                                    ? 'Please wait...'
+                                    ? context.l10n.pleaseWait
                                     : (provider.hasMicrophonePermission ||
                                             provider.hasScreenCapturePermission ||
                                             provider.hasAccessibilityPermission)
-                                        ? 'Continue'
-                                        : 'Skip',
+                                        ? context.l10n.continueButton
+                                        : context.l10n.skip,
                                 onPressed: provider.isLoading
                                     ? null
                                     : () {
@@ -311,7 +309,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                           ),
                           const SizedBox(height: 8),
                           OmiButton(
-                            label: 'Back',
+                            label: context.l10n.back,
                             type: OmiButtonType.text,
                             onPressed: widget.onBack,
                           ),

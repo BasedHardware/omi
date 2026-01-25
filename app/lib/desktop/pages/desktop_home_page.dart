@@ -22,6 +22,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/focus_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -30,6 +31,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/shortcut_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -477,39 +479,44 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           // Main navigation items
                           _buildNavItem(
                             icon: FontAwesomeIcons.house,
-                            label: 'Conversations',
+                            label: context.l10n.conversations,
                             index: 0,
                             isSelected: homeProvider.selectedIndex == 0,
                             onTap: () => _navigateToIndex(0, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.solidComments,
-                            label: 'Chat',
+                            label: context.l10n.chat,
                             index: 1,
                             isSelected: homeProvider.selectedIndex == 1,
                             onTap: () => _navigateToIndex(1, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.brain,
-                            label: 'Memories',
+                            label: context.l10n.memories,
                             index: 2,
                             isSelected: homeProvider.selectedIndex == 2,
                             onTap: () => _navigateToIndex(2, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.squareCheck,
-                            label: 'Actions',
+                            label: context.l10n.tasks,
                             index: 3,
                             isSelected: homeProvider.selectedIndex == 3,
                             onTap: () => _navigateToIndex(3, homeProvider),
                           ),
                           _buildNavItem(
                             icon: FontAwesomeIcons.gripVertical,
-                            label: 'Apps',
+                            label: context.l10n.apps,
                             index: 4,
                             isSelected: homeProvider.selectedIndex == 4,
                             onTap: () => _navigateToIndex(4, homeProvider),
                           ),
+
+                          const SizedBox(height: 16),
+
+                          // Proactive Assistant (Focus Monitoring)
+                          _buildProactiveAssistantItem(),
 
                           const Spacer(),
 
@@ -530,7 +537,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                                 margin: const EdgeInsets.only(top: 12),
                                 child: _buildSecondaryNavItem(
                                   icon: Icons.download_rounded,
-                                  label: 'Sync Available',
+                                  label: context.l10n.syncAvailable,
                                   onTap: () => routeToPage(context, const SyncPage()),
                                   showAccent: true,
                                 ),
@@ -552,7 +559,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           // Secondary navigation items (same style as main nav)
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.gear,
-                            label: 'Settings',
+                            label: context.l10n.settings,
                             onTap: () {
                               MixpanelManager().pageOpened('Settings');
                               DesktopSettingsModal.show(context);
@@ -560,7 +567,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.gift,
-                            label: 'Refer a Friend',
+                            label: context.l10n.referAFriend,
                             onTap: () {
                               MixpanelManager().pageOpened('Refer a Friend');
                               launchUrl(Uri.parse('https://affiliate.omi.me'));
@@ -568,7 +575,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           _buildBottomNavItem(
                             icon: FontAwesomeIcons.circleQuestion,
-                            label: 'Help',
+                            label: context.l10n.help,
                             onTap: () {
                               if (PlatformService.isIntercomSupported) {
                                 Intercom.instance.displayHelpCenter();
@@ -666,9 +673,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                         width: 1,
                       ),
                     ),
-                    child: const Text(
-                      'Pro',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.pro,
+                      style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: ResponsiveHelper.purplePrimary,
@@ -790,8 +797,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            MixpanelManager()
-                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
+            MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
             onTap();
           },
           borderRadius: BorderRadius.circular(10),
@@ -836,6 +842,118 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       index,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
+    );
+  }
+
+  Widget _buildProactiveAssistantItem() {
+    return Consumer<FocusProvider>(
+      builder: (context, focusProvider, child) {
+        final isMonitoring = focusProvider.isMonitoring;
+        final hasPermission = focusProvider.hasScreenRecordingPermission;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () async {
+                if (!hasPermission) {
+                  // Request permission
+                  await focusProvider.openScreenRecordingSettings();
+                  return;
+                }
+                // Toggle monitoring
+                await focusProvider.toggleMonitoring();
+              },
+              borderRadius: BorderRadius.circular(10),
+              hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                decoration: BoxDecoration(
+                  color: isMonitoring
+                      ? const Color(0xFF1a472a).withValues(alpha: 0.6)
+                      : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: isMonitoring
+                      ? Border.all(
+                          color: const Color(0xFF28CA42).withValues(alpha: 0.4),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    // Status indicator
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isMonitoring
+                            ? const Color(0xFF28CA42)
+                            : hasPermission
+                                ? ResponsiveHelper.textTertiary
+                                : Colors.orange,
+                        shape: BoxShape.circle,
+                        boxShadow: isMonitoring
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF28CA42).withValues(alpha: 0.5),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Proactive Assistant',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isMonitoring ? FontWeight.w500 : FontWeight.w400,
+                              color: isMonitoring ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                            ),
+                          ),
+                          if (isMonitoring && focusProvider.currentApp != null)
+                            Text(
+                              focusProvider.isFocused
+                                  ? 'Focused on ${focusProvider.currentApp}'
+                                  : 'Watching ${focusProvider.currentApp}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if (!hasPermission)
+                            Text(
+                              'Click to grant permission',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange.withValues(alpha: 0.8),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Toggle indicator
+                    Icon(
+                      isMonitoring ? FontAwesomeIcons.toggleOn : FontAwesomeIcons.toggleOff,
+                      color: isMonitoring ? const Color(0xFF28CA42) : ResponsiveHelper.textTertiary,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -906,18 +1024,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.bolt,
                     color: Colors.white,
                     size: 13,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Text(
-                    'Upgrade to Pro',
-                    style: TextStyle(
+                    context.l10n.upgradeToPro,
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
@@ -979,9 +1097,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Get Omi Device',
-                            style: TextStyle(
+                          Text(
+                            context.l10n.getOmiDevice,
+                            style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: ResponsiveHelper.textPrimary,
@@ -989,7 +1107,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Wearable AI companion',
+                            context.l10n.wearableAiCompanion,
                             style: TextStyle(
                               fontSize: 11,
                               color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),

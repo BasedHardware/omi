@@ -866,7 +866,9 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             mElement: kAudioObjectPropertyElementMain
         )
 
-        deviceListChangedListener = { (inNumberAddresses, inAddresses) in
+        deviceListChangedListener = { [weak self] (inNumberAddresses, inAddresses) in
+            guard let self = self else { return }
+
             // Invalidate any existing work item to reset the debounce period
             self.deviceChangeWorkItem?.cancel()
 

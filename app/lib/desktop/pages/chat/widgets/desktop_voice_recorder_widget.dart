@@ -12,6 +12,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -84,7 +85,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
     super.dispose();
   }
 
-  Future<bool> _checkAndRequestMicrophonePermission() async {
+  Future<bool> _checkAndRequestMicrophonePermission(BuildContext context) async {
     try {
       // Check microphone permission first
       String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
@@ -93,25 +94,24 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
         if (micStatus == 'undetermined' || micStatus == 'unavailable') {
           bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
           if (!micGranted) {
-            AppSnackbar.showSnackbarError('Microphone permission is required for voice recording.');
+            AppSnackbar.showSnackbarError(context.l10n.microphonePermissionRequired);
             return false;
           }
         } else if (micStatus == 'denied') {
-          AppSnackbar.showSnackbarError(
-              'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+          AppSnackbar.showSnackbarError(context.l10n.microphonePermissionDenied);
           return false;
         }
       }
       return true;
     } catch (e) {
-      AppSnackbar.showSnackbarError('Failed to check Microphone permission: $e');
+      AppSnackbar.showSnackbarError(context.l10n.failedToCheckMicrophonePermission(e.toString()));
       return false;
     }
   }
 
   Future<void> _startRecording() async {
     // Check and request microphone permission using desktop platform channel
-    if (!await _checkAndRequestMicrophonePermission()) {
+    if (!await _checkAndRequestMicrophonePermission(context)) {
       setState(() {
         _state = RecordingState.transcribeFailed;
       });
@@ -195,6 +195,8 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
   }
 
   Future<void> _processRecording() async {
+    if (_isProcessing) return;
+
     if (_audioChunks.isEmpty) {
       widget.onClose();
       return;
@@ -212,6 +214,14 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
       flattenedBytes.addAll(chunk);
     }
 
+    // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
+    const int minAudioBytes = 16000;
+    if (flattenedBytes.length < minAudioBytes) {
+      Logger.debug('Audio too short (${flattenedBytes.length} bytes), closing without error');
+      widget.onClose();
+      return;
+    }
+
     final audioFile = await FileUtils.convertPcmToWavFile(
       Uint8List.fromList(flattenedBytes),
       16000,
@@ -221,14 +231,18 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
     try {
       final transcript = await transcribeVoiceMessage(audioFile);
       if (mounted) {
+        if (transcript.isEmpty) {
+          // Empty transcript - close gracefully without error
+          Logger.debug('Empty transcript received, closing without error');
+          widget.onClose();
+          return;
+        }
         setState(() {
           _transcript = transcript;
           _state = RecordingState.transcribeSuccess;
           _isProcessing = false;
         });
-        if (transcript.isNotEmpty) {
-          widget.onTranscriptReady(transcript);
-        }
+        widget.onTranscriptReady(transcript);
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
@@ -238,7 +252,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
           _isProcessing = false;
         });
       }
-      AppSnackbar.showSnackbarError('Failed to transcribe audio');
+      AppSnackbar.showSnackbarError(context.l10n.failedToTranscribeAudio);
     }
   }
 
@@ -323,9 +337,9 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
               Shimmer.fromColors(
                 baseColor: ResponsiveHelper.textTertiary,
                 highlightColor: ResponsiveHelper.textPrimary,
-                child: const Text(
-                  'Transcribing...',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.transcribing,
+                  style: const TextStyle(
                     color: ResponsiveHelper.textPrimary,
                     fontSize: 14,
                   ),
@@ -401,10 +415,10 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Flexible(
+              Flexible(
                 child: Text(
-                  'Transcription failed',
-                  style: TextStyle(
+                  context.l10n.transcriptionFailed,
+                  style: const TextStyle(
                     color: Colors.redAccent,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

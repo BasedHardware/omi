@@ -701,7 +701,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         index: i,
         rating: grade?.rating,
         isToday: isToday,
-        dayLabel: DateFormat('E').format(day).substring(0, 1),
+        dayLabel: DateFormat('E', Localizations.localeOf(context).languageCode).format(day).substring(0, 1),
       ));
     }
 

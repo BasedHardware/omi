@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
@@ -192,6 +193,9 @@ class AuthService {
     }
   }
 
+  // Method channel for direct deep link delivery (fallback for app_links)
+  static const _deepLinkChannel = MethodChannel('com.omi/deep_links');
+
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
@@ -206,39 +210,64 @@ class AuthService {
 
       Logger.debug('Authorization URL: $authUrl');
 
+      // Set up listeners before launching URL
+      final appLinks = AppLinks();
+      late StreamSubscription linkSubscription;
+      final completer = Completer<String>();
+
+      // Listen via app_links
+      linkSubscription = appLinks.uriLinkStream.listen(
+        (Uri uri) {
+          Logger.debug('Received callback URI via app_links: $uri');
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            if (!completer.isCompleted) {
+              linkSubscription.cancel();
+              completer.complete(uri.toString());
+            }
+          }
+        },
+        onError: (error) {
+          Logger.debug('App link error: $error');
+          if (!completer.isCompleted) {
+            linkSubscription.cancel();
+            completer.completeError(error);
+          }
+        },
+      );
+
+      // Also listen via direct method channel (fallback)
+      _deepLinkChannel.setMethodCallHandler((call) async {
+        if (call.method == 'onDeepLink') {
+          final urlString = call.arguments as String;
+          Logger.debug('Received callback URI via method channel: $urlString');
+          final uri = Uri.parse(urlString);
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            if (!completer.isCompleted) {
+              linkSubscription.cancel();
+              _deepLinkChannel.setMethodCallHandler(null);
+              completer.complete(urlString);
+            }
+          }
+        }
+      });
+
+      // Now launch the URL
       final launched = await launchUrl(
         Uri.parse(authUrl),
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched) {
+        linkSubscription.cancel();
+        _deepLinkChannel.setMethodCallHandler(null);
         throw Exception('Failed to launch authentication URL');
       }
-
-      // Listen for the callback URL using app_links
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            linkSubscription.cancel();
-            completer.complete(uri.toString());
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          linkSubscription.cancel();
-          completer.completeError(error);
-        },
-      );
 
       final result = await completer.future.timeout(
         const Duration(minutes: 5),
         onTimeout: () {
           linkSubscription.cancel();
+          _deepLinkChannel.setMethodCallHandler(null);
           throw Exception('Authentication timeout');
         },
       );

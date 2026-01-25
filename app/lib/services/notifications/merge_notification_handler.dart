@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 
+import 'package:omi/main.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Event data for merge completion
@@ -77,13 +79,16 @@ class MergeNotificationHandler {
   }) async {
     try {
       final notificationId = mergedConversationId.hashCode;
+      final ctx = MyApp.navigatorKey.currentContext;
+      final totalCount = removedCount + 1;
 
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '✅ Conversations Merged Successfully',
-          body: '${removedCount + 1} conversations have been merged successfully',
+          title: '✅ ${ctx?.l10n.mergeConversationsSuccessTitle ?? 'Conversations Merged Successfully'}',
+          body: ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
+              '$totalCount conversations have been merged successfully',
           payload: {
             'merged_conversation_id': mergedConversationId,
             'navigate_to': '/conversation/$mergedConversationId',

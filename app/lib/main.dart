@@ -35,6 +35,7 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/calendar_provider.dart';
@@ -58,6 +59,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/providers/focus_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -138,15 +140,14 @@ Future _init() async {
   await ServiceManager.init();
 
   // Firebase
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
+  if (Firebase.apps.isEmpty) {
+    final options = (PlatformService.isWindows || F.env == Environment.prod)
+        ? prod.DefaultFirebaseOptions.currentPlatform
+        : dev.DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp(options: options);
   } else {
-    if (F.env == Environment.prod) {
-      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
-    } else {
-      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
-    }
+    // Firebase may already be initialized by native SDK (macOS)
+    debugPrint('Firebase already initialized.');
   }
 
   await PlatformManager.initializeServices();
@@ -369,6 +370,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => FolderProvider()),
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
           ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
+          ChangeNotifierProvider(create: (context) => FocusProvider()..initialize()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

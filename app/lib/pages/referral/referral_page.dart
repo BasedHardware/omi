@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ReferralPage extends StatefulWidget {
   const ReferralPage({super.key});
@@ -59,9 +60,9 @@ class _ReferralPageState extends State<ReferralPage> {
             Navigator.of(context).pop();
           },
         ),
-        title: const Text(
-          'Referral Program',
-          style: TextStyle(
+        title: Text(
+          context.l10n.referralProgram,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w600,

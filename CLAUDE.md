@@ -1,5 +1,13 @@
 # Coding Guidelines
 
+## Setup
+
+### Install Pre-commit Hook
+Run once to enable auto-formatting on commit:
+```bash
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
 ## Backend
 
 ### No In-Function Imports
@@ -38,3 +46,46 @@ from routers.apps import some_function  # Don't import from higher level
 from database.cache import get_memory_cache
 from database.redis_db import r
 ```
+
+### Memory Management
+
+Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
+
+## App (Flutter)
+
+### Localization Required
+
+- All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
+
+- After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
+```bash
+cd app && flutter gen-l10n
+```
+
+## Formatting
+
+Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
+
+### Dart (app/)
+```bash
+dart format --line-length 120 <files>
+```
+Note: Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
+
+### Python (backend/)
+```bash
+black --line-length 120 --skip-string-normalization <files>
+```
+
+### C/C++ (firmware: omi/, omiGlass/)
+```bash
+clang-format -i <files>
+```
+
+## Testing
+
+### Always Run Tests Before Committing
+After making changes, always run the appropriate test script to verify your changes.
+
+- **Backend changes**: Run `backend/test.sh`
+- **App changes**: Run `app/test.sh`

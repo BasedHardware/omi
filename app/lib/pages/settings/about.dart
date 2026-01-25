@@ -36,7 +36,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
                 MixpanelManager().pageOpened('About Privacy Policy');
                 routeToPage(
                   context,
-                  const PageWebView(url: 'https://www.omi.me/pages/privacy', title: 'Privacy Policy'),
+                  PageWebView(url: 'https://www.omi.me/pages/privacy', title: context.l10n.privacyPolicyTitle),
                 );
               },
             ),

@@ -11,6 +11,7 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/desktop_memory_dialog.dart';
@@ -289,7 +290,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Loading memories...',
+                                  context.l10n.loadingMemories,
                                   style: ResponsiveHelper(context).bodyLarge.copyWith(
                                         color: ResponsiveHelper.textPrimary,
                                       ),
@@ -350,7 +351,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           Expanded(
             child: OmiSearchInput(
               controller: _searchController,
-              hint: 'Search memories...',
+              hint: context.l10n.searchMemories,
               onChanged: (value) {
                 provider.setSearchQuery(value);
                 if (value.isNotEmpty) {
@@ -397,10 +398,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         ),
         offset: const Offset(0, 48),
         itemBuilder: (context) => [
-          _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.system, 'About You'),
-          _buildFilterItem(FilterOption.interesting, 'Insights'),
-          _buildFilterItem(FilterOption.manual, 'Manual'),
+          _buildFilterItem(FilterOption.all, context.l10n.allMemories),
+          _buildFilterItem(FilterOption.system, context.l10n.aboutYou),
+          _buildFilterItem(FilterOption.interesting, context.l10n.insights),
+          _buildFilterItem(FilterOption.manual, context.l10n.manual),
         ],
         onSelected: _applyFilter,
         child: Container(
@@ -462,13 +463,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   String _getFilterText() {
     switch (_currentFilter) {
       case FilterOption.system:
-        return 'About You';
+        return context.l10n.aboutYou;
       case FilterOption.interesting:
-        return 'Insights';
+        return context.l10n.insights;
       case FilterOption.manual:
-        return 'Manual';
+        return context.l10n.manual;
       case FilterOption.all:
-        return 'All';
+        return context.l10n.all;
     }
   }
 
@@ -555,10 +556,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ),
             const SizedBox(height: 16),
-            const Text(
-              'Loading your memories...',
+            Text(
+              context.l10n.loadingYourMemories,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -576,11 +577,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       children: [
         OmiEmptyState(
           icon: FontAwesomeIcons.brain,
-          title:
-              provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          title: provider.searchQuery.isEmpty && _selectedCategory == null
+              ? context.l10n.noMemoriesYet
+              : context.l10n.noMemoriesFound,
           message: provider.searchQuery.isEmpty && _selectedCategory == null
-              ? 'Create your first memory to get started'
-              : 'Try adjusting your search or filter',
+              ? context.l10n.createYourFirstMemory
+              : context.l10n.tryAdjustingFilter,
           color: ResponsiveHelper.purplePrimary,
         ),
         if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
@@ -603,9 +605,9 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ],
                 ),
-                child: const Text(
-                  'Add your first memory',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.addYourFirstMemory,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
