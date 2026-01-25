@@ -2,6 +2,45 @@
 Unit tests for voice message language resolution.
 """
 
+import sys
+import types
+from unittest.mock import MagicMock
+
+sys.modules["database._client"] = MagicMock()
+sys.modules["stripe"] = MagicMock()
+sys.modules["database.chat"] = MagicMock()
+sys.modules["database.notifications"] = MagicMock()
+sys.modules["database.apps"] = MagicMock()
+sys.modules["models.chat"] = MagicMock()
+sys.modules["models.conversation"] = MagicMock()
+sys.modules["models.notification_message"] = MagicMock()
+sys.modules["models.app"] = MagicMock()
+sys.modules["models.transcript_segment"] = MagicMock()
+sys.modules["utils.notifications"] = MagicMock()
+sys.modules["utils.other.storage"] = MagicMock()
+sys.modules["utils.retrieval.graph"] = MagicMock()
+sys.modules["utils.stt.pre_recorded"] = MagicMock()
+
+
+class NotFound(Exception):
+    pass
+
+
+_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+_google_exceptions_module = types.ModuleType("google.cloud.exceptions")
+_google_exceptions_module.NotFound = NotFound
+sys.modules.setdefault("google.cloud.exceptions", _google_exceptions_module)
+_google_firestore_module = types.ModuleType("google.cloud.firestore")
+sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
+_google_firestore_v1_module = types.ModuleType("google.cloud.firestore_v1")
+_google_firestore_v1_module.FieldFilter = MagicMock()
+_google_firestore_v1_module.transactional = lambda func: func
+sys.modules.setdefault("google.cloud.firestore_v1", _google_firestore_v1_module)
+setattr(_google_module, "cloud", _google_cloud_module)
+setattr(_google_cloud_module, "exceptions", _google_exceptions_module)
+setattr(_google_cloud_module, "firestore", _google_firestore_module)
+
 import database.users as user_db
 from utils.chat import resolve_voice_message_language
 
@@ -36,6 +75,15 @@ def test_request_language_specific(monkeypatch):
 
     language, detect_language = resolve_voice_message_language("uid", "ru")
     assert language == "ru"
+    assert detect_language is False
+
+
+def test_request_language_blank_uses_user_preferences(monkeypatch):
+    monkeypatch.setattr(user_db, "get_user_language_preference", lambda uid: "vi")
+    monkeypatch.setattr(user_db, "get_user_transcription_preferences", lambda uid: {"single_language_mode": True})
+
+    language, detect_language = resolve_voice_message_language("uid", "   ")
+    assert language == "vi"
     assert detect_language is False
 
 
