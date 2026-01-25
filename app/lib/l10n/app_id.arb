@@ -2537,5 +2537,7 @@
   "chooseTransferMethod": "Pilih metode transfer",
   "fastTransferSpeed": "~150 KB/s melalui WiFi",
   "largeTimeGapDetected": "Terdeteksi jeda waktu besar ({gap})",
-  "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})"
+  "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})",
+  "dailyRecaps": "Ringkasan Harian",
+  "removeFilter": "Hapus Filter"
 }

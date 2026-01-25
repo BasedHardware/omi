@@ -2464,5 +2464,7 @@
   "chooseTransferMethod": "Vyberte metodu přenosu",
   "fastTransferSpeed": "~150 KB/s přes WiFi",
   "largeTimeGapDetected": "Zjištěna velká časová mezera ({gap})",
-  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})"
+  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})",
+  "dailyRecaps": "Denní Souhrny",
+  "removeFilter": "Odstranit Filtr"
 }

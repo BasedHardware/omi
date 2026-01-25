@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Pilih kaedah pemindahan",
   "fastTransferSpeed": "~150 KB/s melalui WiFi",
   "largeTimeGapDetected": "Jurang masa besar dikesan ({gap})",
-  "largeTimeGapsDetected": "Jurang masa besar dikesan ({gaps})"
+  "largeTimeGapsDetected": "Jurang masa besar dikesan ({gaps})",
+  "dailyRecaps": "Ringkasan Harian",
+  "removeFilter": "Alih Keluar Penapis"
 }

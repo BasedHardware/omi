@@ -2530,5 +2530,7 @@
   "chooseTransferMethod": "Выберите способ передачи",
   "fastTransferSpeed": "~150 КБ/с через WiFi",
   "largeTimeGapDetected": "Обнаружен большой временной разрыв ({gap})",
-  "largeTimeGapsDetected": "Обнаружены большие временные разрывы ({gaps})"
+  "largeTimeGapsDetected": "Обнаружены большие временные разрывы ({gaps})",
+  "dailyRecaps": "Ежедневные сводки",
+  "removeFilter": "Удалить фильтр"
 }

@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Izvēlieties pārsūtīšanas metodi",
   "fastTransferSpeed": "~150 KB/s caur WiFi",
   "largeTimeGapDetected": "Konstatēta liela laika starpība ({gap})",
-  "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})"
+  "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})",
+  "dailyRecaps": "Dienas Kopsavilkumi",
+  "removeFilter": "Noņemt Filtru"
 }

@@ -2463,5 +2463,7 @@
   "chooseTransferMethod": "Übertragungsmethode wählen",
   "fastTransferSpeed": "~150 KB/s über WiFi",
   "largeTimeGapDetected": "Große Zeitlücke erkannt ({gap})",
-  "largeTimeGapsDetected": "Große Zeitlücken erkannt ({gaps})"
+  "largeTimeGapsDetected": "Große Zeitlücken erkannt ({gaps})",
+  "dailyRecaps": "Tägliche Zusammenfassungen",
+  "removeFilter": "Filter Entfernen"
 }

@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Kies overdrachtsmethode",
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "largeTimeGapDetected": "Groot tijdsverschil gedetecteerd ({gap})",
-  "largeTimeGapsDetected": "Grote tijdsverschillen gedetecteerd ({gaps})"
+  "largeTimeGapsDetected": "Grote tijdsverschillen gedetecteerd ({gaps})",
+  "dailyRecaps": "Dagelijkse Samenvattingen",
+  "removeFilter": "Filter Verwijderen"
 }

@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Scegli metodo di trasferimento",
   "fastTransferSpeed": "~150 KB/s tramite WiFi",
   "largeTimeGapDetected": "Rilevato un grande divario temporale ({gap})",
-  "largeTimeGapsDetected": "Rilevati grandi divari temporali ({gaps})"
+  "largeTimeGapsDetected": "Rilevati grandi divari temporali ({gaps})",
+  "dailyRecaps": "Riepiloghi Giornalieri",
+  "removeFilter": "Rimuovi Filtro"
 }

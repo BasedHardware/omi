@@ -2530,5 +2530,7 @@
   "chooseTransferMethod": "Choisir la méthode de transfert",
   "fastTransferSpeed": "~150 Ko/s via WiFi",
   "largeTimeGapDetected": "Grand écart de temps détecté ({gap})",
-  "largeTimeGapsDetected": "Grands écarts de temps détectés ({gaps})"
+  "largeTimeGapsDetected": "Grands écarts de temps détectés ({gaps})",
+  "dailyRecaps": "Récapitulatifs Quotidiens",
+  "removeFilter": "Supprimer le Filtre"
 }
