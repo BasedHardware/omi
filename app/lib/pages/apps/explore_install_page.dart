@@ -606,22 +606,22 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                     ),
                                   ),
                                   const SizedBox(width: 16),
-                                  const Expanded(
+                                  Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          'Create Your Own App',
-                                          style: TextStyle(
+                                          context.l10n.createYourOwnApp,
+                                          style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
                                             color: Colors.black,
                                           ),
                                         ),
-                                        SizedBox(height: 2),
+                                        const SizedBox(height: 2),
                                         Text(
-                                          'Build and share your custom app',
-                                          style: TextStyle(
+                                          context.l10n.buildAndShareYourCustomApp,
+                                          style: const TextStyle(
                                             fontSize: 13,
                                             color: Colors.black54,
                                           ),
@@ -707,7 +707,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               SizedBox(
                                                 height: 44,
                                                 child: SearchBar(
-                                                  hintText: 'Search 1500+ Apps',
+                                                  hintText: context.l10n.searchAppsPlaceholder,
                                                   leading: const Padding(
                                                     padding: EdgeInsets.only(left: 6.0),
                                                     child: Icon(FontAwesomeIcons.magnifyingGlass,
@@ -788,9 +788,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: const Text(
-                                              'My Apps',
-                                              style: TextStyle(
+                                            label: Text(
+                                              context.l10n.myApps,
+                                              style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,
@@ -860,8 +860,8 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             ),
                                             label: Text(
                                               (state.visibleFilterCount > 0 && !state.isSearchActive)
-                                                  ? 'Installed'
-                                                  : 'Installed Apps',
+                                                  ? context.l10n.installed
+                                                  : context.l10n.installedApps,
                                               style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
@@ -933,9 +933,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               size: 16,
                                               color: Colors.white,
                                             ),
-                                            label: const Text(
-                                              'Filters',
-                                              style: TextStyle(
+                                            label: Text(
+                                              context.l10n.filters,
+                                              style: const TextStyle(
                                                 fontSize: 14,
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.w500,

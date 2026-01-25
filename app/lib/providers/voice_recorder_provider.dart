@@ -7,10 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
+import 'package:omi/main.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 enum VoiceRecorderState {
   idle,
@@ -149,6 +151,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   Future<void> processRecording() async {
+    if (_isProcessing) return;
+
     if (_audioChunks.isEmpty) {
       close();
       return;
@@ -164,6 +168,14 @@ class VoiceRecorderProvider extends ChangeNotifier {
     List<int> flattenedBytes = [];
     for (var chunk in _audioChunks) {
       flattenedBytes.addAll(chunk);
+    }
+
+    // Check minimum audio length (0.5 seconds at 16kHz PCM16 = 16000 bytes)
+    const int minAudioBytes = 16000;
+    if (flattenedBytes.length < minAudioBytes) {
+      Logger.debug('Audio too short (${flattenedBytes.length} bytes), closing without error');
+      close();
+      return;
     }
 
     // Convert PCM to WAV file
@@ -184,13 +196,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
         _onTranscriptReady?.call(transcript);
         // Auto-close after successful transcription
         close();
+      } else {
+        // Empty transcript - close gracefully without error
+        Logger.debug('Empty transcript received, closing without error');
+        close();
       }
     } catch (e) {
       Logger.debug('Error processing recording: $e');
       _state = VoiceRecorderState.transcribeFailed;
       _isProcessing = false;
       notifyListeners();
-      AppSnackbar.showSnackbarError('Failed to transcribe audio');
+      AppSnackbar.showSnackbarError(
+          MyApp.navigatorKey.currentContext?.l10n.voiceFailedToTranscribe ?? 'Failed to transcribe audio');
     }
   }
 

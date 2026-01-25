@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/adaptive_widget.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class OmiLoadMoreButton extends AdaptiveWidget {
@@ -15,12 +16,12 @@ class OmiLoadMoreButton extends AdaptiveWidget {
   });
 
   @override
-  Widget buildDesktop(BuildContext context) => _base();
+  Widget buildDesktop(BuildContext context) => _base(context);
 
   @override
-  Widget buildMobile(BuildContext context) => _base();
+  Widget buildMobile(BuildContext context) => _base(context);
 
-  Widget _base() {
+  Widget _base(BuildContext context) {
     if (loading) {
       return const CircularProgressIndicator(
         valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
@@ -31,7 +32,7 @@ class OmiLoadMoreButton extends AdaptiveWidget {
       onPressed: onPressed,
       icon: const Icon(Icons.expand_more, size: 18),
       label: Text(
-        'Load More ($remaining remaining)',
+        context.l10n.loadMoreRemaining(remaining.toString()),
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
       ),
       style: ElevatedButton.styleFrom(

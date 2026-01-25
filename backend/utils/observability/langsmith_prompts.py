@@ -18,6 +18,7 @@ from utils.observability.langsmith import has_langsmith_api_key
 @dataclass
 class CachedPrompt:
     """Cached prompt template with metadata."""
+
     template_text: str
     prompt_name: str
     prompt_commit: Optional[str]
@@ -54,33 +55,33 @@ def _is_cache_valid(cached: CachedPrompt) -> bool:
 def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
     """
     Fetch a prompt from LangSmith by name.
-    
+
     Returns CachedPrompt if successful, None if failed.
-    
+
     Note: Prompt fetching only requires an API key, not tracing to be enabled.
     This allows prompt versioning to work even when global tracing is disabled.
     """
     if not has_langsmith_api_key():
         print(f"⚠️  LangSmith API key not configured, cannot fetch prompt: {prompt_name}")
         return None
-    
+
     try:
         from langsmith import Client
-        
+
         client = Client()
-        
+
         # Pull the prompt - this returns a ChatPromptTemplate or similar
         prompt = client.pull_prompt(prompt_name)
-        
+
         # Extract the system message template text
         # LangSmith prompts can be ChatPromptTemplate with messages
         template_text = None
         prompt_commit = None
-        
+
         # Try to get commit/version info from the prompt metadata
         if hasattr(prompt, 'metadata'):
             prompt_commit = prompt.metadata.get('lc_hub', {}).get('commit_hash')
-        
+
         # Extract template text from the prompt
         # Handle different prompt types
         if hasattr(prompt, 'messages'):
@@ -94,7 +95,7 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
                 elif hasattr(msg, 'template'):
                     template_text = msg.template
                     break
-            
+
             # If no system message found, try first message
             if not template_text and prompt.messages:
                 first_msg = prompt.messages[0]
@@ -109,19 +110,19 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
             template_text = prompt.template
         elif isinstance(prompt, str):
             template_text = prompt
-        
+
         if not template_text:
             print(f"❌ Could not extract template text from LangSmith prompt: {prompt_name}")
             return None
-        
+
         # Try to get commit hash from different places
         if not prompt_commit:
             # The commit hash might be in the response metadata
             # For now, use a timestamp-based identifier if no commit available
             prompt_commit = f"fetched_{int(time.time())}"
-        
+
         print(f"✅ Fetched prompt from LangSmith: {prompt_name} (commit: {prompt_commit})")
-        
+
         return CachedPrompt(
             template_text=template_text,
             prompt_name=prompt_name,
@@ -129,7 +130,7 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
             fetched_at=time.time(),
             source="langsmith",
         )
-        
+
     except Exception as e:
         print(f"❌ Error fetching prompt from LangSmith: {e}")
         return None
@@ -138,13 +139,13 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
 def get_agentic_system_prompt_template() -> CachedPrompt:
     """
     Get the agentic system prompt template with caching.
-    
+
     Returns a CachedPrompt with template_text and metadata.
     Falls back to hardcoded prompt if LangSmith is unavailable.
     """
     prompt_name = _get_agentic_prompt_name()
     cache_key = f"agentic:{prompt_name}"
-    
+
     # Check cache first
     if cache_key in _prompt_cache:
         cached = _prompt_cache[cache_key]
@@ -152,14 +153,14 @@ def get_agentic_system_prompt_template() -> CachedPrompt:
             return cached
         else:
             print(f"🔄 Cache expired for prompt: {prompt_name}")
-    
+
     # Try to fetch from LangSmith
     fetched = _fetch_prompt_from_langsmith(prompt_name)
-    
+
     if fetched:
         _prompt_cache[cache_key] = fetched
         return fetched
-    
+
     # Fallback to hardcoded prompt
     print(f"⚠️  Using fallback hardcoded prompt for: {prompt_name}")
     fallback = CachedPrompt(
@@ -176,17 +177,18 @@ def get_agentic_system_prompt_template() -> CachedPrompt:
 def render_prompt(template_text: str, variables: Dict[str, Any]) -> str:
     """
     Render a prompt template with the given variables.
-    
+
     Uses str.format_map for safe substitution.
     Missing variables will raise KeyError.
-    
+
     Args:
         template_text: Template string with {variable} placeholders
         variables: Dictionary of variable name -> value
-    
+
     Returns:
         Rendered prompt string
     """
+
     # Use a SafeDict that returns empty string for missing keys with default empty sections
     class SafeDict(dict):
         def __missing__(self, key):
@@ -195,7 +197,7 @@ def render_prompt(template_text: str, variables: Dict[str, Any]) -> str:
                 return ''
             # For other missing keys, raise error
             raise KeyError(f"Missing required template variable: {key}")
-    
+
     safe_vars = SafeDict(variables)
     return template_text.format_map(safe_vars)
 
@@ -203,7 +205,7 @@ def render_prompt(template_text: str, variables: Dict[str, Any]) -> str:
 def get_prompt_metadata() -> Tuple[str, Optional[str], str]:
     """
     Get current prompt metadata without re-fetching if cached.
-    
+
     Returns:
         Tuple of (prompt_name, prompt_commit, source)
     """
@@ -220,7 +222,7 @@ def clear_prompt_cache():
 def _get_fallback_agentic_prompt_template() -> str:
     """
     Return the hardcoded fallback template for the agentic system prompt.
-    
+
     This matches the template format expected by LangSmith with {variable} placeholders.
     """
     return """<assistant_role>

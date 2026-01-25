@@ -18,6 +18,7 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
+#include "spi_flash.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
@@ -222,7 +223,6 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_INF("single tap detected\n");
         btn_last_event = event;
-        notify_tap();
 
         turnoff_all();
     }
@@ -386,6 +386,11 @@ void turnoff_all()
     accel_off();
     k_msleep(100);
 #endif
+
+    rc = flash_off();
+    if (rc) {
+        LOG_ERR("Can not suspend the spi flash module: %d", rc);
+    }
 
     if (is_sd_on()) {
         app_sd_off();

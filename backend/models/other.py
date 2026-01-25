@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -24,3 +24,5 @@ class Person(BaseModel):
     created_at: datetime
     updated_at: datetime
     speech_samples: List[str] = []
+    speech_sample_transcripts: Optional[List[str]] = None
+    speech_samples_version: int = 3

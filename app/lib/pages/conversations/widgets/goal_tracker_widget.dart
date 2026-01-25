@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -377,7 +378,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     HapticFeedback.lightImpact();
     final newGoal = Goal(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'My goal',
+      title: context.l10n.myGoal,
       goalType: 'numeric',
       currentValue: 0,
       targetValue: 100,
@@ -389,7 +390,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
     );
     setState(() {
       _goal = newGoal;
-      _goalTitleController.text = 'My goal';
+      _goalTitleController.text = context.l10n.myGoal;
       _currentValueController.text = '0';
       _targetValueController.text = '100';
       _isEditingGoal = true;
@@ -465,7 +466,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
         child: Column(
           children: [
             Text(
-              'GOAL',
+              context.l10n.goal,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
@@ -482,7 +483,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
               ),
               const SizedBox(height: 8),
               Text(
-                'Tap to track this goal',
+                context.l10n.tapToTrackThisGoal,
                 style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.35)),
               ),
             ] else ...[
@@ -491,7 +492,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 children: [
                   Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
                   const SizedBox(width: 8),
-                  Text('Tap to set a goal', style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5))),
+                  Text(context.l10n.tapToSetAGoal,
+                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5))),
                 ],
               ),
             ],
@@ -517,7 +519,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
               children: [
                 // "Goal" label
                 Text(
-                  'GOAL',
+                  context.l10n.goal,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
@@ -682,13 +684,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _numField(_currentValueController, 'CURRENT', color),
+              _numField(_currentValueController, context.l10n.current.toUpperCase(), color),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text('/',
                     style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2))),
               ),
-              _numField(_targetValueController, 'TARGET', Colors.white60),
+              _numField(_targetValueController, context.l10n.target.toUpperCase(), Colors.white60),
             ],
           ),
           const SizedBox(height: 20),
@@ -704,8 +706,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Save',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: Text(context.l10n.save,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -721,7 +723,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration:
                       BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                  child: Text('Cancel',
+                  child: Text(context.l10n.cancel,
                       style:
                           TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6))),
                 ),

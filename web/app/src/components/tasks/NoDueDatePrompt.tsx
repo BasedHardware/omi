@@ -154,7 +154,7 @@ export function NoDueDatePrompt({
             {items.slice(0, 3).map(item => (
               <div
                 key={item.id}
-                className="text-xs text-text-quaternary truncate pl-2 border-l-2 border-amber-500/30"
+                className="text-xs text-text-quaternary pl-2 border-l-2 border-amber-500/30"
               >
                 {item.description}
               </div>

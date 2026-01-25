@@ -18,6 +18,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PersonaProfilePage extends StatefulWidget {
   final double? bottomMargin;
@@ -98,9 +99,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                   }
                 },
               ),
-              title: const Text(
-                'Persona',
-                style: TextStyle(
+              title: Text(
+                context.l10n.persona,
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -285,7 +286,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                     SvgPicture.asset(Assets.images.linkIcon),
                                     const SizedBox(width: 14),
                                     Text(
-                                      'Share Public Link',
+                                      context.l10n.sharePublicLink,
                                       style: TextStyle(
                                         color: Colors.white.withOpacity(0.86),
                                         fontWeight: FontWeight.bold,
@@ -303,7 +304,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                 child: Row(
                                   children: [
                                     Text(
-                                      'Make Persona Public',
+                                      context.l10n.makePersonaPublic,
                                       style: TextStyle(
                                         color: Colors.white.withOpacity(0.65),
                                         fontSize: 18,
@@ -336,7 +337,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                   Padding(
                                     padding: const EdgeInsets.only(left: 8.0, bottom: 12),
                                     child: Text(
-                                      'Connected Knowledge Data',
+                                      context.l10n.connectedKnowledgeData,
                                       style: TextStyle(
                                         color: Colors.white.withOpacity(0.65),
                                         fontSize: 18,
@@ -466,17 +467,17 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Edit Name', style: TextStyle(color: Colors.white)),
+          title: Text(context.l10n.editName, style: const TextStyle(color: Colors.white)),
           content: TextField(
             controller: nameController,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: 'Enter name',
-              hintStyle: TextStyle(color: Colors.grey),
-              enabledBorder: UnderlineInputBorder(
+            decoration: InputDecoration(
+              hintText: context.l10n.enterName,
+              hintStyle: const TextStyle(color: Colors.grey),
+              enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: Colors.grey),
               ),
-              focusedBorder: UnderlineInputBorder(
+              focusedBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: Colors.white),
               ),
             ),
@@ -486,7 +487,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () {
@@ -495,7 +496,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                   Navigator.of(context).pop();
                 }
               },
-              child: const Text('Save', style: TextStyle(color: Colors.white)),
+              child: Text(context.l10n.save, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -509,24 +510,24 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          title: const Text('Disconnect Twitter', style: TextStyle(color: Colors.white)),
-          content: const Text(
-            'Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.',
-            style: TextStyle(color: Colors.white70),
+          title: Text(context.l10n.disconnectTwitter, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            context.l10n.disconnectTwitterConfirmation,
+            style: const TextStyle(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () {
                 provider.disconnectTwitter();
                 Navigator.of(context).pop();
               },
-              child: const Text('Disconnect', style: TextStyle(color: Colors.redAccent)),
+              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.redAccent)),
             ),
           ],
         );
@@ -539,17 +540,17 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
-          content: const Text(
-            'Are you sure you want to sign out?',
-            style: TextStyle(color: Colors.white70),
+          title: Text(context.l10n.signOut, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            context.l10n.signOutConfirmation,
+            style: const TextStyle(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () async {
@@ -560,7 +561,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 Navigator.of(context).pop();
                 routeToPage(context, const AppShell(), replace: true);
               },
-              child: const Text('Sign Out', style: TextStyle(color: Colors.redAccent)),
+              child: Text(context.l10n.signOut, style: const TextStyle(color: Colors.redAccent)),
             ),
           ],
         );
@@ -604,9 +605,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 ),
                 const Spacer(),
                 const SizedBox(height: 24),
-                const Text(
-                  'Get Omi Device',
-                  style: TextStyle(
+                Text(
+                  context.l10n.getOmiDevice,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -614,7 +615,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Create a more accurate clone with\nyour personal conversations',
+                  context.l10n.getOmiDeviceDescription,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.6),
@@ -642,9 +643,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                             ),
                           ),
                         ),
-                        child: const Text(
-                          'Get Omi',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.getOmi,
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w500,
                           ),
@@ -657,7 +658,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                           routeToPage(context, const OnboardingWrapper());
                         },
                         child: Text(
-                          'I have Omi device',
+                          context.l10n.iHaveOmiDevice,
                           style: TextStyle(
                             fontSize: 18,
                             color: Colors.white.withOpacity(0.6),
@@ -720,7 +721,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
-                'Coming soon',
+                context.l10n.comingSoon,
                 style: TextStyle(
                   color: grayedOutColor,
                   fontSize: 12,
@@ -734,9 +735,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Text(
-                'Connect',
-                style: TextStyle(
+              child: Text(
+                context.l10n.connect,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                 ),
@@ -749,9 +750,9 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                 color: const Color(0xFF373737),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Text(
-                'Connected',
-                style: TextStyle(
+              child: Text(
+                context.l10n.connected,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                 ),

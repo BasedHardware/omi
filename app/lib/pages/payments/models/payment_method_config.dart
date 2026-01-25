@@ -6,6 +6,7 @@ import 'package:omi/gen/assets.gen.dart';
 
 class PaymentMethodConfig {
   final String title;
+  final String subtitle;
   final Widget icon;
   final Color backgroundColor;
   final VoidCallback onManageTap;
@@ -15,6 +16,7 @@ class PaymentMethodConfig {
 
   const PaymentMethodConfig({
     required this.title,
+    required this.subtitle,
     required this.icon,
     required this.backgroundColor,
     required this.onManageTap,
@@ -23,16 +25,17 @@ class PaymentMethodConfig {
     this.isConnected = false,
   });
 
-  String get subtitle => isActive ? 'Active' : (isConnected ? 'Connected' : 'Not Connected');
-
   static PaymentMethodConfig stripe({
+    required String title,
+    required String subtitle,
     required VoidCallback onManageTap,
     VoidCallback? onSetActiveTap,
     bool isActive = false,
     bool isConnected = false,
   }) {
     return PaymentMethodConfig(
-      title: 'Stripe',
+      title: title,
+      subtitle: subtitle,
       icon: SvgPicture.asset(
         Assets.images.stripeLogo,
         width: 80,
@@ -47,13 +50,16 @@ class PaymentMethodConfig {
   }
 
   static PaymentMethodConfig paypal({
+    required String title,
+    required String subtitle,
     required VoidCallback onManageTap,
     VoidCallback? onSetActiveTap,
     bool isActive = false,
     bool isConnected = false,
   }) {
     return PaymentMethodConfig(
-      title: 'PayPal',
+      title: title,
+      subtitle: subtitle,
       icon: const Icon(
         Icons.paypal,
         size: 32,

@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class SdCardTransferProgress extends StatefulWidget {
   final double progress;
   final String displayPercentage;
@@ -109,7 +111,7 @@ class _SdCardTransferProgressState extends State<SdCardTransferProgress> with Ti
                                   color: Colors.white,
                                 ),
                               ),
-                              const Text('Remaining', style: TextStyle(fontSize: 16, color: Colors.white)),
+                              Text(context.l10n.remaining, style: const TextStyle(fontSize: 16, color: Colors.white)),
                             ],
                           ),
                         ),

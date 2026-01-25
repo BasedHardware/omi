@@ -86,6 +86,8 @@ class IntegrationProvider extends ChangeNotifier {
         return _integrations['google_calendar'] ?? false;
       case IntegrationApp.whoop:
         return _integrations['whoop'] ?? false;
+      case IntegrationApp.appleHealth:
+        return _integrations['apple_health'] ?? false;
       case IntegrationApp.notion:
         return _integrations['notion'] ?? false;
       case IntegrationApp.twitter:

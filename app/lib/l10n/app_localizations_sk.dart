@@ -34,10 +34,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get cancel => 'Zrušiť';
 
   @override
-  String get ok => 'Ok';
+  String get ok => 'OK';
 
   @override
-  String get delete => 'Odstrániť';
+  String get delete => 'Zmazať';
 
   @override
   String get add => 'Pridať';
@@ -58,10 +58,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get clear => 'Vymazať';
 
   @override
-  String get copyTranscript => 'Skopírovať prepis';
+  String get copyTranscript => 'Kopírovať prepis';
 
   @override
-  String get copySummary => 'Skopírovať zhrnutie';
+  String get copySummary => 'Kopírovať zhrnutie';
 
   @override
   String get testPrompt => 'Otestovať výzvu';
@@ -85,7 +85,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get errorProcessingConversation => 'Chyba pri spracovaní konverzácie. Skúste to prosím neskôr.';
 
   @override
-  String get noInternetConnection => 'Skontrolujte prosím svoje internetové pripojenie a skúste to znova.';
+  String get noInternetConnection => 'Žiadne internetové pripojenie';
 
   @override
   String get unableToDeleteConversation => 'Nepodarilo sa odstrániť konverzáciu';
@@ -126,7 +126,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createPersonHint => 'Vytvorte novú osobu a naučte Omi rozpoznávať aj jej hlas!';
 
   @override
-  String get speechProfile => 'Hlasový profil';
+  String get speechProfile => 'Rečový Profil';
 
   @override
   String sampleNumber(int number) {
@@ -162,7 +162,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get couldNotAccessFile => 'Nepodarilo sa pristúpiť k vybranému súboru';
 
   @override
-  String get askOmi => 'Spýtať sa Omi';
+  String get askOmi => 'Opýtať sa Omi';
 
   @override
   String get done => 'Hotovo';
@@ -171,7 +171,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get disconnected => 'Odpojené';
 
   @override
-  String get searching => 'Vyhľadáva sa';
+  String get searching => 'Vyhľadávanie...';
 
   @override
   String get connectDevice => 'Pripojiť zariadenie';
@@ -222,17 +222,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncingBackground => 'Budeme naďalej synchronizovať vaše nahrávky na pozadí.';
 
   @override
-  String get noConversationsYet => 'Zatiaľ žiadne konverzácie.';
+  String get noConversationsYet => 'Zatiaľ žiadne konverzácie';
 
   @override
-  String get noStarredConversations => 'Zatiaľ žiadne obľúbené konverzácie.';
+  String get noStarredConversations => 'Žiadne konverzácie s hviezdičkou';
 
   @override
   String get starConversationHint =>
       'Ak chcete označiť konverzáciu hviezdičkou, otvorte ju a ťuknite na ikonu hviezdy v hlavičke.';
 
   @override
-  String get searchConversations => 'Hľadať konverzácie';
+  String get searchConversations => 'Hľadať konverzácie...';
 
   @override
   String selectedCount(int count, Object s) {
@@ -263,10 +263,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noMessagesYet => 'Zatiaľ žiadne správy!\nPrečo nespustíte konverzáciu?';
 
   @override
-  String get deletingMessages => 'Odstraňujú sa vaše správy z pamäte Omi...';
+  String get deletingMessages => 'Odstraňovanie vašich správ z pamäte Omi...';
 
   @override
-  String get messageCopied => 'Správa bola skopírovaná do schránky.';
+  String get messageCopied => '✨ Správa skopírovaná do schránky';
 
   @override
   String get cannotReportOwnMessage => 'Nemôžete nahlásiť vlastné správy.';
@@ -284,7 +284,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get thankYouFeedback => 'Ďakujeme za vašu spätnú väzbu!';
 
   @override
-  String get clearChat => 'Vymazať chat?';
+  String get clearChat => 'Vymazať chat';
 
   @override
   String get clearChatConfirm => 'Naozaj chcete vymazať chat? Túto akciu nie je možné vrátiť späť.';
@@ -299,7 +299,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get apps => 'Aplikácie';
 
   @override
-  String get noAppsFound => 'Neboli nájdené žiadne aplikácie';
+  String get noAppsFound => 'Nenašli sa žiadne aplikácie';
 
   @override
   String get tryAdjustingSearch => 'Skúste upraviť vyhľadávanie alebo filtre';
@@ -311,7 +311,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get buildAndShareApp => 'Vytvorte a zdieľajte vlastnú aplikáciu';
 
   @override
-  String get searchApps => 'Hľadať v 1500+ aplikáciách';
+  String get searchApps => 'Hľadať aplikácie...';
 
   @override
   String get myApps => 'Moje aplikácie';
@@ -324,7 +324,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Nepodarilo sa načítať aplikácie :(\n\nSkontrolujte prosím svoje internetové pripojenie a skúste to znova.';
 
   @override
-  String get aboutOmi => 'O aplikácii Omi';
+  String get aboutOmi => 'O Omi';
 
   @override
   String get privacyPolicy => 'Zásady ochrany osobných údajov';
@@ -339,7 +339,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get joinCommunity => 'Pridajte sa ku komunite!';
 
   @override
-  String get membersAndCounting => 'Viac ako 8000 členov a stále pribúdajú.';
+  String get membersAndCounting => '8000+ členov a ich počet rastie.';
 
   @override
   String get deleteAccountTitle => 'Odstrániť účet';
@@ -391,25 +391,25 @@ class AppLocalizationsSk extends AppLocalizations {
   String get email => 'E-mail';
 
   @override
-  String get customVocabulary => 'Vlastný slovník';
+  String get customVocabulary => 'Vlastný Slovník';
 
   @override
-  String get identifyingOthers => 'Identifikácia ostatných';
+  String get identifyingOthers => 'Identifikácia Ostatných';
 
   @override
-  String get paymentMethods => 'Platobné metódy';
+  String get paymentMethods => 'Platobné Metódy';
 
   @override
-  String get conversationDisplay => 'Zobrazenie konverzácií';
+  String get conversationDisplay => 'Zobrazenie Konverzácií';
 
   @override
-  String get dataPrivacy => 'Údaje a súkromie';
+  String get dataPrivacy => 'Ochrana Údajov';
 
   @override
-  String get userId => 'ID používateľa';
+  String get userId => 'ID Používateľa';
 
   @override
-  String get notSet => 'Nie je nastavené';
+  String get notSet => 'Nenastavené';
 
   @override
   String get userIdCopied => 'ID používateľa bolo skopírované do schránky';
@@ -436,7 +436,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get helpCenter => 'Centrum pomoci';
 
   @override
-  String get developerSettings => 'Vývojárske nastavenia';
+  String get developerSettings => 'Nastavenia vývojára';
 
   @override
   String get getOmiForMac => 'Získať Omi pre Mac';
@@ -445,7 +445,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get referralProgram => 'Odporúčací program';
 
   @override
-  String get signOut => 'Odhlásiť sa';
+  String get signOut => 'Odhlásiť Sa';
 
   @override
   String get appAndDeviceCopied => 'Podrobnosti o aplikácii a zariadení boli skopírované';
@@ -533,7 +533,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceUnpairedMessage =>
-      'Párovanie zariadenia bolo zrušené. Prejdite do Nastavenia > Bluetooth a zabudnite zariadenie pre dokončenie.';
+      'Zariadenie odpárované. Prejdite do Nastavenia > Bluetooth a zabudnite zariadenie na dokončenie odpárovania.';
 
   @override
   String get unpairDialogTitle => 'Zrušiť párovanie zariadenia';
@@ -587,7 +587,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get starOngoing => 'Označiť prebiehajúcu konverzáciu hviezdičkou';
 
   @override
-  String get off => 'Vypnuté';
+  String get off => 'Vyp.';
 
   @override
   String get max => 'Maximum';
@@ -635,7 +635,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get developerSettingsTitle => 'Vývojárske nastavenia';
 
   @override
-  String get saving => 'Ukladá sa...';
+  String get saving => 'Ukladanie...';
 
   @override
   String get personaConfig => 'Nakonfigurujte svoju AI persónu';
@@ -674,7 +674,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createKeyToStart => 'Vytvorte kľúč pre začiatok';
 
   @override
-  String get createKey => 'Vytvoriť kľúč';
+  String get createKey => 'Vytvoriť Kľúč';
 
   @override
   String get docs => 'Dokumentácia';
@@ -753,7 +753,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get upgrade => 'Upgradovať';
 
   @override
-  String get upgradeToUnlimited => 'Upgradovať na neobmedzený';
+  String get upgradeToUnlimited => 'Upgradovať na neobmedzené';
 
   @override
   String basicPlanDesc(int limit) {
@@ -796,7 +796,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get debugLogs => 'Debug logy';
+  String get debugLogs => 'Denníky ladenia';
 
   @override
   String get debugLogsAutoDelete => 'Automaticky sa odstránia po 3 dňoch.';
@@ -805,7 +805,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get debugLogsDesc => 'Pomáha diagnostikovať problémy';
 
   @override
-  String get noLogFilesFound => 'Neboli nájdené žiadne súbory logov.';
+  String get noLogFilesFound => 'Nenašli sa žiadne súbory denníka.';
 
   @override
   String get omiDebugLog => 'Omi debug log';
@@ -817,7 +817,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get selectLogFile => 'Vyberte súbor logu';
 
   @override
-  String get shareLogs => 'Zdieľať logy';
+  String get shareLogs => 'Zdieľať denníky';
 
   @override
   String get debugLogCleared => 'Debug log bol vymazaný';
@@ -845,7 +845,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Týmto odstránite všetky odvodené údaje grafu znalostí (uzly a prepojenia). Vaše pôvodné spomienky zostanú v bezpečí. Graf bude znovu vytvorený postupom času alebo na ďalšiu požiadavku.';
 
   @override
-  String get knowledgeGraphDeleted => 'Graf znalostí bol úspešne odstránený';
+  String get knowledgeGraphDeleted => 'Graf znalostí zmazaný';
 
   @override
   String deleteGraphFailed(String error) {
@@ -871,7 +871,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get serverUrl => 'URL servera';
 
   @override
-  String get urlCopied => 'URL bola skopírovaná';
+  String get urlCopied => 'URL skopírovaná';
 
   @override
   String get apiKeyAuth => 'Autentifikácia API kľúčom';
@@ -898,7 +898,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get webhooks => 'Webhooky';
 
   @override
-  String get conversationEvents => 'Udalosti konverzácií';
+  String get conversationEvents => 'Udalosti konverzácie';
 
   @override
   String get newConversationCreated => 'Nová konverzácia bola vytvorená';
@@ -919,7 +919,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get intervalSeconds => 'Interval (sekundy)';
 
   @override
-  String get daySummary => 'Denné zhrnutie';
+  String get daySummary => 'Denný súhrn';
 
   @override
   String get summaryGenerated => 'Zhrnutie bolo vygenerované';
@@ -943,7 +943,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get understandingWords => 'Porozumenie (slová)';
 
   @override
-  String get insights => 'Postrehy';
+  String get insights => 'Poznatky';
 
   @override
   String get memories => 'Spomienky';
@@ -1204,7 +1204,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get refresh => 'Obnoviť';
 
   @override
-  String get noUpcomingMeetings => 'Neboli nájdené žiadne nadchádzajúce stretnutia';
+  String get noUpcomingMeetings => 'Žiadne nadchádzajúce stretnutia';
 
   @override
   String get checkingNextDays => 'Kontrola nasledujúcich 30 dní';
@@ -1289,7 +1289,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchLanguageHint => 'Hľadať jazyk podľa názvu alebo kódu';
 
   @override
-  String get noLanguagesFound => 'Neboli nájdené žiadne jazyky';
+  String get noLanguagesFound => 'Nenašli sa žiadne jazyky';
 
   @override
   String get skip => 'Preskočiť';
@@ -1370,7 +1370,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noReposFound => 'Neboli nájdené žiadne repozitáre';
 
   @override
-  String get private => 'Súkromný';
+  String get private => 'Súkromná';
 
   @override
   String updatedDate(String date) {
@@ -1378,7 +1378,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get yesterday => 'včera';
+  String get yesterday => 'Včera';
 
   @override
   String daysAgo(int count) {
@@ -1584,8 +1584,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noLogsYet => 'Zatiaľ žiadne logy. Začnite nahrávanie, aby ste videli vlastnú STT aktivitu.';
 
   @override
-  String deviceUsesCodec(String deviceName, String codecReason) {
-    return '$deviceName používa $codecReason. Omi bude použité.';
+  String deviceUsesCodec(String device, String reason) {
+    return '$device používa $reason. Bude použité Omi.';
   }
 
   @override
@@ -1616,7 +1616,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get saveChanges => 'Uložiť zmeny';
 
   @override
-  String get resetToDefault => 'Obnoviť na predvolené';
+  String get resetToDefault => 'Obnoviť predvolené';
 
   @override
   String get viewTemplate => 'Zobraziť šablónu';
@@ -1731,7 +1731,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get dontShowAgain => 'Znovu to neukazovať';
+  String get dontShowAgain => 'Nezobrazovať znova';
 
   @override
   String get iUnderstand => 'Rozumiem';
@@ -1805,7 +1805,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get maybeLater => 'Možno neskôr';
 
   @override
-  String get speechProfileIntro => 'Omi potrebuje naučiť sa vaše ciele a váš hlas. Neskôr to budete môcť upraviť.';
+  String get speechProfileIntro => 'Omi potrebuje spoznať vaše ciele a váš hlas. Neskôr to budete môcť zmeniť.';
 
   @override
   String get getStarted => 'Začať';
@@ -1879,7 +1879,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get wantDifferentName => 'Chcete sa volať inak?';
 
   @override
-  String get whatsYourName => 'Ako sa voláte?';
+  String get whatsYourName => 'Ako sa voláš?';
 
   @override
   String get speakTranscribeSummarize => 'Hovoriť. Prepisovať. Sumarizovať.';
@@ -1996,10 +1996,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get actionItemCompleted => 'Úloha bola dokončená';
 
   @override
-  String get deleteActionItemTitle => 'Odstrániť úlohu';
+  String get deleteActionItemTitle => 'Odstrániť akčnú položku';
 
   @override
-  String get deleteActionItemMessage => 'Naozaj chcete odstrániť túto úlohu?';
+  String get deleteActionItemMessage => 'Naozaj chcete odstrániť túto akčnú položku?';
 
   @override
   String get deleteSelectedItemsTitle => 'Odstrániť vybrané položky';
@@ -2053,9 +2053,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deleteSelected => 'Odstrániť vybrané';
 
   @override
-  String searchMemories(int count) {
-    return 'Hľadať v $count spomienkach';
-  }
+  String get searchMemories => 'Hľadať spomienky...';
 
   @override
   String get memoryDeleted => 'Spomienka bola odstránená.';
@@ -2064,7 +2062,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get undo => 'Vrátiť späť';
 
   @override
-  String get noMemoriesYet => 'Zatiaľ žiadne spomienky';
+  String get noMemoriesYet => '🧠 Zatiaľ žiadne spomienky';
 
   @override
   String get noAutoMemories => 'Zatiaľ žiadne automaticky extrahované spomienky';
@@ -2076,7 +2074,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noMemoriesInCategories => 'Žiadne spomienky v týchto kategóriách';
 
   @override
-  String get noMemoriesFound => 'Neboli nájdené žiadne spomienky';
+  String get noMemoriesFound => '🔍 Nenašli sa žiadne spomienky';
 
   @override
   String get addFirstMemory => 'Pridajte svoju prvú spomienku';
@@ -2135,10 +2133,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get allMemoriesPublicResult => 'Všetky spomienky sú teraz verejné';
 
   @override
-  String get newMemory => 'Nová spomienka';
+  String get newMemory => '✨ Nová pamäť';
 
   @override
-  String get editMemory => 'Upraviť spomienku';
+  String get editMemory => '✏️ Upraviť pamäť';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';
@@ -2153,10 +2151,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get retry => 'Skúsiť znova';
 
   @override
-  String get createActionItem => 'Vytvoriť úlohu';
+  String get createActionItem => 'Vytvoriť položku úlohy';
 
   @override
-  String get editActionItem => 'Upraviť úlohu';
+  String get editActionItem => 'Upraviť položku úlohy';
 
   @override
   String get actionItemDescriptionHint => 'Čo je potrebné urobiť?';
@@ -2168,16 +2166,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get actionItemUpdated => 'Úloha bola aktualizovaná';
 
   @override
-  String get failedToUpdateActionItem => 'Nepodarilo sa aktualizovať úlohu';
+  String get failedToUpdateActionItem => 'Nepodarilo sa aktualizovať položku úlohy';
 
   @override
   String get actionItemCreated => 'Úloha bola vytvorená';
 
   @override
-  String get failedToCreateActionItem => 'Nepodarilo sa vytvoriť úlohu';
+  String get failedToCreateActionItem => 'Nepodarilo sa vytvoriť položku úlohy';
 
   @override
-  String get dueDate => 'Termín dokončenia';
+  String get dueDate => 'Termín';
 
   @override
   String get time => 'Čas';
@@ -2210,10 +2208,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get markComplete => 'Označiť ako dokončené';
 
   @override
-  String get actionItemDeleted => 'Úloha bola odstránená';
+  String get actionItemDeleted => 'Akčná položka odstránená';
 
   @override
-  String get failedToDeleteActionItem => 'Nepodarilo sa odstrániť úlohu';
+  String get failedToDeleteActionItem => 'Nepodarilo sa odstrániť položku úlohy';
 
   @override
   String get deleteActionItemConfirmTitle => 'Odstrániť úlohu';
@@ -2233,4 +2231,5594 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get languageSettingsHelperText =>
       'Jazyk aplikácie mení ponuky a tlačidlá. Jazyk reči ovplyvňuje spôsob prepisu vašich nahrávok.';
+
+  @override
+  String get translationNotice => 'Oznámenie o preklade';
+
+  @override
+  String get translationNoticeMessage =>
+      'Omi prekladá konverzácie do vášho hlavného jazyka. Aktualizujte to kedykoľvek v Nastavenia → Profily.';
+
+  @override
+  String get pleaseCheckInternetConnection => 'Skontrolujte prosím pripojenie k internetu a skúste to znova';
+
+  @override
+  String get pleaseSelectReason => 'Vyberte prosím dôvod';
+
+  @override
+  String get tellUsMoreWhatWentWrong => 'Povedzte nám viac o tom, čo sa pokazilo...';
+
+  @override
+  String get selectText => 'Vybrať text';
+
+  @override
+  String maximumGoalsAllowed(int count) {
+    return 'Maximum $count cieľov povolených';
+  }
+
+  @override
+  String get conversationCannotBeMerged => 'Túto konverzáciu nie je možné zlúčiť (zamknutá alebo sa už zlučuje)';
+
+  @override
+  String get pleaseEnterFolderName => 'Zadajte prosím názov priečinka';
+
+  @override
+  String get failedToCreateFolder => 'Vytvorenie priečinka zlyhalo';
+
+  @override
+  String get failedToUpdateFolder => 'Aktualizácia priečinka zlyhala';
+
+  @override
+  String get folderName => 'Názov priečinka';
+
+  @override
+  String get descriptionOptional => 'Popis (voliteľné)';
+
+  @override
+  String get failedToDeleteFolder => 'Odstránenie priečinka zlyhalo';
+
+  @override
+  String get editFolder => 'Upraviť priečinok';
+
+  @override
+  String get deleteFolder => 'Odstrániť priečinok';
+
+  @override
+  String get transcriptCopiedToClipboard => 'Prepis skopírovaný do schránky';
+
+  @override
+  String get summaryCopiedToClipboard => 'Zhrnutie skopírované do schránky';
+
+  @override
+  String get conversationUrlCouldNotBeShared => 'URL konverzácie sa nepodarilo zdieľať.';
+
+  @override
+  String get urlCopiedToClipboard => 'URL skopírovaná do schránky';
+
+  @override
+  String get exportTranscript => 'Exportovať prepis';
+
+  @override
+  String get exportSummary => 'Exportovať zhrnutie';
+
+  @override
+  String get exportButton => 'Exportovať';
+
+  @override
+  String get actionItemsCopiedToClipboard => 'Položky akcií skopírované do schránky';
+
+  @override
+  String get summarize => 'Zhrnúť';
+
+  @override
+  String get generateSummary => 'Vygenerovať súhrn';
+
+  @override
+  String get conversationNotFoundOrDeleted => 'Konverzácia nebola nájdená alebo bola odstránená';
+
+  @override
+  String get deleteMemory => 'Odstrániť pamäť';
+
+  @override
+  String get thisActionCannotBeUndone => 'Túto akciu nie je možné vrátiť späť.';
+
+  @override
+  String memoriesCount(int count) {
+    return '$count spomienok';
+  }
+
+  @override
+  String get noMemoriesInCategory => 'V tejto kategórii zatiaľ nie sú žiadne spomienky';
+
+  @override
+  String get addYourFirstMemory => 'Pridajte svoju prvú spomienku';
+
+  @override
+  String get firmwareDisconnectUsb => 'Odpojte USB';
+
+  @override
+  String get firmwareUsbWarning => 'Pripojenie USB počas aktualizácií môže poškodiť vaše zariadenie.';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Batéria nad 15%';
+
+  @override
+  String get firmwareEnsureBattery => 'Uistite sa, že vaše zariadenie má 15% batérie.';
+
+  @override
+  String get firmwareStableConnection => 'Stabilné pripojenie';
+
+  @override
+  String get firmwareConnectWifi => 'Pripojte sa k WiFi alebo mobilným dátam.';
+
+  @override
+  String failedToStartUpdate(String error) {
+    return 'Nepodarilo sa spustiť aktualizáciu: $error';
+  }
+
+  @override
+  String get beforeUpdateMakeSure => 'Pred aktualizáciou sa uistite:';
+
+  @override
+  String get confirmed => 'Potvrdené!';
+
+  @override
+  String get release => 'Uvoľniť';
+
+  @override
+  String get slideToUpdate => 'Posuňte pre aktualizáciu';
+
+  @override
+  String copiedToClipboard(String title) {
+    return '$title skopírované do schránky';
+  }
+
+  @override
+  String get batteryLevel => 'Úroveň batérie';
+
+  @override
+  String get productUpdate => 'Aktualizácia produktu';
+
+  @override
+  String get offline => 'Offline';
+
+  @override
+  String get available => 'Dostupné';
+
+  @override
+  String get unpairDeviceDialogTitle => 'Zrušiť párovanie zariadenia';
+
+  @override
+  String get unpairDeviceDialogMessage =>
+      'Tým sa zruší párovanie zariadenia, aby sa mohlo pripojiť k inému telefónu. Budete musieť prejsť do Nastavenia > Bluetooth a zabudnúť zariadenie na dokončenie procesu.';
+
+  @override
+  String get unpair => 'Zrušiť párovanie';
+
+  @override
+  String get unpairAndForgetDevice => 'Zrušiť párovanie a zabudnúť zariadenie';
+
+  @override
+  String get unknownDevice => 'Neznáme';
+
+  @override
+  String get unknown => 'Neznáme';
+
+  @override
+  String get productName => 'Názov produktu';
+
+  @override
+  String get serialNumber => 'Sériové číslo';
+
+  @override
+  String get connected => 'Pripojené';
+
+  @override
+  String get privacyPolicyTitle => 'Zásady ochrany osobných údajov';
+
+  @override
+  String get omiSttProvider => 'Omi';
+
+  @override
+  String labelCopied(String label) {
+    return '$label skopírované';
+  }
+
+  @override
+  String get noApiKeysYet => 'Zatiaľ žiadne API kľúče. Vytvorte jeden pre integráciu s vašou aplikáciou.';
+
+  @override
+  String get createKeyToGetStarted => 'Vytvorte kľúč pre začatie';
+
+  @override
+  String get persona => 'Persona';
+
+  @override
+  String get configureYourAiPersona => 'Nakonfigurujte svoju AI osobnosť';
+
+  @override
+  String get configureSttProvider => 'Konfigurácia poskytovateľa STT';
+
+  @override
+  String get setWhenConversationsAutoEnd => 'Nastavte, kedy sa konverzácie automaticky ukončia';
+
+  @override
+  String get importDataFromOtherSources => 'Import údajov z iných zdrojov';
+
+  @override
+  String get debugAndDiagnostics => 'Ladenie a diagnostika';
+
+  @override
+  String get autoDeletesAfter3Days => 'Automatické vymazanie po 3 dňoch';
+
+  @override
+  String get helpsDiagnoseIssues => 'Pomáha diagnostikovať problémy';
+
+  @override
+  String get exportStartedMessage => 'Export sa začal. Môže to trvať niekoľko sekúnd...';
+
+  @override
+  String get exportConversationsToJson => 'Exportovať konverzácie do súboru JSON';
+
+  @override
+  String get knowledgeGraphDeletedSuccess => 'Graf znalostí bol úspešne odstránený';
+
+  @override
+  String failedToDeleteGraph(String error) {
+    return 'Nepodarilo sa odstrániť graf: $error';
+  }
+
+  @override
+  String get clearAllNodesAndConnections => 'Vymazať všetky uzly a spojenia';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Pridať do claude_desktop_config.json';
+
+  @override
+  String get connectAiAssistantsToData => 'Pripojte AI asistentov k vašim údajom';
+
+  @override
+  String get useYourMcpApiKey => 'Použite svoj MCP API kľúč';
+
+  @override
+  String get realTimeTranscript => 'Prepis v reálnom čase';
+
+  @override
+  String get experimental => 'Experimentálne';
+
+  @override
+  String get transcriptionDiagnostics => 'Diagnostika prepisu';
+
+  @override
+  String get detailedDiagnosticMessages => 'Podrobné diagnostické správy';
+
+  @override
+  String get autoCreateSpeakers => 'Automaticky vytvoriť rečníkov';
+
+  @override
+  String get autoCreateWhenNameDetected => 'Automaticky vytvoriť pri zistení mena';
+
+  @override
+  String get followUpQuestions => 'Následné otázky';
+
+  @override
+  String get suggestQuestionsAfterConversations => 'Navrhovať otázky po konverzáciách';
+
+  @override
+  String get goalTracker => 'Sledovanie cieľov';
+
+  @override
+  String get trackPersonalGoalsOnHomepage => 'Sledujte svoje osobné ciele na domovskej stránke';
+
+  @override
+  String get dailyReflection => 'Denná reflexia';
+
+  @override
+  String get get9PmReminderToReflect => 'Dostávajte pripomienku o 21:00 na zamyslenie sa nad svojím dňom';
+
+  @override
+  String get actionItemDescriptionCannotBeEmpty => 'Popis akčnej položky nesmie byť prázdny';
+
+  @override
+  String get saved => 'Uložené';
+
+  @override
+  String get overdue => 'Po termíne';
+
+  @override
+  String get failedToUpdateDueDate => 'Nepodarilo sa aktualizovať termín';
+
+  @override
+  String get markIncomplete => 'Označiť ako nedokončené';
+
+  @override
+  String get editDueDate => 'Upraviť termín';
+
+  @override
+  String get setDueDate => 'Nastaviť termín';
+
+  @override
+  String get clearDueDate => 'Vymazať termín';
+
+  @override
+  String get failedToClearDueDate => 'Nepodarilo sa vymazať termín';
+
+  @override
+  String get mondayAbbr => 'Po';
+
+  @override
+  String get tuesdayAbbr => 'Ut';
+
+  @override
+  String get wednesdayAbbr => 'St';
+
+  @override
+  String get thursdayAbbr => 'Št';
+
+  @override
+  String get fridayAbbr => 'Pi';
+
+  @override
+  String get saturdayAbbr => 'So';
+
+  @override
+  String get sundayAbbr => 'Ne';
+
+  @override
+  String get howDoesItWork => 'Ako to funguje?';
+
+  @override
+  String get sdCardSyncDescription => 'Synchronizácia SD karty importuje vaše spomienky z SD karty do aplikácie';
+
+  @override
+  String get checksForAudioFiles => 'Kontroluje zvukové súbory na SD karte';
+
+  @override
+  String get omiSyncsAudioFiles => 'Omi potom synchronizuje zvukové súbory so serverom';
+
+  @override
+  String get serverProcessesAudio => 'Server spracováva zvukové súbory a vytvára spomienky';
+
+  @override
+  String get youreAllSet => 'Všetko je pripravené!';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Vitajte v Omi! Váš AI spoločník je pripravený pomôcť vám s rozhovormi, úlohami a oveľa viac.';
+
+  @override
+  String get startUsingOmi => 'Začať používať Omi';
+
+  @override
+  String get back => 'Späť';
+
+  @override
+  String get keyboardShortcuts => 'Klávesové Skratky';
+
+  @override
+  String get toggleControlBar => 'Prepnúť ovládací panel';
+
+  @override
+  String get pressKeys => 'Stlačte klávesy...';
+
+  @override
+  String get cmdRequired => '⌘ vyžadované';
+
+  @override
+  String get invalidKey => 'Neplatný kláves';
+
+  @override
+  String get space => 'Medzera';
+
+  @override
+  String get search => 'Hľadať';
+
+  @override
+  String get searchPlaceholder => 'Hľadať...';
+
+  @override
+  String get untitledConversation => 'Konverzácia bez názvu';
+
+  @override
+  String countRemaining(String count) {
+    return '$count zostáva';
+  }
+
+  @override
+  String get addGoal => 'Pridať cieľ';
+
+  @override
+  String get editGoal => 'Upraviť cieľ';
+
+  @override
+  String get icon => 'Ikona';
+
+  @override
+  String get goalTitle => 'Názov cieľa';
+
+  @override
+  String get current => 'Aktuálne';
+
+  @override
+  String get target => 'Cieľ';
+
+  @override
+  String get saveGoal => 'Uložiť';
+
+  @override
+  String get goals => 'Ciele';
+
+  @override
+  String get tapToAddGoal => 'Klepnutím pridajte cieľ';
+
+  @override
+  String welcomeBack(String name) {
+    return 'Vitajte späť, $name';
+  }
+
+  @override
+  String get yourConversations => 'Vaše konverzácie';
+
+  @override
+  String get reviewAndManageConversations => 'Prezrite si a spravujte svoje zaznamenané konverzácie';
+
+  @override
+  String get startCapturingConversations => 'Začnite zachytávať konverzácie pomocou zariadenia Omi a uvidíte ich tu.';
+
+  @override
+  String get useMobileAppToCapture => 'Použite mobilnú aplikáciu na zachytenie zvuku';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Konverzácie sa spracovávajú automaticky';
+
+  @override
+  String get getInsightsInstantly => 'Získajte poznatky a zhrnutia okamžite';
+
+  @override
+  String get showAll => 'Zobraziť všetko →';
+
+  @override
+  String get noTasksForToday => 'Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
+
+  @override
+  String get dailyScore => 'DENNÉ SKÓRE';
+
+  @override
+  String get dailyScoreDescription => 'Skóre, ktoré vám pomôže lepšie\nsa sústrediť na plnenie.';
+
+  @override
+  String get searchResults => 'Výsledky vyhľadávania';
+
+  @override
+  String get actionItems => 'Úlohy';
+
+  @override
+  String get tasksToday => 'Dnes';
+
+  @override
+  String get tasksTomorrow => 'Zajtra';
+
+  @override
+  String get tasksNoDeadline => 'Bez termínu';
+
+  @override
+  String get tasksLater => 'Neskôr';
+
+  @override
+  String get loadingTasks => 'Načítanie úloh...';
+
+  @override
+  String get tasks => 'Úlohy';
+
+  @override
+  String get swipeTasksToIndent => 'Potiahnutím úloh odsaďte, presuňte medzi kategóriami';
+
+  @override
+  String get create => 'Vytvoriť';
+
+  @override
+  String get noTasksYet => 'Zatiaľ žiadne úlohy';
+
+  @override
+  String get tasksFromConversationsWillAppear =>
+      'Úlohy z vašich konverzácií sa tu zobrazia.\nKliknite na Vytvoriť a pridajte jednu ručne.';
+
+  @override
+  String get monthJan => 'Jan';
+
+  @override
+  String get monthFeb => 'Feb';
+
+  @override
+  String get monthMar => 'Mar';
+
+  @override
+  String get monthApr => 'Apr';
+
+  @override
+  String get monthMay => 'Máj';
+
+  @override
+  String get monthJun => 'Jún';
+
+  @override
+  String get monthJul => 'Júl';
+
+  @override
+  String get monthAug => 'Aug';
+
+  @override
+  String get monthSep => 'Sep';
+
+  @override
+  String get monthOct => 'Okt';
+
+  @override
+  String get monthNov => 'Nov';
+
+  @override
+  String get monthDec => 'Dec';
+
+  @override
+  String get timePM => 'PM';
+
+  @override
+  String get timeAM => 'AM';
+
+  @override
+  String get actionItemUpdatedSuccessfully => 'Položka úlohy úspešne aktualizovaná';
+
+  @override
+  String get actionItemCreatedSuccessfully => 'Položka úlohy úspešne vytvorená';
+
+  @override
+  String get actionItemDeletedSuccessfully => 'Položka úlohy úspešne odstránená';
+
+  @override
+  String get deleteActionItem => 'Odstrániť položku úlohy';
+
+  @override
+  String get deleteActionItemConfirmation =>
+      'Naozaj chcete odstrániť túto položku úlohy? Túto akciu nemožno vrátiť späť.';
+
+  @override
+  String get enterActionItemDescription => 'Zadajte popis položky úlohy...';
+
+  @override
+  String get markAsCompleted => 'Označiť ako dokončené';
+
+  @override
+  String get setDueDateAndTime => 'Nastaviť termín a čas';
+
+  @override
+  String get reloadingApps => 'Opätovné načítanie aplikácií...';
+
+  @override
+  String get loadingApps => 'Načítanie aplikácií...';
+
+  @override
+  String get browseInstallCreateApps => 'Prechádzajte, inštalujte a vytvárajte aplikácie';
+
+  @override
+  String get all => 'Všetko';
+
+  @override
+  String get open => 'Otvoriť';
+
+  @override
+  String get install => 'Inštalovať';
+
+  @override
+  String get noAppsAvailable => 'Nie sú k dispozícii žiadne aplikácie';
+
+  @override
+  String get unableToLoadApps => 'Nepodarilo sa načítať aplikácie';
+
+  @override
+  String get tryAdjustingSearchTermsOrFilters => 'Skúste upraviť vyhľadávacie výrazy alebo filtre';
+
+  @override
+  String get checkBackLaterForNewApps => 'Vráťte sa neskôr pre nové aplikácie';
+
+  @override
+  String get pleaseCheckInternetConnectionAndTryAgain => 'Skontrolujte prosím internetové pripojenie a skúste to znova';
+
+  @override
+  String get createNewApp => 'Vytvoriť novú aplikáciu';
+
+  @override
+  String get buildSubmitCustomOmiApp => 'Vytvorte a odošlite svoju vlastnú Omi aplikáciu';
+
+  @override
+  String get submittingYourApp => 'Odosielanie vašej aplikácie...';
+
+  @override
+  String get preparingFormForYou => 'Príprava formulára pre vás...';
+
+  @override
+  String get appDetails => 'Podrobnosti aplikácie';
+
+  @override
+  String get paymentDetails => 'Platobné údaje';
+
+  @override
+  String get previewAndScreenshots => 'Náhľad a snímky obrazovky';
+
+  @override
+  String get appCapabilities => 'Možnosti aplikácie';
+
+  @override
+  String get aiPrompts => 'AI výzvy';
+
+  @override
+  String get chatPrompt => 'Výzva chatu';
+
+  @override
+  String get chatPromptPlaceholder =>
+      'Ste skvelá aplikácia, vašou úlohou je reagovať na otázky používateľov a dať im dobrý pocit...';
+
+  @override
+  String get conversationPrompt => 'Výzva konverzácie';
+
+  @override
+  String get conversationPromptPlaceholder => 'Ste skvelá aplikácia, dostanete prepis a zhrnutie konverzácie...';
+
+  @override
+  String get notificationScopes => 'Rozsahy oznámení';
+
+  @override
+  String get appPrivacyAndTerms => 'Ochrana súkromia a podmienky aplikácie';
+
+  @override
+  String get makeMyAppPublic => 'Zverejniť moju aplikáciu';
+
+  @override
+  String get submitAppTermsAgreement =>
+      'Odoslaním tejto aplikácie súhlasím so Zmluvnými podmienkami a Zásadami ochrany osobných údajov Omi AI';
+
+  @override
+  String get submitApp => 'Odoslať aplikáciu';
+
+  @override
+  String get needHelpGettingStarted => 'Potrebujete pomoc so začatím?';
+
+  @override
+  String get clickHereForAppBuildingGuides => 'Kliknite sem pre návody na vytváranie aplikácií a dokumentáciu';
+
+  @override
+  String get submitAppQuestion => 'Odoslať aplikáciu?';
+
+  @override
+  String get submitAppPublicDescription =>
+      'Vaša aplikácia bude skontrolovaná a zverejnená. Môžete ju začať používať okamžite, aj počas kontroly!';
+
+  @override
+  String get submitAppPrivateDescription =>
+      'Vaša aplikácia bude skontrolovaná a sprístupnená vám súkromne. Môžete ju začať používať okamžite, aj počas kontroly!';
+
+  @override
+  String get startEarning => 'Začnite zarábať! 💰';
+
+  @override
+  String get connectStripeOrPayPal => 'Pripojte Stripe alebo PayPal, aby ste mohli prijímať platby za svoju aplikáciu.';
+
+  @override
+  String get connectNow => 'Pripojiť teraz';
+
+  @override
+  String get installsCount => 'Inštalácie';
+
+  @override
+  String get uninstallApp => 'Odinštalovať aplikáciu';
+
+  @override
+  String get subscribe => 'Prihlásiť sa na odber';
+
+  @override
+  String get dataAccessNotice => 'Upozornenie na prístup k údajom';
+
+  @override
+  String get dataAccessWarning =>
+      'Táto aplikácia bude mať prístup k vašim údajom. Omi AI nie je zodpovedný za to, ako táto aplikácia používa, upravuje alebo maže vaše údaje';
+
+  @override
+  String get installApp => 'Inštalovať aplikáciu';
+
+  @override
+  String get betaTesterNotice => 'Ste beta tester tejto aplikácie. Ešte nie je verejná. Bude verejná po schválení.';
+
+  @override
+  String get appUnderReviewOwner => 'Vaša aplikácia je v recenzii a viditeľná len pre vás. Bude verejná po schválení.';
+
+  @override
+  String get appRejectedNotice =>
+      'Vaša aplikácia bola zamietnutá. Aktualizujte prosím podrobnosti aplikácie a odošlite ju znova na recenziu.';
+
+  @override
+  String get setupSteps => 'Kroky nastavenia';
+
+  @override
+  String get setupInstructions => 'Pokyny na nastavenie';
+
+  @override
+  String get integrationInstructions => 'Pokyny na integráciu';
+
+  @override
+  String get preview => 'Náhľad';
+
+  @override
+  String get aboutTheApp => 'O aplikácii';
+
+  @override
+  String get aboutThePersona => 'O persóne';
+
+  @override
+  String get chatPersonality => 'Osobnosť chatu';
+
+  @override
+  String get ratingsAndReviews => 'Hodnotenia a recenzie';
+
+  @override
+  String get noRatings => 'žiadne hodnotenia';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ hodnotení';
+  }
+
+  @override
+  String get errorActivatingApp => 'Chyba pri aktivácii aplikácie';
+
+  @override
+  String get integrationSetupRequired => 'Ak sa jedná o integračnú aplikáciu, uistite sa, že je nastavenie dokončené.';
+
+  @override
+  String get installed => 'Nainštalované';
+
+  @override
+  String get appIdLabel => 'ID aplikácie';
+
+  @override
+  String get appNameLabel => 'Názov aplikácie';
+
+  @override
+  String get appNamePlaceholder => 'Moja úžasná aplikácia';
+
+  @override
+  String get pleaseEnterAppName => 'Zadajte prosím názov aplikácie';
+
+  @override
+  String get categoryLabel => 'Kategória';
+
+  @override
+  String get selectCategory => 'Vyberte kategóriu';
+
+  @override
+  String get descriptionLabel => 'Popis';
+
+  @override
+  String get appDescriptionPlaceholder =>
+      'Moja úžasná aplikácia je skvelá aplikácia, ktorá robí úžasné veci. Je to najlepšia aplikácia!';
+
+  @override
+  String get pleaseProvideValidDescription => 'Zadajte prosím platný popis';
+
+  @override
+  String get appPricingLabel => 'Cena aplikácie';
+
+  @override
+  String get noneSelected => 'Nič nevybrané';
+
+  @override
+  String get appIdCopiedToClipboard => 'ID aplikácie skopírované do schránky';
+
+  @override
+  String get appCategoryModalTitle => 'Kategória aplikácie';
+
+  @override
+  String get pricingFree => 'Zadarmo';
+
+  @override
+  String get pricingPaid => 'Platené';
+
+  @override
+  String get loadingCapabilities => 'Načítavajú sa funkcie...';
+
+  @override
+  String get filterInstalled => 'Nainštalované';
+
+  @override
+  String get filterMyApps => 'Moje aplikácie';
+
+  @override
+  String get clearSelection => 'Vymazať výber';
+
+  @override
+  String get filterCategory => 'Kategória';
+
+  @override
+  String get rating4PlusStars => '4+ hviezdičiek';
+
+  @override
+  String get rating3PlusStars => '3+ hviezdičiek';
+
+  @override
+  String get rating2PlusStars => '2+ hviezdičiek';
+
+  @override
+  String get rating1PlusStars => '1+ hviezdička';
+
+  @override
+  String get filterRating => 'Hodnotenie';
+
+  @override
+  String get filterCapabilities => 'Funkcie';
+
+  @override
+  String get noNotificationScopesAvailable => 'Nie sú k dispozícii žiadne rozsahy oznámení';
+
+  @override
+  String get popularApps => 'Obľúbené aplikácie';
+
+  @override
+  String get pleaseProvidePrompt => 'Zadajte prosím výzvu';
+
+  @override
+  String chatWithAppName(String appName) {
+    return 'Chat s $appName';
+  }
+
+  @override
+  String get defaultAiAssistant => 'Predvolený AI asistent';
+
+  @override
+  String get readyToChat => '✨ Pripravený na chat!';
+
+  @override
+  String get connectionNeeded => '🌐 Vyžaduje sa pripojenie';
+
+  @override
+  String get startConversation => 'Začnite konverzáciu a nechajte kúzlo začať';
+
+  @override
+  String get checkInternetConnection => 'Skontrolujte prosím internetové pripojenie';
+
+  @override
+  String get wasThisHelpful => 'Bolo to užitočné?';
+
+  @override
+  String get thankYouForFeedback => 'Ďakujeme za spätnú väzbu!';
+
+  @override
+  String get maxFilesUploadError => 'Naraz môžete nahrať iba 4 súbory';
+
+  @override
+  String get attachedFiles => '📎 Priložené súbory';
+
+  @override
+  String get takePhoto => 'Odfotiť';
+
+  @override
+  String get captureWithCamera => 'Zachytiť kamerou';
+
+  @override
+  String get selectImages => 'Vybrať obrázky';
+
+  @override
+  String get chooseFromGallery => 'Vybrať z galérie';
+
+  @override
+  String get selectFile => 'Vybrať súbor';
+
+  @override
+  String get chooseAnyFileType => 'Vybrať akýkoľvek typ súboru';
+
+  @override
+  String get cannotReportOwnMessages => 'Nemôžete nahlásiť vlastné správy';
+
+  @override
+  String get messageReportedSuccessfully => '✅ Správa úspešne nahlásená';
+
+  @override
+  String get confirmReportMessage => 'Naozaj chcete nahlásiť túto správu?';
+
+  @override
+  String get selectChatAssistant => 'Vybrať chatovacieho asistenta';
+
+  @override
+  String get enableMoreApps => 'Povoliť viac aplikácií';
+
+  @override
+  String get chatCleared => 'Chat vymazaný';
+
+  @override
+  String get clearChatTitle => 'Vymazať chat?';
+
+  @override
+  String get confirmClearChat => 'Naozaj chcete vymazať chat? Túto akciu nemožno vrátiť späť.';
+
+  @override
+  String get copy => 'Kopírovať';
+
+  @override
+  String get share => 'Zdieľať';
+
+  @override
+  String get report => 'Nahlásiť';
+
+  @override
+  String get microphonePermissionRequired => 'Na hlasový záznam je potrebné povolenie mikrofónu.';
+
+  @override
+  String get microphonePermissionDenied =>
+      'Povolenie mikrofónu zamietnuté. Udeľte prosím povolenie v Predvoľby systému > Súkromie a bezpečnosť > Mikrofón.';
+
+  @override
+  String failedToCheckMicrophonePermission(String error) {
+    return 'Nepodarilo sa skontrolovať povolenie mikrofónu: $error';
+  }
+
+  @override
+  String get failedToTranscribeAudio => 'Nepodarilo sa prepísať zvuk';
+
+  @override
+  String get transcribing => 'Prepisovanie...';
+
+  @override
+  String get transcriptionFailed => 'Prepis zlyhal';
+
+  @override
+  String get discardedConversation => 'Zahodená konverzácia';
+
+  @override
+  String get at => 'o';
+
+  @override
+  String get from => 'od';
+
+  @override
+  String get copied => 'Skopírované!';
+
+  @override
+  String get copyLink => 'Kopírovať odkaz';
+
+  @override
+  String get hideTranscript => 'Skryť prepis';
+
+  @override
+  String get viewTranscript => 'Zobraziť prepis';
+
+  @override
+  String get conversationDetails => 'Detaily konverzácie';
+
+  @override
+  String get transcript => 'Prepis';
+
+  @override
+  String segmentsCount(int count) {
+    return '$count segmentov';
+  }
+
+  @override
+  String get noTranscriptAvailable => 'Prepis nie je k dispozícii';
+
+  @override
+  String get noTranscriptMessage => 'Táto konverzácia nemá prepis.';
+
+  @override
+  String get conversationUrlCouldNotBeGenerated => 'URL konverzácie sa nedá vygenerovať.';
+
+  @override
+  String get failedToGenerateConversationLink => 'Nepodarilo sa vygenerovať odkaz na konverzáciu';
+
+  @override
+  String get failedToGenerateShareLink => 'Nepodarilo sa vygenerovať odkaz na zdieľanie';
+
+  @override
+  String get reloadingConversations => 'Opätovné načítanie konverzácií...';
+
+  @override
+  String get user => 'Používateľ';
+
+  @override
+  String get starred => 'S hviezdičkou';
+
+  @override
+  String get date => 'Dátum';
+
+  @override
+  String get noResultsFound => 'Nenašli sa žiadne výsledky';
+
+  @override
+  String get tryAdjustingSearchTerms => 'Skúste upraviť hľadané výrazy';
+
+  @override
+  String get starConversationsToFindQuickly => 'Označte konverzácie hviezdičkou, aby ste ich tu rýchlo našli';
+
+  @override
+  String noConversationsOnDate(String date) {
+    return 'Žiadne konverzácie dňa $date';
+  }
+
+  @override
+  String get trySelectingDifferentDate => 'Skúste vybrať iný dátum';
+
+  @override
+  String get conversations => 'Konverzácie';
+
+  @override
+  String get chat => 'Chat';
+
+  @override
+  String get actions => 'Akcie';
+
+  @override
+  String get syncAvailable => 'Synchronizácia k dispozícii';
+
+  @override
+  String get referAFriend => 'Odporučiť priateľovi';
+
+  @override
+  String get help => 'Pomoc';
+
+  @override
+  String get pro => 'Pro';
+
+  @override
+  String get upgradeToPro => 'Upgrade na Pro';
+
+  @override
+  String get getOmiDevice => 'Získať zariadenie Omi';
+
+  @override
+  String get wearableAiCompanion => 'Nositeľný AI spoločník';
+
+  @override
+  String get loadingMemories => 'Načítavanie spomienok...';
+
+  @override
+  String get allMemories => 'Všetky spomienky';
+
+  @override
+  String get aboutYou => 'O vás';
+
+  @override
+  String get manual => 'Manuálne';
+
+  @override
+  String get loadingYourMemories => 'Načítavanie vašich spomienok...';
+
+  @override
+  String get createYourFirstMemory => 'Vytvorte svoju prvú spomienku a začnite';
+
+  @override
+  String get tryAdjustingFilter => 'Skúste upraviť vyhľadávanie alebo filter';
+
+  @override
+  String get whatWouldYouLikeToRemember => 'Čo by ste si chceli zapamätať?';
+
+  @override
+  String get category => 'Kategória';
+
+  @override
+  String get public => 'Verejná';
+
+  @override
+  String get failedToSaveCheckConnection => 'Uloženie zlyhalo. Skontrolujte pripojenie.';
+
+  @override
+  String get createMemory => 'Vytvoriť pamäť';
+
+  @override
+  String get deleteMemoryConfirmation => 'Naozaj chcete odstrániť túto pamäť? Túto akciu nie je možné vrátiť späť.';
+
+  @override
+  String get makePrivate => 'Nastaviť ako súkromné';
+
+  @override
+  String get organizeAndControlMemories => 'Organizujte a ovládajte svoje spomienky';
+
+  @override
+  String get total => 'Celkom';
+
+  @override
+  String get makeAllMemoriesPrivate => 'Nastaviť všetky spomienky ako súkromné';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Nastaviť všetky spomienky na súkromnú viditeľnosť';
+
+  @override
+  String get makeAllMemoriesPublic => 'Nastaviť všetky spomienky ako verejné';
+
+  @override
+  String get setAllMemoriesToPublic => 'Nastaviť všetky spomienky na verejnú viditeľnosť';
+
+  @override
+  String get permanentlyRemoveAllMemories => 'Trvalo odstrániť všetky spomienky z Omi';
+
+  @override
+  String get allMemoriesAreNowPrivate => 'Všetky spomienky sú teraz súkromné';
+
+  @override
+  String get allMemoriesAreNowPublic => 'Všetky spomienky sú teraz verejné';
+
+  @override
+  String get clearOmisMemory => 'Vymazať pamäť Omi';
+
+  @override
+  String clearMemoryConfirmation(int count) {
+    return 'Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých $count spomienok.';
+  }
+
+  @override
+  String get omisMemoryCleared => 'Pamäť Omi o vás bola vymazaná';
+
+  @override
+  String get welcomeToOmi => 'Vitajte v Omi';
+
+  @override
+  String get continueWithApple => 'Pokračovať s Apple';
+
+  @override
+  String get continueWithGoogle => 'Pokračovať s Google';
+
+  @override
+  String get byContinuingYouAgree => 'Pokračovaním súhlasíte s našimi ';
+
+  @override
+  String get termsOfService => 'Podmienkami služby';
+
+  @override
+  String get and => ' a ';
+
+  @override
+  String get dataAndPrivacy => 'Dáta a súkromie';
+
+  @override
+  String get secureAuthViaAppleId => 'Bezpečné overenie cez Apple ID';
+
+  @override
+  String get secureAuthViaGoogleAccount => 'Bezpečné overenie cez účet Google';
+
+  @override
+  String get whatWeCollect => 'Čo zbierame';
+
+  @override
+  String get dataCollectionMessage =>
+      'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch, aby poskytli prehľady založené na AI a umožnili všetky funkcie aplikácie.';
+
+  @override
+  String get dataProtection => 'Ochrana dát';
+
+  @override
+  String get yourDataIsProtected => 'Vaše dáta sú chránené a riadia sa našimi ';
+
+  @override
+  String get pleaseSelectYourPrimaryLanguage => 'Prosím vyberte svoj primárny jazyk';
+
+  @override
+  String get chooseYourLanguage => 'Vyberte si svoj jazyk';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Vyberte si preferovaný jazyk pre najlepší Omi zážitok';
+
+  @override
+  String get searchLanguages => 'Hľadať jazyky...';
+
+  @override
+  String get selectALanguage => 'Vyberte jazyk';
+
+  @override
+  String get tryDifferentSearchTerm => 'Skúste iný vyhľadávací výraz';
+
+  @override
+  String get pleaseEnterYourName => 'Prosím zadajte svoje meno';
+
+  @override
+  String get nameMustBeAtLeast2Characters => 'Meno musí mať aspoň 2 znaky';
+
+  @override
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Povedzte nám, ako by ste chceli byť oslovovaní. To pomáha prispôsobiť váš Omi zážitok.';
+
+  @override
+  String charactersCount(int count) {
+    return '$count znakov';
+  }
+
+  @override
+  String get enableFeaturesForBestExperience => 'Povoľte funkcie pre najlepší Omi zážitok na vašom zariadení.';
+
+  @override
+  String get microphoneAccess => 'Prístup k mikrofónu';
+
+  @override
+  String get recordAudioConversations => 'Nahrávať audio konverzácie';
+
+  @override
+  String get microphoneAccessDescription =>
+      'Omi potrebuje prístup k mikrofónu na nahrávanie vašich konverzácií a poskytovanie prepisov.';
+
+  @override
+  String get screenRecording => 'Záznam obrazovky';
+
+  @override
+  String get captureSystemAudioFromMeetings => 'Zachytiť systémový zvuk zo schôdzok';
+
+  @override
+  String get screenRecordingDescription =>
+      'Omi potrebuje povolenie na záznam obrazovky na zachytenie systémového zvuku z vašich schôdzok v prehliadači.';
+
+  @override
+  String get accessibility => 'Prístupnosť';
+
+  @override
+  String get detectBrowserBasedMeetings => 'Detekovať schôdzky v prehliadači';
+
+  @override
+  String get accessibilityDescription =>
+      'Omi potrebuje povolenie prístupnosti na detekciu, kedy sa pripájate k schôdzkam Zoom, Meet alebo Teams vo vašom prehliadači.';
+
+  @override
+  String get pleaseWait => 'Prosím čakajte...';
+
+  @override
+  String get joinTheCommunity => 'Pripojte sa ku komunite!';
+
+  @override
+  String get loadingProfile => 'Načítavanie profilu...';
+
+  @override
+  String get profileSettings => 'Nastavenia profilu';
+
+  @override
+  String get noEmailSet => 'Email nie je nastavený';
+
+  @override
+  String get userIdCopiedToClipboard => 'ID používateľa skopírované';
+
+  @override
+  String get yourInformation => 'Vaše Informácie';
+
+  @override
+  String get setYourName => 'Nastaviť svoje meno';
+
+  @override
+  String get changeYourName => 'Zmeniť svoje meno';
+
+  @override
+  String get manageYourOmiPersona => 'Spravovať svoju Omi personu';
+
+  @override
+  String get voiceAndPeople => 'Hlas a Ľudia';
+
+  @override
+  String get teachOmiYourVoice => 'Naučiť Omi svoj hlas';
+
+  @override
+  String get tellOmiWhoSaidIt => 'Povedzte Omi, kto to povedal 🗣️';
+
+  @override
+  String get payment => 'Platba';
+
+  @override
+  String get addOrChangeYourPaymentMethod => 'Pridať alebo zmeniť platobnú metódu';
+
+  @override
+  String get preferences => 'Predvoľby';
+
+  @override
+  String get helpImproveOmiBySharing => 'Pomôžte vylepšiť Omi zdieľaním anonymizovaných analytických dát';
+
+  @override
+  String get deleteAccount => 'Zmazať Účet';
+
+  @override
+  String get deleteYourAccountAndAllData => 'Vymazať účet a všetky údaje';
+
+  @override
+  String get clearLogs => 'Vymazať denníky';
+
+  @override
+  String get debugLogsCleared => 'Protokoly ladenia vymazané';
+
+  @override
+  String get exportConversations => 'Exportovať konverzácie';
+
+  @override
+  String get exportAllConversationsToJson => 'Exportujte všetky svoje konverzácie do súboru JSON.';
+
+  @override
+  String get conversationsExportStarted => 'Export konverzácií začal. Môže to trvať niekoľko sekúnd, prosím čakajte.';
+
+  @override
+  String get mcpDescription =>
+      'Na pripojenie Omi k iným aplikáciám na čítanie, vyhľadávanie a správu vašich spomienok a konverzácií. Vytvorte kľúč na začatie.';
+
+  @override
+  String get apiKeys => 'API kľúče';
+
+  @override
+  String errorLabel(String error) {
+    return 'Chyba: $error';
+  }
+
+  @override
+  String get noApiKeysFound => 'Nenašli sa žiadne API kľúče. Vytvorte jeden na začatie.';
+
+  @override
+  String get advancedSettings => 'Pokročilé nastavenia';
+
+  @override
+  String get triggersWhenNewConversationCreated => 'Spustí sa pri vytvorení novej konverzácie.';
+
+  @override
+  String get triggersWhenNewTranscriptReceived => 'Spustí sa pri prijatí nového prepisu.';
+
+  @override
+  String get realtimeAudioBytes => 'Zvukové bajty v reálnom čase';
+
+  @override
+  String get triggersWhenAudioBytesReceived => 'Spustí sa pri prijatí zvukových bajtov.';
+
+  @override
+  String get everyXSeconds => 'Každých x sekúnd';
+
+  @override
+  String get triggersWhenDaySummaryGenerated => 'Spustí sa pri vytvorení denného súhrnu.';
+
+  @override
+  String get tryLatestExperimentalFeatures => 'Vyskúšajte najnovšie experimentálne funkcie od tímu Omi.';
+
+  @override
+  String get transcriptionServiceDiagnosticStatus => 'Diagnostický stav služby prepisu';
+
+  @override
+  String get enableDetailedDiagnosticMessages => 'Povoliť podrobné diagnostické správy zo služby prepisu';
+
+  @override
+  String get autoCreateAndTagNewSpeakers => 'Automaticky vytvárať a označovať nových rečníkov';
+
+  @override
+  String get automaticallyCreateNewPerson => 'Automaticky vytvoriť novú osobu, keď je v prepise zistené meno.';
+
+  @override
+  String get pilotFeatures => 'Pilotné funkcie';
+
+  @override
+  String get pilotFeaturesDescription => 'Tieto funkcie sú testy a podpora nie je zaručená.';
+
+  @override
+  String get suggestFollowUpQuestion => 'Navrhnúť následnú otázku';
+
+  @override
+  String get saveSettings => 'Uložiť Nastavenia';
+
+  @override
+  String get syncingDeveloperSettings => 'Synchronizácia nastavení vývojára...';
+
+  @override
+  String get summary => 'Zhrnutie';
+
+  @override
+  String get auto => 'Automaticky';
+
+  @override
+  String get noSummaryForApp =>
+      'Pre túto aplikáciu nie je k dispozícii zhrnutie. Skúste inú aplikáciu pre lepšie výsledky.';
+
+  @override
+  String get tryAnotherApp => 'Vyskúšať inú aplikáciu';
+
+  @override
+  String generatedBy(String appName) {
+    return 'Vygenerované aplikáciou $appName';
+  }
+
+  @override
+  String get overview => 'Prehľad';
+
+  @override
+  String get otherAppResults => 'Výsledky z iných aplikácií';
+
+  @override
+  String get unknownApp => 'Neznáma aplikácia';
+
+  @override
+  String get noSummaryAvailable => 'Nie je k dispozícii žiadne zhrnutie';
+
+  @override
+  String get conversationNoSummaryYet => 'Táto konverzácia ešte nemá zhrnutie.';
+
+  @override
+  String get chooseSummarizationApp => 'Vybrať aplikáciu na zhrnutie';
+
+  @override
+  String setAsDefaultSummarizationApp(String appName) {
+    return 'Aplikácia $appName nastavená ako predvolená aplikácia na zhrnutie';
+  }
+
+  @override
+  String get letOmiChooseAutomatically => 'Nechajte Omi automaticky vybrať najlepšiu aplikáciu';
+
+  @override
+  String get deleteConversationConfirmation =>
+      'Naozaj chcete odstrániť túto konverzáciu? Túto akciu nemožno vrátiť späť.';
+
+  @override
+  String get conversationDeleted => 'Konverzácia odstránená';
+
+  @override
+  String get generatingLink => 'Generovanie odkazu...';
+
+  @override
+  String get editConversation => 'Upraviť konverzáciu';
+
+  @override
+  String get conversationLinkCopiedToClipboard => 'Odkaz na konverzáciu skopírovaný do schránky';
+
+  @override
+  String get conversationTranscriptCopiedToClipboard => 'Prepis konverzácie skopírovaný do schránky';
+
+  @override
+  String get editConversationDialogTitle => 'Upraviť konverzáciu';
+
+  @override
+  String get changeTheConversationTitle => 'Zmeniť názov konverzácie';
+
+  @override
+  String get conversationTitle => 'Názov konverzácie';
+
+  @override
+  String get enterConversationTitle => 'Zadajte názov konverzácie...';
+
+  @override
+  String get conversationTitleUpdatedSuccessfully => 'Názov konverzácie úspešne aktualizovaný';
+
+  @override
+  String get failedToUpdateConversationTitle => 'Nepodarilo sa aktualizovať názov konverzácie';
+
+  @override
+  String get errorUpdatingConversationTitle => 'Chyba pri aktualizácii názvu konverzácie';
+
+  @override
+  String get settingUp => 'Nastavovanie...';
+
+  @override
+  String get startYourFirstRecording => 'Začnite svoj prvý záznam';
+
+  @override
+  String get preparingSystemAudioCapture => 'Príprava záznamu systémového zvuku';
+
+  @override
+  String get clickTheButtonToCaptureAudio =>
+      'Kliknite na tlačidlo na záznam zvuku pre živé prepisy, AI poznatky a automatické ukladanie.';
+
+  @override
+  String get reconnecting => 'Opätovné pripájanie...';
+
+  @override
+  String get recordingPaused => 'Záznam pozastavený';
+
+  @override
+  String get recordingActive => 'Záznam aktívny';
+
+  @override
+  String get startRecording => 'Spustiť záznam';
+
+  @override
+  String resumingInCountdown(String countdown) {
+    return 'Pokračovanie za ${countdown}s...';
+  }
+
+  @override
+  String get tapPlayToResume => 'Klepnite na prehrať pre pokračovanie';
+
+  @override
+  String get listeningForAudio => 'Počúvanie zvuku...';
+
+  @override
+  String get preparingAudioCapture => 'Príprava záznamu zvuku';
+
+  @override
+  String get clickToBeginRecording => 'Kliknite pre začatie záznamu';
+
+  @override
+  String get translated => 'preložené';
+
+  @override
+  String get liveTranscript => 'Živý prepis';
+
+  @override
+  String segmentsSingular(String count) {
+    return '$count segment';
+  }
+
+  @override
+  String segmentsPlural(String count) {
+    return '$count segmentov';
+  }
+
+  @override
+  String get startRecordingToSeeTranscript => 'Spustite záznam pre zobrazenie živého prepisu';
+
+  @override
+  String get paused => 'Pozastavené';
+
+  @override
+  String get initializing => 'Inicializácia...';
+
+  @override
+  String get recording => 'Nahrávanie';
+
+  @override
+  String microphoneChangedResumingIn(String countdown) {
+    return 'Mikrofón zmenený. Pokračovanie za ${countdown}s';
+  }
+
+  @override
+  String get clickPlayToResumeOrStop => 'Kliknite na prehrať pre pokračovanie alebo zastaviť pre dokončenie';
+
+  @override
+  String get settingUpSystemAudioCapture => 'Nastavenie záznamu systémového zvuku';
+
+  @override
+  String get capturingAudioAndGeneratingTranscript => 'Záznam zvuku a generovanie prepisu';
+
+  @override
+  String get clickToBeginRecordingSystemAudio => 'Kliknite pre začatie záznamu systémového zvuku';
+
+  @override
+  String get you => 'Vy';
+
+  @override
+  String speakerWithId(String speakerId) {
+    return 'Hovorca $speakerId';
+  }
+
+  @override
+  String get translatedByOmi => 'preložené pomocou omi';
+
+  @override
+  String get backToConversations => 'Späť na konverzácie';
+
+  @override
+  String get systemAudio => 'Systém';
+
+  @override
+  String get mic => 'Mikrofón';
+
+  @override
+  String audioInputSetTo(String deviceName) {
+    return 'Vstup zvuku nastavený na $deviceName';
+  }
+
+  @override
+  String errorSwitchingAudioDevice(String error) {
+    return 'Chyba pri prepínaní zvukového zariadenia: $error';
+  }
+
+  @override
+  String get selectAudioInput => 'Vyberte vstup zvuku';
+
+  @override
+  String get loadingDevices => 'Načítavanie zariadení...';
+
+  @override
+  String get settingsHeader => 'NASTAVENIA';
+
+  @override
+  String get plansAndBilling => 'Plány a Fakturácia';
+
+  @override
+  String get calendarIntegration => 'Integrácia Kalendára';
+
+  @override
+  String get dailySummary => 'Denný súhrn';
+
+  @override
+  String get developer => 'Vývojár';
+
+  @override
+  String get about => 'O aplikácii';
+
+  @override
+  String get selectTime => 'Vybrať čas';
+
+  @override
+  String get accountGroup => 'Účet';
+
+  @override
+  String get signOutQuestion => 'Odhlásiť sa?';
+
+  @override
+  String get signOutConfirmation => 'Naozaj sa chcete odhlásiť?';
+
+  @override
+  String get customVocabularyHeader => 'VLASTNÝ SLOVNÍK';
+
+  @override
+  String get addWordsDescription => 'Pridajte slová, ktoré má Omi rozpoznávať počas prepisu.';
+
+  @override
+  String get enterWordsHint => 'Zadajte slová (oddelené čiarkami)';
+
+  @override
+  String get dailySummaryHeader => 'DENNÝ SÚHRN';
+
+  @override
+  String get dailySummaryTitle => 'Denný Súhrn';
+
+  @override
+  String get dailySummaryDescription => 'Získajte personalizovaný súhrn konverzácií dňa ako upozornenie.';
+
+  @override
+  String get deliveryTime => 'Čas doručenia';
+
+  @override
+  String get deliveryTimeDescription => 'Kedy prijímať denný súhrn';
+
+  @override
+  String get subscription => 'Predplatné';
+
+  @override
+  String get viewPlansAndUsage => 'Zobraziť Plány a Využitie';
+
+  @override
+  String get viewPlansDescription => 'Spravujte svoje predplatné a pozrite si štatistiky využitia';
+
+  @override
+  String get addOrChangePaymentMethod => 'Pridajte alebo zmeňte svoju platobnú metódu';
+
+  @override
+  String get displayOptions => 'Možnosti zobrazenia';
+
+  @override
+  String get showMeetingsInMenuBar => 'Zobraziť stretnutia v paneli ponúk';
+
+  @override
+  String get displayUpcomingMeetingsDescription => 'Zobraziť nadchádzajúce stretnutia v paneli ponúk';
+
+  @override
+  String get showEventsWithoutParticipants => 'Zobraziť udalosti bez účastníkov';
+
+  @override
+  String get includePersonalEventsDescription => 'Zahrnúť osobné udalosti bez účastníkov';
+
+  @override
+  String get upcomingMeetings => 'Nadchádzajúce stretnutia';
+
+  @override
+  String get checkingNext7Days => 'Kontrola nasledujúcich 7 dní';
+
+  @override
+  String get shortcuts => 'Klávesové skratky';
+
+  @override
+  String get shortcutChangeInstruction => 'Kliknite na skratku a zmeňte ju. Stlačením Escape zrušíte.';
+
+  @override
+  String get configurePersonaDescription => 'Nakonfigurujte svoju AI personu';
+
+  @override
+  String get configureSTTProvider => 'Nakonfigurujte poskytovateľa STT';
+
+  @override
+  String get setConversationEndDescription => 'Nastavte, kedy sa konverzácie automaticky ukončia';
+
+  @override
+  String get importDataDescription => 'Importovať dáta z iných zdrojov';
+
+  @override
+  String get exportConversationsDescription => 'Exportovať konverzácie do JSON';
+
+  @override
+  String get exportingConversations => 'Exportovanie konverzácií...';
+
+  @override
+  String get clearNodesDescription => 'Vymazať všetky uzly a pripojenia';
+
+  @override
+  String get deleteKnowledgeGraphQuestion => 'Vymazať graf znalostí?';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Tým sa vymažú všetky odvodené údaje grafu znalostí. Vaše pôvodné spomienky zostanú v bezpečí.';
+
+  @override
+  String get connectOmiWithAI => 'Pripojte Omi k AI asistentom';
+
+  @override
+  String get noAPIKeys => 'Žiadne kľúče API. Vytvorte jeden na začatie.';
+
+  @override
+  String get autoCreateWhenDetected => 'Automaticky vytvoriť pri detekcii mena';
+
+  @override
+  String get trackPersonalGoals => 'Sledovať osobné ciele na domovskej stránke';
+
+  @override
+  String get dailyReflectionDescription =>
+      'Získajte pripomienku o 21:00, aby ste sa zamysleli nad svojím dňom a zaznamenali myšlienky.';
+
+  @override
+  String get endpointURL => 'URL koncového bodu';
+
+  @override
+  String get links => 'Odkazy';
+
+  @override
+  String get discordMemberCount => 'Viac ako 8000 členov na Discorde';
+
+  @override
+  String get userInformation => 'Informácie o používateľovi';
+
+  @override
+  String get capabilities => 'Schopnosti';
+
+  @override
+  String get previewScreenshots => 'Náhľad snímok obrazovky';
+
+  @override
+  String get holdOnPreparingForm => 'Počkajte, pripravujeme pre vás formulár';
+
+  @override
+  String get bySubmittingYouAgreeToOmi => 'Odoslaním súhlasíte s Omi ';
+
+  @override
+  String get termsAndPrivacyPolicy => 'Podmienky a Zásady ochrany osobných údajov';
+
+  @override
+  String get helpsDiagnoseIssuesAutoDeletes => 'Pomáha diagnostikovať problémy. Automaticky sa vymaže po 3 dňoch.';
+
+  @override
+  String get manageYourApp => 'Spravujte svoju aplikáciu';
+
+  @override
+  String get updatingYourApp => 'Aktualizácia vašej aplikácie';
+
+  @override
+  String get fetchingYourAppDetails => 'Načítanie podrobností aplikácie';
+
+  @override
+  String get updateAppQuestion => 'Aktualizovať aplikáciu?';
+
+  @override
+  String get updateAppConfirmation =>
+      'Ste si istý, že chcete aktualizovať svoju aplikáciu? Zmeny sa prejavia po kontrole naším tímom.';
+
+  @override
+  String get updateApp => 'Aktualizovať aplikáciu';
+
+  @override
+  String get createAndSubmitNewApp => 'Vytvorte a odošlite novú aplikáciu';
+
+  @override
+  String appsCount(String count) {
+    return 'Aplikácie ($count)';
+  }
+
+  @override
+  String privateAppsCount(String count) {
+    return 'Súkromné aplikácie ($count)';
+  }
+
+  @override
+  String publicAppsCount(String count) {
+    return 'Verejné aplikácie ($count)';
+  }
+
+  @override
+  String get newVersionAvailable => 'K dispozícii je nová verzia  🎉';
+
+  @override
+  String get no => 'Nie';
+
+  @override
+  String get subscriptionCancelledSuccessfully =>
+      'Predplatné bolo úspešne zrušené. Zostane aktívne do konca aktuálneho fakturačného obdobia.';
+
+  @override
+  String get failedToCancelSubscription => 'Zrušenie predplatného zlyhalo. Skúste to prosím znova.';
+
+  @override
+  String get invalidPaymentUrl => 'Neplatná adresa URL platby';
+
+  @override
+  String get permissionsAndTriggers => 'Povolenia a spúšťače';
+
+  @override
+  String get chatFeatures => 'Funkcie chatu';
+
+  @override
+  String get uninstall => 'Odinštalovať';
+
+  @override
+  String get installs => 'INŠTALÁCIE';
+
+  @override
+  String get priceLabel => 'CENA';
+
+  @override
+  String get updatedLabel => 'AKTUALIZOVANÉ';
+
+  @override
+  String get createdLabel => 'VYTVORENÉ';
+
+  @override
+  String get featuredLabel => 'ODPORÚČANÉ';
+
+  @override
+  String get cancelSubscriptionQuestion => 'Zrušiť predplatné?';
+
+  @override
+  String get cancelSubscriptionConfirmation =>
+      'Ste si istý, že chcete zrušiť predplatné? Budete mať prístup do konca aktuálneho fakturačného obdobia.';
+
+  @override
+  String get cancelSubscriptionButton => 'Zrušiť predplatné';
+
+  @override
+  String get cancelling => 'Rušenie...';
+
+  @override
+  String get betaTesterMessage => 'Ste beta tester tejto aplikácie. Zatiaľ nie je verejná. Bude verejná po schválení.';
+
+  @override
+  String get appUnderReviewMessage =>
+      'Vaša aplikácia je v procese kontroly a viditeľná len pre vás. Bude verejná po schválení.';
+
+  @override
+  String get appRejectedMessage => 'Vaša aplikácia bola zamietnutá. Aktualizujte údaje a znova odošlite na kontrolu.';
+
+  @override
+  String get invalidIntegrationUrl => 'Neplatná URL integrácie';
+
+  @override
+  String get tapToComplete => 'Klepnite pre dokončenie';
+
+  @override
+  String get invalidSetupInstructionsUrl => 'Neplatná URL pokynov na nastavenie';
+
+  @override
+  String get pushToTalk => 'Stlačte pre hovor';
+
+  @override
+  String get summaryPrompt => 'Výzva na zhrnutie';
+
+  @override
+  String get pleaseSelectARating => 'Vyberte prosím hodnotenie';
+
+  @override
+  String get reviewAddedSuccessfully => 'Recenzia úspešne pridaná 🚀';
+
+  @override
+  String get reviewUpdatedSuccessfully => 'Recenzia úspešne aktualizovaná 🚀';
+
+  @override
+  String get failedToSubmitReview => 'Nepodarilo sa odoslať recenziu. Skúste to znova.';
+
+  @override
+  String get addYourReview => 'Pridajte svoju recenziu';
+
+  @override
+  String get editYourReview => 'Upravte svoju recenziu';
+
+  @override
+  String get writeAReviewOptional => 'Napíšte recenziu (voliteľné)';
+
+  @override
+  String get submitReview => 'Odoslať recenziu';
+
+  @override
+  String get updateReview => 'Aktualizovať recenziu';
+
+  @override
+  String get yourReview => 'Vaša recenzia';
+
+  @override
+  String get anonymousUser => 'Anonymný používateľ';
+
+  @override
+  String get issueActivatingApp => 'Pri aktivácii tejto aplikácie došlo k problému. Skúste to prosím znova.';
+
+  @override
+  String get dataAccessNoticeDescription => 'Omi pristupuje k vašim údajom len na zlepšenie vášho zážitku';
+
+  @override
+  String get copyUrl => 'Kopírovať URL';
+
+  @override
+  String get txtFormat => 'TXT';
+
+  @override
+  String get pdfFormat => 'PDF';
+
+  @override
+  String get weekdayMon => 'Po';
+
+  @override
+  String get weekdayTue => 'Ut';
+
+  @override
+  String get weekdayWed => 'St';
+
+  @override
+  String get weekdayThu => 'Št';
+
+  @override
+  String get weekdayFri => 'Pi';
+
+  @override
+  String get weekdaySat => 'So';
+
+  @override
+  String get weekdaySun => 'Ne';
+
+  @override
+  String serviceIntegrationComingSoon(String serviceName) {
+    return 'Integrácia s $serviceName čoskoro';
+  }
+
+  @override
+  String alreadyExportedTo(String platform) {
+    return 'Už exportované do $platform';
+  }
+
+  @override
+  String get anotherPlatform => 'inú platformu';
+
+  @override
+  String pleaseAuthenticateWithService(String serviceName) {
+    return 'Prosím overte sa pomocou $serviceName v Nastavenia > Integrácie úloh';
+  }
+
+  @override
+  String addingToService(String serviceName) {
+    return 'Pridávanie do $serviceName...';
+  }
+
+  @override
+  String addedToService(String serviceName) {
+    return 'Pridané do $serviceName';
+  }
+
+  @override
+  String failedToAddToService(String serviceName) {
+    return 'Nepodarilo sa pridať do $serviceName';
+  }
+
+  @override
+  String get permissionDeniedForAppleReminders => 'Povolenie pre Apple Reminders zamietnuté';
+
+  @override
+  String failedToCreateApiKey(String error) {
+    return 'Nepodarilo sa vytvoriť API kľúč poskytovateľa: $error';
+  }
+
+  @override
+  String get createAKey => 'Vytvoriť kľúč';
+
+  @override
+  String get apiKeyRevokedSuccessfully => 'API kľúč bol úspešne odvolaný';
+
+  @override
+  String failedToRevokeApiKey(String error) {
+    return 'Nepodarilo sa odvolať API kľúč: $error';
+  }
+
+  @override
+  String get omiApiKeys => 'Omi API kľúče';
+
+  @override
+  String get apiKeysDescription =>
+      'API kľúče sa používajú na overenie, keď vaša aplikácia komunikuje so serverom OMI. Umožňujú vašej aplikácii vytvárať spomienky a bezpečne pristupovať k ďalším službám OMI.';
+
+  @override
+  String get aboutOmiApiKeys => 'O Omi API kľúčoch';
+
+  @override
+  String get yourNewKey => 'Váš nový kľúč:';
+
+  @override
+  String get copyToClipboard => 'Kopírovať do schránky';
+
+  @override
+  String get pleaseCopyKeyNow => 'Prosím skopírujte si ho teraz a zapíšte si ho na bezpečné miesto. ';
+
+  @override
+  String get willNotSeeAgain => 'Nebudete ho môcť znova zobraziť.';
+
+  @override
+  String get revokeKey => 'Odvolať kľúč';
+
+  @override
+  String get revokeApiKeyQuestion => 'Odvolať API kľúč?';
+
+  @override
+  String get revokeApiKeyWarning =>
+      'Túto akciu nie je možné vrátiť späť. Aplikácie používajúce tento kľúč už nebudú mať prístup k API.';
+
+  @override
+  String get revoke => 'Odvolať';
+
+  @override
+  String get whatWouldYouLikeToCreate => 'Čo by ste chceli vytvoriť?';
+
+  @override
+  String get createAnApp => 'Vytvoriť aplikáciu';
+
+  @override
+  String get createAndShareYourApp => 'Vytvorte a zdieľajte svoju aplikáciu';
+
+  @override
+  String get createMyClone => 'Vytvoriť môj klon';
+
+  @override
+  String get createYourDigitalClone => 'Vytvorte si digitálny klon';
+
+  @override
+  String get itemApp => 'Aplikácia';
+
+  @override
+  String get itemPersona => 'Persona';
+
+  @override
+  String keepItemPublic(String item) {
+    return 'Ponechať $item verejnú';
+  }
+
+  @override
+  String makeItemPublicQuestion(String item) {
+    return 'Zverejniť $item?';
+  }
+
+  @override
+  String makeItemPrivateQuestion(String item) {
+    return 'Zneverejniť $item?';
+  }
+
+  @override
+  String makeItemPublicExplanation(String item) {
+    return 'Ak zverejníte $item, môže ju používať každý';
+  }
+
+  @override
+  String makeItemPrivateExplanation(String item) {
+    return 'Ak teraz zneverejníte $item, prestane fungovať pre všetkých a bude viditeľná len pre vás';
+  }
+
+  @override
+  String get manageApp => 'Spravovať aplikáciu';
+
+  @override
+  String get updatePersonaDetails => 'Aktualizovať detaily persony';
+
+  @override
+  String deleteItemTitle(String item) {
+    return 'Odstrániť $item';
+  }
+
+  @override
+  String deleteItemQuestion(String item) {
+    return 'Odstrániť $item?';
+  }
+
+  @override
+  String deleteItemConfirmation(String item) {
+    return 'Ste si istí, že chcete odstrániť túto $item? Túto akciu nie je možné vrátiť späť.';
+  }
+
+  @override
+  String get revokeKeyQuestion => 'Odvolať kľúč?';
+
+  @override
+  String revokeKeyConfirmation(String keyName) {
+    return 'Ste si istí, že chcete odvolať kľúč \"$keyName\"? Túto akciu nie je možné vrátiť späť.';
+  }
+
+  @override
+  String get createNewKey => 'Vytvoriť nový kľúč';
+
+  @override
+  String get keyNameHint => 'napr. Claude Desktop';
+
+  @override
+  String get pleaseEnterAName => 'Prosím zadajte názov.';
+
+  @override
+  String failedToCreateKeyWithError(String error) {
+    return 'Nepodarilo sa vytvoriť kľúč: $error';
+  }
+
+  @override
+  String get failedToCreateKeyTryAgain => 'Nepodarilo sa vytvoriť kľúč. Skúste to prosím znova.';
+
+  @override
+  String get keyCreated => 'Kľúč vytvorený';
+
+  @override
+  String get keyCreatedMessage => 'Váš nový kľúč bol vytvorený. Prosím skopírujte si ho teraz. Už ho neuvidíte.';
+
+  @override
+  String get keyWord => 'Kľúč';
+
+  @override
+  String get externalAppAccess => 'Prístup externých aplikácií';
+
+  @override
+  String get externalAppAccessDescription =>
+      'Nasledujúce nainštalované aplikácie majú externé integrácie a môžu pristupovať k vašim údajom, ako sú konverzácie a spomienky.';
+
+  @override
+  String get noExternalAppsHaveAccess => 'Žiadne externé aplikácie nemajú prístup k vašim údajom.';
+
+  @override
+  String get maximumSecurityE2ee => 'Maximálne zabezpečenie (E2EE)';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end šifrovanie je zlatý štandard ochrany súkromia. Keď je povolené, vaše údaje sú šifrované na vašom zariadení pred odoslaním na naše servery. To znamená, že nikto, ani Omi, nemôže pristupovať k vášmu obsahu.';
+
+  @override
+  String get importantTradeoffs => 'Dôležité kompromisy:';
+
+  @override
+  String get e2eeTradeoff1 => '• Niektoré funkcie ako integrácie externých aplikácií môžu byť zakázané.';
+
+  @override
+  String get e2eeTradeoff2 => '• Ak stratíte heslo, vaše údaje nie je možné obnoviť.';
+
+  @override
+  String get featureComingSoon => 'Táto funkcia bude čoskoro k dispozícii!';
+
+  @override
+  String get migrationInProgressMessage => 'Migrácia prebieha. Úroveň ochrany nemôžete zmeniť, kým sa nedokončí.';
+
+  @override
+  String get migrationFailed => 'Migrácia zlyhala';
+
+  @override
+  String migratingFromTo(String source, String target) {
+    return 'Migrácia z $source na $target';
+  }
+
+  @override
+  String objectsCount(String processed, String total) {
+    return '$processed / $total objektov';
+  }
+
+  @override
+  String get secureEncryption => 'Bezpečné šifrovanie';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vaše údaje sú šifrované kľúčom jedinečným pre vás na našich serveroch hostovaných v Google Cloud. To znamená, že váš surový obsah je neprístupný nikomu, vrátane zamestnancov Omi alebo Google, priamo z databázy.';
+
+  @override
+  String get endToEndEncryption => 'End-to-end šifrovanie';
+
+  @override
+  String get e2eeCardDescription =>
+      'Povoľte pre maximálne zabezpečenie, kde iba vy máte prístup k vašim údajom. Klepnutím sa dozviete viac.';
+
+  @override
+  String get dataAlwaysEncrypted => 'Bez ohľadu na úroveň sú vaše údaje vždy šifrované v pokoji aj pri prenose.';
+
+  @override
+  String get readOnlyScope => 'Iba na čítanie';
+
+  @override
+  String get fullAccessScope => 'Plný prístup';
+
+  @override
+  String get readScope => 'Čítanie';
+
+  @override
+  String get writeScope => 'Zápis';
+
+  @override
+  String get apiKeyCreated => 'API kľúč vytvorený!';
+
+  @override
+  String get saveKeyWarning => 'Uložte si tento kľúč teraz! Znovu ho neuvidíte.';
+
+  @override
+  String get yourApiKey => 'VÁŠ API KĽÚČ';
+
+  @override
+  String get tapToCopy => 'Klepnutím skopírujete';
+
+  @override
+  String get copyKey => 'Kopírovať kľúč';
+
+  @override
+  String get createApiKey => 'Vytvoriť API kľúč';
+
+  @override
+  String get accessDataProgrammatically => 'Programovo pristupujte k svojim údajom';
+
+  @override
+  String get keyNameLabel => 'NÁZOV KĽÚČA';
+
+  @override
+  String get keyNamePlaceholder => 'napr., Moja integrácia aplikácie';
+
+  @override
+  String get permissionsLabel => 'OPRÁVNENIA';
+
+  @override
+  String get permissionsInfoNote => 'R = Čítanie, W = Zápis. Predvolené je iba na čítanie, ak nie je nič vybrané.';
+
+  @override
+  String get developerApi => 'Vývojárske API';
+
+  @override
+  String get createAKeyToGetStarted => 'Vytvorte kľúč pre začatie';
+
+  @override
+  String errorWithMessage(String error) {
+    return 'Chyba: $error';
+  }
+
+  @override
+  String get omiTraining => 'Školenie Omi';
+
+  @override
+  String get trainingDataProgram => 'Program tréningových dát';
+
+  @override
+  String get getOmiUnlimitedFree => 'Získajte Omi Unlimited zadarmo prispením vašich dát na trénovanie AI modelov.';
+
+  @override
+  String get trainingDataBullets =>
+      '• Vaše dáta pomáhajú zlepšovať AI modely\n• Zdieľajú sa len necitlivé dáta\n• Úplne transparentný proces';
+
+  @override
+  String get learnMoreAtOmiTraining => 'Zistite viac na omi.me/training';
+
+  @override
+  String get agreeToContributeData => 'Rozumiem a súhlasím s prispením mojich dát na trénovanie AI';
+
+  @override
+  String get submitRequest => 'Odoslať žiadosť';
+
+  @override
+  String get thankYouRequestUnderReview => 'Ďakujeme! Vaša žiadosť sa posudzuje. Po schválení vás upozorníme.';
+
+  @override
+  String planRemainsActiveUntil(String date) {
+    return 'Váš plán zostane aktívny do $date. Potom stratíte prístup k neobmedzeným funkciám. Ste si istí?';
+  }
+
+  @override
+  String get confirmCancellation => 'Potvrdiť zrušenie';
+
+  @override
+  String get keepMyPlan => 'Ponechať môj plán';
+
+  @override
+  String get subscriptionSetToCancel => 'Vaše predplatné je nastavené na zrušenie na konci obdobia.';
+
+  @override
+  String get switchedToOnDevice => 'Prepnuté na prepis na zariadení';
+
+  @override
+  String get couldNotSwitchToFreePlan => 'Nepodarilo sa prepnúť na bezplatný plán. Skúste to prosím znova.';
+
+  @override
+  String get couldNotLoadPlans => 'Nepodarilo sa načítať dostupné plány. Skúste to prosím znova.';
+
+  @override
+  String get selectedPlanNotAvailable => 'Vybraný plán nie je k dispozícii. Skúste to prosím znova.';
+
+  @override
+  String get upgradeToAnnualPlan => 'Upgradovať na ročný plán';
+
+  @override
+  String get importantBillingInfo => 'Dôležité informácie o fakturácii:';
+
+  @override
+  String get monthlyPlanContinues => 'Váš súčasný mesačný plán bude pokračovať do konca fakturačného obdobia';
+
+  @override
+  String get paymentMethodCharged =>
+      'Váš existujúci spôsob platby bude automaticky účtovaný po skončení mesačného plánu';
+
+  @override
+  String get annualSubscriptionStarts => 'Vaše 12-mesačné ročné predplatné sa automaticky spustí po zaúčtovaní';
+
+  @override
+  String get thirteenMonthsCoverage => 'Získate celkom 13 mesiacov pokrytia (aktuálny mesiac + 12 mesiacov ročne)';
+
+  @override
+  String get confirmUpgrade => 'Potvrdiť upgrade';
+
+  @override
+  String get confirmPlanChange => 'Potvrdiť zmenu plánu';
+
+  @override
+  String get confirmAndProceed => 'Potvrdiť a pokračovať';
+
+  @override
+  String get upgradeScheduled => 'Upgrade naplánovaný';
+
+  @override
+  String get changePlan => 'Zmeniť plán';
+
+  @override
+  String get upgradeAlreadyScheduled => 'Váš upgrade na ročný plán je už naplánovaný';
+
+  @override
+  String get youAreOnUnlimitedPlan => 'Ste na pláne Unlimited.';
+
+  @override
+  String get yourOmiUnleashed => 'Váš Omi, uvoľnený. Prejdite na neobmedzený pre nekonečné možnosti.';
+
+  @override
+  String planEndedOn(String date) {
+    return 'Váš plán skončil $date.\\nZnova sa prihláste teraz - budete okamžite účtovaní za nové fakturačné obdobie.';
+  }
+
+  @override
+  String planSetToCancelOn(String date) {
+    return 'Váš plán je nastavený na zrušenie $date.\\nZnova sa prihláste teraz, aby ste si zachovali výhody - bez poplatku do $date.';
+  }
+
+  @override
+  String get annualPlanStartsAutomatically => 'Váš ročný plán sa automaticky spustí po skončení mesačného plánu.';
+
+  @override
+  String planRenewsOn(String date) {
+    return 'Váš plán sa obnovuje $date.';
+  }
+
+  @override
+  String get unlimitedConversations => 'Neobmedzené konverzácie';
+
+  @override
+  String get askOmiAnything => 'Opýtajte sa Omi čokoľvek o svojom živote';
+
+  @override
+  String get unlockOmiInfiniteMemory => 'Odomknite nekonečnú pamäť Omi';
+
+  @override
+  String get youreOnAnnualPlan => 'Ste na ročnom pláne';
+
+  @override
+  String get alreadyBestValuePlan => 'Už máte plán s najlepšou hodnotou. Nie sú potrebné žiadne zmeny.';
+
+  @override
+  String get unableToLoadPlans => 'Nedá sa načítať plány';
+
+  @override
+  String get checkConnectionTryAgain => 'Skontrolujte pripojenie a skúste to znova';
+
+  @override
+  String get useFreePlan => 'Použiť bezplatný plán';
+
+  @override
+  String get continueText => 'Pokračovať';
+
+  @override
+  String get resubscribe => 'Znova sa prihlásiť';
+
+  @override
+  String get couldNotOpenPaymentSettings => 'Nepodarilo sa otvoriť nastavenia platby. Skúste to prosím znova.';
+
+  @override
+  String get managePaymentMethod => 'Spravovať spôsob platby';
+
+  @override
+  String get cancelSubscription => 'Zrušiť predplatné';
+
+  @override
+  String endsOnDate(String date) {
+    return 'Končí $date';
+  }
+
+  @override
+  String get active => 'Aktívny';
+
+  @override
+  String get freePlan => 'Bezplatný plán';
+
+  @override
+  String get configure => 'Konfigurovať';
+
+  @override
+  String get privacyInformation => 'Informácie o súkromí';
+
+  @override
+  String get yourPrivacyMattersToUs => 'Na vašom súkromí nám záleží';
+
+  @override
+  String get privacyIntroText =>
+      'V Omi berieme vaše súkromie veľmi vážne. Chceme byť transparentní ohľadom údajov, ktoré zhromažďujeme a ako ich používame. Tu je to, čo potrebujete vedieť:';
+
+  @override
+  String get whatWeTrack => 'Čo sledujeme';
+
+  @override
+  String get anonymityAndPrivacy => 'Anonymita a súkromie';
+
+  @override
+  String get optInAndOptOutOptions => 'Možnosti prihlásenia a odhlásenia';
+
+  @override
+  String get ourCommitment => 'Náš záväzok';
+
+  @override
+  String get commitmentText =>
+      'Zaväzujeme sa používať zhromaždené údaje len na to, aby sme z Omi urobili lepší produkt pre vás. Vaše súkromie a dôvera sú pre nás prvoradé.';
+
+  @override
+  String get thankYouText =>
+      'Ďakujeme, že ste cenený používateľ Omi. Ak máte akékoľvek otázky alebo obavy, neváhajte nás kontaktovať na team@basedhardware.com.';
+
+  @override
+  String get wifiSyncSettings => 'Nastavenia synchronizácie WiFi';
+
+  @override
+  String get enterHotspotCredentials => 'Zadajte prihlasovacie údaje hotspotu telefónu';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi synchronizácia používa váš telefón ako hotspot. Nájdite názov a heslo v Nastavenia > Osobný hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Názov hotspotu (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'napr. iPhone Hotspot';
+
+  @override
+  String get password => 'Heslo';
+
+  @override
+  String get enterHotspotPassword => 'Zadajte heslo hotspotu';
+
+  @override
+  String get saveCredentials => 'Uložiť prihlasovacie údaje';
+
+  @override
+  String get clearCredentials => 'Vymazať prihlasovacie údaje';
+
+  @override
+  String get pleaseEnterHotspotName => 'Prosím zadajte názov hotspotu';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi prihlasovacie údaje uložené';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi prihlasovacie údaje vymazané';
+
+  @override
+  String summaryGeneratedForDate(String date) {
+    return 'Zhrnutie vytvorené pre $date';
+  }
+
+  @override
+  String get failedToGenerateSummaryCheckConversations =>
+      'Nepodarilo sa vytvoriť zhrnutie. Uistite sa, že máte konverzácie pre daný deň.';
+
+  @override
+  String get summaryNotFound => 'Zhrnutie nenájdené';
+
+  @override
+  String get yourDaysJourney => 'Vaša denná cesta';
+
+  @override
+  String get highlights => 'Hlavné body';
+
+  @override
+  String get unresolvedQuestions => 'Nevyriešené otázky';
+
+  @override
+  String get decisions => 'Rozhodnutia';
+
+  @override
+  String get learnings => 'Ponaučenia';
+
+  @override
+  String get autoDeletesAfterThreeDays => 'Automaticky vymazané po 3 dňoch.';
+
+  @override
+  String get knowledgeGraphDeletedSuccessfully => 'Graf znalostí úspešne vymazaný';
+
+  @override
+  String get exportStartedMayTakeFewSeconds => 'Export sa začal. Môže to trvať niekoľko sekúnd...';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Toto vymaže všetky odvodené údaje grafu znalostí (uzly a spojenia). Vaše pôvodné spomienky zostanú v bezpečí. Graf sa obnoví časom alebo pri ďalšej požiadavke.';
+
+  @override
+  String get configureDailySummaryDigest => 'Nastavte si denný prehľad úloh';
+
+  @override
+  String accessesDataTypes(String dataTypes) {
+    return 'Prístup k $dataTypes';
+  }
+
+  @override
+  String triggeredByType(String triggerType) {
+    return 'spustené $triggerType';
+  }
+
+  @override
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+    return '$accessDescription a je $triggerDescription.';
+  }
+
+  @override
+  String isTriggeredBy(String triggerDescription) {
+    return 'Je $triggerDescription.';
+  }
+
+  @override
+  String get noSpecificDataAccessConfigured => 'Nie je nakonfigurovaný žiadny konkrétny prístup k údajom.';
+
+  @override
+  String get basicPlanDescription => '1 200 prémiových minút + neobmedzené na zariadení';
+
+  @override
+  String get minutes => 'minút';
+
+  @override
+  String get omiHas => 'Omi má:';
+
+  @override
+  String get premiumMinutesUsed => 'Prémiové minúty vyčerpané.';
+
+  @override
+  String get setupOnDevice => 'Nastaviť na zariadení';
+
+  @override
+  String get forUnlimitedFreeTranscription => 'pre neobmedzenú bezplatnú transkripciu.';
+
+  @override
+  String premiumMinsLeft(int count) {
+    return 'Zostáva $count prémiových minút.';
+  }
+
+  @override
+  String get alwaysAvailable => 'vždy k dispozícii.';
+
+  @override
+  String get importHistory => 'História importu';
+
+  @override
+  String get noImportsYet => 'Zatiaľ žiadne importy';
+
+  @override
+  String get selectZipFileToImport => 'Vyberte súbor .zip na import!';
+
+  @override
+  String get otherDevicesComingSoon => 'Ďalšie zariadenia už čoskoro';
+
+  @override
+  String get deleteAllLimitlessConversations => 'Odstrániť všetky konverzácie Limitless?';
+
+  @override
+  String get deleteAllLimitlessWarning =>
+      'Toto natrvalo odstráni všetky konverzácie importované z Limitless. Túto akciu nemožno vrátiť späť.';
+
+  @override
+  String deletedLimitlessConversations(int count) {
+    return 'Odstránených $count konverzácií Limitless';
+  }
+
+  @override
+  String get failedToDeleteConversations => 'Nepodarilo sa odstrániť konverzácie';
+
+  @override
+  String get deleteImportedData => 'Odstrániť importované údaje';
+
+  @override
+  String get statusPending => 'Čaká';
+
+  @override
+  String get statusProcessing => 'Spracováva sa';
+
+  @override
+  String get statusCompleted => 'Dokončené';
+
+  @override
+  String get statusFailed => 'Zlyhalo';
+
+  @override
+  String nConversations(int count) {
+    return '$count konverzácií';
+  }
+
+  @override
+  String get pleaseEnterName => 'Prosím zadajte meno';
+
+  @override
+  String get nameMustBeBetweenCharacters => 'Meno musí mať 2 až 40 znakov';
+
+  @override
+  String get deleteSampleQuestion => 'Odstrániť vzorku?';
+
+  @override
+  String deleteSampleConfirmation(String name) {
+    return 'Ste si istí, že chcete odstrániť vzorku $name?';
+  }
+
+  @override
+  String get confirmDeletion => 'Potvrdiť odstránenie';
+
+  @override
+  String deletePersonConfirmation(String name) {
+    return 'Ste si istí, že chcete odstrániť $name? Tým sa odstránia aj všetky súvisiace hlasové vzorky.';
+  }
+
+  @override
+  String get howItWorksTitle => 'Ako to funguje?';
+
+  @override
+  String get howPeopleWorks =>
+      'Po vytvorení osoby môžete prejsť na prepis konverzácie a priradiť im zodpovedajúce segmenty, takto bude Omi schopné rozpoznať aj ich reč!';
+
+  @override
+  String get tapToDelete => 'Klepnite pre odstránenie';
+
+  @override
+  String get newTag => 'NOVÉ';
+
+  @override
+  String get needHelpChatWithUs => 'Potrebujete pomoc? Napíšte nám';
+
+  @override
+  String get localStorageEnabled => 'Lokálne úložisko povolené';
+
+  @override
+  String get localStorageDisabled => 'Lokálne úložisko zakázané';
+
+  @override
+  String failedToUpdateSettings(String error) {
+    return 'Nepodarilo sa aktualizovať nastavenia: $error';
+  }
+
+  @override
+  String get privacyNotice => 'Oznámenie o ochrane súkromia';
+
+  @override
+  String get recordingsMayCaptureOthers =>
+      'Nahrávky môžu zachytiť hlasy ostatných. Pred povolením sa uistite, že máte súhlas všetkých účastníkov.';
+
+  @override
+  String get enable => 'Povoliť';
+
+  @override
+  String get storeAudioOnPhone => 'Ukladať audio na telefón';
+
+  @override
+  String get on => 'Zap.';
+
+  @override
+  String get storeAudioDescription =>
+      'Uchovávajte všetky zvukové nahrávky uložené lokálne v telefóne. Pri vypnutí sa ukladajú iba neúspešné nahrávania pre úsporu miesta.';
+
+  @override
+  String get enableLocalStorage => 'Povoliť lokálne úložisko';
+
+  @override
+  String get cloudStorageEnabled => 'Cloudové úložisko povolené';
+
+  @override
+  String get cloudStorageDisabled => 'Cloudové úložisko zakázané';
+
+  @override
+  String get enableCloudStorage => 'Povoliť cloudové úložisko';
+
+  @override
+  String get storeAudioOnCloud => 'Ukladať audio do cloudu';
+
+  @override
+  String get cloudStorageDialogMessage =>
+      'Vaše nahrávky v reálnom čase budú uložené v súkromnom cloudovom úložisku počas rozprávania.';
+
+  @override
+  String get storeAudioCloudDescription =>
+      'Ukladajte svoje nahrávky v reálnom čase do súkromného cloudového úložiska počas rozprávania. Zvuk sa zachytáva a bezpečne ukladá v reálnom čase.';
+
+  @override
+  String get downloadingFirmware => 'Sťahovanie firmvéru';
+
+  @override
+  String get installingFirmware => 'Inštalácia firmvéru';
+
+  @override
+  String get firmwareUpdateWarning =>
+      'Nezatvárajte aplikáciu ani nevypínajte zariadenie. Mohlo by to poškodiť vaše zariadenie.';
+
+  @override
+  String get firmwareUpdated => 'Firmvér aktualizovaný';
+
+  @override
+  String restartDeviceToComplete(Object deviceName) {
+    return 'Pre dokončenie aktualizácie reštartujte $deviceName.';
+  }
+
+  @override
+  String get yourDeviceIsUpToDate => 'Vaše zariadenie je aktuálne';
+
+  @override
+  String get currentVersion => 'Aktuálna verzia';
+
+  @override
+  String get latestVersion => 'Najnovšia verzia';
+
+  @override
+  String get whatsNew => 'Čo je nové';
+
+  @override
+  String get installUpdate => 'Nainštalovať aktualizáciu';
+
+  @override
+  String get updateNow => 'Aktualizovať teraz';
+
+  @override
+  String get updateGuide => 'Sprievodca aktualizáciou';
+
+  @override
+  String get checkingForUpdates => 'Kontrola aktualizácií';
+
+  @override
+  String get checkingFirmwareVersion => 'Kontrola verzie firmvéru...';
+
+  @override
+  String get firmwareUpdate => 'Aktualizácia firmvéru';
+
+  @override
+  String get payments => 'Platby';
+
+  @override
+  String get connectPaymentMethodInfo =>
+      'Pripojte nižšie platobnú metódu a začnite prijímať platby za svoje aplikácie.';
+
+  @override
+  String get selectedPaymentMethod => 'Vybraná platobná metóda';
+
+  @override
+  String get availablePaymentMethods => 'Dostupné platobné metódy';
+
+  @override
+  String get activeStatus => 'Aktívny';
+
+  @override
+  String get connectedStatus => 'Pripojené';
+
+  @override
+  String get notConnectedStatus => 'Nepripojené';
+
+  @override
+  String get setActive => 'Nastaviť ako aktívne';
+
+  @override
+  String get getPaidThroughStripe => 'Získajte platby za predaj aplikácií cez Stripe';
+
+  @override
+  String get monthlyPayouts => 'Mesačné výplaty';
+
+  @override
+  String get monthlyPayoutsDescription => 'Dostávajte mesačné platby priamo na účet, keď dosiahnete zárobky 10 \$';
+
+  @override
+  String get secureAndReliable => 'Bezpečné a spoľahlivé';
+
+  @override
+  String get stripeSecureDescription => 'Stripe zabezpečuje bezpečné a včasné prevody príjmov z vašej aplikácie';
+
+  @override
+  String get selectYourCountry => 'Vyberte svoju krajinu';
+
+  @override
+  String get countrySelectionPermanent => 'Výber krajiny je trvalý a neskôr ho nemožno zmeniť.';
+
+  @override
+  String get byClickingConnectNow => 'Kliknutím na \"Pripojiť teraz\" súhlasíte s';
+
+  @override
+  String get stripeConnectedAccountAgreement => 'Zmluva o pripojenom účte Stripe';
+
+  @override
+  String get errorConnectingToStripe => 'Chyba pri pripájaní k Stripe! Skúste to prosím neskôr.';
+
+  @override
+  String get connectingYourStripeAccount => 'Pripájanie vášho účtu Stripe';
+
+  @override
+  String get stripeOnboardingInstructions =>
+      'Dokončite prosím proces registrácie Stripe vo vašom prehliadači. Táto stránka sa automaticky aktualizuje po dokončení.';
+
+  @override
+  String get failedTryAgain => 'Zlyhalo? Skúsiť znova';
+
+  @override
+  String get illDoItLater => 'Urobím to neskôr';
+
+  @override
+  String get successfullyConnected => 'Úspešne pripojené!';
+
+  @override
+  String get stripeReadyForPayments =>
+      'Váš účet Stripe je teraz pripravený prijímať platby. Môžete ihneď začať zarábať z predaja aplikácií.';
+
+  @override
+  String get updateStripeDetails => 'Aktualizovať údaje Stripe';
+
+  @override
+  String get errorUpdatingStripeDetails => 'Chyba pri aktualizácii údajov Stripe! Skúste to prosím neskôr.';
+
+  @override
+  String get updatePayPal => 'Aktualizovať PayPal';
+
+  @override
+  String get setUpPayPal => 'Nastaviť PayPal';
+
+  @override
+  String get updatePayPalAccountDetails => 'Aktualizujte údaje svojho účtu PayPal';
+
+  @override
+  String get connectPayPalToReceivePayments => 'Pripojte svoj účet PayPal a začnite prijímať platby za svoje aplikácie';
+
+  @override
+  String get paypalEmail => 'E-mail PayPal';
+
+  @override
+  String get paypalMeLink => 'Odkaz PayPal.me';
+
+  @override
+  String get stripeRecommendation =>
+      'Ak je Stripe k dispozícii vo vašej krajine, dôrazne odporúčame jeho použitie pre rýchlejšie a jednoduchšie výplaty.';
+
+  @override
+  String get updatePayPalDetails => 'Aktualizovať údaje PayPal';
+
+  @override
+  String get savePayPalDetails => 'Uložiť údaje PayPal';
+
+  @override
+  String get pleaseEnterPayPalEmail => 'Zadajte svoj e-mail PayPal';
+
+  @override
+  String get pleaseEnterPayPalMeLink => 'Zadajte svoj odkaz PayPal.me';
+
+  @override
+  String get doNotIncludeHttpInLink => 'Nezahrňujte http alebo https alebo www do odkazu';
+
+  @override
+  String get pleaseEnterValidPayPalMeLink => 'Zadajte platný odkaz PayPal.me';
+
+  @override
+  String get pleaseEnterValidEmail => 'Zadajte platnú e-mailovú adresu';
+
+  @override
+  String get syncingYourRecordings => 'Synchronizácia vašich nahrávok';
+
+  @override
+  String get syncYourRecordings => 'Synchronizujte svoje nahrávky';
+
+  @override
+  String get syncNow => 'Synchronizovať teraz';
+
+  @override
+  String get error => 'Chyba';
+
+  @override
+  String get speechSamples => 'Hlasové vzorky';
+
+  @override
+  String additionalSampleIndex(String index) {
+    return 'Ďalšia vzorka $index';
+  }
+
+  @override
+  String durationSeconds(String seconds) {
+    return 'Trvanie: $seconds sekúnd';
+  }
+
+  @override
+  String get additionalSpeechSampleRemoved => 'Ďalšia hlasová vzorka odstránená';
+
+  @override
+  String get consentDataMessage =>
+      'Pokračovaním budú všetky údaje, ktoré zdieľate s touto aplikáciou (vrátane vašich konverzácií, nahrávok a osobných informácií), bezpečne uložené na našich serveroch, aby sme vám mohli poskytovať poznatky založené na AI a umožniť všetky funkcie aplikácie.';
+
+  @override
+  String get tasksEmptyStateMessage =>
+      'Úlohy z vašich konverzácií sa zobrazia tu.\nKlepnite na + pre manuálne vytvorenie.';
+
+  @override
+  String get clearChatAction => 'Vymazať chat';
+
+  @override
+  String get enableApps => 'Povoliť aplikácie';
+
+  @override
+  String get omiAppName => 'Omi';
+
+  @override
+  String get showMore => 'zobraziť viac ↓';
+
+  @override
+  String get showLess => 'zobraziť menej ↑';
+
+  @override
+  String get loadingYourRecording => 'Načítava sa nahrávka...';
+
+  @override
+  String get photoDiscardedMessage => 'Táto fotografia bola vyradená, pretože nebola významná.';
+
+  @override
+  String get analyzing => 'Analyzovanie...';
+
+  @override
+  String get searchCountries => 'Hľadať krajiny...';
+
+  @override
+  String get checkingAppleWatch => 'Kontrola Apple Watch...';
+
+  @override
+  String get installOmiOnAppleWatch => 'Nainštalujte Omi na\nApple Watch';
+
+  @override
+  String get installOmiOnAppleWatchDescription =>
+      'Ak chcete používať Apple Watch s Omi, musíte najprv nainštalovať aplikáciu Omi na hodinky.';
+
+  @override
+  String get openOmiOnAppleWatch => 'Otvorte Omi na\nApple Watch';
+
+  @override
+  String get openOmiOnAppleWatchDescription =>
+      'Aplikácia Omi je nainštalovaná na Apple Watch. Otvorte ju a klepnite na Štart.';
+
+  @override
+  String get openWatchApp => 'Otvoriť aplikáciu Watch';
+
+  @override
+  String get iveInstalledAndOpenedTheApp => 'Nainštaloval(a) som a otvoril(a) aplikáciu';
+
+  @override
+  String get unableToOpenWatchApp =>
+      'Aplikáciu Apple Watch sa nepodarilo otvoriť. Manuálne otvorte aplikáciu Watch na Apple Watch a nainštalujte Omi zo sekcie \"Dostupné aplikácie\".';
+
+  @override
+  String get appleWatchConnectedSuccessfully => 'Apple Watch úspešne pripojené!';
+
+  @override
+  String get appleWatchNotReachable =>
+      'Apple Watch stále nie je dostupné. Uistite sa, že aplikácia Omi je na hodinkách otvorená.';
+
+  @override
+  String errorCheckingConnection(String error) {
+    return 'Chyba pri kontrole pripojenia: $error';
+  }
+
+  @override
+  String get muted => 'Stlmené';
+
+  @override
+  String get processNow => 'Spracovať teraz';
+
+  @override
+  String get finishedConversation => 'Konverzácia dokončená?';
+
+  @override
+  String get stopRecordingConfirmation => 'Ste si istí, že chcete zastaviť nahrávanie a zhrnúť konverzáciu teraz?';
+
+  @override
+  String get conversationEndsManually => 'Konverzácia sa ukončí iba ručne.';
+
+  @override
+  String conversationSummarizedAfterMinutes(int minutes, String suffix) {
+    return 'Konverzácia sa zhrnie po $minutes minút$suffix ticha.';
+  }
+
+  @override
+  String get dontAskAgain => 'Nepýtaj sa znova';
+
+  @override
+  String get waitingForTranscriptOrPhotos => 'Čakanie na prepis alebo fotografie...';
+
+  @override
+  String get noSummaryYet => 'Zatiaľ žiadne zhrnutie';
+
+  @override
+  String hints(String text) {
+    return 'Tipy: $text';
+  }
+
+  @override
+  String get testConversationPrompt => 'Testovať výzvu konverzácie';
+
+  @override
+  String get prompt => 'Výzva';
+
+  @override
+  String get result => 'Výsledok:';
+
+  @override
+  String get compareTranscripts => 'Porovnať prepisy';
+
+  @override
+  String get notHelpful => 'Nebolo užitočné';
+
+  @override
+  String get exportTasksWithOneTap => 'Exportujte úlohy jedným ťuknutím!';
+
+  @override
+  String get inProgress => 'Prebieha';
+
+  @override
+  String get photos => 'Fotky';
+
+  @override
+  String get rawData => 'Nespracované dáta';
+
+  @override
+  String get content => 'Obsah';
+
+  @override
+  String get noContentToDisplay => 'Žiadny obsah na zobrazenie';
+
+  @override
+  String get noSummary => 'Žiadny súhrn';
+
+  @override
+  String get updateOmiFirmware => 'Aktualizovať firmvér omi';
+
+  @override
+  String get anErrorOccurredTryAgain => 'Vyskytla sa chyba. Skúste to znova.';
+
+  @override
+  String get welcomeBackSimple => 'Vitajte späť';
+
+  @override
+  String get addVocabularyDescription => 'Pridajte slová, ktoré má Omi rozpoznať počas prepisu.';
+
+  @override
+  String get enterWordsCommaSeparated => 'Zadajte slová (oddelené čiarkou)';
+
+  @override
+  String get whenToReceiveDailySummary => 'Kedy dostať denné zhrnutie';
+
+  @override
+  String get checkingNextSevenDays => 'Kontrola nasledujúcich 7 dní';
+
+  @override
+  String failedToDeleteError(String error) {
+    return 'Odstránenie zlyhalo: $error';
+  }
+
+  @override
+  String get developerApiKeys => 'API kľúče vývojára';
+
+  @override
+  String get noApiKeysCreateOne => 'Žiadne API kľúče. Vytvorte jeden na začiatok.';
+
+  @override
+  String get commandRequired => '⌘ je povinné';
+
+  @override
+  String get spaceKey => 'Medzerník';
+
+  @override
+  String loadMoreRemaining(String count) {
+    return 'Načítať viac ($count zostáva)';
+  }
+
+  @override
+  String wrappedTopPercentUser(String percentile) {
+    return 'Top $percentile% používateľ';
+  }
+
+  @override
+  String get wrappedMinutes => 'minút';
+
+  @override
+  String get wrappedConversations => 'konverzácií';
+
+  @override
+  String get wrappedDaysActive => 'aktívnych dní';
+
+  @override
+  String get wrappedYouTalkedAbout => 'Hovorili ste o';
+
+  @override
+  String get wrappedActionItems => 'Úlohy';
+
+  @override
+  String get wrappedTasksCreated => 'vytvorených úloh';
+
+  @override
+  String get wrappedCompleted => 'dokončených';
+
+  @override
+  String wrappedCompletionRate(String rate) {
+    return '$rate% miera dokončenia';
+  }
+
+  @override
+  String get wrappedYourTopDays => 'Vaše najlepšie dni';
+
+  @override
+  String get wrappedBestMoments => 'Najlepšie momenty';
+
+  @override
+  String get wrappedMyBuddies => 'Moji priatelia';
+
+  @override
+  String get wrappedCouldntStopTalkingAbout => 'Nemohol som prestať hovoriť o';
+
+  @override
+  String get wrappedShow => 'SERIÁL';
+
+  @override
+  String get wrappedMovie => 'FILM';
+
+  @override
+  String get wrappedBook => 'KNIHA';
+
+  @override
+  String get wrappedCelebrity => 'CELEBRITA';
+
+  @override
+  String get wrappedFood => 'JEDLO';
+
+  @override
+  String get wrappedMovieRecs => 'Odporúčania filmov pre priateľov';
+
+  @override
+  String get wrappedBiggest => 'Najväčšia';
+
+  @override
+  String get wrappedStruggle => 'Výzva';
+
+  @override
+  String get wrappedButYouPushedThrough => 'Ale zvládli ste to 💪';
+
+  @override
+  String get wrappedWin => 'Výhra';
+
+  @override
+  String get wrappedYouDidIt => 'Dokázali ste to! 🎉';
+
+  @override
+  String get wrappedTopPhrases => 'Top 5 fráz';
+
+  @override
+  String get wrappedMins => 'min';
+
+  @override
+  String get wrappedConvos => 'konverzácií';
+
+  @override
+  String get wrappedDays => 'dní';
+
+  @override
+  String get wrappedMyBuddiesLabel => 'MOJI PRIATELIA';
+
+  @override
+  String get wrappedObsessionsLabel => 'POSADNUTOSTI';
+
+  @override
+  String get wrappedStruggleLabel => 'VÝZVA';
+
+  @override
+  String get wrappedWinLabel => 'VÝHRA';
+
+  @override
+  String get wrappedTopPhrasesLabel => 'TOP FRÁZY';
+
+  @override
+  String get wrappedLetsHitRewind => 'Pretočme späť tvoj';
+
+  @override
+  String get wrappedGenerateMyWrapped => 'Vygenerovať môj Wrapped';
+
+  @override
+  String get wrappedProcessingDefault => 'Spracovanie...';
+
+  @override
+  String get wrappedCreatingYourStory => 'Vytvárame tvoj\npríbeh 2025...';
+
+  @override
+  String get wrappedSomethingWentWrong => 'Niečo sa\npokazilo';
+
+  @override
+  String get wrappedAnErrorOccurred => 'Vyskytla sa chyba';
+
+  @override
+  String get wrappedTryAgain => 'Skúsiť znova';
+
+  @override
+  String get wrappedNoDataAvailable => 'Žiadne údaje nie sú k dispozícii';
+
+  @override
+  String get wrappedOmiLifeRecap => 'Omi zhrnutie života';
+
+  @override
+  String get wrappedSwipeUpToBegin => 'Potiahni nahor pre začiatok';
+
+  @override
+  String get wrappedShareText => 'Môj 2025, zaznamenaný Omi ✨ omi.me/wrapped';
+
+  @override
+  String get wrappedFailedToShare => 'Zdieľanie zlyhalo. Skúste to znova.';
+
+  @override
+  String get wrappedFailedToStartGeneration => 'Spustenie generovania zlyhalo. Skúste to znova.';
+
+  @override
+  String get wrappedStarting => 'Začíname';
+
+  @override
+  String get wrappedShare => 'Zdieľať';
+
+  @override
+  String get wrappedShareYourWrapped => 'Zdieľaj svoj Wrapped';
+
+  @override
+  String get wrappedMy2025 => 'Môj 2025';
+
+  @override
+  String get wrappedRememberedByOmi => 'zaznamenaný Omi';
+
+  @override
+  String get wrappedMostFunDay => 'Najzábavnejší';
+
+  @override
+  String get wrappedMostProductiveDay => 'Najproduktívnejší';
+
+  @override
+  String get wrappedMostIntenseDay => 'Najintenzívnejší';
+
+  @override
+  String get wrappedFunniestMoment => 'Najvtipnejší';
+
+  @override
+  String get wrappedMostCringeMoment => 'Najtrápnejší';
+
+  @override
+  String get wrappedMinutesLabel => 'minút';
+
+  @override
+  String get wrappedConversationsLabel => 'konverzácií';
+
+  @override
+  String get wrappedDaysActiveLabel => 'aktívnych dní';
+
+  @override
+  String get wrappedTasksGenerated => 'vytvorených úloh';
+
+  @override
+  String get wrappedTasksCompleted => 'dokončených úloh';
+
+  @override
+  String get wrappedTopFivePhrases => 'Top 5 fráz';
+
+  @override
+  String get wrappedAGreatDay => 'Skvelý deň';
+
+  @override
+  String get wrappedGettingItDone => 'Zvládnuť to';
+
+  @override
+  String get wrappedAChallenge => 'Výzva';
+
+  @override
+  String get wrappedAHilariousMoment => 'Vtipný moment';
+
+  @override
+  String get wrappedThatAwkwardMoment => 'Ten trápny moment';
+
+  @override
+  String get wrappedYouHadFunnyMoments => 'Mal si vtipné chvíle tento rok!';
+
+  @override
+  String get wrappedWeveAllBeenThere => 'Všetci sme tam boli!';
+
+  @override
+  String get wrappedFriend => 'Priateľ';
+
+  @override
+  String get wrappedYourBuddy => 'Tvoj kamarát!';
+
+  @override
+  String get wrappedNotMentioned => 'Nespomenuté';
+
+  @override
+  String get wrappedTheHardPart => 'Ťažká časť';
+
+  @override
+  String get wrappedPersonalGrowth => 'Osobný rast';
+
+  @override
+  String get wrappedFunDay => 'Zábavný';
+
+  @override
+  String get wrappedProductiveDay => 'Produktívny';
+
+  @override
+  String get wrappedIntenseDay => 'Intenzívny';
+
+  @override
+  String get wrappedFunnyMomentTitle => 'Vtipný moment';
+
+  @override
+  String get wrappedCringeMomentTitle => 'Trápny moment';
+
+  @override
+  String get wrappedYouTalkedAboutBadge => 'Hovoril si o';
+
+  @override
+  String get wrappedCompletedLabel => 'Dokončené';
+
+  @override
+  String get wrappedMyBuddiesCard => 'Moji kamaráti';
+
+  @override
+  String get wrappedBuddiesLabel => 'KAMARÁTI';
+
+  @override
+  String get wrappedObsessionsLabelUpper => 'POSADNUTOSTI';
+
+  @override
+  String get wrappedStruggleLabelUpper => 'BOJ';
+
+  @override
+  String get wrappedWinLabelUpper => 'VÍŤAZSTVO';
+
+  @override
+  String get wrappedTopPhrasesLabelUpper => 'TOP FRÁZY';
+
+  @override
+  String get wrappedYourHeader => 'Tvoje';
+
+  @override
+  String get wrappedTopDaysHeader => 'Najlepšie dni';
+
+  @override
+  String get wrappedYourTopDaysBadge => 'Tvoje najlepšie dni';
+
+  @override
+  String get wrappedBestHeader => 'Najlepšie';
+
+  @override
+  String get wrappedMomentsHeader => 'Momenty';
+
+  @override
+  String get wrappedBestMomentsBadge => 'Najlepšie momenty';
+
+  @override
+  String get wrappedBiggestHeader => 'Najväčší';
+
+  @override
+  String get wrappedStruggleHeader => 'Boj';
+
+  @override
+  String get wrappedWinHeader => 'Víťazstvo';
+
+  @override
+  String get wrappedButYouPushedThroughEmoji => 'Ale zvládol si to 💪';
+
+  @override
+  String get wrappedYouDidItEmoji => 'Dokázal si to! 🎉';
+
+  @override
+  String get wrappedHours => 'hodín';
+
+  @override
+  String get wrappedActions => 'akcií';
+
+  @override
+  String get multipleSpeakersDetected => 'Zistených viacero rečníkov';
+
+  @override
+  String get multipleSpeakersDescription =>
+      'Zdá sa, že v nahrávke je viacero rečníkov. Uistite sa, že ste na tichom mieste a skúste to znova.';
+
+  @override
+  String get invalidRecordingDetected => 'Zistená neplatná nahrávka';
+
+  @override
+  String get notEnoughSpeechDescription => 'Nebola zistená dostatočná reč. Prosím, hovorte viac a skúste to znova.';
+
+  @override
+  String get speechDurationDescription => 'Uistite sa, že hovoríte aspoň 5 sekúnd a nie viac ako 90.';
+
+  @override
+  String get connectionLostDescription =>
+      'Spojenie bolo prerušené. Skontrolujte svoje internetové pripojenie a skúste to znova.';
+
+  @override
+  String get howToTakeGoodSample => 'Ako urobiť dobrú vzorku?';
+
+  @override
+  String get goodSampleInstructions =>
+      '1. Uistite sa, že ste na tichom mieste.\n2. Hovorte jasne a prirodzene.\n3. Uistite sa, že vaše zariadenie je v prirodzenej polohe na krku.\n\nPo vytvorení ho môžete vždy vylepšiť alebo urobiť znova.';
+
+  @override
+  String get noDeviceConnectedUseMic => 'Žiadne pripojené zariadenie. Bude použitý mikrofón telefónu.';
+
+  @override
+  String get doItAgain => 'Urobiť znova';
+
+  @override
+  String get listenToSpeechProfile => 'Počúvať môj hlasový profil ➡️';
+
+  @override
+  String get recognizingOthers => 'Rozpoznávanie ostatných 👀';
+
+  @override
+  String get keepGoingGreat => 'Pokračuj, darí sa ti skvele';
+
+  @override
+  String get somethingWentWrongTryAgain => 'Niečo sa pokazilo! Skúste to prosím neskôr znova.';
+
+  @override
+  String get uploadingVoiceProfile => 'Nahrávanie vášho hlasového profilu....';
+
+  @override
+  String get memorizingYourVoice => 'Ukladanie vášho hlasu...';
+
+  @override
+  String get personalizingExperience => 'Prispôsobovanie vašej skúsenosti...';
+
+  @override
+  String get keepSpeakingUntil100 => 'Hovorte ďalej, kým nedosiahnete 100%.';
+
+  @override
+  String get greatJobAlmostThere => 'Skvelá práca, už ste skoro tam';
+
+  @override
+  String get soCloseJustLittleMore => 'Tak blízko, len ešte trochu';
+
+  @override
+  String get notificationFrequency => 'Frekvencia upozornení';
+
+  @override
+  String get controlNotificationFrequency => 'Ovládajte, ako často vám Omi posiela proaktívne oznámenia.';
+
+  @override
+  String get yourScore => 'Vaše skóre';
+
+  @override
+  String get dailyScoreBreakdown => 'Rozpis denného skóre';
+
+  @override
+  String get todaysScore => 'Dnešné skóre';
+
+  @override
+  String get tasksCompleted => 'Dokončené úlohy';
+
+  @override
+  String get completionRate => 'Miera dokončenia';
+
+  @override
+  String get howItWorks => 'Ako to funguje';
+
+  @override
+  String get dailyScoreExplanation =>
+      'Vaše denné skóre je založené na plnení úloh. Dokončite svoje úlohy pre zlepšenie skóre!';
+
+  @override
+  String get notificationFrequencyDescription =>
+      'Ovládajte, ako často vám Omi posiela proaktívne upozornenia a pripomienky.';
+
+  @override
+  String get sliderOff => 'Vyp.';
+
+  @override
+  String get sliderMax => 'Max.';
+
+  @override
+  String summaryGeneratedFor(String date) {
+    return 'Súhrn vygenerovaný pre $date';
+  }
+
+  @override
+  String get failedToGenerateSummary =>
+      'Nepodarilo sa vygenerovať súhrn. Uistite sa, že máte konverzácie pre tento deň.';
+
+  @override
+  String get recap => 'Zhrnutie';
+
+  @override
+  String deleteQuoted(String name) {
+    return 'Odstrániť \"$name\"';
+  }
+
+  @override
+  String moveConversationsTo(int count) {
+    return 'Presunúť $count konverzácií do:';
+  }
+
+  @override
+  String get noFolder => 'Žiadny priečinok';
+
+  @override
+  String get removeFromAllFolders => 'Odstrániť zo všetkých priečinkov';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Vytvorte a zdieľajte svoju vlastnú aplikáciu';
+
+  @override
+  String get searchAppsPlaceholder => 'Hľadať v 1500+ aplikáciách';
+
+  @override
+  String get filters => 'Filtre';
+
+  @override
+  String get frequencyOff => 'Vypnuté';
+
+  @override
+  String get frequencyMinimal => 'Minimálna';
+
+  @override
+  String get frequencyLow => 'Nízka';
+
+  @override
+  String get frequencyBalanced => 'Vyvážená';
+
+  @override
+  String get frequencyHigh => 'Vysoká';
+
+  @override
+  String get frequencyMaximum => 'Maximálna';
+
+  @override
+  String get frequencyDescOff => 'Žiadne proaktívne upozornenia';
+
+  @override
+  String get frequencyDescMinimal => 'Len kritické pripomienky';
+
+  @override
+  String get frequencyDescLow => 'Len dôležité aktualizácie';
+
+  @override
+  String get frequencyDescBalanced => 'Pravidelné užitočné pripomienky';
+
+  @override
+  String get frequencyDescHigh => 'Časté kontroly';
+
+  @override
+  String get frequencyDescMaximum => 'Zostaňte neustále zapojený';
+
+  @override
+  String get clearChatQuestion => 'Vymazať chat?';
+
+  @override
+  String get syncingMessages => 'Synchronizácia správ so serverom...';
+
+  @override
+  String get chatAppsTitle => 'Chatové aplikácie';
+
+  @override
+  String get selectApp => 'Vybrať aplikáciu';
+
+  @override
+  String get noChatAppsEnabled =>
+      'Žiadne chatové aplikácie nie sú povolené.\nKlepnite na \"Povoliť aplikácie\" pre pridanie.';
+
+  @override
+  String get disable => 'Zakázať';
+
+  @override
+  String get photoLibrary => 'Knižnica fotografií';
+
+  @override
+  String get chooseFile => 'Vybrať súbor';
+
+  @override
+  String get configureAiPersona => 'Nakonfigurovať AI osobnosť';
+
+  @override
+  String get connectAiAssistantsToYourData => 'Pripojiť AI asistentov k vašim údajom';
+
+  @override
+  String get oAuth => 'OAuth';
+
+  @override
+  String get trackYourGoalsOnHomepage => 'Sledovať vaše ciele na domovskej stránke';
+
+  @override
+  String get deleteRecording => 'Odstrániť nahrávku';
+
+  @override
+  String get thisCannotBeUndone => 'Túto akciu nie je možné vrátiť späť.';
+
+  @override
+  String get sdCard => 'SD karta';
+
+  @override
+  String get fromSd => 'Z SD karty';
+
+  @override
+  String get limitless => 'Limitless';
+
+  @override
+  String get fastTransfer => 'Rýchly prenos';
+
+  @override
+  String get syncingStatus => 'Synchronizuje sa';
+
+  @override
+  String get failedStatus => 'Zlyhalo';
+
+  @override
+  String etaLabel(String time) {
+    return 'ETA: $time';
+  }
+
+  @override
+  String get transferMethod => 'Metóda prenosu';
+
+  @override
+  String get fast => 'Rýchle';
+
+  @override
+  String get ble => 'BLE';
+
+  @override
+  String get phone => 'Telefón';
+
+  @override
+  String get cancelSync => 'Zrušiť synchronizáciu';
+
+  @override
+  String get cancelSyncMessage => 'Naozaj chcete zrušiť synchronizáciu? Môžete pokračovať neskôr.';
+
+  @override
+  String get syncCancelled => 'Synchronizácia zrušená';
+
+  @override
+  String get deleteProcessedFiles => 'Odstrániť spracované súbory';
+
+  @override
+  String get processedFilesDeleted => 'Spracované súbory odstránené';
+
+  @override
+  String get wifiEnableFailed => 'Nepodarilo sa povoliť WiFi na zariadení';
+
+  @override
+  String get deviceNoFastTransfer => 'Zariadenie nepodporuje rýchly prenos';
+
+  @override
+  String get enableHotspotMessage => 'Povoľte prosím hotspot na vašom telefóne';
+
+  @override
+  String get transferStartFailed => 'Nepodarilo sa spustiť prenos';
+
+  @override
+  String get deviceNotResponding => 'Zariadenie neodpovedá. Skúste to prosím znova.';
+
+  @override
+  String get invalidWifiCredentials => 'Neplatné WiFi prihlasovacie údaje';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi pripojenie zlyhalo';
+
+  @override
+  String get sdCardProcessing => 'Spracovanie SD karty';
+
+  @override
+  String sdCardProcessingMessage(int count) {
+    return 'Spracovávajú sa súbory z SD karty';
+  }
+
+  @override
+  String get process => 'Spracovať';
+
+  @override
+  String get wifiSyncFailed => 'WiFi synchronizácia zlyhala';
+
+  @override
+  String get processingFailed => 'Spracovanie zlyhalo';
+
+  @override
+  String get downloadingFromSdCard => 'Sťahovanie z SD karty';
+
+  @override
+  String processingProgress(int current, int total) {
+    return 'Processing $current/$total';
+  }
+
+  @override
+  String conversationsCreated(int count) {
+    return '$count conversations created';
+  }
+
+  @override
+  String get internetRequired => 'Vyžaduje sa internet';
+
+  @override
+  String get processAudio => 'Spracovať audio';
+
+  @override
+  String get start => 'Spustiť';
+
+  @override
+  String get noRecordings => 'Žiadne nahrávky';
+
+  @override
+  String get audioFromOmiWillAppearHere => 'Audio z vášho zariadenia Omi sa zobrazí tu';
+
+  @override
+  String get deleteProcessed => 'Odstrániť spracované';
+
+  @override
+  String get tryDifferentFilter => 'Skúste iný filter';
+
+  @override
+  String get recordings => 'Nahrávky';
+
+  @override
+  String get enableRemindersAccess => 'Povoľte prístup k Pripomienkam v Nastaveniach pre použitie Apple Pripomienok';
+
+  @override
+  String todayAtTime(String time) {
+    return 'Dnes o $time';
+  }
+
+  @override
+  String yesterdayAtTime(String time) {
+    return 'Včera o $time';
+  }
+
+  @override
+  String get lessThanAMinute => 'Menej ako minúta';
+
+  @override
+  String estimatedMinutes(int count) {
+    return '~$count min.';
+  }
+
+  @override
+  String estimatedHours(int count) {
+    return '~$count hod.';
+  }
+
+  @override
+  String estimatedTimeRemaining(String time) {
+    return 'Odhad: zostáva $time';
+  }
+
+  @override
+  String get summarizingConversation => 'Zhrnutie konverzácie...\nMôže to trvať niekoľko sekúnd';
+
+  @override
+  String get resummarizingConversation => 'Opätovné zhrnutie konverzácie...\nMôže to trvať niekoľko sekúnd';
+
+  @override
+  String get nothingInterestingRetry => 'Nič zaujímavé nenájdené,\nchcete to skúsiť znova?';
+
+  @override
+  String get noSummaryForConversation => 'Pre túto konverzáciu\nnie je k dispozícii zhrnutie.';
+
+  @override
+  String get unknownLocation => 'Neznáma poloha';
+
+  @override
+  String get couldNotLoadMap => 'Mapu sa nepodarilo načítať';
+
+  @override
+  String get triggerConversationIntegration => 'Spustiť integráciu vytvorenia konverzácie';
+
+  @override
+  String get webhookUrlNotSet => 'URL webhooku nie je nastavená';
+
+  @override
+  String get setWebhookUrlInSettings => 'Nastavte URL webhooku v nastaveniach vývojára pre použitie tejto funkcie.';
+
+  @override
+  String get sendWebUrl => 'Odoslať webovú URL';
+
+  @override
+  String get sendTranscript => 'Odoslať prepis';
+
+  @override
+  String get sendSummary => 'Odoslať zhrnutie';
+
+  @override
+  String get debugModeDetected => 'Zistený režim ladenia';
+
+  @override
+  String get performanceReduced => 'Výkon môže byť znížený';
+
+  @override
+  String autoClosingInSeconds(int seconds) {
+    return 'Automatické zatvorenie o $seconds sekúnd';
+  }
+
+  @override
+  String get modelRequired => 'Vyžaduje sa model';
+
+  @override
+  String get downloadWhisperModel => 'Stiahnite model whisper na použitie prepisu na zariadení';
+
+  @override
+  String get deviceNotCompatible => 'Vaše zariadenie nie je kompatibilné s prepisom na zariadení';
+
+  @override
+  String get deviceRequirements => 'Vaše zariadenie nespĺňa požiadavky pre prepis na zariadení.';
+
+  @override
+  String get willLikelyCrash => 'Povolenie pravdepodobne spôsobí pád alebo zamrznutie aplikácie.';
+
+  @override
+  String get transcriptionSlowerLessAccurate => 'Prepis bude výrazne pomalší a menej presný.';
+
+  @override
+  String get proceedAnyway => 'Napriek tomu pokračovať';
+
+  @override
+  String get olderDeviceDetected => 'Zistené staršie zariadenie';
+
+  @override
+  String get onDeviceSlower => 'Prepis na zariadení môže byť na tomto zariadení pomalší.';
+
+  @override
+  String get batteryUsageHigher => 'Spotreba batérie bude vyššia ako pri cloudovom prepise.';
+
+  @override
+  String get considerOmiCloud => 'Zvážte použitie Omi Cloud pre lepší výkon.';
+
+  @override
+  String get highResourceUsage => 'Vysoká spotreba zdrojov';
+
+  @override
+  String get onDeviceIntensive => 'Prepis na zariadení je výpočtovo náročný.';
+
+  @override
+  String get batteryDrainIncrease => 'Spotreba batérie sa výrazne zvýši.';
+
+  @override
+  String get deviceMayWarmUp => 'Zariadenie sa môže pri dlhšom používaní zahriať.';
+
+  @override
+  String get speedAccuracyLower => 'Rýchlosť a presnosť môžu byť nižšie ako pri cloudových modeloch.';
+
+  @override
+  String get cloudProvider => 'Cloudový poskytovateľ';
+
+  @override
+  String get premiumMinutesInfo =>
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis.';
+
+  @override
+  String get viewUsage => 'Zobraziť využitie';
+
+  @override
+  String get localProcessingInfo =>
+      'Zvuk sa spracováva lokálne. Funguje offline, väčšie súkromie, ale vyššia spotreba batérie.';
+
+  @override
+  String get model => 'Model';
+
+  @override
+  String get performanceWarning => 'Varovanie o výkone';
+
+  @override
+  String get largeModelWarning =>
+      'Tento model je veľký a môže spôsobiť pád aplikácie alebo veľmi pomalý chod na mobilných zariadeniach.\n\nOdporúča sa \"small\" alebo \"base\".';
+
+  @override
+  String get usingNativeIosSpeech => 'Používanie natívneho rozpoznávania reči iOS';
+
+  @override
+  String get noModelDownloadRequired =>
+      'Použije sa natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
+
+  @override
+  String get modelReady => 'Model pripravený';
+
+  @override
+  String get redownload => 'Stiahnuť znova';
+
+  @override
+  String get doNotCloseApp => 'Prosím nezatvárajte aplikáciu.';
+
+  @override
+  String get downloading => 'Sťahovanie...';
+
+  @override
+  String get downloadModel => 'Stiahnuť model';
+
+  @override
+  String estimatedSize(String size) {
+    return 'Odhadovaná veľkosť: ~$size MB';
+  }
+
+  @override
+  String availableSpace(String space) {
+    return 'Dostupný priestor: $space';
+  }
+
+  @override
+  String get notEnoughSpace => 'Varovanie: Nedostatok miesta!';
+
+  @override
+  String get download => 'Stiahnuť';
+
+  @override
+  String downloadError(String error) {
+    return 'Chyba sťahovania: $error';
+  }
+
+  @override
+  String get cancelled => 'Zrušené';
+
+  @override
+  String get deviceNotCompatibleTitle => 'Zariadenie nie je kompatibilné';
+
+  @override
+  String get deviceNotMeetRequirements => 'Vaše zariadenie nespĺňa požiadavky pre prepis na zariadení.';
+
+  @override
+  String get transcriptionSlowerOnDevice => 'Prepis na zariadení môže byť na tomto zariadení pomalší.';
+
+  @override
+  String get computationallyIntensive => 'Prepis na zariadení je výpočtovo náročný.';
+
+  @override
+  String get batteryDrainSignificantly => 'Vybíjanie batérie sa výrazne zvýši.';
+
+  @override
+  String get premiumMinutesMonth =>
+      '1 200 prémiových minút/mesiac. Karta Na zariadení ponúka neobmedzený bezplatný prepis. ';
+
+  @override
+  String get audioProcessedLocally =>
+      'Zvuk sa spracováva lokálne. Funguje offline, je súkromnejší, ale spotrebováva viac batérie.';
+
+  @override
+  String get languageLabel => 'Jazyk';
+
+  @override
+  String get modelLabel => 'Model';
+
+  @override
+  String get modelTooLargeWarning =>
+      'Tento model je veľký a môže spôsobiť pád aplikácie alebo veľmi pomalý beh na mobilných zariadeniach.\n\nOdporúča sa small alebo base.';
+
+  @override
+  String get nativeEngineNoDownload =>
+      'Bude použitý natívny hlasový engine vášho zariadenia. Nie je potrebné sťahovať model.';
+
+  @override
+  String modelReadyWithName(String model) {
+    return 'Model pripravený ($model)';
+  }
+
+  @override
+  String get reDownload => 'Znova stiahnuť';
+
+  @override
+  String downloadingModelProgress(String model, String received, String total) {
+    return 'Sťahovanie $model: $received / $total MB';
+  }
+
+  @override
+  String preparingModel(String model) {
+    return 'Príprava $model...';
+  }
+
+  @override
+  String downloadErrorWithMessage(String error) {
+    return 'Chyba sťahovania: $error';
+  }
+
+  @override
+  String estimatedSizeWithValue(String size) {
+    return 'Odhadovaná veľkosť: ~$size MB';
+  }
+
+  @override
+  String availableSpaceWithValue(String space) {
+    return 'Dostupné miesto: $space';
+  }
+
+  @override
+  String get omiTranscriptionOptimized =>
+      'Vstavaný živý prepis Omi je optimalizovaný pre konverzácie v reálnom čase s automatickou detekciou rečníkov a diarizáciou.';
+
+  @override
+  String get reset => 'Resetovať';
+
+  @override
+  String get useTemplateFrom => 'Použiť šablónu od';
+
+  @override
+  String get selectProviderTemplate => 'Vyberte šablónu poskytovateľa...';
+
+  @override
+  String get quicklyPopulateResponse => 'Rýchlo vyplniť známym formátom odpovede poskytovateľa';
+
+  @override
+  String get quicklyPopulateRequest => 'Rýchlo vyplniť známym formátom požiadavky poskytovateľa';
+
+  @override
+  String get invalidJsonError => 'Neplatný JSON';
+
+  @override
+  String downloadModelWithName(String model) {
+    return 'Stiahnuť model ($model)';
+  }
+
+  @override
+  String modelNameWithFile(String model) {
+    return 'Model: $model';
+  }
+
+  @override
+  String get device => 'Zariadenie';
+
+  @override
+  String get chatAssistantsTitle => 'Chat asistenti';
+
+  @override
+  String get permissionReadConversations => 'Čítať konverzácie';
+
+  @override
+  String get permissionReadMemories => 'Čítať spomienky';
+
+  @override
+  String get permissionReadTasks => 'Čítať úlohy';
+
+  @override
+  String get permissionCreateConversations => 'Vytvárať konverzácie';
+
+  @override
+  String get permissionCreateMemories => 'Vytvárať spomienky';
+
+  @override
+  String get permissionTypeAccess => 'Prístup';
+
+  @override
+  String get permissionTypeCreate => 'Vytvoriť';
+
+  @override
+  String get permissionTypeTrigger => 'Spúšťač';
+
+  @override
+  String get permissionDescReadConversations => 'Táto aplikácia môže pristupovať k vašim konverzáciám.';
+
+  @override
+  String get permissionDescReadMemories => 'Táto aplikácia môže pristupovať k vašim spomienkam.';
+
+  @override
+  String get permissionDescReadTasks => 'Táto aplikácia môže pristupovať k vašim úlohám.';
+
+  @override
+  String get permissionDescCreateConversations => 'Táto aplikácia môže vytvárať nové konverzácie.';
+
+  @override
+  String get permissionDescCreateMemories => 'Táto aplikácia môže vytvárať nové spomienky.';
+
+  @override
+  String get realtimeListening => 'Počúvanie v reálnom čase';
+
+  @override
+  String get setupCompleted => 'Dokončené';
+
+  @override
+  String get pleaseSelectRating => 'Prosím vyberte hodnotenie';
+
+  @override
+  String get writeReviewOptional => 'Napíšte recenziu (voliteľné)';
+
+  @override
+  String get setupQuestionsIntro => 'Pomôžte nám prispôsobiť váš zážitok';
+
+  @override
+  String get setupQuestionProfession => 'Aká je vaša profesia?';
+
+  @override
+  String get setupQuestionUsage => 'Kde budete Omi najviac používať?';
+
+  @override
+  String get setupQuestionAge => 'Aký je váš vek?';
+
+  @override
+  String get setupAnswerAllQuestions => 'Odpovedzte prosím na všetky otázky';
+
+  @override
+  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+
+  @override
+  String get professionEntrepreneur => 'Podnikateľ';
+
+  @override
+  String get professionSoftwareEngineer => 'Softvérový inžinier';
+
+  @override
+  String get professionProductManager => 'Produktový manažér';
+
+  @override
+  String get professionExecutive => 'Manažér';
+
+  @override
+  String get professionSales => 'Obchod';
+
+  @override
+  String get professionStudent => 'Študent';
+
+  @override
+  String get usageAtWork => 'V práci';
+
+  @override
+  String get usageIrlEvents => 'IRL Events';
+
+  @override
+  String get usageOnline => 'Online';
+
+  @override
+  String get usageSocialSettings => 'V spoločenských situáciách';
+
+  @override
+  String get usageEverywhere => 'Všade';
+
+  @override
+  String get customBackendUrlTitle => 'Vlastná URL servera';
+
+  @override
+  String get backendUrlLabel => 'URL servera';
+
+  @override
+  String get saveUrlButton => 'Uložiť URL';
+
+  @override
+  String get enterBackendUrlError => 'Zadajte URL servera';
+
+  @override
+  String get urlMustEndWithSlashError => 'URL musí končiť na \"/\"';
+
+  @override
+  String get invalidUrlError => 'Zadajte platnú URL';
+
+  @override
+  String get backendUrlSavedSuccess => 'URL servera bola úspešne uložená!';
+
+  @override
+  String get signInTitle => 'Prihlásiť sa';
+
+  @override
+  String get signInButton => 'Prihlásiť sa';
+
+  @override
+  String get enterEmailError => 'Zadajte svoj e-mail';
+
+  @override
+  String get invalidEmailError => 'Zadajte platný e-mail';
+
+  @override
+  String get enterPasswordError => 'Zadajte svoje heslo';
+
+  @override
+  String get passwordMinLengthError => 'Heslo musí mať aspoň 8 znakov';
+
+  @override
+  String get signInSuccess => 'Prihlásenie úspešné!';
+
+  @override
+  String get alreadyHaveAccountLogin => 'Máte už účet? Prihláste sa';
+
+  @override
+  String get emailLabel => 'E-mail';
+
+  @override
+  String get passwordLabel => 'Heslo';
+
+  @override
+  String get createAccountTitle => 'Vytvoriť účet';
+
+  @override
+  String get nameLabel => 'Meno';
+
+  @override
+  String get repeatPasswordLabel => 'Zopakujte heslo';
+
+  @override
+  String get signUpButton => 'Zaregistrovať sa';
+
+  @override
+  String get enterNameError => 'Zadajte svoje meno';
+
+  @override
+  String get passwordsDoNotMatch => 'Heslá sa nezhodujú';
+
+  @override
+  String get signUpSuccess => 'Registrácia úspešná!';
+
+  @override
+  String get loadingKnowledgeGraph => 'Načítava sa znalostný graf...';
+
+  @override
+  String get noKnowledgeGraphYet => 'Zatiaľ žiadny znalostný graf';
+
+  @override
+  String get buildingKnowledgeGraphFromMemories => 'Vytvára sa znalostný graf zo spomienok...';
+
+  @override
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Váš znalostný graf sa vytvorí automaticky, keď vytvoríte nové spomienky.';
+
+  @override
+  String get buildGraphButton => 'Vytvoriť graf';
+
+  @override
+  String get checkOutMyMemoryGraph => 'Pozrite sa na môj graf pamäte!';
+
+  @override
+  String get getButton => 'Získať';
+
+  @override
+  String openingApp(String appName) {
+    return 'Otvára sa $appName...';
+  }
+
+  @override
+  String get writeSomething => 'Napíšte niečo';
+
+  @override
+  String get submitReply => 'Odoslať odpoveď';
+
+  @override
+  String get editYourReply => 'Upraviť odpoveď';
+
+  @override
+  String get replyToReview => 'Odpovedať na recenziu';
+
+  @override
+  String get rateAndReviewThisApp => 'Ohodnoťte a recenzujte túto aplikáciu';
+
+  @override
+  String get noChangesInReview => 'Žiadne zmeny v recenzii na aktualizáciu.';
+
+  @override
+  String get cantRateWithoutInternet => 'Nemožno hodnotiť aplikáciu bez pripojenia na internet.';
+
+  @override
+  String get appAnalytics => 'Analytika aplikácie';
+
+  @override
+  String get learnMoreLink => 'zistiť viac';
+
+  @override
+  String get moneyEarned => 'Zarobené peniaze';
+
+  @override
+  String get writeYourReply => 'Napíšte svoju odpoveď...';
+
+  @override
+  String get replySentSuccessfully => 'Odpoveď bola úspešne odoslaná';
+
+  @override
+  String failedToSendReply(String error) {
+    return 'Nepodarilo sa odoslať odpoveď: $error';
+  }
+
+  @override
+  String get send => 'Odoslať';
+
+  @override
+  String starFilter(int count) {
+    return '$count hviezdička';
+  }
+
+  @override
+  String get noReviewsFound => 'Nenašli sa žiadne recenzie';
+
+  @override
+  String get editReply => 'Upraviť odpoveď';
+
+  @override
+  String get reply => 'Odpoveď';
+
+  @override
+  String starFilterLabel(int count) {
+    return '$count hviezda';
+  }
+
+  @override
+  String get sharePublicLink => 'Zdieľať verejný odkaz';
+
+  @override
+  String get makePersonaPublic => 'Zverejniť osobnosť';
+
+  @override
+  String get connectedKnowledgeData => 'Pripojené znalostné údaje';
+
+  @override
+  String get enterName => 'Zadajte meno';
+
+  @override
+  String get disconnectTwitter => 'Odpojiť Twitter';
+
+  @override
+  String get disconnectTwitterConfirmation => 'Naozaj chcete odpojiť Twitter?';
+
+  @override
+  String get getOmiDeviceDescription => 'Vytvorte presnejší klon s vašimi osobnými konverzáciami';
+
+  @override
+  String get getOmi => 'Získať Omi';
+
+  @override
+  String get iHaveOmiDevice => 'Mám zariadenie Omi';
+
+  @override
+  String get goal => 'CIEĽ';
+
+  @override
+  String get tapToTrackThisGoal => 'Ťuknite pre sledovanie tohto cieľa';
+
+  @override
+  String get tapToSetAGoal => 'Ťuknite pre nastavenie cieľa';
+
+  @override
+  String get processedConversations => 'Spracované konverzácie';
+
+  @override
+  String get updatedConversations => 'Aktualizované konverzácie';
+
+  @override
+  String get newConversations => 'Nové konverzácie';
+
+  @override
+  String get summaryTemplate => 'Šablóna zhrnutia';
+
+  @override
+  String get suggestedTemplates => 'Navrhované šablóny';
+
+  @override
+  String get otherTemplates => 'Ostatné šablóny';
+
+  @override
+  String get availableTemplates => 'Dostupné šablóny';
+
+  @override
+  String get getCreative => 'Buďte kreatívni';
+
+  @override
+  String get defaultLabel => 'Predvolené';
+
+  @override
+  String get lastUsedLabel => 'Naposledy použité';
+
+  @override
+  String get setDefaultApp => 'Nastaviť predvolenú aplikáciu';
+
+  @override
+  String setDefaultAppContent(String appName) {
+    return 'Nastaviť $appName ako predvolenú aplikáciu na zhrnutia?\\n\\nTáto aplikácia sa automaticky použije pre všetky budúce zhrnutia konverzácií.';
+  }
+
+  @override
+  String get setDefaultButton => 'Nastaviť predvolenú';
+
+  @override
+  String setAsDefaultSuccess(String appName) {
+    return '$appName nastavená ako predvolená aplikácia na zhrnutia';
+  }
+
+  @override
+  String get createCustomTemplate => 'Vytvoriť vlastnú šablónu';
+
+  @override
+  String get allTemplates => 'Všetky šablóny';
+
+  @override
+  String failedToInstallApp(String appName) {
+    return 'Nepodarilo sa nainštalovať $appName. Skúste to znova.';
+  }
+
+  @override
+  String errorInstallingApp(String appName, String error) {
+    return 'Chyba pri inštalácii $appName: $error';
+  }
+
+  @override
+  String tagSpeaker(int speakerId) {
+    return 'Označiť rečníka';
+  }
+
+  @override
+  String get personNameAlreadyExists => 'Meno osoby už existuje';
+
+  @override
+  String get selectYouFromList => 'Vyberte seba zo zoznamu';
+
+  @override
+  String get enterPersonsName => 'Zadajte meno osoby';
+
+  @override
+  String get addPerson => 'Pridať osobu';
+
+  @override
+  String tagOtherSegmentsFromSpeaker(int selected, int total) {
+    return 'Označiť ostatné segmenty od tohto rečníka ($selected/$total)';
+  }
+
+  @override
+  String get tagOtherSegments => 'Označiť ostatné segmenty';
+
+  @override
+  String get managePeople => 'Spravovať osoby';
+
+  @override
+  String get shareViaSms => 'Zdieľať cez SMS';
+
+  @override
+  String get selectContactsToShareSummary => 'Vyberte kontakty na zdieľanie súhrnu konverzácie';
+
+  @override
+  String get searchContactsHint => 'Hľadať kontakty...';
+
+  @override
+  String contactsSelectedCount(int count) {
+    return '$count vybraných';
+  }
+
+  @override
+  String get clearAllSelection => 'Vymazať všetko';
+
+  @override
+  String get selectContactsToShare => 'Vyberte kontakty na zdieľanie';
+
+  @override
+  String shareWithContactCount(int count) {
+    return 'Zdieľať s $count kontaktom';
+  }
+
+  @override
+  String shareWithContactsCount(int count) {
+    return 'Zdieľať s $count kontaktmi';
+  }
+
+  @override
+  String get contactsPermissionRequired => 'Vyžaduje sa povolenie kontaktov';
+
+  @override
+  String get contactsPermissionRequiredForSms => 'Na zdieľanie cez SMS sa vyžaduje povolenie kontaktov';
+
+  @override
+  String get grantContactsPermissionForSms => 'Pre zdieľanie cez SMS prosím udeľte povolenie kontaktov';
+
+  @override
+  String get noContactsWithPhoneNumbers => 'Neboli nájdené kontakty s telefónnymi číslami';
+
+  @override
+  String get noContactsMatchSearch => 'Žiadne kontakty nezodpovedajú vášmu vyhľadávaniu';
+
+  @override
+  String get failedToLoadContacts => 'Nepodarilo sa načítať kontakty';
+
+  @override
+  String get failedToPrepareConversationForSharing =>
+      'Nepodarilo sa pripraviť konverzáciu na zdieľanie. Skúste to znova.';
+
+  @override
+  String get couldNotOpenSmsApp => 'Nepodarilo sa otvoriť aplikáciu SMS. Skúste to znova.';
+
+  @override
+  String heresWhatWeDiscussed(String link) {
+    return 'Tu je to, o čom sme práve hovorili: $link';
+  }
+
+  @override
+  String get wifiSync => 'Synchronizácia WiFi';
+
+  @override
+  String itemCopiedToClipboard(String item) {
+    return '$item skopírované do schránky';
+  }
+
+  @override
+  String get wifiConnectionFailedTitle => 'Pripojenie zlyhalo';
+
+  @override
+  String connectingToDeviceName(String deviceName) {
+    return 'Connecting to $deviceName';
+  }
+
+  @override
+  String enableDeviceWifi(String deviceName) {
+    return 'Enable $deviceName\'s WiFi';
+  }
+
+  @override
+  String connectToDeviceName(String deviceName) {
+    return 'Connect to $deviceName';
+  }
+
+  @override
+  String get recordingDetails => 'Podrobnosti nahrávky';
+
+  @override
+  String get storageLocationSdCard => 'SD Card';
+
+  @override
+  String get storageLocationLimitlessPendant => 'Prívesok Limitless';
+
+  @override
+  String get storageLocationPhone => 'Telefón';
+
+  @override
+  String get storageLocationPhoneMemory => 'Pamäť telefónu';
+
+  @override
+  String storedOnDevice(String deviceName) {
+    return 'Stored on $deviceName';
+  }
+
+  @override
+  String get transferring => 'Prenáša sa';
+
+  @override
+  String get transferRequired => 'Vyžaduje sa prenos';
+
+  @override
+  String get downloadingAudioFromSdCard => 'Sťahovanie audia z SD karty';
+
+  @override
+  String get transferRequiredDescription => 'Táto nahrávka musí byť prenesená do telefónu pred spracovaním';
+
+  @override
+  String get cancelTransfer => 'Zrušiť prenos';
+
+  @override
+  String get transferToPhone => 'Preniesť do telefónu';
+
+  @override
+  String get privateAndSecureOnDevice => 'Private & secure on your device';
+
+  @override
+  String get recordingInfo => 'Informácie o nahrávke';
+
+  @override
+  String get transferInProgress => 'Prebieha prenos';
+
+  @override
+  String get shareRecording => 'Zdieľať nahrávku';
+
+  @override
+  String get deleteRecordingConfirmation => 'Naozaj chcete odstrániť túto nahrávku?';
+
+  @override
+  String get recordingIdLabel => 'ID nahrávky';
+
+  @override
+  String get dateTimeLabel => 'Date & Time';
+
+  @override
+  String get durationLabel => 'Trvanie';
+
+  @override
+  String get audioFormatLabel => 'Formát audia';
+
+  @override
+  String get storageLocationLabel => 'Umiestnenie úložiska';
+
+  @override
+  String get estimatedSizeLabel => 'Odhadovaná veľkosť';
+
+  @override
+  String get deviceModelLabel => 'Model zariadenia';
+
+  @override
+  String get deviceIdLabel => 'ID zariadenia';
+
+  @override
+  String get statusLabel => 'Stav';
+
+  @override
+  String get statusProcessed => 'Spracované';
+
+  @override
+  String get statusUnprocessed => 'Nespracované';
+
+  @override
+  String get switchedToFastTransfer => 'Prepnuté na rýchly prenos';
+
+  @override
+  String get transferCompleteMessage => 'Prenos dokončený';
+
+  @override
+  String transferFailedMessage(String error) {
+    return 'Prenos zlyhal. Skúste to prosím znova.';
+  }
+
+  @override
+  String get transferCancelled => 'Prenos zrušený';
+
+  @override
+  String get fastTransferEnabled => 'Rýchly prenos povolený';
+
+  @override
+  String get bluetoothSyncEnabled => 'Synchronizácia Bluetooth povolená';
+
+  @override
+  String get enableFastTransfer => 'Povoliť rýchly prenos';
+
+  @override
+  String get fastTransferDescription =>
+      'Rýchly prenos používa WiFi pre ~5x rýchlejšie prenosy. Váš telefón sa dočasne pripojí k WiFi sieti zariadenia Omi počas prenosu.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Prístup na internet je počas prenosu pozastavený';
+
+  @override
+  String get chooseTransferMethodDescription => 'Zvoľte, ako sa nahrávky prenášajú zo zariadenia Omi do telefónu.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s cez WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X RÝCHLEJŠÍ';
+
+  @override
+  String get fastTransferMethodDescription =>
+      'Vytvorí priame WiFi pripojenie k zariadeniu Omi. Telefón sa dočasne odpojí od bežnej WiFi počas prenosu.';
+
+  @override
+  String get bluetooth => 'Bluetooth';
+
+  @override
+  String get bleSpeed => '~30 KB/s cez BLE';
+
+  @override
+  String get bluetoothMethodDescription =>
+      'Používa štandardné Bluetooth Low Energy pripojenie. Pomalšie, ale neovplyvňuje WiFi pripojenie.';
+
+  @override
+  String get selected => 'Vybrané';
+
+  @override
+  String get selectOption => 'Vybrať';
+
+  @override
+  String get lowBatteryAlertTitle => 'Upozornenie na nízku batériu';
+
+  @override
+  String get lowBatteryAlertBody => 'Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋';
+
+  @override
+  String get deviceDisconnectedNotificationTitle => 'Vaše zariadenie Omi bolo odpojené';
+
+  @override
+  String get deviceDisconnectedNotificationBody =>
+      'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní Omi.';
+
+  @override
+  String get firmwareUpdateAvailable => 'K dispozícii je aktualizácia firmvéru';
+
+  @override
+  String firmwareUpdateAvailableDescription(String version) {
+    return 'Pre vaše zariadenie Omi je k dispozícii nová aktualizácia firmvéru ($version). Chcete aktualizovať teraz?';
+  }
+
+  @override
+  String get later => 'Neskôr';
+
+  @override
+  String get appDeletedSuccessfully => 'Aplikácia bola úspešne odstránená';
+
+  @override
+  String get appDeleteFailed => 'Nepodarilo sa odstrániť aplikáciu. Skúste to neskôr.';
+
+  @override
+  String get appVisibilityChangedSuccessfully =>
+      'Viditeľnosť aplikácie bola úspešne zmenená. Môže to trvať niekoľko minút.';
+
+  @override
+  String get errorActivatingAppIntegration =>
+      'Chyba pri aktivácii aplikácie. Ak ide o integračnú aplikáciu, uistite sa, že nastavenie je dokončené.';
+
+  @override
+  String get errorUpdatingAppStatus => 'Pri aktualizácii stavu aplikácie došlo k chybe.';
+
+  @override
+  String get calculatingETA => 'Calculating...';
+
+  @override
+  String aboutMinutesRemaining(int minutes) {
+    return 'Zostáva približne $minutes minút';
+  }
+
+  @override
+  String get aboutAMinuteRemaining => 'Zostáva približne minúta';
+
+  @override
+  String get almostDone => 'Almost done...';
+
+  @override
+  String get omiSays => 'omi says';
+
+  @override
+  String get analyzingYourData => 'Analyzujú sa vaše údaje';
+
+  @override
+  String migratingToProtection(String level) {
+    return 'Migrácia do chráneného úložiska';
+  }
+
+  @override
+  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+
+  @override
+  String migratingItemsProgress(String itemType, int percentage) {
+    return 'Migrating $itemType... $percentage%';
+  }
+
+  @override
+  String get allObjectsMigratedFinalizing => 'Všetky objekty migrované, dokončuje sa';
+
+  @override
+  String get migrationErrorOccurred => 'Počas migrácie sa vyskytla chyba';
+
+  @override
+  String get migrationComplete => 'Migrácia dokončená';
+
+  @override
+  String dataProtectedWithSettings(String level) {
+    return 'Vaše údaje sú chránené vašimi nastaveniami';
+  }
+
+  @override
+  String get chatsLowercase => 'chats';
+
+  @override
+  String get dataLowercase => 'data';
+
+  @override
+  String get fallNotificationTitle => 'Ouch';
+
+  @override
+  String get fallNotificationBody => 'Zistili sme pád. Ste v poriadku?';
+
+  @override
+  String get importantConversationTitle => 'Dôležitý rozhovor';
+
+  @override
+  String get importantConversationBody => 'Práve ste mali dôležitý rozhovor. Klepnutím zdieľajte zhrnutie.';
+
+  @override
+  String get templateName => 'Názov šablóny';
+
+  @override
+  String get templateNameHint => 'napr. Extraktor akcií zo schôdzky';
+
+  @override
+  String get nameMustBeAtLeast3Characters => 'Názov musí mať aspoň 3 znaky';
+
+  @override
+  String get conversationPromptHint => 'napr. Extrahujte úlohy, prijaté rozhodnutia a kľúčové poznatky z konverzácie.';
+
+  @override
+  String get pleaseEnterAppPrompt => 'Zadajte prosím výzvu pre aplikáciu';
+
+  @override
+  String get promptMustBeAtLeast10Characters => 'Výzva musí mať aspoň 10 znakov';
+
+  @override
+  String get anyoneCanDiscoverTemplate => 'Ktokoľvek môže objaviť vašu šablónu';
+
+  @override
+  String get onlyYouCanUseTemplate => 'Iba vy môžete používať túto šablónu';
+
+  @override
+  String get generatingDescription => 'Generovanie popisu...';
+
+  @override
+  String get creatingAppIcon => 'Vytváranie ikony aplikácie...';
+
+  @override
+  String get installingApp => 'Inštalácia aplikácie...';
+
+  @override
+  String get appCreatedAndInstalled => 'Aplikácia vytvorená a nainštalovaná!';
+
+  @override
+  String get appCreatedSuccessfully => 'Aplikácia úspešne vytvorená!';
+
+  @override
+  String get failedToCreateApp => 'Nepodarilo sa vytvoriť aplikáciu. Skúste to znova.';
+
+  @override
+  String get addAppSelectCoreCapability => 'Vyberte ešte jednu základnú schopnosť pre vašu aplikáciu';
+
+  @override
+  String get addAppSelectPaymentPlan => 'Vyberte platobný plán a zadajte cenu pre vašu aplikáciu';
+
+  @override
+  String get addAppSelectCapability => 'Vyberte aspoň jednu schopnosť pre vašu aplikáciu';
+
+  @override
+  String get addAppSelectLogo => 'Vyberte logo pre vašu aplikáciu';
+
+  @override
+  String get addAppEnterChatPrompt => 'Zadajte chatovú výzvu pre vašu aplikáciu';
+
+  @override
+  String get addAppEnterConversationPrompt => 'Zadajte konverzačnú výzvu pre vašu aplikáciu';
+
+  @override
+  String get addAppSelectTriggerEvent => 'Vyberte spúšťaciu udalosť pre vašu aplikáciu';
+
+  @override
+  String get addAppEnterWebhookUrl => 'Zadajte webhook URL pre vašu aplikáciu';
+
+  @override
+  String get addAppSelectCategory => 'Vyberte kategóriu pre vašu aplikáciu';
+
+  @override
+  String get addAppFillRequiredFields => 'Vyplňte správne všetky povinné polia';
+
+  @override
+  String get addAppUpdatedSuccess => 'Aplikácia úspešne aktualizovaná 🚀';
+
+  @override
+  String get addAppUpdateFailed => 'Aktualizácia zlyhala. Skúste to neskôr';
+
+  @override
+  String get addAppSubmittedSuccess => 'Aplikácia úspešne odoslaná 🚀';
+
+  @override
+  String addAppErrorOpeningFilePicker(String message) {
+    return 'Chyba pri otváraní výberu súborov: $message';
+  }
+
+  @override
+  String addAppErrorSelectingImage(String error) {
+    return 'Chyba pri výbere obrázka: $error';
+  }
+
+  @override
+  String get addAppPhotosPermissionDenied => 'Povolenie fotiek zamietnuté. Povoľte prístup k fotkám';
+
+  @override
+  String get addAppErrorSelectingImageRetry => 'Chyba pri výbere obrázka. Skúste to znova.';
+
+  @override
+  String addAppErrorSelectingThumbnail(String error) {
+    return 'Chyba pri výbere miniatúry: $error';
+  }
+
+  @override
+  String get addAppErrorSelectingThumbnailRetry => 'Chyba pri výbere miniatúry. Skúste to znova.';
+
+  @override
+  String get addAppCapabilityConflictWithPersona => 'Iné schopnosti nemožno vybrať s Personou';
+
+  @override
+  String get addAppPersonaConflictWithCapabilities => 'Persona nemôže byť vybraná s inými schopnosťami';
+
+  @override
+  String get personaTwitterHandleNotFound => 'Twitter účet nenájdený';
+
+  @override
+  String get personaTwitterHandleSuspended => 'Twitter účet je pozastavený';
+
+  @override
+  String get personaFailedToVerifyTwitter => 'Overenie Twitter účtu zlyhalo';
+
+  @override
+  String get personaFailedToFetch => 'Nepodarilo sa načítať vašu personu';
+
+  @override
+  String get personaFailedToCreate => 'Nepodarilo sa vytvoriť personu';
+
+  @override
+  String get personaConnectKnowledgeSource => 'Pripojte aspoň jeden zdroj dát (Omi alebo Twitter)';
+
+  @override
+  String get personaUpdatedSuccessfully => 'Persona úspešne aktualizovaná';
+
+  @override
+  String get personaFailedToUpdate => 'Aktualizácia persony zlyhala';
+
+  @override
+  String get personaPleaseSelectImage => 'Vyberte obrázok';
+
+  @override
+  String get personaFailedToCreateTryLater => 'Vytvorenie persony zlyhalo. Skúste to neskôr.';
+
+  @override
+  String personaFailedToCreateWithError(String error) {
+    return 'Vytvorenie persony zlyhalo: $error';
+  }
+
+  @override
+  String get personaFailedToEnable => 'Aktivácia persony zlyhala';
+
+  @override
+  String personaErrorEnablingWithError(String error) {
+    return 'Chyba pri aktivácii persony: $error';
+  }
+
+  @override
+  String get paymentFailedToFetchCountries => 'Nepodarilo sa načítať podporované krajiny. Skúste to neskôr.';
+
+  @override
+  String get paymentFailedToSetDefault => 'Nepodarilo sa nastaviť predvolenú platobnú metódu. Skúste to neskôr.';
+
+  @override
+  String get paymentFailedToSavePaypal => 'Nepodarilo sa uložiť PayPal údaje. Skúste to neskôr.';
+
+  @override
+  String get paypalEmailHint => 'nik@example.com';
+
+  @override
+  String get paypalMeLinkHint => 'paypal.me/nik';
+
+  @override
+  String get paymentMethodStripe => 'Stripe';
+
+  @override
+  String get paymentMethodPayPal => 'PayPal';
+
+  @override
+  String get paymentStatusActive => 'Aktívny';
+
+  @override
+  String get paymentStatusConnected => 'Pripojené';
+
+  @override
+  String get paymentStatusNotConnected => 'Nepripojené';
+
+  @override
+  String get paymentAppCost => 'Cena aplikácie';
+
+  @override
+  String get paymentEnterValidAmount => 'Zadajte platnú sumu';
+
+  @override
+  String get paymentEnterAmountGreaterThanZero => 'Zadajte sumu väčšiu ako 0';
+
+  @override
+  String get paymentPlan => 'Platobný plán';
+
+  @override
+  String get paymentNoneSelected => 'Nič nevybrané';
+
+  @override
+  String get aiGenPleaseEnterDescription => 'Zadajte prosím popis vašej aplikácie';
+
+  @override
+  String get aiGenCreatingAppIcon => 'Vytváranie ikony aplikácie...';
+
+  @override
+  String aiGenErrorOccurredWithDetails(String message) {
+    return 'Vyskytla sa chyba: $message';
+  }
+
+  @override
+  String get aiGenAppCreatedSuccessfully => 'Aplikácia bola úspešne vytvorená!';
+
+  @override
+  String get aiGenFailedToCreateApp => 'Nepodarilo sa vytvoriť aplikáciu';
+
+  @override
+  String get aiGenErrorWhileCreatingApp => 'Pri vytváraní aplikácie sa vyskytla chyba';
+
+  @override
+  String get aiGenFailedToGenerateApp => 'Nepodarilo sa vygenerovať aplikáciu. Skúste to prosím znova.';
+
+  @override
+  String get aiGenFailedToRegenerateIcon => 'Nepodarilo sa znovu vygenerovať ikonu';
+
+  @override
+  String get aiGenPleaseGenerateAppFirst => 'Najprv prosím vygenerujte aplikáciu';
+
+  @override
+  String get xHandleTitle => 'Vaša X (Twitter) prezývka';
+
+  @override
+  String get xHandleDescription => 'Zadajte vašu X prezývku pre prepojenie účtu';
+
+  @override
+  String get xHandleHint => '@nikshevchenko';
+
+  @override
+  String get xHandlePleaseEnter => 'Zadajte prosím vašu X prezývku';
+
+  @override
+  String get xHandlePleaseEnterValid => 'Zadajte prosím platnú X prezývku';
+
+  @override
+  String get nextButton => 'Ďalej';
+
+  @override
+  String get connectOmiDevice => 'Pripojiť zariadenie Omi';
+
+  @override
+  String planSwitchingDescriptionWithTitle(String title) {
+    return 'Prepnutie na $title';
+  }
+
+  @override
+  String get planUpgradeScheduledMessage =>
+      'Upgrade naplánovaný. Váš nový plán začne na začiatku ďalšieho fakturačného obdobia.';
+
+  @override
+  String get couldNotSchedulePlanChange => 'Nepodarilo sa naplánovať zmenu plánu';
+
+  @override
+  String get subscriptionReactivatedDefault => 'Predplatné reaktivované';
+
+  @override
+  String get subscriptionSuccessfulCharged => 'Predplatné úspešne účtované';
+
+  @override
+  String get couldNotProcessSubscription => 'Nepodarilo sa spracovať predplatné';
+
+  @override
+  String get couldNotLaunchUpgradePage => 'Nepodarilo sa otvoriť stránku upgradu. Skúste to prosím znova.';
+
+  @override
+  String get transcriptionJsonPlaceholder => 'Tu sa zobrazí JSON prepisu';
+
+  @override
+  String get transcriptionSourceOmi => 'Omi';
+
+  @override
+  String get pricePlaceholder => '0.00';
+
+  @override
+  String importErrorOpeningFilePicker(String message) {
+    return 'Chyba pri otváraní výberu súborov: $message';
+  }
+
+  @override
+  String importErrorGeneric(String error) {
+    return 'Chyba: $error';
+  }
+
+  @override
+  String get mergeConversationsSuccessTitle => 'Konverzácie úspešne zlúčené';
+
+  @override
+  String mergeConversationsSuccessBody(int count) {
+    return '$count konverzácií bolo úspešne zlúčených';
+  }
+
+  @override
+  String get dailyReflectionNotificationTitle => 'Čas na dennú reflexiu';
+
+  @override
+  String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
+
+  @override
+  String get actionItemReminderTitle => 'Pripomienka Omi';
+
+  @override
+  String deviceDisconnectedTitle(String deviceName) {
+    return '$deviceName odpojené';
+  }
+
+  @override
+  String deviceDisconnectedBody(String deviceName) {
+    return 'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní vášho $deviceName.';
+  }
+
+  @override
+  String get onboardingSignIn => 'Prihlásiť sa';
+
+  @override
+  String get onboardingYourName => 'Vaše meno';
+
+  @override
+  String get onboardingLanguage => 'Jazyk';
+
+  @override
+  String get onboardingPermissions => 'Povolenia';
+
+  @override
+  String get onboardingComplete => 'Hotovo';
+
+  @override
+  String get onboardingWelcomeToOmi => 'Vitajte v Omi';
+
+  @override
+  String get onboardingTellUsAboutYourself => 'Povedzte nám niečo o sebe';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vyberte si preferencie';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Udeliť požadovaný prístup';
+
+  @override
+  String get onboardingYoureAllSet => 'Ste pripravení';
+
+  @override
+  String get searchTranscriptOrSummary => 'Hľadať v prepise alebo zhrnutí...';
+
+  @override
+  String get myGoal => 'Môj cieľ';
+
+  @override
+  String get appNotAvailable => 'Aplikácia nie je dostupná';
+
+  @override
+  String get failedToConnectTodoist => 'Pripojenie k Todoist zlyhalo';
+
+  @override
+  String get failedToConnectAsana => 'Pripojenie k Asana zlyhalo';
+
+  @override
+  String get failedToConnectGoogleTasks => 'Pripojenie k Google Tasks zlyhalo';
+
+  @override
+  String get failedToConnectClickUp => 'Pripojenie k ClickUp zlyhalo';
+
+  @override
+  String failedToConnectServiceWithError(String serviceName, String error) {
+    return 'Nepodarilo sa pripojiť k službe: $error';
+  }
+
+  @override
+  String get successfullyConnectedTodoist => 'Úspešne pripojené k Todoist';
+
+  @override
+  String get failedToConnectTodoistRetry => 'Nepodarilo sa pripojiť k Todoist. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedAsana => 'Úspešne pripojené k Asana';
+
+  @override
+  String get failedToConnectAsanaRetry => 'Nepodarilo sa pripojiť k Asana. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedGoogleTasks => 'Úspešne pripojené k Google Tasks';
+
+  @override
+  String get failedToConnectGoogleTasksRetry => 'Nepodarilo sa pripojiť k Google Tasks. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedClickUp => 'Úspešne pripojené k ClickUp';
+
+  @override
+  String get failedToConnectClickUpRetry => 'Nepodarilo sa pripojiť k ClickUp. Skúste to znova.';
+
+  @override
+  String get successfullyConnectedNotion => 'Úspešne pripojené k Notion';
+
+  @override
+  String get failedToRefreshNotionStatus => 'Nepodarilo sa obnoviť stav Notion';
+
+  @override
+  String get successfullyConnectedGoogle => 'Úspešne pripojené k Google';
+
+  @override
+  String get failedToRefreshGoogleStatus => 'Nepodarilo sa obnoviť stav Google';
+
+  @override
+  String get successfullyConnectedWhoop => 'Úspešne pripojené k Whoop';
+
+  @override
+  String get failedToRefreshWhoopStatus => 'Nepodarilo sa obnoviť stav Whoop';
+
+  @override
+  String get successfullyConnectedGitHub => 'Úspešne pripojené k GitHub';
+
+  @override
+  String get failedToRefreshGitHubStatus => 'Nepodarilo sa obnoviť stav GitHub';
+
+  @override
+  String get authFailedToSignInWithGoogle => 'Nepodarilo sa prihlásiť cez Google';
+
+  @override
+  String get authenticationFailed => 'Autentifikácia zlyhala';
+
+  @override
+  String get authFailedToSignInWithApple => 'Nepodarilo sa prihlásiť cez Apple';
+
+  @override
+  String get authFailedToRetrieveToken => 'Nepodarilo sa získať token';
+
+  @override
+  String get authUnexpectedErrorFirebase => 'Neočakávaná chyba Firebase';
+
+  @override
+  String get authUnexpectedError => 'Neočakávaná chyba';
+
+  @override
+  String get authFailedToLinkGoogle => 'Nepodarilo sa prepojiť Google účet';
+
+  @override
+  String get authFailedToLinkApple => 'Nepodarilo sa prepojiť Apple účet';
+
+  @override
+  String get onboardingBluetoothRequired => 'Vyžaduje sa Bluetooth';
+
+  @override
+  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth zamietnutý. Povoľte v systémových nastaveniach.';
+
+  @override
+  String onboardingBluetoothStatusCheckPrefs(String status) {
+    return 'Stav Bluetooth: $status. Skontrolujte nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckBluetooth(String error) {
+    return 'Nepodarilo sa skontrolovať Bluetooth: $error';
+  }
+
+  @override
+  String get onboardingNotificationDeniedSystemPrefs => 'Upozornenia zamietnuté. Povoľte v systémových nastaveniach.';
+
+  @override
+  String get onboardingNotificationDeniedNotifications => 'Upozornenia zamietnuté';
+
+  @override
+  String onboardingNotificationStatusCheckPrefs(String status) {
+    return 'Stav upozornení: $status. Skontrolujte nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckNotification(String error) {
+    return 'Nepodarilo sa skontrolovať upozornenia: $error';
+  }
+
+  @override
+  String get onboardingLocationGrantInSettings => 'Udeľte povolenie polohy v nastaveniach';
+
+  @override
+  String get onboardingMicrophoneRequired => 'Vyžaduje sa mikrofón';
+
+  @override
+  String get onboardingMicrophoneDenied => 'Mikrofón zamietnutý';
+
+  @override
+  String onboardingMicrophoneStatusCheckPrefs(String status) {
+    return 'Stav mikrofónu: $status. Skontrolujte nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckMicrophone(String error) {
+    return 'Nepodarilo sa skontrolovať mikrofón: $error';
+  }
+
+  @override
+  String get onboardingScreenCaptureRequired => 'Vyžaduje sa nahrávanie obrazovky';
+
+  @override
+  String get onboardingScreenCaptureDenied => 'Nahrávanie obrazovky zamietnuté';
+
+  @override
+  String onboardingScreenCaptureStatusCheckPrefs(String status) {
+    return 'Stav nahrávania obrazovky: $status. Skontrolujte nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckScreenCapture(String error) {
+    return 'Nepodarilo sa skontrolovať nahrávanie obrazovky: $error';
+  }
+
+  @override
+  String get onboardingAccessibilityRequired => 'Vyžaduje sa prístupnosť';
+
+  @override
+  String onboardingAccessibilityStatusCheckPrefs(String status) {
+    return 'Stav prístupnosti: $status. Skontrolujte nastavenia.';
+  }
+
+  @override
+  String onboardingFailedCheckAccessibility(String error) {
+    return 'Nepodarilo sa skontrolovať prístupnosť: $error';
+  }
+
+  @override
+  String get msgCameraNotAvailable => 'Kamera nie je dostupná';
+
+  @override
+  String get msgCameraPermissionDenied => 'Povolenie kamery zamietnuté';
+
+  @override
+  String msgCameraAccessError(String error) {
+    return 'Chyba prístupu ku kamere: $error';
+  }
+
+  @override
+  String get msgPhotoError => 'Chyba fotky';
+
+  @override
+  String get msgMaxImagesLimit => 'Dosiahli ste maximálny počet obrázkov';
+
+  @override
+  String msgFilePickerError(String error) {
+    return 'Chyba výberu súboru: $error';
+  }
+
+  @override
+  String msgSelectImagesError(String error) {
+    return 'Chyba výberu obrázkov: $error';
+  }
+
+  @override
+  String get msgPhotosPermissionDenied => 'Povolenie na fotky zamietnuté';
+
+  @override
+  String get msgSelectImagesGenericError => 'Nepodarilo sa vybrať obrázky';
+
+  @override
+  String get msgMaxFilesLimit => 'Dosiahli ste maximálny počet súborov';
+
+  @override
+  String msgSelectFilesError(String error) {
+    return 'Chyba výberu súborov: $error';
+  }
+
+  @override
+  String get msgSelectFilesGenericError => 'Nepodarilo sa vybrať súbory';
+
+  @override
+  String get msgUploadFileFailed => 'Nahrávanie súboru zlyhalo';
+
+  @override
+  String get msgReadingMemories => 'Čítam spomienky...';
+
+  @override
+  String get msgLearningMemories => 'Učím sa spomienky...';
+
+  @override
+  String get msgUploadAttachedFileFailed => 'Nahrávanie priloženého súboru zlyhalo';
+
+  @override
+  String captureRecordingError(String error) {
+    return 'Chyba nahrávania: $error';
+  }
+
+  @override
+  String captureRecordingStoppedDisplayIssue(String reason) {
+    return 'Nahrávanie zastavené: $reason. Možno budete musieť znovu pripojiť externé displeje alebo reštartovať nahrávanie.';
+  }
+
+  @override
+  String get captureMicrophonePermissionRequired => 'Vyžaduje sa povolenie mikrofónu';
+
+  @override
+  String get captureMicrophonePermissionInSystemPreferences => 'Povoľte prístup k mikrofónu v systémových nastaveniach';
+
+  @override
+  String get captureScreenRecordingPermissionRequired => 'Vyžaduje sa povolenie nahrávania obrazovky';
+
+  @override
+  String get captureDisplayDetectionFailed => 'Detekcia displeja zlyhala';
+
+  @override
+  String get devModeInvalidAudioBytesWebhookUrl => 'Neplatná URL webhooku pre audio bajty';
+
+  @override
+  String get devModeInvalidRealtimeTranscriptWebhookUrl => 'Neplatná URL webhooku pre prepis v reálnom čase';
+
+  @override
+  String get devModeInvalidConversationCreatedWebhookUrl => 'Neplatná URL webhooku pre vytvorenie konverzácie';
+
+  @override
+  String get devModeInvalidDaySummaryWebhookUrl => 'Neplatná URL webhooku pre denné zhrnutie';
+
+  @override
+  String get devModeSettingsSaved => 'Nastavenia vývojára uložené';
+
+  @override
+  String get voiceFailedToTranscribe => 'Nepodarilo sa prepísať hlas';
+
+  @override
+  String get locationPermissionRequired => 'Vyžaduje sa povolenie polohy';
+
+  @override
+  String get locationPermissionContent => 'Pre túto funkciu potrebujeme prístup k vašej polohe';
+
+  @override
+  String get pdfTranscriptExport => 'Export prepisu';
+
+  @override
+  String get pdfConversationExport => 'Export konverzácie';
+
+  @override
+  String pdfTitleLabel(String title) {
+    return 'Názov: $title';
+  }
+
+  @override
+  String get conversationNewIndicator => 'Nové';
+
+  @override
+  String conversationPhotosCount(int count) {
+    return '$count fotiek';
+  }
+
+  @override
+  String get mergingStatus => 'Zlučuje sa...';
+
+  @override
+  String timeSecsSingular(int count) {
+    return '$count sek';
+  }
+
+  @override
+  String timeSecsPlural(int count) {
+    return '$count sek';
+  }
+
+  @override
+  String timeMinSingular(int count) {
+    return '$count min';
+  }
+
+  @override
+  String timeMinsPlural(int count) {
+    return '$count min';
+  }
+
+  @override
+  String timeMinsAndSecs(int mins, int secs) {
+    return '$mins min $secs sek';
+  }
+
+  @override
+  String timeHourSingular(int count) {
+    return '$count hod';
+  }
+
+  @override
+  String timeHoursPlural(int count) {
+    return '$count hod';
+  }
+
+  @override
+  String timeHoursAndMins(int hours, int mins) {
+    return '$hours hod $mins min';
+  }
+
+  @override
+  String timeDaySingular(int count) {
+    return '$count deň';
+  }
+
+  @override
+  String timeDaysPlural(int count) {
+    return '$count dní';
+  }
+
+  @override
+  String timeDaysAndHours(int days, int hours) {
+    return '$days dní $hours hod';
+  }
+
+  @override
+  String timeCompactSecs(int count) {
+    return '${count}s';
+  }
+
+  @override
+  String timeCompactMins(int count) {
+    return '${count}m';
+  }
+
+  @override
+  String timeCompactMinsAndSecs(int mins, int secs) {
+    return '${mins}m ${secs}s';
+  }
+
+  @override
+  String timeCompactHours(int count) {
+    return '${count}h';
+  }
+
+  @override
+  String timeCompactHoursAndMins(int hours, int mins) {
+    return '${hours}h ${mins}m';
+  }
+
+  @override
+  String get moveToFolder => 'Presunúť do priečinka';
+
+  @override
+  String get noFoldersAvailable => 'Žiadne priečinky nie sú k dispozícii';
+
+  @override
+  String get newFolder => 'Nový priečinok';
+
+  @override
+  String get color => 'Farba';
+
+  @override
+  String get waitingForDevice => 'Čakám na zariadenie...';
+
+  @override
+  String get saySomething => 'Povedzte niečo...';
+
+  @override
+  String get initialisingSystemAudio => 'Inicializácia systémového zvuku';
+
+  @override
+  String get stopRecording => 'Zastaviť nahrávanie';
+
+  @override
+  String get continueRecording => 'Pokračovať v nahrávaní';
+
+  @override
+  String get initialisingRecorder => 'Inicializácia nahrávača';
+
+  @override
+  String get pauseRecording => 'Pozastaviť nahrávanie';
+
+  @override
+  String get resumeRecording => 'Obnoviť nahrávanie';
+
+  @override
+  String get noDailyRecapsYet => 'Zatiaľ žiadne denné súhrny';
+
+  @override
+  String get dailyRecapsDescription => 'Vaše denné súhrny sa tu zobrazia po vygenerovaní';
+
+  @override
+  String get chooseTransferMethod => 'Vyberte spôsob prenosu';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s cez WiFi';
+
+  @override
+  String largeTimeGapDetected(String gap) {
+    return 'Zistená veľká časová medzera ($gap)';
+  }
+
+  @override
+  String largeTimeGapsDetected(String gaps) {
+    return 'Zistené veľké časové medzery ($gaps)';
+  }
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+
+  @override
+  String get downloadAudio => 'Download Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio downloaded successfully';
+
+  @override
+  String get audioDownloadFailed => 'Failed to download audio';
+
+  @override
+  String get downloadingAudio => 'Downloading audio...';
+
+  @override
+  String get shareAudio => 'Share Audio';
+
+  @override
+  String get preparingAudio => 'Preparing Audio';
+
+  @override
+  String get gettingAudioFiles => 'Getting audio files...';
+
+  @override
+  String get downloadingAudioProgress => 'Downloading Audio';
+
+  @override
+  String get processingAudio => 'Processing Audio';
+
+  @override
+  String get combiningAudioFiles => 'Combining audio files...';
+
+  @override
+  String get audioReady => 'Audio Ready';
+
+  @override
+  String get openingShareSheet => 'Opening share sheet...';
+
+  @override
+  String get audioShareFailed => 'Share Failed';
 }

@@ -182,7 +182,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
               ),
               duration: const Duration(seconds: 3),
               action: SnackBarAction(
-                label: 'OK',
+                label: context.l10n.ok,
                 textColor: Colors.white70,
                 onPressed: () {},
               ),

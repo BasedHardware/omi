@@ -19,17 +19,17 @@
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "lib/core/storage.h"
 #endif
-#include "lib/core/sd_card.h"
-#include "spi_flash.h"
-#include "wdog_facade.h"
 #include <hal/nrf_reset.h>
 #include "rtc.h"
 #include "lsm6dso_time.h"
 
+#include "lib/core/sd_card.h"
+#include "wdog_facade.h"
+
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_BATTERY
-#define BATTERY_FULL_THRESHOLD_PERCENT        98 // 98%
+#define BATTERY_FULL_THRESHOLD_PERCENT 98 // 98%
 extern uint8_t battery_percentage;
 #endif
 bool is_connected = false;
@@ -43,7 +43,7 @@ static void print_reset_reason(void)
 
     reas = nrf_reset_resetreas_get(NRF_RESET);
     nrf_reset_resetreas_clear(NRF_RESET, reas);
-    
+
     if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
         printk("Reset by WATCHDOG\n");
     } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
@@ -161,16 +161,6 @@ void set_led_state()
     set_led_red(red);
 }
 
-static int suspend_unused_modules(void)
-{
-    int err = flash_off();
-    if (err) {
-        LOG_ERR("Can not suspend the spi flash module: %d", err);
-    }
-
-    return 0;
-}
-
 int main(void)
 {
     int ret;
@@ -207,15 +197,6 @@ int main(void)
         LOG_ERR("Failed to initialize LEDs (err %d)", ret);
         error_led_driver();
         return ret;
-    }
-
-    // Suspend unused modules
-    LOG_PRINTK("\n");
-    LOG_INF("Suspending unused modules...\n");
-    ret = suspend_unused_modules();
-    if (ret) {
-        LOG_ERR("Failed to suspend unused modules (err %d)", ret);
-        ret = 0;
     }
 
     // Initialize settings

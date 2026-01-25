@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class CustomBackendURLForm extends StatefulWidget {
   const CustomBackendURLForm({super.key});
 
@@ -12,20 +14,20 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
   final _urlController = TextEditingController();
 
   // Function to validate the URL
-  String? _validateURL(String? value) {
+  String? _validateURL(String? value, BuildContext context) {
     if (value == null || value.isEmpty) {
-      return 'Please enter the backend URL';
+      return context.l10n.enterBackendUrlError;
     }
 
     // Check if the URL ends with '/'
     if (!value.endsWith('/')) {
-      return 'URL must end with "/"';
+      return context.l10n.urlMustEndWithSlashError;
     }
 
     // Use Uri.tryParse to validate the URL format
     final Uri? uri = Uri.tryParse(value);
     if (uri == null || !uri.hasAbsolutePath || uri.scheme.isEmpty) {
-      return 'Please enter a valid URL';
+      return context.l10n.invalidUrlError;
     }
 
     return null;
@@ -41,7 +43,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
 
       // Show a success message
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Backend URL saved successfully!')),
+        SnackBar(content: Text(context.l10n.backendUrlSavedSuccess)),
       );
     }
   }
@@ -82,7 +84,7 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Custom Backend URL',
+                        context.l10n.customBackendUrlTitle,
                         style: TextStyle(
                           fontSize: 28.0,
                           fontWeight: FontWeight.bold,
@@ -93,13 +95,13 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                       TextFormField(
                         controller: _urlController,
                         decoration: InputDecoration(
-                          labelText: 'Backend URL',
+                          labelText: context.l10n.backendUrlLabel,
                           prefixIcon: const Icon(Icons.link),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
-                        validator: _validateURL,
+                        validator: (value) => _validateURL(value, context),
                         keyboardType: TextInputType.url,
                       ),
                       const SizedBox(height: 24),
@@ -114,9 +116,9 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                             ),
                             backgroundColor: Colors.blueAccent[700],
                           ),
-                          child: const Text(
-                            'Save URL',
-                            style: TextStyle(fontSize: 18.0),
+                          child: Text(
+                            context.l10n.saveUrlButton,
+                            style: const TextStyle(fontSize: 18.0),
                           ),
                         ),
                       ),

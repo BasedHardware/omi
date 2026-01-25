@@ -7,7 +7,7 @@ import {
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation } from '@/lib/api';
+import { processInProgressConversation, getTranscriptionPreferences } from '@/lib/api';
 
 /**
  * Hook to manage recording lifecycle.
@@ -66,8 +66,22 @@ export function useRecording() {
     pausedDurationRef.current = 0;
 
     try {
+      // Fetch user's transcription preferences to get language and single_language_mode
+      // If single_language_mode is true, we must send the specific language (not 'multi')
+      // to avoid the backend falling back to English
+      let language = 'multi';
+      try {
+        const prefs = await getTranscriptionPreferences();
+        // Use user's language if set, or 'multi' for multi-language detection
+        // When single_language_mode is true, the backend needs the specific language
+        language = prefs.language || 'multi';
+      } catch (langErr) {
+        console.warn('Failed to fetch transcription preferences, using multi:', langErr);
+      }
+
       // Create transcription socket
       const socket = createTranscriptionSocket({
+        language,
         onSegment: (segment: TranscriptSegment) => {
           if (!isMountedRef.current) return;
           setSegments((prev) => {
@@ -86,10 +100,10 @@ export function useRecording() {
           // Don't set error state for socket issues - just log them
         },
         onConnected: () => {
-          console.log('Transcription socket connected');
+          // Socket connected
         },
         onDisconnected: () => {
-          console.log('Transcription socket disconnected');
+          // Socket disconnected
         },
       });
 
@@ -199,13 +213,8 @@ export function useRecording() {
 
     // Process the conversation in the background - don't block the user
     processInProgressConversation()
-      .then((result) => {
-        if (result?.conversation) {
-          console.log('Conversation saved:', result.conversation.id);
-          // Optionally show a toast notification here
-        } else {
-          console.log('No in-progress conversation found');
-        }
+      .then(() => {
+        // Conversation processed - could show a toast notification here
       })
       .catch((err) => {
         console.error('Failed to process conversation:', err);

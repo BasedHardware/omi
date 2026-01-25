@@ -141,7 +141,8 @@ class MergeConfirmationDialog extends StatelessWidget {
   }
 
   /// Check for large time gaps between consecutive conversations
-  static String? _checkForLargeGaps(List<ServerConversation> conversations) {
+  /// Returns a list of gap durations (e.g., ["1.5h", "2.0h"]) or null if no large gaps
+  static List<String>? _checkForLargeGaps(List<ServerConversation> conversations) {
     if (conversations.length < 2) return null;
 
     // Sort by start time
@@ -160,11 +161,15 @@ class MergeConfirmationDialog extends StatelessWidget {
     }
 
     if (gaps.isEmpty) return null;
+    return gaps;
+  }
 
+  /// Format the gap warning message using localization
+  static String _formatGapWarning(BuildContext context, List<String> gaps) {
     if (gaps.length == 1) {
-      return 'Large time gap detected (${gaps.first})';
+      return context.l10n.largeTimeGapDetected(gaps.first);
     }
-    return 'Large time gaps detected (${gaps.join(", ")})';
+    return context.l10n.largeTimeGapsDetected(gaps.join(", "));
   }
 
   static Future<bool> show(
@@ -173,8 +178,9 @@ class MergeConfirmationDialog extends StatelessWidget {
   ) async {
     if (selectedConversations.length < 2) return false;
 
-    // Check for large gaps
-    final warning = _checkForLargeGaps(selectedConversations);
+    // Check for large gaps and format warning message if any
+    final gaps = _checkForLargeGaps(selectedConversations);
+    final warning = gaps != null ? _formatGapWarning(context, gaps) : null;
 
     final result = await showDialog<bool>(
       context: context,

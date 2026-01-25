@@ -15,7 +15,6 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 
 enum ImageOrientation {
   orientation0, // 0 degrees

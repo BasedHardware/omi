@@ -31,6 +31,7 @@ import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import '../../../backend/http/api/payment.dart';
 import '../../../backend/schema/app.dart';
 import '../widgets/show_app_options_sheet.dart';
@@ -122,6 +123,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
+    if (app.externalIntegration == null) return;
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
@@ -203,9 +205,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Subscription cancelled successfully. It will remain active until the end of the current billing period.'),
+            SnackBar(
+              content: Text(context.l10n.subscriptionCancelledSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -213,8 +214,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to cancel subscription. Please try again.'),
+            SnackBar(
+              content: Text(context.l10n.failedToCancelSubscription),
               backgroundColor: Colors.red,
             ),
           );
@@ -224,7 +225,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(context.l10n.errorWithMessage(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -272,6 +273,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       await _refreshAppDetails();
     });
     if (app.worksExternally()) {
+      checkSetupCompleted();
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
@@ -390,48 +392,48 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // Read permissions
     if (actions.any((a) => a.action == 'read_conversations')) {
       permissionItems.add(_PermissionItem(
-        title: 'Read Conversations',
-        type: 'Access',
-        description: 'This app can access your conversations.',
+        title: context.l10n.permissionReadConversations,
+        type: context.l10n.permissionTypeAccess,
+        description: context.l10n.permissionDescReadConversations,
       ));
     }
     if (actions.any((a) => a.action == 'read_memories')) {
       permissionItems.add(_PermissionItem(
-        title: 'Read Memories',
-        type: 'Access',
-        description: 'This app can access your memories.',
+        title: context.l10n.permissionReadMemories,
+        type: context.l10n.permissionTypeAccess,
+        description: context.l10n.permissionDescReadMemories,
       ));
     }
     if (actions.any((a) => a.action == 'read_tasks')) {
       permissionItems.add(_PermissionItem(
-        title: 'Read Tasks',
-        type: 'Access',
-        description: 'This app can access your tasks.',
+        title: context.l10n.permissionReadTasks,
+        type: context.l10n.permissionTypeAccess,
+        description: context.l10n.permissionDescReadTasks,
       ));
     }
 
     // Create permissions
     if (actions.any((a) => a.action == 'create_conversation')) {
       permissionItems.add(_PermissionItem(
-        title: 'Create Conversations',
-        type: 'Create',
-        description: 'This app can create new conversations.',
+        title: context.l10n.permissionCreateConversations,
+        type: context.l10n.permissionTypeCreate,
+        description: context.l10n.permissionDescCreateConversations,
       ));
     }
     if (actions.any((a) => a.action == 'create_facts')) {
       permissionItems.add(_PermissionItem(
-        title: 'Create Memories',
-        type: 'Create',
-        description: 'This app can create new memories.',
+        title: context.l10n.permissionCreateMemories,
+        type: context.l10n.permissionTypeCreate,
+        description: context.l10n.permissionDescCreateMemories,
       ));
     }
 
     // Trigger
     if (trigger != null && trigger != 'Unknown') {
-      final displayTrigger = trigger == 'Transcript Segment Processed' ? 'Realtime Listening' : trigger;
+      final displayTrigger = trigger == 'Transcript Segment Processed' ? context.l10n.realtimeListening : trigger;
       permissionItems.add(_PermissionItem(
         title: displayTrigger,
-        type: 'Trigger',
+        type: context.l10n.permissionTypeTrigger,
         description: 'This app runs automatically when: $displayTrigger',
       ));
     }
@@ -457,7 +459,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Permissions & Triggers',
+            context.l10n.permissionsAndTriggers,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 18),
@@ -550,7 +552,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Chat Features',
+            context.l10n.chatFeatures,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
@@ -862,9 +864,24 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  app.author.decodeString,
-                                  style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        app.author.decodeString,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (app.official) ...[
+                                      const SizedBox(width: 4),
+                                      const FaIcon(
+                                        FontAwesomeIcons.solidCircleCheck,
+                                        size: 14,
+                                        color: Colors.deepPurpleAccent,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
@@ -878,7 +895,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   )
                                 : app.enabled
                                     ? AnimatedLoadingButton(
-                                        text: 'Uninstall',
+                                        text: context.l10n.uninstall,
                                         width: 90,
                                         height: 32,
                                         onPressed: () => _toggleApp(app.id, false),
@@ -900,7 +917,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 final uri = Uri.tryParse(app.paymentLink!);
                                                 if (uri == null) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text('Invalid payment URL')),
+                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
                                                   );
                                                   return;
                                                 }
@@ -915,7 +932,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         : AnimatedLoadingButton(
                                             width: 75,
                                             height: 32,
-                                            text: 'Install',
+                                            text: context.l10n.install,
                                             onPressed: () async {
                                               if (app.worksExternally()) {
                                                 showDialog(
@@ -923,9 +940,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   builder: (ctx) {
                                                     return StatefulBuilder(builder: (ctx, setState) {
                                                       return ConfirmationDialog(
-                                                        title: 'Data Access Notice',
-                                                        description:
-                                                            'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                                        title: context.l10n.dataAccessNotice,
+                                                        description: context.l10n.dataAccessNoticeDescription,
                                                         onConfirm: () {
                                                           _toggleApp(app.id, true);
                                                           Navigator.pop(context);
@@ -1335,7 +1351,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 final uri = Uri.tryParse(rawUrl);
                                 if (uri == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Invalid integration URL')),
+                                    SnackBar(content: Text(context.l10n.invalidIntegrationUrl)),
                                   );
                                   return;
                                 }
@@ -1386,7 +1402,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            setupCompleted ? 'Completed' : 'Tap to complete',
+                                            setupCompleted ? context.l10n.setupCompleted : context.l10n.tapToComplete,
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: setupCompleted ? Colors.green : Colors.grey.shade500,
@@ -1417,21 +1433,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 true) {
                               await routeToPage(
                                 context,
-                                MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+                                MarkdownViewer(
+                                    title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
                                 final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
                                 if (uri == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Invalid setup instructions URL')),
+                                    SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)),
                                   );
                                   return;
                                 }
                                 await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
-                                routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
+                                routeToPage(
+                                    context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
                               }
                             }
                           }
@@ -1537,11 +1555,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       routeToPage(
                           context,
                           MarkdownViewer(
-                              title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                              title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                               markdown: app.description.decodeString));
                     }
                   },
-                  title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                  title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                   description: app.description,
                   showChips: false,
                 ),
@@ -1566,7 +1584,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         capabilitiesList = [
                           ...capabilitiesList,
                           AppCapability(
-                            title: 'Push to Talk',
+                            title: context.l10n.pushToTalk,
                             id: 'push_to_talk',
                           ),
                         ];
@@ -1583,10 +1601,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 app.conversationPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          routeToPage(context,
-                              MarkdownViewer(title: 'Summary Prompt', markdown: app.conversationPrompt!.decodeString));
+                          routeToPage(
+                              context,
+                              MarkdownViewer(
+                                  title: context.l10n.summaryPrompt, markdown: app.conversationPrompt!.decodeString));
                         },
-                        title: 'Summary Prompt',
+                        title: context.l10n.summaryPrompt,
                         description: app.conversationPrompt!,
                         showChips: false,
                         maxLines: 3,
@@ -1596,10 +1616,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 app.chatPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          routeToPage(context,
-                              MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
+                          routeToPage(
+                              context,
+                              MarkdownViewer(
+                                  title: context.l10n.chatPersonality, markdown: app.chatPrompt!.decodeString));
                         },
-                        title: 'Chat Personality',
+                        title: context.l10n.chatPersonality,
                         description: app.chatPrompt!,
                         showChips: false,
                         maxLines: 3,
@@ -1642,7 +1664,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Text('Ratings & Reviews',
+                                      Text(context.l10n.ratingsAndReviews,
                                           style: TextStyle(
                                               color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                                       const Spacer(),
@@ -1704,7 +1726,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (uri == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid integration URL')),
+            SnackBar(content: Text(context.l10n.invalidIntegrationUrl)),
           );
         }
         return;
@@ -1714,7 +1736,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
           context,
-          MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+          MarkdownViewer(title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
         );
       } else {
         if (app.externalIntegration!.isInstructionsUrl == true) {
@@ -1722,7 +1744,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           if (uri == null) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Invalid setup instructions URL')),
+                SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)),
               );
             }
             return;
@@ -1730,7 +1752,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
           await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
-          routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
+          routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
         }
       }
     }
@@ -1800,6 +1822,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
         app.enabled = true;
         appLoading = false;
       });
+      if (app.worksExternally()) {
+        checkSetupCompleted();
+      }
 
       // Automatically open app home page after installation if available
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
@@ -2026,7 +2051,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
   Future<void> _submitReview() async {
     if (editRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a rating')),
+        SnackBar(content: Text(context.l10n.pleaseSelectRating)),
       );
       return;
     }
@@ -2082,8 +2107,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(
-                    widget.userReview == null ? 'Review added successfully 🚀' : 'Review updated successfully 🚀')),
+                content: Text(widget.userReview == null
+                    ? context.l10n.reviewAddedSuccessfully
+                    : context.l10n.reviewUpdatedSuccessfully)),
           );
           setState(() => isEditing = false);
           widget.onReviewUpdated?.call();
@@ -2091,7 +2117,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to submit review. Please try again.')),
+            SnackBar(content: Text(context.l10n.failedToSubmitReview)),
           );
         }
       }
@@ -2220,7 +2246,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             maxLength: 250,
             style: const TextStyle(color: Colors.white, fontSize: 14),
             decoration: InputDecoration(
-              hintText: 'Write a review (optional)',
+              hintText: context.l10n.writeReviewOptional,
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.black.withOpacity(0.3),

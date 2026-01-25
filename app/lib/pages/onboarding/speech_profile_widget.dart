@@ -41,7 +41,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
@@ -52,10 +53,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
   @override
   void dispose() {
+    final speechProvider = context.read<SpeechProfileProvider>();
+
+    speechProvider.forceCompletionTimer?.cancel();
+    speechProvider.forceCompletionTimer = null;
+    speechProvider.close();
+
+    _scrollController.dispose();
     _questionAnimationController.dispose();
-    // if (mounted) {
-    //   context.read<SpeechProfileProvider>().close();
-    // }
+
     super.dispose();
   }
 
@@ -69,6 +75,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
       );
+    }
+  }
+
+  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
+    switch (state) {
+      case SpeechProfileLoadingState.uploading:
+        return context.l10n.uploadingVoiceProfile;
+      case SpeechProfileLoadingState.memorizing:
+        return context.l10n.memorizingYourVoice;
+      case SpeechProfileLoadingState.personalizing:
+        return context.l10n.personalizingExperience;
+      case SpeechProfileLoadingState.allSet:
+        return context.l10n.youreAllSet;
     }
   }
 
@@ -110,9 +129,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
               } else if (info == 'NEXT_QUESTION') {
-                // Animate question change
-                _questionAnimationController.reset();
-                _questionAnimationController.forward();
+                if (!mounted) return;
+
+                _questionAnimationController
+                  ..reset()
+                  ..forward();
               }
             },
             showError: (error) {
@@ -336,7 +357,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         provider.finalize();
                                       });
 
-                                      // Start question animation
+                                      if (!mounted) return;
                                       _questionAnimationController.forward();
                                     },
                                     child: Text(
@@ -391,7 +412,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         ),
                                       ),
                                       const SizedBox(width: 24),
-                                      Text(provider.loadingText,
+                                      Text(_getLoadingText(context, provider.loadingState),
                                           style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),

@@ -18,6 +18,7 @@ import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -36,9 +37,8 @@ class DesktopConversationSummary extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         final summarizedApp = provider.getSummarizedApp();
-        final hasOverview = conversation.structured.overview.isNotEmpty;
 
-        if (!hasOverview && conversation.appResults.isEmpty && summarizedApp == null) {
+        if (conversation.appResults.isEmpty && summarizedApp == null) {
           return _buildEmptyState(context, provider);
         }
 
@@ -52,20 +52,13 @@ class DesktopConversationSummary extends StatelessWidget {
             // App summary result (if available)
             if (summarizedApp != null) ...[
               _buildAppSummaryCard(context, summarizedApp, provider),
-              if (hasOverview || conversation.appResults.isNotEmpty) const SizedBox(height: 24),
-            ],
-
-            // Overview section
-            if (hasOverview) ...[
-              _buildSectionHeader('Overview', FontAwesomeIcons.lightbulb),
-              const SizedBox(height: 12),
-              _buildContentCard(context, conversation.structured.overview.decodeString),
+              if (conversation.appResults.isNotEmpty) const SizedBox(height: 24),
             ],
 
             // Other app results section (if any beyond the main summarized app)
             if (conversation.appResults.where((result) => result != summarizedApp).isNotEmpty) ...[
-              if (hasOverview || summarizedApp != null) const SizedBox(height: 24),
-              _buildSectionHeader('Other App Results', FontAwesomeIcons.robot),
+              if (summarizedApp != null) const SizedBox(height: 24),
+              _buildSectionHeader(context.l10n.otherAppResults, FontAwesomeIcons.robot),
               const SizedBox(height: 12),
               ...conversation.appResults.where((result) => result != summarizedApp).map((result) => Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -95,9 +88,9 @@ class DesktopConversationSummary extends StatelessWidget {
                 size: 16,
               ),
               const SizedBox(width: 8),
-              const Text(
-                'Summary',
-                style: TextStyle(
+              Text(
+                context.l10n.summary,
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -148,9 +141,9 @@ class DesktopConversationSummary extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text(
-                      'Auto',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.auto,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textSecondary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
@@ -195,7 +188,7 @@ class DesktopConversationSummary extends StatelessWidget {
 
         // App selection dropdown
         OmiButton(
-          label: 'Apps',
+          label: context.l10n.apps,
           type: OmiButtonType.neutral,
           icon: FontAwesomeIcons.chevronDown,
           enabled: !isReprocessing,
@@ -238,10 +231,10 @@ class DesktopConversationSummary extends StatelessWidget {
           if (content.isEmpty) ...[
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'No summary available for this app. Try another app for better results.',
-                    style: TextStyle(
+                    context.l10n.noSummaryForApp,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textTertiary,
                       fontSize: 14,
                       fontStyle: FontStyle.italic,
@@ -250,7 +243,7 @@ class DesktopConversationSummary extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 OmiButton(
-                  label: 'Try Another App',
+                  label: context.l10n.tryAnotherApp,
                   type: OmiButtonType.neutral,
                   enabled: true,
                   onPressed: () => _showAppSelectionSheet(context, provider),
@@ -285,7 +278,7 @@ class DesktopConversationSummary extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Generated by ${app.name}',
+                      context.l10n.generatedBy(app.name),
                       style: const TextStyle(
                         color: ResponsiveHelper.textTertiary,
                         fontSize: 11,
@@ -326,23 +319,6 @@ class DesktopConversationSummary extends StatelessWidget {
     );
   }
 
-  Widget _buildContentCard(BuildContext context, String content) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: SelectionArea(
-        child: getMarkdownWidget(context, content),
-      ),
-    );
-  }
-
   Widget _buildAppResultCard(BuildContext context, AppResponse result) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -365,7 +341,7 @@ class DesktopConversationSummary extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                result.appId ?? 'Unknown App',
+                result.appId ?? context.l10n.unknownApp,
                 style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
@@ -388,15 +364,15 @@ class DesktopConversationSummary extends StatelessWidget {
       padding: const EdgeInsets.all(32),
       child: Column(
         children: [
-          const OmiEmptyState(
+          OmiEmptyState(
             icon: FontAwesomeIcons.fileAlt,
-            title: 'No Summary Available',
-            message: 'This conversation doesn\'t have a summary yet.',
+            title: context.l10n.noSummaryAvailable,
+            message: context.l10n.conversationNoSummaryYet,
           ),
           if (!conversation.discarded) ...[
             const SizedBox(height: 24),
             OmiButton(
-              label: 'Generate Summary',
+              label: context.l10n.generateSummary,
               type: OmiButtonType.primary,
               onPressed: () => _showAppSelectionSheet(context, provider),
               icon: FontAwesomeIcons.wandMagicSparkles,
@@ -421,7 +397,7 @@ class DesktopConversationSummary extends StatelessWidget {
     Clipboard.setData(ClipboardData(text: content));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Summary copied to clipboard'),
+        content: Text(context.l10n.summaryCopiedToClipboard),
         backgroundColor: ResponsiveHelper.purplePrimary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -504,7 +480,7 @@ class _DesktopAppSelectionSheetState extends State<_DesktopAppSelectionSheet> {
               // Header
               OmiPanelHeader(
                 icon: FontAwesomeIcons.solidStar,
-                title: 'Choose Summarization App',
+                title: context.l10n.chooseSummarizationApp,
                 onClose: () => Navigator.pop(context),
               ),
 
@@ -567,24 +543,24 @@ class _DesktopAppSelectionSheetState extends State<_DesktopAppSelectionSheet> {
                                     width: 1,
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       FontAwesomeIcons.store,
                                       color: ResponsiveHelper.textSecondary,
                                       size: 16,
                                     ),
-                                    SizedBox(width: 12),
+                                    const SizedBox(width: 12),
                                     Text(
-                                      'Enable More Apps',
-                                      style: TextStyle(
+                                      context.l10n.enableMoreApps,
+                                      style: const TextStyle(
                                         color: ResponsiveHelper.textPrimary,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    Spacer(),
-                                    Icon(
+                                    const Spacer(),
+                                    const Icon(
                                       FontAwesomeIcons.chevronRight,
                                       color: ResponsiveHelper.textTertiary,
                                       size: 12,
@@ -667,7 +643,7 @@ class _AppSelectionItem extends StatelessWidget {
             provider.setPreferredSummarizationApp(app!.id);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${app!.name} set as default summarization app'),
+                content: Text(context.l10n.setAsDefaultSummarizationApp(app!.name)),
                 backgroundColor: ResponsiveHelper.purplePrimary,
                 behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -748,12 +724,14 @@ class _AppSelectionItem extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        app?.name ?? 'Auto',
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                      Builder(
+                        builder: (context) => Text(
+                          app?.name ?? context.l10n.auto,
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       if (app != null) ...[
@@ -769,11 +747,13 @@ class _AppSelectionItem extends StatelessWidget {
                         ),
                       ] else ...[
                         const SizedBox(height: 2),
-                        const Text(
-                          'Let Omi choose the best app automatically',
-                          style: TextStyle(
-                            color: ResponsiveHelper.textTertiary,
-                            fontSize: 12,
+                        Builder(
+                          builder: (context) => Text(
+                            context.l10n.letOmiChooseAutomatically,
+                            style: const TextStyle(
+                              color: ResponsiveHelper.textTertiary,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
