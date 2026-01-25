@@ -105,26 +105,6 @@ class _FolderTabsState extends State<FolderTabs> {
     );
   }
 
-  Widget _buildDailySummariesTab() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: _FolderTab(
-        label: context.l10n.recap,
-        icon: '🕐',
-        color: Colors.green,
-        isSelected: widget.showDailySummaries,
-        skipFolderTracking: true,
-        onTap: () {
-          // Track recap tab opened when toggling to true
-          if (!widget.showDailySummaries) {
-            MixpanelManager().recapTabOpened();
-          }
-          widget.onDailySummariesToggle();
-        },
-      ),
-    );
-  }
-
   Widget _buildFolderTab(Folder folder) {
     final isSelected = widget.selectedFolderId == folder.id;
     return Padding(
@@ -165,11 +145,6 @@ class _FolderTabsState extends State<FolderTabs> {
       },
     ));
     tabs.add(const SizedBox(width: 8));
-
-    // Daily Summaries tab second (after All, before Starred) - only show if user has summaries
-    if (widget.hasDailySummaries) {
-      tabs.add(_buildDailySummariesTab());
-    }
 
     // Starred tab
     tabs.add(_buildStarredTab());
