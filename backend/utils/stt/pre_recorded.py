@@ -27,28 +27,53 @@ _deepgram_nova2_only_languages = {
     "th-TH",
 }
 
-# Languages supported by nova-3 for multi-language mode
-_deepgram_nova3_multi_languages = {
-    "multi",
+# Languages supported by nova-3
+_deepgram_nova3_languages = {
+    "bg",
+    "ca",
+    "cs",
+    "da",
+    "da-DK",
+    "nl",
     "en",
     "en-US",
     "en-AU",
     "en-GB",
     "en-IN",
     "en-NZ",
-    "es",
-    "es-419",
+    "et",
+    "fi",
+    "nl-BE",
     "fr",
     "fr-CA",
     "de",
+    "de-CH",
+    "el",
     "hi",
-    "ru",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "ko-KR",
+    "lv",
+    "lt",
+    "ms",
+    "no",
+    "pl",
     "pt",
     "pt-BR",
     "pt-PT",
-    "ja",
-    "it",
-    "nl",
+    "ro",
+    "ru",
+    "sk",
+    "es",
+    "es-419",
+    "sv",
+    "sv-SE",
+    "tr",
+    "uk",
+    "vi",
 }
 
 
@@ -70,8 +95,12 @@ def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
     if language in _deepgram_nova2_only_languages:
         return language, 'nova-2-general'
 
-    # All other languages use nova-3
-    return language, 'nova-3'
+    # Languages supported by nova-3
+    if language in _deepgram_nova3_languages:
+        return language, 'nova-3'
+
+    # Unsupported language - fall back to multi for auto-detection
+    return 'multi', 'nova-3'
 
 
 @timeit
