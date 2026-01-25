@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from io import BytesIO
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import fal_client
 from deepgram import DeepgramClient, DeepgramClientOptions
@@ -22,6 +22,8 @@ def deepgram_prerecorded(
     attempts: int = 0,
     return_language: bool = False,
     diarize: bool = True,
+    language: Optional[str] = None,
+    detect_language: bool = False,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
@@ -32,6 +34,8 @@ def deepgram_prerecorded(
         speakers_count: Hint for number of speakers (not used by Deepgram, kept for API compatibility)
         attempts: Current retry attempt number
         return_language: If True, returns (words, language) tuple
+        language: Language code to force, or 'multi' for multilingual
+        detect_language: If True, enable Deepgram language detection
 
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
@@ -40,14 +44,17 @@ def deepgram_prerecorded(
     print('deepgram_prerecorded', audio_url, speakers_count, attempts)
 
     try:
+        should_return_language = return_language or detect_language
         options = {
             "model": "nova-3",
             "smart_format": True,
             "punctuate": True,
             "diarize": diarize,
-            "detect_language": return_language,
+            "detect_language": detect_language,
             "utterances": True,
         }
+        if language and not detect_language:
+            options["language"] = language
 
         response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
 
@@ -63,7 +70,7 @@ def deepgram_prerecorded(
 
         dg_words = alternatives[0].get('words', [])
         if not dg_words:
-            if return_language:
+            if should_return_language:
                 detected_lang = channels[0].get('detected_language', 'en')
                 if detected_lang and '-' in detected_lang:
                     detected_lang = detected_lang.split('-')[0]
@@ -84,7 +91,7 @@ def deepgram_prerecorded(
                 }
             )
 
-        if return_language:
+        if should_return_language:
             # Deepgram returns detected_language in the channel
             detected_lang = channels[0].get('detected_language', 'en')
             # Normalize language code (Deepgram might return 'en-US', we want 'en')
@@ -97,8 +104,16 @@ def deepgram_prerecorded(
     except Exception as e:
         print(f'Deepgram prerecorded error: {e}')
         if attempts < 2:
-            return deepgram_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize)
-        if return_language:
+            return deepgram_prerecorded(
+                audio_url,
+                speakers_count,
+                attempts + 1,
+                return_language,
+                diarize,
+                language,
+                detect_language,
+            )
+        if return_language or detect_language:
             return [], 'en'
         return []
 

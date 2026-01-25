@@ -29,6 +29,7 @@ from utils.apps import get_available_app_by_id
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
+    resolve_voice_message_language,
     transcribe_voice_message_segment,
 )
 from utils.llm.persona import initial_persona_chat_message
@@ -307,7 +308,9 @@ def get_messages(
 
 @router.post("/v2/voice-messages")
 async def create_voice_message_stream(
-    files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -318,16 +321,24 @@ async def create_voice_message_stream(
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
+    resolved_language, detect_language = resolve_voice_message_language(uid, language)
+
     # process
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
+        async for chunk in process_voice_message_segment_stream(
+            list(wav_paths)[0], uid, language=resolved_language, detect_language=detect_language
+        ):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post("/v2/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def transcribe_voice_message(
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     # Check if files are empty
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail='No files provided')
@@ -357,11 +368,17 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 
     # Process all WAV files and collect transcripts
     transcripts = []
+    detected_languages = []
+    resolved_language, detect_language = resolve_voice_message_language(uid, language)
     for wav_path in wav_paths:
         try:
-            transcript = transcribe_voice_message_segment(wav_path)
+            transcript, detected_language = transcribe_voice_message_segment(
+                wav_path, uid, language=resolved_language, detect_language=detect_language
+            )
             if transcript:
                 transcripts.append(transcript)
+            if detect_language and detected_language:
+                detected_languages.append(detected_language)
         except Exception as e:
             print(f"Error transcribing {wav_path}: {e}")
             # Cleanup all remaining temp files before raising
@@ -380,12 +397,36 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
                 except:
                     pass
 
+    if detect_language:
+        unique_languages = {lang for lang in detected_languages if lang}
+        detected_language = None
+        if len(unique_languages) == 1:
+            detected_language = unique_languages.pop()
+        elif len(unique_languages) > 1:
+            detected_language = "multi"
+    else:
+        detected_language = None
+
     # Combine all transcripts
     if transcripts:
-        return {"transcript": " ".join(transcripts)}
+        response = {"transcript": " ".join(transcripts)}
+        if detected_language:
+            response["language"] = detected_language
+        transcripts.clear()
+        detected_languages.clear()
+        wav_paths.clear()
+        other_file_paths.clear()
+        return response
 
     # If we got here, no transcript was produced
-    return {"transcript": ""}
+    response = {"transcript": ""}
+    if detected_language:
+        response["language"] = detected_language
+    transcripts.clear()
+    detected_languages.clear()
+    wav_paths.clear()
+    other_file_paths.clear()
+    return response
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
