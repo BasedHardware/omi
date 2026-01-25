@@ -1,9 +1,14 @@
 import os
+import sys
+from unittest.mock import MagicMock
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
+
+# Mock the database client to avoid needing GCP credentials
+sys.modules["database._client"] = MagicMock()
 
 from database import users as users_db
 
