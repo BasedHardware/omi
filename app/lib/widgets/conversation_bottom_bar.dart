@@ -58,6 +58,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
+  List<AudioFile> _getSortedAudioFiles() {
+    if (widget.conversation == null) return [];
+    final files = List<AudioFile>.from(widget.conversation!.audioFiles);
+    files.sort((a, b) {
+      final aTime = a.startedAt?.millisecondsSinceEpoch ?? 0;
+      final bTime = b.startedAt?.millisecondsSinceEpoch ?? 0;
+      return aTime.compareTo(bTime);
+    });
+    return files;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,7 +95,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (widget.conversation == null) return;
     double totalSeconds = 0;
     _trackStartOffsets = [];
-    for (final audioFile in widget.conversation!.audioFiles) {
+    for (final audioFile in _getSortedAudioFiles()) {
       _trackStartOffsets.add(Duration(milliseconds: (totalSeconds * 1000).toInt()));
       totalSeconds += audioFile.duration;
     }
@@ -99,21 +110,21 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   int _findRelevantAudioFileIndex() {
-    final conversation = widget.conversation;
-    if (conversation == null || conversation.audioFiles.isEmpty) {
+    final sortedFiles = _getSortedAudioFiles();
+    if (sortedFiles.isEmpty) {
       return 0;
     }
 
-    if (conversation.audioFiles.length == 1) {
+    if (sortedFiles.length == 1) {
       return 0;
     }
 
-    final conversationStartTs = conversation.startedAt?.millisecondsSinceEpoch ?? 0;
+    final conversationStartTs = widget.conversation?.startedAt?.millisecondsSinceEpoch ?? 0;
     var bestAudioIdx = 0;
     var minDiff = double.infinity;
 
-    for (int i = 0; i < conversation.audioFiles.length; i++) {
-      final audioStartTs = conversation.audioFiles[i].startedAt?.millisecondsSinceEpoch ?? 0;
+    for (int i = 0; i < sortedFiles.length; i++) {
+      final audioStartTs = sortedFiles[i].startedAt?.millisecondsSinceEpoch ?? 0;
       final diff = (audioStartTs - conversationStartTs).abs().toDouble();
       if (diff < minDiff) {
         minDiff = diff;
@@ -133,11 +144,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// Where: chunkOffset = firstChunkTimestamp - conversationStartedAt
   double _calculateFilePositionForTimestamp(double transcriptTimestamp) {
     final conversation = widget.conversation;
-    if (conversation == null || conversation.audioFiles.isEmpty || conversation.startedAt == null) {
+    final sortedFiles = _getSortedAudioFiles();
+    if (conversation == null || sortedFiles.isEmpty || conversation.startedAt == null) {
       return transcriptTimestamp;
     }
 
-    final audioFile = conversation.audioFiles[_findRelevantAudioFileIndex()];
+    final audioFile = sortedFiles[_findRelevantAudioFileIndex()];
 
     final double firstChunkTs;
     if (audioFile.startedAt != null) {
@@ -203,12 +215,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _audioPlayer = AudioPlayer();
 
       final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
+      final sortedAudioFiles = _getSortedAudioFiles();
 
       List<AudioSource> audioSources = [];
       Map<String, String>? fallbackHeaders;
 
-      for (final fileId in audioFileIds) {
+      for (final audioFile in sortedAudioFiles) {
+        final fileId = audioFile.id;
         // Find matching signed URL info
         final urlInfo = signedUrlInfos.firstWhere(
           (info) => info.id == fileId,
