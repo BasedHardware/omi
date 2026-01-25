@@ -32,6 +32,7 @@ class ConversationBottomBar extends StatefulWidget {
   final bool hasSegments;
   final bool hasActionItems;
   final ServerConversation? conversation;
+  final Function(Future<void> Function(double))? onSeekFunctionReady;
 
   const ConversationBottomBar({
     super.key,
@@ -42,6 +43,7 @@ class ConversationBottomBar extends StatefulWidget {
     this.hasSegments = true,
     this.hasActionItems = true,
     this.conversation,
+    this.onSeekFunctionReady,
   });
 
   @override
@@ -60,6 +62,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   void initState() {
     super.initState();
     _calculateTotalDuration();
+    // Provide the seek function to parent widget
+    widget.onSeekFunctionReady?.call(seekToTranscriptSegment);
   }
 
   @override
@@ -92,6 +96,95 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return trackPosition;
     }
     return _trackStartOffsets[currentIndex] + trackPosition;
+  }
+
+  int _findRelevantAudioFileIndex() {
+    final conversation = widget.conversation;
+    if (conversation == null || conversation.audioFiles.isEmpty) {
+      return 0;
+    }
+
+    if (conversation.audioFiles.length == 1) {
+      return 0;
+    }
+
+    final conversationStartTs = conversation.startedAt?.millisecondsSinceEpoch ?? 0;
+    var bestAudioIdx = 0;
+    var minDiff = double.infinity;
+
+    for (int i = 0; i < conversation.audioFiles.length; i++) {
+      final audioStartTs = conversation.audioFiles[i].startedAt?.millisecondsSinceEpoch ?? 0;
+      final diff = (audioStartTs - conversationStartTs).abs().toDouble();
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestAudioIdx = i;
+      }
+    }
+
+    return bestAudioIdx;
+  }
+
+  /// Calculate the correct file position for a transcript timestamp.
+  ///
+  /// Transcript segment timestamps are relative to conversation.startedAt.
+  /// The merged audio file starts at the first chunk timestamp.
+  ///
+  /// Formula: filePosition = segment.start - chunkOffset
+  /// Where: chunkOffset = firstChunkTimestamp - conversationStartedAt
+  double _calculateFilePositionForTimestamp(double transcriptTimestamp) {
+    final conversation = widget.conversation;
+    if (conversation == null || conversation.audioFiles.isEmpty || conversation.startedAt == null) {
+      return transcriptTimestamp;
+    }
+
+    final audioFile = conversation.audioFiles[_findRelevantAudioFileIndex()];
+
+    final double firstChunkTs;
+    if (audioFile.startedAt != null) {
+      firstChunkTs = audioFile.startedAt!.millisecondsSinceEpoch / 1000.0;
+    } else if (audioFile.chunkTimestamps.isNotEmpty) {
+      firstChunkTs = audioFile.chunkTimestamps.first;
+    } else {
+      return transcriptTimestamp;
+    }
+
+    final conversationStartTs = conversation.startedAt!.millisecondsSinceEpoch / 1000.0;
+
+    // chunkOffset = firstChunkTimestamp - conversationStartedAt
+    final chunkOffset = firstChunkTs - conversationStartTs;
+
+    // filePosition = segment.start - chunkOffset
+    return transcriptTimestamp - chunkOffset;
+  }
+
+  /// Seek to a transcript segment's timestamp and start playing.
+  /// Calculates the correct position in the merged audio file.
+  Future<void> seekToTranscriptSegment(double segmentStartSeconds) async {
+    if (!_isAudioInitialized) {
+      await _initAudioIfNeeded();
+    }
+    if (!mounted || _audioPlayer == null) return;
+
+    // Calculate the correct file position
+    final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
+
+    // Ensure position is not negative
+    final targetPosition = Duration(
+      milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt(),
+    );
+
+    await _seekToCombinedPosition(targetPosition);
+
+    // Auto-play after seeking to segment
+    if (_audioPlayer != null && !_audioPlayer!.playing) {
+      final conversationId = widget.conversation?.id ?? '';
+      MixpanelManager().audioPlaybackStarted(
+        conversationId: conversationId,
+        durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
+      );
+      await _audioPlayer!.play();
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _initAudioIfNeeded() async {
