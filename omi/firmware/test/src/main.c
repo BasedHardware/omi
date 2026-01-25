@@ -53,7 +53,11 @@ int main(void)
     printk("Starting omi EVT test...\n");
     // Start shell over UART
     const struct shell *shell_ptr = shell_backend_uart_get_ptr();
-    shell_start(shell_ptr);
+    if (shell_ptr) {
+        shell_start(shell_ptr);
+    } else {
+        printk("UART shell backend not found.\n");
+    }
 
     ret = pm_device_runtime_get(buttons);
     if (ret < 0) {
