@@ -17,7 +17,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
 
 
 def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
@@ -62,12 +62,17 @@ def transcribe_voice_message_segment(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    is_multi = language == 'multi'
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    is_multi = stt_language == 'multi'
     if is_multi:
-        words, detected_language = deepgram_prerecorded(url, diarize=False, language=language, return_language=True)
+        words, detected_language = deepgram_prerecorded(
+            url, diarize=False, language=stt_language, return_language=True, model=stt_model
+        )
     else:
-        words = deepgram_prerecorded(url, diarize=False, language=language, return_language=False)
-        detected_language = language
+        words = deepgram_prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
+        detected_language = stt_language
     if not words:
         print('no words')
         return None, detected_language
@@ -102,7 +107,10 @@ def process_voice_message_segment(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    words = deepgram_prerecorded(url, diarize=False, language=language)
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
@@ -177,7 +185,10 @@ async def process_voice_message_segment_stream(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    words = deepgram_prerecorded(url, diarize=False, language=language)
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:

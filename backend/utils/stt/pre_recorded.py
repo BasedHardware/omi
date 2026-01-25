@@ -14,6 +14,65 @@ from utils.other.endpoints import timeit
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
 
+# Language sets for Deepgram models (subset needed for pre-recorded)
+# Languages only supported by nova-2 (not nova-3)
+_deepgram_nova2_only_languages = {
+    "zh",
+    "zh-CN",
+    "zh-Hans",
+    "zh-TW",
+    "zh-Hant",
+    "zh-HK",
+    "th",
+    "th-TH",
+}
+
+# Languages supported by nova-3 for multi-language mode
+_deepgram_nova3_multi_languages = {
+    "multi",
+    "en",
+    "en-US",
+    "en-AU",
+    "en-GB",
+    "en-IN",
+    "en-NZ",
+    "es",
+    "es-419",
+    "fr",
+    "fr-CA",
+    "de",
+    "hi",
+    "ru",
+    "pt",
+    "pt-BR",
+    "pt-PT",
+    "ja",
+    "it",
+    "nl",
+}
+
+
+def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
+    """
+    Determine the appropriate Deepgram model and language for pre-recorded transcription.
+
+    Args:
+        language: The requested language code or 'multi' for auto-detection
+
+    Returns:
+        Tuple of (language_to_use, model_name)
+    """
+    # For multi-language mode
+    if language == 'multi':
+        return 'multi', 'nova-3'
+
+    # Languages that require nova-2
+    if language in _deepgram_nova2_only_languages:
+        return language, 'nova-2-general'
+
+    # All other languages use nova-3
+    return language, 'nova-3'
+
 
 @timeit
 def deepgram_prerecorded(
@@ -23,6 +82,7 @@ def deepgram_prerecorded(
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
+    model: str = "nova-3",
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
@@ -47,7 +107,7 @@ def deepgram_prerecorded(
         is_multi = language == 'multi'
         should_detect_language = return_language or is_multi
         options = {
-            "model": "nova-3",
+            "model": model,
             "smart_format": True,
             "punctuate": True,
             "diarize": diarize,
@@ -112,6 +172,7 @@ def deepgram_prerecorded(
                 return_language,
                 diarize,
                 language,
+                model,
             )
         if return_language:
             return [], 'en'
