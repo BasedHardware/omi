@@ -185,11 +185,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt(),
     );
 
+    // Track transcript segment tap
+    final conversationId = widget.conversation?.id ?? '';
+    MixpanelManager().transcriptSegmentTapped(
+      conversationId: conversationId,
+      segmentStartSeconds: segmentStartSeconds,
+      seekPositionSeconds: filePosition,
+    );
+
     await _seekToCombinedPosition(targetPosition);
 
     // Auto-play after seeking to segment
     if (_audioPlayer != null && !_audioPlayer!.playing) {
-      final conversationId = widget.conversation?.id ?? '';
       MixpanelManager().audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
