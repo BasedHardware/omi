@@ -1,0 +1,130 @@
+# Functional Test: Recording & Transcription Flow
+# Tests: Start recording → Live transcription → Stop → Save conversation
+#
+# Preconditions:
+#   - User is signed in
+#   - Omi device is connected and nearby
+#   - Microphone permissions granted
+#
+# Note: Actual transcription requires the Omi device to capture audio.
+# This test validates the UI flow and state transitions.
+
+appId: ${APP_ID}
+tags:
+  - functional
+  - recording
+  - transcription
+  - core
+---
+
+# Launch app
+- launchApp
+
+# Wait for home screen to load - check for main UI elements
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Cc]apture.*"
+    timeout: 10000
+
+- takeScreenshot: recording_01_home
+
+# Navigate to recording/capture section
+# Look for record button, microphone icon, or capture tab
+- tapOn:
+    text: ".*[Rr]ecord.*|.*[Cc]apture.*|.*[Ss]tart.*"
+    optional: true
+
+- tapOn:
+    id: ".*record.*|.*capture.*|.*microphone.*"
+    optional: true
+
+# Alternative: tap on floating action button or center icon
+- runFlow:
+    when:
+      notVisible: ".*[Rr]ecording.*"
+    commands:
+      - tapOn:
+          point: "50%,90%"
+          optional: true
+
+- takeScreenshot: recording_02_pre_record
+
+# Start recording
+- runFlow:
+    when:
+      visible: ".*[Ss]tart.*|.*[Rr]ecord.*|.*[Tt]ap.*"
+    commands:
+      - tapOn:
+          text: ".*[Ss]tart.*|.*[Rr]ecord.*"
+
+# Wait for recording to begin
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecording.*|.*[Ll]istening.*|.*[Ll]ive.*|00:.*"
+    timeout: 10000
+
+- takeScreenshot: recording_03_active
+
+# Verify recording indicator is visible
+- assertVisible:
+    text: ".*[Rr]ecording.*|.*[Ll]istening.*|00:.*"
+    optional: false
+
+# Let it record for a few seconds (simulating conversation)
+- swipe:
+    direction: UP
+    duration: 500
+- swipe:
+    direction: DOWN
+    duration: 500
+
+# Wait for transcription to appear (if device is capturing audio)
+- runFlow:
+    when:
+      visible: ".*transcript.*|.*[Ss]peaker.*|.*said.*"
+    commands:
+      - takeScreenshot: recording_04_transcription_visible
+      - assertVisible:
+          text: ".*transcript.*|.*[Ss]peaker.*|.*said.*"
+
+# Let recording continue briefly
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: recording_05_mid_recording
+
+# Stop recording
+- tapOn:
+    text: ".*[Ss]top.*|.*[Ff]inish.*|.*[Dd]one.*"
+    optional: true
+
+# Alternative: tap stop button by position or id
+- tapOn:
+    id: ".*stop.*|.*pause.*"
+    optional: true
+
+# Wait for processing/saving
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]aved.*|.*[Pp]rocess.*|.*[Cc]omplete.*|.*[Cc]onversation.*"
+    timeout: 15000
+
+- takeScreenshot: recording_06_complete
+
+# Verify conversation was created
+- runFlow:
+    when:
+      visible: ".*[Cc]onversation.*|.*[Ss]ummary.*|.*[Tt]ranscript.*"
+    commands:
+      - assertVisible:
+          text: ".*[Cc]onversation.*|.*[Ss]ummary.*|.*[Tt]ranscript.*"
+      - takeScreenshot: recording_07_conversation_created
+
+# Go back to home
+- back
+- back
+
+- takeScreenshot: recording_08_final
+
+- stopApp

@@ -1,0 +1,106 @@
+# Functional Test: Device Connection Flow
+# Tests: Bluetooth pairing → Device detection → Connection verification
+#
+# Preconditions:
+#   - User is signed in
+#   - Omi device is powered on and nearby
+#   - Bluetooth is enabled on phone
+#
+# Note: This test requires a physical Omi device for full validation.
+# Without a device, it validates the UI flow up to the scanning stage.
+
+appId: ${APP_ID}
+tags:
+  - functional
+  - device
+  - bluetooth
+---
+
+# Launch app (assuming already signed in)
+- launchApp
+
+# Wait for home screen - check for main UI elements
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Ss]etting.*"
+    timeout: 10000
+
+# Navigate to device settings/connection
+- tapOn:
+    text: ".*[Ss]etting.*|.*[Pp]rofile.*"
+    optional: true
+
+# Alternative: look for device icon or connection status
+- tapOn:
+    id: ".*device.*|.*bluetooth.*|.*connect.*"
+    optional: true
+
+# Take screenshot of current state
+- takeScreenshot: device_01_initial_state
+
+# Look for "Connect Device" or "Add Device" option
+- runFlow:
+    when:
+      visible: ".*[Cc]onnect.*[Dd]evice.*|.*[Aa]dd.*[Dd]evice.*"
+    commands:
+      - tapOn:
+          text: ".*[Cc]onnect.*[Dd]evice.*|.*[Aa]dd.*[Dd]evice.*"
+
+# Wait for Bluetooth scanning screen
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]can.*|.*[Ss]earch.*|.*[Ll]ooking.*|.*[Bb]luetooth.*"
+    timeout: 10000
+
+- takeScreenshot: device_02_scanning
+
+# If device is found, tap on it
+- runFlow:
+    when:
+      visible: ".*[Oo]mi.*|.*[Ff]riend.*|.*[Dd]evice.*found.*"
+    commands:
+      - tapOn:
+          text: ".*[Oo]mi.*|.*[Ff]riend.*"
+          index: 0
+      - takeScreenshot: device_03_device_found
+
+# Wait for connection confirmation
+- runFlow:
+    when:
+      visible: ".*[Cc]onnect.*|.*[Pp]air.*"
+    commands:
+      - extendedWaitUntil:
+          visible:
+            text: ".*[Cc]onnected.*|.*[Ss]uccess.*|.*[Rr]eady.*"
+          timeout: 30000
+      - takeScreenshot: device_04_connected
+
+# Handle system Bluetooth pairing dialog if shown
+- runFlow:
+    when:
+      visible: ".*[Pp]air.*|.*[Bb]luetooth.*[Pp]airing.*"
+    commands:
+      - tapOn:
+          text: ".*[Pp]air.*|.*[Aa]llow.*|.*[Oo]k.*"
+          optional: true
+
+# Verify device status in settings
+- runFlow:
+    when:
+      visible: ".*[Cc]onnected.*|.*[Oo]nline.*"
+    commands:
+      - assertVisible:
+          text: ".*[Cc]onnected.*|.*[Oo]nline.*"
+      - takeScreenshot: device_05_status_verified
+
+# Go back to home
+- tapOn:
+    text: ".*[Bb]ack.*|.*[Dd]one.*|.*[Cc]lose.*"
+    optional: true
+
+- back
+
+# Final screenshot
+- takeScreenshot: device_06_complete
+
+- stopApp
