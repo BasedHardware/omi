@@ -1,12 +1,41 @@
 import asyncio
 import os
+import sys
+import types
+from unittest.mock import MagicMock
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-from google.cloud.exceptions import NotFound
+# Mock modules that initialize GCP clients at import time or have complex dependencies
+sys.modules["database._client"] = MagicMock()
+sys.modules["utils.other.storage"] = MagicMock()
+sys.modules["utils.stt.pre_recorded"] = MagicMock()
+sys.modules["utils.stt.speaker_embedding"] = MagicMock()
+sys.modules["stripe"] = MagicMock()
+
+
+class NotFound(Exception):
+    pass
+
+
+_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+_google_exceptions_module = types.ModuleType("google.cloud.exceptions")
+_google_exceptions_module.NotFound = NotFound
+sys.modules.setdefault("google.cloud.exceptions", _google_exceptions_module)
+_google_firestore_module = types.ModuleType("google.cloud.firestore")
+sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
+_google_firestore_v1_module = types.ModuleType("google.cloud.firestore_v1")
+_google_firestore_v1_module.FieldFilter = MagicMock()
+_google_firestore_v1_module.transactional = lambda func: func
+sys.modules.setdefault("google.cloud.firestore_v1", _google_firestore_v1_module)
+setattr(_google_module, "cloud", _google_cloud_module)
+setattr(_google_cloud_module, "exceptions", _google_exceptions_module)
+setattr(_google_cloud_module, "firestore", _google_firestore_module)
+
 
 import utils.speaker_sample_migration as migration
 
