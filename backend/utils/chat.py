@@ -63,7 +63,11 @@ def transcribe_voice_message_segment(
         language = resolve_voice_message_language(uid, None)
 
     is_multi = language == 'multi'
-    words, detected_language = deepgram_prerecorded(url, diarize=False, language=language, return_language=is_multi)
+    if is_multi:
+        words, detected_language = deepgram_prerecorded(url, diarize=False, language=language, return_language=True)
+    else:
+        words = deepgram_prerecorded(url, diarize=False, language=language, return_language=False)
+        detected_language = language
     if not words:
         print('no words')
         return None, detected_language
