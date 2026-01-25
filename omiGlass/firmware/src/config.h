@@ -120,11 +120,37 @@ typedef enum {
 #define STATUS_REPORT_INTERVAL_MS 120000 // 2 minutes (was 30 seconds)
 
 // =============================================================================
+// MICROPHONE CONFIGURATION - I2S PDM (XIAO ESP32S3 Sense built-in mic)
+// =============================================================================
+// XIAO ESP32S3 Sense has built-in PDM microphone
+#define MIC_CLK_PIN 42  // PDM Clock pin (GPIO42)
+#define MIC_DATA_PIN 41 // PDM Data pin (GPIO41)
+
+#define MIC_SAMPLE_RATE 16000          // 16kHz sample rate
+#define MIC_BUFFER_SAMPLES 1600        // 100ms buffer (16000 * 0.1)
+#define MIC_GAIN 2                     // Microphone gain multiplier
+#define AUDIO_RING_BUFFER_SAMPLES 8000 // 500ms of audio data
+
+// =============================================================================
+// OPUS CODEC CONFIGURATION
+// =============================================================================
+#define AUDIO_CODEC_ID 21              // Opus codec ID (matches Omi protocol)
+#define OPUS_FRAME_SAMPLES 320         // 20ms frame @ 16kHz
+#define OPUS_OUTPUT_MAX_BYTES 160      // Max encoded frame size
+#define OPUS_BITRATE 32000             // 32kbps
+#define OPUS_COMPLEXITY 3              // Encoding complexity (1-10)
+#define OPUS_VBR 1                     // Variable bitrate enabled
+
+// Audio BLE packet configuration
+#define AUDIO_PACKET_HEADER_SIZE 3     // 2 bytes index + 1 byte sub-index
+#define AUDIO_TX_RING_BUFFER_SIZE 16   // Number of encoded frames to buffer
+
+// =============================================================================
 // BLE UUID DEFINITIONS - OMI Protocol
 // =============================================================================
 #define OMI_SERVICE_UUID "19B10000-E8F2-537E-4F6C-D104768A1214"
 #define AUDIO_DATA_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
-#define AUDIO_CONTROL_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
+#define AUDIO_CODEC_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 #define PHOTO_DATA_UUID "19B10005-E8F2-537E-4F6C-D104768A1214"
 #define PHOTO_CONTROL_UUID "19B10006-E8F2-537E-4F6C-D104768A1214"
 
