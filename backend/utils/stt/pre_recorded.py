@@ -45,15 +45,16 @@ def deepgram_prerecorded(
 
     try:
         should_return_language = return_language or detect_language
+        should_detect_language = return_language or detect_language
         options = {
             "model": "nova-3",
             "smart_format": True,
             "punctuate": True,
             "diarize": diarize,
-            "detect_language": detect_language,
+            "detect_language": should_detect_language,
             "utterances": True,
         }
-        if language and not detect_language:
+        if language and not should_detect_language:
             options["language"] = language
 
         response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)

@@ -26,8 +26,8 @@ def test_request_language_multi(monkeypatch):
     monkeypatch.setattr(user_db, "get_user_transcription_preferences", lambda uid: {"single_language_mode": True})
 
     language, detect_language = resolve_voice_message_language("uid", "multi")
-    assert language == "multi"
-    assert detect_language is False
+    assert language is None
+    assert detect_language is True
 
 
 def test_request_language_specific(monkeypatch):

@@ -26,10 +26,8 @@ def resolve_voice_message_language(uid: str, request_language: Optional[str]) ->
         normalized = request_language.strip()
         if normalized:
             request_lower = normalized.lower()
-            if request_lower == 'auto':
+            if request_lower == 'auto' or request_lower == 'multi':
                 return None, True
-            if request_lower == 'multi':
-                return 'multi', False
             return normalized, False
 
     user_language = user_db.get_user_language_preference(uid)
@@ -59,11 +57,9 @@ def transcribe_voice_message_segment(
 
     if language:
         language_normalized = language.strip()
-        if language_normalized.lower() == 'auto':
+        if language_normalized.lower() == 'auto' or language_normalized.lower() == 'multi':
             language = None
             detect_language = True
-        elif language_normalized.lower() == 'multi':
-            language = 'multi'
 
     if not language and not detect_language:
         language, detect_language = resolve_voice_message_language(uid, None)
