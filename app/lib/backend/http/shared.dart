@@ -261,6 +261,7 @@ Stream<String> makeMultipartStreamingApiCall({
   required String url,
   required List<File> files,
   Map<String, String> headers = const {},
+  Map<String, String> fields = const {},
   String fileFieldName = 'files',
 }) async* {
   try {
@@ -271,6 +272,7 @@ Stream<String> makeMultipartStreamingApiCall({
 
     var request = http.MultipartRequest('POST', Uri.parse(url));
     request.headers.addAll(builtHeaders);
+    request.fields.addAll(fields);
 
     for (var file in files) {
       request.files.add(await http.MultipartFile.fromPath(fileFieldName, file.path, filename: basename(file.path)));
