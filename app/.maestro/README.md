@@ -68,10 +68,10 @@ For first-time setup, run tests in order:
 
 | Test | Metrics |
 |------|---------|
-| 01_extended_session | Memory stability over extended use, recording cycles |
-| 02_continuous_recording | Battery drain during 30+ min continuous recording |
-| 03_memory_leak_detection | Heap growth via repeated open/close cycles |
-| 04_responsiveness | UI frame rates, scroll performance, input latency |
+| 01_extended_session.yaml | Memory stability, CPU spikes, responsiveness over repeated recording cycles |
+| 02_continuous_recording.yaml | Battery drain, memory/CPU usage during 30+ min continuous recording |
+| 03_memory_leak_detection.yaml | Memory growth over repeated app open/close cycles |
+| 04_responsiveness.yaml | UI frame rates, scroll performance, interaction latency |
 
 ## Running Extended Tests
 

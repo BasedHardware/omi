@@ -57,9 +57,31 @@ run_tests() {
     fi
 }
 
-# Parse arguments
-TEST_SUITE="${1:-all}"
-REPORT_FLAG="${2:-}"
+# Parse arguments - handle flags in any order
+TEST_SUITE="all"
+REPORT_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --report)
+            REPORT_FLAG="--report"
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        functional|performance|all)
+            TEST_SUITE="$1"
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+done
 
 # Check Maestro installation
 check_maestro
@@ -83,15 +105,6 @@ case $TEST_SUITE in
         echo "Running all tests..."
         run_tests "functional" "$REPORT_FLAG"
         run_tests "performance" "$REPORT_FLAG"
-        ;;
-    --help|-h)
-        usage
-        exit 0
-        ;;
-    *)
-        echo -e "${RED}Unknown option: $TEST_SUITE${NC}"
-        usage
-        exit 1
         ;;
 esac
 
