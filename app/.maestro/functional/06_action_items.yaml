@@ -7,7 +7,7 @@
 #
 # Note: Action items are AI-extracted tasks from conversations.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - action_items
@@ -17,10 +17,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: actions_01_home
@@ -49,9 +49,9 @@ tags:
 
 - takeScreenshot: actions_02_list
 
-# Verify action items section is accessible
+# Verify action items section is accessible - check for action items or empty state
 - assertVisible:
-    text: ".*"
+    text: ".*[Aa]ction.*|.*[Tt]ask.*|.*[Ee]mpty.*|.*[Nn]o.*[Tt]ask.*"
     optional: false
 
 # Check if action items exist

@@ -7,7 +7,7 @@
 #
 # Note: Tests the plugin/app marketplace functionality.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - apps
@@ -17,10 +17,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: apps_01_home
@@ -49,9 +49,9 @@ tags:
 
 - takeScreenshot: apps_02_store
 
-# Verify apps section is accessible
+# Verify apps section is accessible - check for apps or store elements
 - assertVisible:
-    text: ".*"
+    text: ".*[Aa]pp.*|.*[Pp]lugin.*|.*[Ss]tore.*|.*[Mm]arketplace.*|.*[Ii]ntegration.*"
     optional: false
 
 # Browse available apps

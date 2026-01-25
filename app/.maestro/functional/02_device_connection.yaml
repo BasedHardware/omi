@@ -9,7 +9,7 @@
 # Note: This test requires a physical Omi device for full validation.
 # Without a device, it validates the UI flow up to the scanning stage.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - device
@@ -19,10 +19,10 @@ tags:
 # Launch app (assuming already signed in)
 - launchApp
 
-# Wait for home screen
+# Wait for home screen - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Ss]etting.*"
     timeout: 10000
 
 # Navigate to device settings/connection

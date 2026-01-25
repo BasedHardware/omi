@@ -47,9 +47,10 @@ run_tests() {
 
     if [ "$report_flag" == "--report" ]; then
         mkdir -p "${REPORT_DIR}"
+        # Use test_dir in report name to prevent overwriting when running multiple suites
         maestro test \
             --format junit \
-            --output "${REPORT_DIR}/report_${TIMESTAMP}.xml" \
+            --output "${REPORT_DIR}/report_${test_dir}_${TIMESTAMP}.xml" \
             "${SCRIPT_DIR}/${test_dir}/"
     else
         maestro test "${SCRIPT_DIR}/${test_dir}/"
@@ -98,5 +99,5 @@ echo ""
 echo -e "${GREEN}Tests completed!${NC}"
 
 if [ "$REPORT_FLAG" == "--report" ]; then
-    echo -e "Report saved to: ${REPORT_DIR}/report_${TIMESTAMP}.xml"
+    echo -e "Reports saved to: ${REPORT_DIR}/"
 fi

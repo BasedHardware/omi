@@ -10,7 +10,7 @@
 # Run with: maestro test performance/01_extended_session.yaml
 # For full 24hr test: maestro test --timeout 86400000 performance/01_extended_session.yaml
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - performance
   - memory
@@ -20,10 +20,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 15000
 
 - takeScreenshot: perf_01_start
@@ -161,7 +161,7 @@ tags:
       - pressKey: Enter
       - extendedWaitUntil:
           visible:
-            text: ".*"
+            text: ".*[Ss]ent.*|.*[Rr]esponse.*|.*[Hh]ere.*|.*[Ii].*|.*[Bb]ased.*"
           timeout: 30000
       - scroll:
           direction: DOWN

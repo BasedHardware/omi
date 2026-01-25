@@ -7,7 +7,7 @@
 #
 # Note: Memories are auto-generated from conversations by the AI.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - memories
@@ -16,10 +16,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: memories_01_home
@@ -36,9 +36,9 @@ tags:
 
 - takeScreenshot: memories_02_list
 
-# Verify memories section is accessible
+# Verify memories section is accessible - check for memories list or empty state
 - assertVisible:
-    text: ".*"
+    text: ".*[Mm]emor.*|.*[Rr]ecall.*|.*[Ee]mpty.*|.*[Nn]o.*[Mm]emor.*|.*[Ss]tart.*"
     optional: false
 
 # Check if memories exist
@@ -51,10 +51,10 @@ tags:
       - tapOn:
           text: ".*[Mm]emory.*|.*[Ll]earned.*"
           index: 0
-      # Wait for memory detail
+      # Wait for memory detail - look for memory content
       - extendedWaitUntil:
           visible:
-            text: ".*"
+            text: ".*[Mm]emory.*|.*[Dd]etail.*|.*[Cc]ontext.*|.*[Cc]reated.*"
           timeout: 5000
       - takeScreenshot: memories_04_detail
 

@@ -8,7 +8,7 @@
 # Expected: Memory should return to baseline after each cycle.
 # Red flags: Continuous memory growth, OOM errors.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - performance
   - memory
@@ -21,7 +21,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 15000
 
 - takeScreenshot: memory_01_baseline
@@ -65,7 +65,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 # Heavy image/list loading
@@ -110,7 +110,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 # Open/close detail views repeatedly
@@ -141,7 +141,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 # Chat memory test - multiple messages
@@ -159,7 +159,7 @@ tags:
       - pressKey: Enter
       - extendedWaitUntil:
           visible:
-            text: ".*"
+            text: ".*[Ss]ent.*|.*[Rr]esponse.*|.*[Hh]ere.*|.*[Ii].*|.*[Mm]emory.*"
           timeout: 30000
 
 - back
@@ -173,7 +173,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: memory_06_final_state
@@ -197,9 +197,9 @@ tags:
 
 - takeScreenshot: memory_07_final_nav
 
-# App should still be responsive
+# App should still be responsive - verify main UI is visible
 - assertVisible:
-    text: ".*"
+    text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     optional: false
 
 - stopApp

@@ -8,7 +8,7 @@
 #
 # Note: Tests the AI chat functionality that uses memories for context.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - chat
@@ -18,10 +18,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: chat_01_home
@@ -38,9 +38,9 @@ tags:
 
 - takeScreenshot: chat_02_initial
 
-# Verify chat interface is accessible
+# Verify chat interface is accessible - check for chat elements
 - assertVisible:
-    text: ".*"
+    text: ".*[Cc]hat.*|.*[Aa]sk.*|.*[Mm]essage.*|.*[Tt]ype.*|.*[Ss]end.*"
     optional: false
 
 # Look for message input field
@@ -84,9 +84,9 @@ tags:
 
 - takeScreenshot: chat_05_response
 
-# Verify response was received
+# Verify response was received - check for AI response patterns
 - assertVisible:
-    text: ".*"
+    text: ".*[Bb]ased.*|.*[Rr]emember.*|.*[Yy]ou.*|.*[Hh]ere.*|.*[Ii].*"
     optional: false
 
 # Scroll to see full response

@@ -9,7 +9,7 @@
 #
 # Red flags: Jank, dropped frames, delayed responses.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - performance
   - responsiveness
@@ -21,7 +21,7 @@ tags:
 
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 15000
 
 - takeScreenshot: responsive_01_start
@@ -209,9 +209,9 @@ tags:
 
 - takeScreenshot: responsive_10_final
 
-# App should respond within normal timeframes
+# App should respond within normal timeframes - verify input is visible
 - assertVisible:
-    text: ".*"
+    text: ".*[Ff]inal.*|.*[Rr]esponsiveness.*|.*[Tt]ype.*|.*[Mm]essage.*"
     optional: false
 
 - back

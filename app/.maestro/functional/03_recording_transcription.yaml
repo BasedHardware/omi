@@ -9,7 +9,7 @@
 # Note: Actual transcription requires the Omi device to capture audio.
 # This test validates the UI flow and state transitions.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - recording
@@ -20,10 +20,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home screen to load
+# Wait for home screen to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Cc]apture.*"
     timeout: 10000
 
 - takeScreenshot: recording_01_home
@@ -85,7 +85,7 @@ tags:
     commands:
       - takeScreenshot: recording_04_transcription_visible
       - assertVisible:
-          text: ".*"
+          text: ".*transcript.*|.*[Ss]peaker.*|.*said.*"
 
 # Let recording continue briefly
 - scroll:
@@ -118,7 +118,7 @@ tags:
       visible: ".*[Cc]onversation.*|.*[Ss]ummary.*|.*[Tt]ranscript.*"
     commands:
       - assertVisible:
-          text: ".*"
+          text: ".*[Cc]onversation.*|.*[Ss]ummary.*|.*[Tt]ranscript.*"
       - takeScreenshot: recording_07_conversation_created
 
 # Go back to home

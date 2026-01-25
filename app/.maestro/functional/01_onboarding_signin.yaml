@@ -8,7 +8,7 @@
 # Note: This test uses text-based selectors. On first run, you may need to
 # adjust selectors based on actual UI text in your locale.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - onboarding
@@ -95,8 +95,9 @@ tags:
 - takeScreenshot: onboarding_05_complete
 
 # Final assertion - home screen reached
+# Check for common home screen elements (record button, navigation, or header)
 - assertVisible:
-    text: ".*"
+    text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     optional: false
 
 # Test complete

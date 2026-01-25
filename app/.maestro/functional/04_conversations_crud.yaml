@@ -7,7 +7,7 @@
 #
 # Note: This test validates conversation management functionality.
 
-appId: com.friend.ios
+appId: ${APP_ID}
 tags:
   - functional
   - conversations
@@ -17,10 +17,10 @@ tags:
 # Launch app
 - launchApp
 
-# Wait for home to load
+# Wait for home to load - check for main UI elements
 - extendedWaitUntil:
     visible:
-      text: ".*"
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
     timeout: 10000
 
 - takeScreenshot: conversations_01_home
@@ -37,9 +37,9 @@ tags:
 
 - takeScreenshot: conversations_02_list
 
-# Verify conversations are displayed
+# Verify conversations list or empty state is displayed
 - assertVisible:
-    text: ".*"
+    text: ".*[Cc]onversation.*|.*[Tt]oday.*|.*[Yy]esterday.*|.*[Nn]o.*[Cc]onversation.*|.*[Ee]mpty.*"
     optional: false
 
 # Tap on first conversation to view details

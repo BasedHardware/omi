@@ -68,10 +68,10 @@ For first-time setup, run tests in order:
 
 | Test | Metrics |
 |------|---------|
-| battery_drain | Battery consumption over 1hr session |
-| memory_leaks | Heap growth during extended use |
-| cpu_usage | CPU load during recording/transcription |
-| responsiveness | UI frame rates and interaction latency |
+| 01_extended_session | Memory stability over extended use, recording cycles |
+| 02_continuous_recording | Battery drain during 30+ min continuous recording |
+| 03_memory_leak_detection | Heap growth via repeated open/close cycles |
+| 04_responsiveness | UI frame rates, scroll performance, input latency |
 
 ## Running Extended Tests
 
