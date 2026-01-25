@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -309,7 +309,7 @@ def get_messages(
 @router.post("/v2/voice-messages")
 async def create_voice_message_stream(
     files: List[UploadFile] = File(...),
-    language: Optional[str] = None,
+    language: Optional[str] = Form(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     # wav
@@ -334,7 +334,7 @@ async def create_voice_message_stream(
 @router.post("/v2/voice-message/transcribe")
 async def transcribe_voice_message(
     files: List[UploadFile] = File(...),
-    language: Optional[str] = None,
+    language: Optional[str] = Form(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     # Check if files are empty
