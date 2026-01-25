@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "큰 시간 간격이 감지되었습니다 ({gap})",
   "largeTimeGapsDetected": "큰 시간 간격들이 감지되었습니다 ({gaps})",
   "dailyRecaps": "일일 요약",
-  "removeFilter": "필터 제거"
+  "removeFilter": "필터 제거",
+  "deviceDoesNotSupportWifiSwitchingToBle": "기기가 WiFi 동기화를 지원하지 않습니다. Bluetooth로 전환 중",
+  "appleHealthNotAvailable": "이 기기에서는 Apple Health를 사용할 수 없습니다",
+  "downloadAudio": "오디오 다운로드",
+  "audioDownloadSuccess": "오디오가 성공적으로 다운로드되었습니다",
+  "audioDownloadFailed": "오디오 다운로드 실패",
+  "downloadingAudio": "오디오 다운로드 중...",
+  "shareAudio": "오디오 공유",
+  "preparingAudio": "오디오 준비 중",
+  "gettingAudioFiles": "오디오 파일 가져오는 중...",
+  "downloadingAudioProgress": "오디오 다운로드 중",
+  "processingAudio": "오디오 처리 중",
+  "combiningAudioFiles": "오디오 파일 결합 중...",
+  "audioReady": "오디오 준비 완료",
+  "openingShareSheet": "공유 시트 여는 중...",
+  "audioShareFailed": "공유 실패"
 }

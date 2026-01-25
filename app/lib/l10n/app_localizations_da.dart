@@ -7772,49 +7772,50 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Enheden understøtter ikke WiFi-synkronisering, skifter til Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health er ikke tilgængelig på denne enhed';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Download lyd';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Lyd downloadet succesfuldt';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Kunne ikke downloade lyd';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Downloader lyd...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Del lyd';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Forbereder lyd';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Henter lydfiler...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Downloader lyd';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Behandler lyd';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombinerer lydfiler...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Lyd klar';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Åbner delingsark...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Deling mislykkedes';
 
   @override
   String get dailyRecaps => 'Daglige Opsummeringer';

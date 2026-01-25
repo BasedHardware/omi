@@ -2465,5 +2465,20 @@
   "largeTimeGapDetected": "Große Zeitlücke erkannt ({gap})",
   "largeTimeGapsDetected": "Große Zeitlücken erkannt ({gaps})",
   "dailyRecaps": "Tägliche Zusammenfassungen",
-  "removeFilter": "Filter Entfernen"
+  "removeFilter": "Filter Entfernen",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Gerät unterstützt keine WiFi-Synchronisierung, Wechsel zu Bluetooth",
+  "appleHealthNotAvailable": "Apple Health ist auf diesem Gerät nicht verfügbar",
+  "downloadAudio": "Audio herunterladen",
+  "audioDownloadSuccess": "Audio erfolgreich heruntergeladen",
+  "audioDownloadFailed": "Audio-Download fehlgeschlagen",
+  "downloadingAudio": "Lade Audio herunter...",
+  "shareAudio": "Audio teilen",
+  "preparingAudio": "Bereite Audio vor",
+  "gettingAudioFiles": "Hole Audiodateien...",
+  "downloadingAudioProgress": "Lade Audio herunter",
+  "processingAudio": "Verarbeite Audio",
+  "combiningAudioFiles": "Kombiniere Audiodateien...",
+  "audioReady": "Audio bereit",
+  "openingShareSheet": "Öffne Freigabeblatt...",
+  "audioShareFailed": "Teilen fehlgeschlagen"
 }

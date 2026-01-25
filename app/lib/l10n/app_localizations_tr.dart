@@ -7801,49 +7801,50 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth\'a geçiliyor';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health bu cihazda kullanılamıyor';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Ses İndir';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Ses başarıyla indirildi';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Ses indirme başarısız';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Ses indiriliyor...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Sesi Paylaş';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Ses Hazırlanıyor';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Ses dosyaları alınıyor...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Ses İndiriliyor';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Ses İşleniyor';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Ses dosyaları birleştiriliyor...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Ses Hazır';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Paylaşım sayfası açılıyor...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Paylaşım Başarısız';
 
   @override
   String get dailyRecaps => 'Günlük Özetler';

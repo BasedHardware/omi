@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Виявлено великий часовий розрив ({gap})",
   "largeTimeGapsDetected": "Виявлено великі часові розриви ({gaps})",
   "dailyRecaps": "Щоденні підсумки",
-  "removeFilter": "Видалити фільтр"
+  "removeFilter": "Видалити фільтр",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Пристрій не підтримує синхронізацію WiFi, перемикання на Bluetooth",
+  "appleHealthNotAvailable": "Apple Health недоступний на цьому пристрої",
+  "downloadAudio": "Завантажити аудіо",
+  "audioDownloadSuccess": "Аудіо успішно завантажено",
+  "audioDownloadFailed": "Не вдалося завантажити аудіо",
+  "downloadingAudio": "Завантаження аудіо...",
+  "shareAudio": "Поділитися аудіо",
+  "preparingAudio": "Підготовка аудіо",
+  "gettingAudioFiles": "Отримання аудіофайлів...",
+  "downloadingAudioProgress": "Завантаження аудіо",
+  "processingAudio": "Обробка аудіо",
+  "combiningAudioFiles": "Об'єднання аудіофайлів...",
+  "audioReady": "Аудіо готове",
+  "openingShareSheet": "Відкриття аркушу спільного доступу...",
+  "audioShareFailed": "Не вдалося поділитися"
 }

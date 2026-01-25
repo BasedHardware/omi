@@ -7845,49 +7845,50 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Η συσκευή δεν υποστηρίζει συγχρονισμό WiFi, μετάβαση σε Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Το Apple Health δεν είναι διαθέσιμο σε αυτήν τη συσκευή';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Λήψη ήχου';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Ο ήχος λήφθηκε επιτυχώς';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Αποτυχία λήψης ήχου';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Λήψη ήχου...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Κοινοποίηση ήχου';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Προετοιμασία ήχου';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Λήψη αρχείων ήχου...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Λήψη ήχου';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Επεξεργασία ήχου';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Συνδυασμός αρχείων ήχου...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Ο ήχος είναι έτοιμος';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Άνοιγμα φύλλου κοινοποίησης...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Η κοινοποίηση απέτυχε';
 
   @override
   String get dailyRecaps => 'Ημερήσιες Περιλήψεις';

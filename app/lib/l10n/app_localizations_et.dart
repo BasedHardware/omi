@@ -7788,49 +7788,49 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Seade ei toeta WiFi sünkroniseerimist, lülitumine Bluetoothile';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health pole selles seadmes saadaval';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Laadi heli alla';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Heli on edukalt alla laaditud';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Heli allalaadimine ebaõnnestus';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Heli allalaadimine...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Jaga heli';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Heli ettevalmistamine';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Helifailide hankimine...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Heli allalaadimine';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Heli töötlemine';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Helifailide ühendamine...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Heli on valmis';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Jagamislehe avamine...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Jagamine ebaõnnestus';
 
   @override
   String get dailyRecaps => 'Päevased Kokkuvõtted';

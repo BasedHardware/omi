@@ -7806,49 +7806,49 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nav pieejams šajā ierīcē';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Lejupielādēt audio';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio veiksmīgi lejupielādēts';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Audio lejupielāde neizdevās';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Lejupielādē audio...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Kopīgot audio';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Sagatavo audio';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Iegūst audio failus...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Lejupielādē audio';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Apstrādā audio';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Apvieno audio failus...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio gatavs';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Atver kopīgošanas lapu...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Kopīgošana neizdevās';
 
   @override
   String get dailyRecaps => 'Dienas Kopsavilkumi';

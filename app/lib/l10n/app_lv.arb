@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Konstatēta liela laika starpība ({gap})",
   "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})",
   "dailyRecaps": "Dienas Kopsavilkumi",
-  "removeFilter": "Noņemt Filtru"
+  "removeFilter": "Noņemt Filtru",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth",
+  "appleHealthNotAvailable": "Apple Health nav pieejams šajā ierīcē",
+  "downloadAudio": "Lejupielādēt audio",
+  "audioDownloadSuccess": "Audio veiksmīgi lejupielādēts",
+  "audioDownloadFailed": "Audio lejupielāde neizdevās",
+  "downloadingAudio": "Lejupielādē audio...",
+  "shareAudio": "Kopīgot audio",
+  "preparingAudio": "Sagatavo audio",
+  "gettingAudioFiles": "Iegūst audio failus...",
+  "downloadingAudioProgress": "Lejupielādē audio",
+  "processingAudio": "Apstrādā audio",
+  "combiningAudioFiles": "Apvieno audio failus...",
+  "audioReady": "Audio gatavs",
+  "openingShareSheet": "Atver kopīgošanas lapu...",
+  "audioShareFailed": "Kopīgošana neizdevās"
 }

@@ -7854,49 +7854,50 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Gerät unterstützt keine WiFi-Synchronisierung, Wechsel zu Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health ist auf diesem Gerät nicht verfügbar';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Audio herunterladen';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio erfolgreich heruntergeladen';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Audio-Download fehlgeschlagen';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Lade Audio herunter...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Audio teilen';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Bereite Audio vor';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Hole Audiodateien...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Lade Audio herunter';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Verarbeite Audio';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombiniere Audiodateien...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio bereit';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Öffne Freigabeblatt...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Teilen fehlgeschlagen';
 
   @override
   String get dailyRecaps => 'Tägliche Zusammenfassungen';

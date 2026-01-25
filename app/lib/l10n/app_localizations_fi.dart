@@ -7787,49 +7787,49 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Laite ei tue WiFi-synkronointia, vaihdetaan Bluetoothiin';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health ei ole käytettävissä tässä laitteessa';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Lataa ääni';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Ääni ladattu onnistuneesti';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Äänen lataus epäonnistui';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Ladataan ääntä...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Jaa ääni';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Valmistellaan ääntä';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Haetaan äänitiedostoja...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Ladataan ääntä';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Käsitellään ääntä';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Yhdistetään äänitiedostoja...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Ääni valmis';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Avataan jakamisnäyttöä...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Jakaminen epäonnistui';
 
   @override
   String get dailyRecaps => 'Päivittäiset Yhteenvedot';

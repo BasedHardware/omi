@@ -2519,5 +2519,20 @@
   "largeTimeGapDetected": "检测到较大时间间隔 ({gap})",
   "largeTimeGapsDetected": "检测到多个较大时间间隔 ({gaps})",
   "dailyRecaps": "每日回顾",
-  "removeFilter": "移除筛选"
+  "removeFilter": "移除筛选",
+  "deviceDoesNotSupportWifiSwitchingToBle": "设备不支持WiFi同步,正在切换到蓝牙",
+  "appleHealthNotAvailable": "此设备上不可用Apple Health",
+  "downloadAudio": "下载音频",
+  "audioDownloadSuccess": "音频下载成功",
+  "audioDownloadFailed": "音频下载失败",
+  "downloadingAudio": "正在下载音频...",
+  "shareAudio": "分享音频",
+  "preparingAudio": "正在准备音频",
+  "gettingAudioFiles": "正在获取音频文件...",
+  "downloadingAudioProgress": "正在下载音频",
+  "processingAudio": "正在处理音频",
+  "combiningAudioFiles": "正在合并音频文件...",
+  "audioReady": "音频已准备好",
+  "openingShareSheet": "正在打开分享页面...",
+  "audioShareFailed": "分享失败"
 }

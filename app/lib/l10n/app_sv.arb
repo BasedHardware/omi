@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Stort tidsgap upptäckt ({gap})",
   "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})",
   "dailyRecaps": "Dagliga Sammanfattningar",
-  "removeFilter": "Ta Bort Filter"
+  "removeFilter": "Ta Bort Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Enheten stöder inte WiFi-synkronisering, byter till Bluetooth",
+  "appleHealthNotAvailable": "Apple Health är inte tillgängligt på denna enhet",
+  "downloadAudio": "Ladda ner ljud",
+  "audioDownloadSuccess": "Ljud nedladdat framgångsrikt",
+  "audioDownloadFailed": "Misslyckades att ladda ner ljud",
+  "downloadingAudio": "Laddar ner ljud...",
+  "shareAudio": "Dela ljud",
+  "preparingAudio": "Förbereder ljud",
+  "gettingAudioFiles": "Hämtar ljudfiler...",
+  "downloadingAudioProgress": "Laddar ner ljud",
+  "processingAudio": "Bearbetar ljud",
+  "combiningAudioFiles": "Kombinerar ljudfiler...",
+  "audioReady": "Ljud klart",
+  "openingShareSheet": "Öppnar delningsblad...",
+  "audioShareFailed": "Delning misslyckades"
 }
