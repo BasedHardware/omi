@@ -16,7 +16,7 @@ file(GLOB app_sources
     src/feedback.c
     src/wdog_facade.c
     src/rtc.c
-    src/lsm6dso_time.c
+    src/imu.c
 )
 file(GLOB core_sources
     src/lib/core/config.h

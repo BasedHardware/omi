@@ -1,5 +1,5 @@
-#ifndef OMI_LSM6DSO_TIME_H_
-#define OMI_LSM6DSO_TIME_H_
+#ifndef OMI_IMU_H_
+#define OMI_IMU_H_
 
 #include <stdint.h>
 
@@ -10,7 +10,7 @@
  *
  * Safe to call even if the IMU or UTC time is not available.
  */
-void lsm6dso_time_prepare_for_system_off(void);
+void lsm6dsl_time_prepare_for_system_off(void);
 
 /**
  * @brief On boot, adjust UTC epoch using IMU timestamp delta.
@@ -20,6 +20,6 @@ void lsm6dso_time_prepare_for_system_off(void);
  *
  * @return 1 if an adjustment was applied, 0 if not applicable, negative errno on failure.
  */
-int lsm6dso_time_boot_adjust_rtc(void);
+int lsm6dsl_time_boot_adjust_rtc(void);
 
 #endif

@@ -16,13 +16,13 @@ static uint8_t mic_gain = DEFAULT_MIC_GAIN;
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
 
-struct lsm6dso_time_base {
+struct lsm6dsl_time_base {
     uint64_t epoch_s;
     uint32_t ts;
     uint32_t reserved;
 };
 
-static struct lsm6dso_time_base lsm6dso_time_base = {0};
+static struct lsm6dsl_time_base lsm6dsl_time_base = {0};
 
 static int settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg)
 {
@@ -92,11 +92,11 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         return -EINVAL;
     }
 
-    if (settings_name_steq(name, "lsm6dso_time_base", &next) && !next) {
-        if (len == sizeof(lsm6dso_time_base)) {
-            rc = read_cb(cb_arg, &lsm6dso_time_base, sizeof(lsm6dso_time_base));
+    if (settings_name_steq(name, "lsm6dsl_time_base", &next) && !next) {
+        if (len == sizeof(lsm6dsl_time_base)) {
+            rc = read_cb(cb_arg, &lsm6dsl_time_base, sizeof(lsm6dsl_time_base));
             if (rc >= 0) {
-                LOG_INF("Loaded lsm6dso_time_base: epoch_s=%llu ts=0x%08x", lsm6dso_time_base.epoch_s, lsm6dso_time_base.ts);
+                LOG_INF("Loaded lsm6dsl_time_base: epoch_s=%llu ts=0x%08x", lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
                 return 0;
             }
             return rc;
@@ -111,17 +111,17 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
 
             rc = read_cb(cb_arg, &legacy, sizeof(legacy));
             if (rc >= 0) {
-                lsm6dso_time_base.epoch_s = legacy.epoch_s;
-                lsm6dso_time_base.ts = legacy.ts;
-                lsm6dso_time_base.reserved = 0;
-                LOG_INF("Loaded lsm6dso_time_base(legacy): epoch_s=%llu ts=0x%08x", legacy.epoch_s, legacy.ts);
+                lsm6dsl_time_base.epoch_s = legacy.epoch_s;
+                lsm6dsl_time_base.ts = legacy.ts;
+                lsm6dsl_time_base.reserved = 0;
+                LOG_INF("Loaded lsm6dsl_time_base(legacy): epoch_s=%llu ts=0x%08x", legacy.epoch_s, legacy.ts);
                 return 0;
             }
             return rc;
         }
 
-        LOG_WRN("lsm6dso_time_base size mismatch: len=%u expected=%u (or legacy %u)",
-            (unsigned)len, (unsigned)sizeof(lsm6dso_time_base), (unsigned)(sizeof(uint64_t) + sizeof(uint32_t)));
+        LOG_WRN("lsm6dsl_time_base size mismatch: len=%u expected=%u (or legacy %u)",
+            (unsigned)len, (unsigned)sizeof(lsm6dsl_time_base), (unsigned)(sizeof(uint64_t) + sizeof(uint32_t)));
         return -EINVAL;
     }
 
@@ -162,28 +162,28 @@ uint64_t app_settings_get_rtc_epoch(void)
     return rtc_epoch;
 }
 
-int app_settings_save_lsm6dso_time_base(uint64_t epoch_s, uint32_t imu_timestamp)
+int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp)
 {
-    lsm6dso_time_base.epoch_s = epoch_s;
-    lsm6dso_time_base.ts = imu_timestamp;
-    lsm6dso_time_base.reserved = 0;
+    lsm6dsl_time_base.epoch_s = epoch_s;
+    lsm6dsl_time_base.ts = imu_timestamp;
+    lsm6dsl_time_base.reserved = 0;
 
-    int err = settings_save_one("omi/lsm6dso_time_base", &lsm6dso_time_base, sizeof(lsm6dso_time_base));
+    int err = settings_save_one("omi/lsm6dsl_time_base", &lsm6dsl_time_base, sizeof(lsm6dsl_time_base));
     if (err) {
-        LOG_ERR("Failed to save lsm6dso_time_base (err %d)", err);
+        LOG_ERR("Failed to save lsm6dsl_time_base (err %d)", err);
     } else {
-        LOG_INF("Saved lsm6dso_time_base");
+        LOG_INF("Saved lsm6dsl_time_base");
     }
     return err;
 }
 
-int app_settings_get_lsm6dso_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp)
+int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp)
 {
     if (epoch_s == NULL || imu_timestamp == NULL) {
         return -EINVAL;
     }
-    *epoch_s = lsm6dso_time_base.epoch_s;
-    *imu_timestamp = lsm6dso_time_base.ts;
+    *epoch_s = lsm6dsl_time_base.epoch_s;
+    *imu_timestamp = lsm6dsl_time_base.ts;
     return 0;
 }
 
@@ -203,7 +203,7 @@ int app_settings_init(void)
     }
 
     LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x",
-		dim_light_ratio, mic_gain, rtc_epoch, lsm6dso_time_base.epoch_s, lsm6dso_time_base.ts);
+		dim_light_ratio, mic_gain, rtc_epoch, lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
     return err;
 }
 

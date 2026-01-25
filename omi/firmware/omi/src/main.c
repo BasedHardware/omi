@@ -24,7 +24,7 @@
 #include "wdog_facade.h"
 #include <hal/nrf_reset.h>
 #include "rtc.h"
-#include "lsm6dso_time.h"
+#include "imu.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -230,7 +230,7 @@ int main(void)
         LOG_WRN("UTC time not synchronized yet");
     }
 
-    (void)lsm6dso_time_boot_adjust_rtc();
+    (void)lsm6dsl_time_boot_adjust_rtc();
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system

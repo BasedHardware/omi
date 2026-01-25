@@ -77,19 +77,19 @@ int app_settings_save_rtc_epoch(uint64_t epoch_s);
 uint64_t app_settings_get_rtc_epoch(void);
 
 /**
- * @brief Save an LSM6DSO timestamp base for timekeeping across system_off.
+ * @brief Save an LSM6DSL timestamp base for timekeeping across system_off.
  *
  * When epoch_s is non-zero, the base becomes valid; when epoch_s is zero, the
  * stored base is cleared.
  */
-int app_settings_save_lsm6dso_time_base(uint64_t epoch_s, uint32_t imu_timestamp);
+int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp);
 
 /**
- * @brief Get the saved LSM6DSO timestamp base.
+ * @brief Get the saved LSM6DSL timestamp base.
  *
  * @param epoch_s Output epoch seconds (0 if not set).
  * @param imu_timestamp Output IMU timestamp counter.
  */
-int app_settings_get_lsm6dso_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
+int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
 
 #endif // SETTINGS_H
