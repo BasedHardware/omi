@@ -21,6 +21,16 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		F4A7835A6CFE4FB4B9F7529F /* FocusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91BDB67241E4FCBAD880407 /* FocusModels.swift */; };
+		632B5B818C36412388D04EC2 /* FocusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C635656A5174048A95F4D10 /* FocusPlugin.swift */; };
+		3041B573CAF74828819F7967 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92EBFAF784941ADA0C3E332 /* GeminiService.swift */; };
+		69CE3EB886BE42B98ADA9C2F /* GlowBorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */; };
+		8AB8159A23894B6B800F222F /* GlowOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */; };
+		1DC66A72869B4AB19125A178 /* GlowOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */; };
+		24A30D26390C45268854A232 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 196EE392F7ED41BA80F5DAF6 /* Logger.swift */; };
+		4463DC5E82314CB194726E03 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3ED79A10C004849A3F33613 /* NotificationService.swift */; };
+		24441E4A8840429A928946AE /* ScreenCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */; };
+		21CC64FCD1144AA0B4A5B523 /* WindowMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */; };
 		332689E32D863DBF00CB35A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
@@ -70,6 +80,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A91BDB67241E4FCBAD880407 /* FocusModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModels.swift; sourceTree = "<group>"; };
+		0C635656A5174048A95F4D10 /* FocusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPlugin.swift; sourceTree = "<group>"; };
+		E92EBFAF784941ADA0C3E332 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
+		8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowBorderView.swift; sourceTree = "<group>"; };
+		34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowOverlayController.swift; sourceTree = "<group>"; };
+		DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowOverlayWindow.swift; sourceTree = "<group>"; };
+		196EE392F7ED41BA80F5DAF6 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		D3ED79A10C004849A3F33613 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureService.swift; sourceTree = "<group>"; };
+		EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMonitor.swift; sourceTree = "<group>"; };
 		1C2D026EB5A0346DDF59E311 /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		332689E42D870FC600CB35A1 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
@@ -217,6 +237,7 @@
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
+				9EC6408942B2489480331D76 /* FocusMonitor */,
 				33BA886A226E78AF003329D5 /* Configs */,
 			);
 			path = Runner;
@@ -252,6 +273,23 @@
 				990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9EC6408942B2489480331D76 /* FocusMonitor */ = {
+			isa = PBXGroup;
+			children = (
+				A91BDB67241E4FCBAD880407 /* FocusModels.swift */,
+				0C635656A5174048A95F4D10 /* FocusPlugin.swift */,
+				E92EBFAF784941ADA0C3E332 /* GeminiService.swift */,
+				8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */,
+				34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */,
+				DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */,
+				196EE392F7ED41BA80F5DAF6 /* Logger.swift */,
+				D3ED79A10C004849A3F33613 /* NotificationService.swift */,
+				C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */,
+				EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */,
+			);
+			path = FocusMonitor;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -463,6 +501,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F4A7835A6CFE4FB4B9F7529F /* FocusModels.swift in Sources */,
+				632B5B818C36412388D04EC2 /* FocusPlugin.swift in Sources */,
+				3041B573CAF74828819F7967 /* GeminiService.swift in Sources */,
+				69CE3EB886BE42B98ADA9C2F /* GlowBorderView.swift in Sources */,
+				8AB8159A23894B6B800F222F /* GlowOverlayController.swift in Sources */,
+				1DC66A72869B4AB19125A178 /* GlowOverlayWindow.swift in Sources */,
+				24A30D26390C45268854A232 /* Logger.swift in Sources */,
+				4463DC5E82314CB194726E03 /* NotificationService.swift in Sources */,
+				24441E4A8840429A928946AE /* ScreenCaptureService.swift in Sources */,
+				21CC64FCD1144AA0B4A5B523 /* WindowMonitor.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
