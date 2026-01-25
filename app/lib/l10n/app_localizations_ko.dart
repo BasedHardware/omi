@@ -7700,4 +7700,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => '일일 요약';
+
+  @override
+  String get removeFilter => '필터 제거';
 }

@@ -2500,5 +2500,7 @@
   "chooseTransferMethod": "Vyberte spôsob prenosu",
   "fastTransferSpeed": "~150 KB/s cez WiFi",
   "largeTimeGapDetected": "Zistená veľká časová medzera ({gap})",
-  "largeTimeGapsDetected": "Zistené veľké časové medzery ({gaps})"
+  "largeTimeGapsDetected": "Zistené veľké časové medzery ({gaps})",
+  "dailyRecaps": "Denné Súhrny",
+  "removeFilter": "Odstrániť Filter"
 }

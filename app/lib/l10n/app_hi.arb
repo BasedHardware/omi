@@ -2496,5 +2496,7 @@
   "chooseTransferMethod": "स्थानांतरण विधि चुनें",
   "fastTransferSpeed": "~150 KB/s WiFi के माध्यम से",
   "largeTimeGapDetected": "बड़ा समय अंतराल पाया गया ({gap})",
-  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})"
+  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})",
+  "dailyRecaps": "दैनिक सारांश",
+  "removeFilter": "फ़िल्टर हटाएं"
 }

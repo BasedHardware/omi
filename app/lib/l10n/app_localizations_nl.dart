@@ -7856,4 +7856,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Dagelijkse Samenvattingen';
+
+  @override
+  String get removeFilter => 'Filter Verwijderen';
 }

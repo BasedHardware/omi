@@ -7854,4 +7854,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Ringkasan Harian';
+
+  @override
+  String get removeFilter => 'Alih Keluar Penapis';
 }

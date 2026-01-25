@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Välj överföringsmetod",
   "fastTransferSpeed": "~150 KB/s via WiFi",
   "largeTimeGapDetected": "Stort tidsgap upptäckt ({gap})",
-  "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})"
+  "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})",
+  "dailyRecaps": "Dagliga Sammanfattningar",
+  "removeFilter": "Ta Bort Filter"
 }

@@ -7897,4 +7897,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Tägliche Zusammenfassungen';
+
+  @override
+  String get removeFilter => 'Filter Entfernen';
 }

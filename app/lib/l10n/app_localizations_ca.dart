@@ -7879,4 +7879,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Resums Diaris';
+
+  @override
+  String get removeFilter => 'Elimina el Filtre';
 }

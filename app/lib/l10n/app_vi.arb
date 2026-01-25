@@ -2500,5 +2500,7 @@
   "chooseTransferMethod": "Chọn phương thức chuyển",
   "fastTransferSpeed": "~150 KB/s qua WiFi",
   "largeTimeGapDetected": "Phát hiện khoảng cách thời gian lớn ({gap})",
-  "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})"
+  "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})",
+  "dailyRecaps": "Tóm tắt hàng ngày",
+  "removeFilter": "Xóa bộ lọc"
 }

@@ -7776,4 +7776,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'فشلت مشاركة الصوت';
+
+  @override
+  String get dailyRecaps => 'الملخصات اليومية';
+
+  @override
+  String get removeFilter => 'إزالة الفلتر';
 }

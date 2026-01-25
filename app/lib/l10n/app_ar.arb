@@ -2474,5 +2474,7 @@
   "audioShareFailed": "فشلت مشاركة الصوت",
   "audioDownloadSuccess": "تم تحميل الصوت بنجاح",
   "audioDownloadFailed": "فشل تحميل الصوت",
-  "downloadingAudio": "جاري تحميل الصوت..."
+  "downloadingAudio": "جاري تحميل الصوت...",
+  "dailyRecaps": "الملخصات اليومية",
+  "removeFilter": "إزالة الفلتر"
 }

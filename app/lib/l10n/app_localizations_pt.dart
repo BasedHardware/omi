@@ -7831,4 +7831,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Resumos Diários';
+
+  @override
+  String get removeFilter => 'Remover Filtro';
 }

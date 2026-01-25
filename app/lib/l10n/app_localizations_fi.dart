@@ -7830,4 +7830,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Päivittäiset Yhteenvedot';
+
+  @override
+  String get removeFilter => 'Poista Suodatin';
 }

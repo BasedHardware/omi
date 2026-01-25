@@ -7849,4 +7849,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Podsumowania Dnia';
+
+  @override
+  String get removeFilter => 'Usuń Filtr';
 }

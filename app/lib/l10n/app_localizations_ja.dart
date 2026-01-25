@@ -7698,4 +7698,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'デイリーレキャップ';
+
+  @override
+  String get removeFilter => 'フィルターを削除';
 }

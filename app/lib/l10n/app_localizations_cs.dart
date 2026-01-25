@@ -7826,4 +7826,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Denní Souhrny';
+
+  @override
+  String get removeFilter => 'Odstranit Filtr';
 }

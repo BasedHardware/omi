@@ -7863,4 +7863,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Дневни резюмета';
+
+  @override
+  String get removeFilter => 'Премахни филтъра';
 }

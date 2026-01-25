@@ -7688,4 +7688,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => '每日回顾';
+
+  @override
+  String get removeFilter => '移除筛选';
 }

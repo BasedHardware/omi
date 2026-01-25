@@ -7834,4 +7834,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Tóm tắt hàng ngày';
+
+  @override
+  String get removeFilter => 'Xóa bộ lọc';
 }

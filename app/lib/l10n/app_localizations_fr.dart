@@ -7903,4 +7903,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Récapitulatifs Quotidiens';
+
+  @override
+  String get removeFilter => 'Supprimer le Filtre';
 }

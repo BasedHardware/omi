@@ -7844,4 +7844,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Günlük Özetler';
+
+  @override
+  String get removeFilter => 'Filtreyi Kaldır';
 }

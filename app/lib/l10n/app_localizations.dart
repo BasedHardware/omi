@@ -14606,6 +14606,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Share Failed'**
   String get audioShareFailed;
+
+  /// No description provided for @dailyRecaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps'**
+  String get dailyRecaps;
+
+  /// No description provided for @removeFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Filter'**
+  String get removeFilter;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

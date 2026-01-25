@@ -7811,4 +7811,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'दैनिक सारांश';
+
+  @override
+  String get removeFilter => 'फ़िल्टर हटाएं';
 }

@@ -7831,4 +7831,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Päevased Kokkuvõtted';
+
+  @override
+  String get removeFilter => 'Eemalda Filter';
 }

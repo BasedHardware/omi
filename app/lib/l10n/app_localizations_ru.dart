@@ -7856,4 +7856,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Ежедневные сводки';
+
+  @override
+  String get removeFilter => 'Удалить фильтр';
 }

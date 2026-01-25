@@ -7888,4 +7888,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Ημερήσιες Περιλήψεις';
+
+  @override
+  String get removeFilter => 'Κατάργηση Φίλτρου';
 }

@@ -7868,4 +7868,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Napi Összefoglalók';
+
+  @override
+  String get removeFilter => 'Szűrő Eltávolítása';
 }

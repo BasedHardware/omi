@@ -7843,4 +7843,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Щоденні підсумки';
+
+  @override
+  String get removeFilter => 'Видалити фільтр';
 }

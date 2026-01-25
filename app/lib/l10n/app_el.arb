@@ -2495,5 +2495,7 @@
   "chooseTransferMethod": "Επιλέξτε μέθοδο μεταφοράς",
   "fastTransferSpeed": "~150 KB/s μέσω WiFi",
   "largeTimeGapDetected": "Εντοπίστηκε μεγάλο χρονικό κενό ({gap})",
-  "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})"
+  "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})",
+  "dailyRecaps": "Ημερήσιες Περιλήψεις",
+  "removeFilter": "Κατάργηση Φίλτρου"
 }

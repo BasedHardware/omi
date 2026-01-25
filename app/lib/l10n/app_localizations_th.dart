@@ -7794,4 +7794,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'สรุปรายวัน';
+
+  @override
+  String get removeFilter => 'ลบตัวกรอง';
 }

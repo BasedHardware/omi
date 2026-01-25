@@ -7837,4 +7837,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Dagliga Sammanfattningar';
+
+  @override
+  String get removeFilter => 'Ta Bort Filter';
 }

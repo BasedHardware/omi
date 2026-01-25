@@ -7821,4 +7821,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Denné Súhrny';
+
+  @override
+  String get removeFilter => 'Odstrániť Filter';
 }

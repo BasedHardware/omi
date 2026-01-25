@@ -7845,4 +7845,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Resúmenes Diarios';
+
+  @override
+  String get removeFilter => 'Eliminar Filtro';
 }

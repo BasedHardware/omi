@@ -7869,4 +7869,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Recapitulări Zilnice';
+
+  @override
+  String get removeFilter => 'Eliminare Filtru';
 }

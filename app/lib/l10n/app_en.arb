@@ -9780,5 +9780,7 @@
   "combiningAudioFiles": "Combining audio files...",
   "audioReady": "Audio Ready",
   "openingShareSheet": "Opening share sheet...",
-  "audioShareFailed": "Share Failed"
+  "audioShareFailed": "Share Failed",
+  "dailyRecaps": "Daily Recaps",
+  "removeFilter": "Remove Filter"
 }
