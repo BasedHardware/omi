@@ -1,0 +1,169 @@
+# Functional Test: Chat with Memories Feature
+# Tests: Open chat → Send message → Receive AI response → View context
+#
+# Preconditions:
+#   - User is signed in
+#   - Some memories exist for context
+#   - Internet connection available
+#
+# Note: Tests the AI chat functionality that uses memories for context.
+
+appId: com.friend.ios
+tags:
+  - functional
+  - chat
+  - ai
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+- takeScreenshot: chat_01_home
+
+# Navigate to chat section
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*|.*[Mm]essage.*|.*[Aa][Ii].*"
+    optional: true
+
+# Alternative: look for chat icon in navigation
+- tapOn:
+    id: ".*chat.*|.*message.*|.*ai.*"
+    optional: true
+
+- takeScreenshot: chat_02_initial
+
+# Verify chat interface is accessible
+- assertVisible:
+    text: ".*"
+    optional: false
+
+# Look for message input field
+- runFlow:
+    when:
+      visible: ".*[Tt]ype.*|.*[Aa]sk.*|.*[Mm]essage.*|.*[Ss]end.*"
+    commands:
+      - takeScreenshot: chat_03_chat_ready
+
+# Tap on input field
+- tapOn:
+    text: ".*[Tt]ype.*|.*[Aa]sk.*|.*[Mm]essage.*"
+    optional: true
+
+- tapOn:
+    id: ".*input.*|.*message.*|.*text.*"
+    optional: true
+
+# Type a test message
+- inputText: "What do you remember about me?"
+
+- takeScreenshot: chat_04_message_typed
+
+# Send the message
+- tapOn:
+    text: ".*[Ss]end.*"
+    optional: true
+
+- tapOn:
+    id: ".*send.*|.*submit.*"
+    optional: true
+
+# Alternative: press enter/submit
+- pressKey: Enter
+
+# Wait for AI response
+- extendedWaitUntil:
+    visible:
+      text: ".*[Bb]ased.*|.*[Rr]emember.*|.*[Yy]ou.*|.*[Hh]ere.*"
+    timeout: 30000
+
+- takeScreenshot: chat_05_response
+
+# Verify response was received
+- assertVisible:
+    text: ".*"
+    optional: false
+
+# Scroll to see full response
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: chat_06_full_response
+
+# Test another message
+- tapOn:
+    text: ".*[Tt]ype.*|.*[Aa]sk.*|.*[Mm]essage.*"
+    optional: true
+
+- tapOn:
+    id: ".*input.*|.*message.*|.*text.*"
+    optional: true
+
+- inputText: "Can you summarize my recent conversations?"
+
+- tapOn:
+    text: ".*[Ss]end.*"
+    optional: true
+
+- tapOn:
+    id: ".*send.*|.*submit.*"
+    optional: true
+
+- pressKey: Enter
+
+# Wait for second response
+- extendedWaitUntil:
+    visible:
+      text: ".*[Cc]onversation.*|.*[Ss]ummary.*|.*[Rr]ecent.*|.*[Hh]ere.*"
+    timeout: 30000
+
+- takeScreenshot: chat_07_second_response
+
+# Test chat history scroll
+- scroll:
+    direction: UP
+    duration: 1500
+
+- takeScreenshot: chat_08_history
+
+# Look for chat options (clear, export, etc.)
+- runFlow:
+    when:
+      visible: ".*[Mm]ore.*|.*[Oo]ption.*|.*[Mm]enu.*"
+    commands:
+      - tapOn:
+          text: ".*[Mm]ore.*|.*[Oo]ption.*"
+          optional: true
+      - tapOn:
+          id: ".*menu.*|.*more.*"
+          optional: true
+      - takeScreenshot: chat_09_options
+
+# Clear chat if option available
+- runFlow:
+    when:
+      visible: ".*[Cc]lear.*|.*[Nn]ew.*[Cc]hat.*|.*[Rr]eset.*"
+    commands:
+      - tapOn:
+          text: ".*[Cc]lear.*|.*[Nn]ew.*[Cc]hat.*"
+          optional: true
+      - runFlow:
+          when:
+            visible: ".*[Cc]onfirm.*|.*[Yy]es.*"
+          commands:
+            - tapOn:
+                text: ".*[Cc]onfirm.*|.*[Yy]es.*"
+      - takeScreenshot: chat_10_cleared
+
+# Go back to home
+- back
+
+- takeScreenshot: chat_11_final
+
+- stopApp

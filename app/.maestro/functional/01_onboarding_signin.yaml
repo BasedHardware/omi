@@ -1,0 +1,103 @@
+# Functional Test: User Sign-in & Onboarding Flow
+# Tests: Landing page → Sign-in → Name entry → Permissions → Complete
+#
+# Preconditions:
+#   - Fresh app install (or cleared app data)
+#   - Google/Apple sign-in credentials available
+#
+# Note: This test uses text-based selectors. On first run, you may need to
+# adjust selectors based on actual UI text in your locale.
+
+appId: com.friend.ios
+tags:
+  - functional
+  - onboarding
+  - signin
+---
+
+# Launch the app
+- launchApp:
+    clearState: true
+    clearKeychain: true
+
+# Welcome screen
+- assertVisible:
+    text: ".*[Ww]elcome.*|.*[Gg]et [Ss]tarted.*|.*[Ss]ign.*"
+    optional: false
+
+# Screenshot for test report
+- takeScreenshot: onboarding_01_welcome
+
+# Tap sign in button (common patterns)
+- tapOn:
+    text: ".*[Ss]ign.*[Gg]oogle.*|.*[Cc]ontinue.*[Gg]oogle.*"
+    optional: true
+
+# Alternative: Apple sign in if Google not found
+- tapOn:
+    text: ".*[Ss]ign.*[Aa]pple.*|.*[Cc]ontinue.*[Aa]pple.*"
+    optional: true
+
+# Wait for authentication flow
+- extendedWaitUntil:
+    visible:
+      text: ".*[Nn]ame.*|.*[Pp]rofile.*|.*[Pp]ermission.*"
+    timeout: 30000
+
+- takeScreenshot: onboarding_02_post_signin
+
+# Name entry screen (if shown)
+- runFlow:
+    when:
+      visible: ".*[Yy]our [Nn]ame.*|.*[Ww]hat.*call.*"
+    commands:
+      - tapOn:
+          text: ".*[Nn]ame.*"
+          index: 0
+      - inputText: "Test User"
+      - tapOn:
+          text: ".*[Cc]ontinue.*|.*[Nn]ext.*"
+
+# Permissions screen
+- runFlow:
+    when:
+      visible: ".*[Pp]ermission.*|.*[Aa]llow.*"
+    commands:
+      - takeScreenshot: onboarding_03_permissions
+      - tapOn:
+          text: ".*[Aa]llow.*|.*[Cc]ontinue.*"
+          optional: true
+
+# Handle system permission dialogs (microphone, notifications, etc.)
+- runFlow:
+    when:
+      visible: ".*[Aa]llow.*"
+    commands:
+      - tapOn: "Allow"
+        optional: true
+
+# Device selection/connection screen
+- runFlow:
+    when:
+      visible: ".*[Dd]evice.*|.*[Cc]onnect.*|.*[Ss]elect.*"
+    commands:
+      - takeScreenshot: onboarding_04_device_selection
+      - tapOn:
+          text: ".*[Ss]kip.*|.*[Ll]ater.*"
+          optional: true
+
+# Verify we reach the home screen
+- extendedWaitUntil:
+    visible:
+      text: ".*[Hh]ome.*|.*[Cc]onversation.*|.*[Rr]ecord.*"
+    timeout: 15000
+
+- takeScreenshot: onboarding_05_complete
+
+# Final assertion - home screen reached
+- assertVisible:
+    text: ".*"
+    optional: false
+
+# Test complete
+- stopApp

@@ -1,0 +1,228 @@
+# Performance Test: Extended Recording Session
+# Tests: Memory stability over extended use (simulates 1hr session)
+#
+# This test performs repeated recording cycles to detect:
+# - Memory leaks
+# - Battery drain patterns
+# - CPU spikes
+# - UI responsiveness degradation
+#
+# Run with: maestro test performance/01_extended_session.yaml
+# For full 24hr test: maestro test --timeout 86400000 performance/01_extended_session.yaml
+
+appId: com.friend.ios
+tags:
+  - performance
+  - memory
+  - extended
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 15000
+
+- takeScreenshot: perf_01_start
+
+# ===== RECORDING CYCLE 1 =====
+- runScript:
+    script: |
+      const startTime = Date.now();
+      output.cycle1_start = startTime;
+
+# Start recording
+- tapOn:
+    text: ".*[Rr]ecord.*|.*[Cc]apture.*|.*[Ss]tart.*"
+    optional: true
+
+- tapOn:
+    id: ".*record.*|.*capture.*"
+    optional: true
+
+# Wait for recording to start
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecording.*|.*[Ll]istening.*|00:.*"
+    timeout: 10000
+
+# Record for 60 seconds (simulating conversation)
+- repeat:
+    times: 12
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 1000
+      - scroll:
+          direction: UP
+          duration: 1000
+
+# Stop recording
+- tapOn:
+    text: ".*[Ss]top.*|.*[Ff]inish.*"
+    optional: true
+
+- tapOn:
+    id: ".*stop.*"
+    optional: true
+
+# Wait for save
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]aved.*|.*[Cc]omplete.*|.*[Cc]onversation.*"
+    timeout: 15000
+
+- takeScreenshot: perf_02_cycle1_complete
+
+# ===== NAVIGATION STRESS TEST =====
+# Rapidly navigate between screens to detect memory issues
+
+- repeat:
+    times: 5
+    commands:
+      # Go to conversations
+      - tapOn:
+          text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 500
+      # Go to memories
+      - tapOn:
+          text: ".*[Mm]emor.*"
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 500
+      # Go to chat
+      - tapOn:
+          text: ".*[Cc]hat.*|.*[Aa]sk.*"
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 500
+      # Back to home
+      - back
+      - back
+
+- takeScreenshot: perf_03_nav_stress
+
+# ===== RECORDING CYCLE 2 =====
+# Start another recording to check state cleanup
+
+- tapOn:
+    text: ".*[Rr]ecord.*|.*[Cc]apture.*|.*[Ss]tart.*"
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecording.*|.*[Ll]istening.*|00:.*"
+    timeout: 10000
+
+# Record for 60 seconds
+- repeat:
+    times: 12
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 1000
+      - scroll:
+          direction: UP
+          duration: 1000
+
+- tapOn:
+    text: ".*[Ss]top.*|.*[Ff]inish.*"
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]aved.*|.*[Cc]omplete.*"
+    timeout: 15000
+
+- takeScreenshot: perf_04_cycle2_complete
+
+# ===== CHAT STRESS TEST =====
+# Multiple chat interactions to test AI response handling
+
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*"
+    optional: true
+
+- repeat:
+    times: 3
+    commands:
+      - tapOn:
+          text: ".*[Tt]ype.*|.*[Mm]essage.*"
+          optional: true
+      - inputText: "Performance test message"
+      - pressKey: Enter
+      - extendedWaitUntil:
+          visible:
+            text: ".*"
+          timeout: 30000
+      - scroll:
+          direction: DOWN
+          duration: 500
+
+- takeScreenshot: perf_05_chat_stress
+
+- back
+
+# ===== RECORDING CYCLE 3 =====
+
+- tapOn:
+    text: ".*[Rr]ecord.*|.*[Cc]apture.*|.*[Ss]tart.*"
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecording.*|.*[Ll]istening.*|00:.*"
+    timeout: 10000
+
+- repeat:
+    times: 12
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 1000
+      - scroll:
+          direction: UP
+          duration: 1000
+
+- tapOn:
+    text: ".*[Ss]top.*|.*[Ff]inish.*"
+    optional: true
+
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]aved.*|.*[Cc]omplete.*"
+    timeout: 15000
+
+- takeScreenshot: perf_06_cycle3_complete
+
+# ===== FINAL STATE CHECK =====
+# Verify app is still responsive after extended use
+
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- scroll:
+    direction: UP
+    duration: 1000
+
+- takeScreenshot: perf_07_final_responsive
+
+- runScript:
+    script: |
+      const endTime = Date.now();
+      output.total_duration_ms = endTime - output.cycle1_start;
+
+- stopApp

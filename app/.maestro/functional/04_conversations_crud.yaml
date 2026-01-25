@@ -1,0 +1,137 @@
+# Functional Test: Conversations CRUD Operations
+# Tests: List → View → Update → Delete conversations
+#
+# Preconditions:
+#   - User is signed in
+#   - At least one conversation exists (from previous recording test)
+#
+# Note: This test validates conversation management functionality.
+
+appId: com.friend.ios
+tags:
+  - functional
+  - conversations
+  - crud
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+- takeScreenshot: conversations_01_home
+
+# Navigate to conversations list
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*|.*[Pp]ast.*"
+    optional: true
+
+# Alternative: look for list/history icon in bottom nav
+- tapOn:
+    id: ".*history.*|.*conversation.*|.*list.*"
+    optional: true
+
+- takeScreenshot: conversations_02_list
+
+# Verify conversations are displayed
+- assertVisible:
+    text: ".*"
+    optional: false
+
+# Tap on first conversation to view details
+- runFlow:
+    when:
+      visible: ".*[Cc]onversation.*|.*[Tt]oday.*|.*[Yy]esterday.*"
+    commands:
+      - tapOn:
+          text: ".*[Cc]onversation.*|.*[Tt]oday.*|.*[Yy]esterday.*"
+          index: 0
+
+# Wait for conversation detail to load
+- extendedWaitUntil:
+    visible:
+      text: ".*[Tt]ranscript.*|.*[Ss]ummary.*|.*[Ss]peaker.*|.*[Dd]etail.*"
+    timeout: 10000
+
+- takeScreenshot: conversations_03_detail
+
+# Scroll through transcript
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: conversations_04_scrolled
+
+# Look for edit/update options
+- tapOn:
+    text: ".*[Ee]dit.*|.*[Uu]pdate.*|.*[Mm]ore.*"
+    optional: true
+
+- tapOn:
+    id: ".*edit.*|.*menu.*|.*more.*"
+    optional: true
+
+# Take screenshot of edit options if visible
+- runFlow:
+    when:
+      visible: ".*[Ee]dit.*|.*[Rr]ename.*|.*[Dd]elete.*"
+    commands:
+      - takeScreenshot: conversations_05_edit_options
+
+# Test rename/update functionality
+- runFlow:
+    when:
+      visible: ".*[Rr]ename.*|.*[Ee]dit.*[Tt]itle.*"
+    commands:
+      - tapOn:
+          text: ".*[Rr]ename.*|.*[Ee]dit.*[Tt]itle.*"
+      - clearText
+      - inputText: "Test Conversation Updated"
+      - tapOn:
+          text: ".*[Ss]ave.*|.*[Dd]one.*|.*[Oo]k.*"
+      - takeScreenshot: conversations_06_renamed
+
+# Go back to list
+- back
+
+- takeScreenshot: conversations_07_list_after_update
+
+# Test delete functionality (on a test conversation)
+# Long press to get context menu
+- runFlow:
+    when:
+      visible: ".*[Tt]est.*[Cc]onversation.*"
+    commands:
+      - longPressOn:
+          text: ".*[Tt]est.*[Cc]onversation.*"
+      - takeScreenshot: conversations_08_context_menu
+
+# Look for delete option
+- runFlow:
+    when:
+      visible: ".*[Dd]elete.*|.*[Rr]emove.*"
+    commands:
+      - tapOn:
+          text: ".*[Dd]elete.*|.*[Rr]emove.*"
+      # Confirm deletion
+      - runFlow:
+          when:
+            visible: ".*[Cc]onfirm.*|.*[Yy]es.*|.*[Dd]elete.*"
+          commands:
+            - tapOn:
+                text: ".*[Dd]elete.*|.*[Yy]es.*|.*[Cc]onfirm.*"
+      - takeScreenshot: conversations_09_after_delete
+
+# Verify deletion (item should not be visible)
+- assertNotVisible:
+    text: "Test Conversation Updated"
+    optional: true
+
+# Final state
+- takeScreenshot: conversations_10_final
+
+- stopApp

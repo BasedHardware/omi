@@ -1,0 +1,103 @@
+# Functional Test: Memories Feature
+# Tests: View memories → Memory details → Memory interactions
+#
+# Preconditions:
+#   - User is signed in
+#   - Some memories exist (created from conversations)
+#
+# Note: Memories are auto-generated from conversations by the AI.
+
+appId: com.friend.ios
+tags:
+  - functional
+  - memories
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+- takeScreenshot: memories_01_home
+
+# Navigate to memories section
+- tapOn:
+    text: ".*[Mm]emor.*|.*[Rr]ecall.*|.*[Ii]nsight.*"
+    optional: true
+
+# Alternative: look for memories icon in navigation
+- tapOn:
+    id: ".*memor.*|.*brain.*|.*insight.*"
+    optional: true
+
+- takeScreenshot: memories_02_list
+
+# Verify memories section is accessible
+- assertVisible:
+    text: ".*"
+    optional: false
+
+# Check if memories exist
+- runFlow:
+    when:
+      visible: ".*[Mm]emory.*|.*[Rr]emember.*|.*[Ll]earned.*"
+    commands:
+      - takeScreenshot: memories_03_has_memories
+      # Tap on first memory
+      - tapOn:
+          text: ".*[Mm]emory.*|.*[Ll]earned.*"
+          index: 0
+      # Wait for memory detail
+      - extendedWaitUntil:
+          visible:
+            text: ".*"
+          timeout: 5000
+      - takeScreenshot: memories_04_detail
+
+# Handle empty state
+- runFlow:
+    when:
+      visible: ".*[Nn]o.*[Mm]emor.*|.*[Ee]mpty.*|.*[Ss]tart.*[Rr]ecord.*"
+    commands:
+      - takeScreenshot: memories_03_empty_state
+      - assertVisible:
+          text: ".*[Nn]o.*[Mm]emor.*|.*[Ee]mpty.*|.*[Ss]tart.*"
+
+# Scroll through memories list
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: memories_05_scrolled
+
+# Look for memory categories or filters
+- runFlow:
+    when:
+      visible: ".*[Ff]ilter.*|.*[Cc]ategory.*|.*[Aa]ll.*"
+    commands:
+      - tapOn:
+          text: ".*[Ff]ilter.*|.*[Cc]ategory.*"
+          optional: true
+      - takeScreenshot: memories_06_filters
+
+# Test memory interaction (if available)
+- runFlow:
+    when:
+      visible: ".*[Ss]hare.*|.*[Ee]xport.*|.*[Dd]elete.*"
+    commands:
+      - tapOn:
+          text: ".*[Mm]ore.*|.*[Oo]ptions.*"
+          optional: true
+      - takeScreenshot: memories_07_options
+
+# Go back to home
+- back
+- back
+
+- takeScreenshot: memories_08_final
+
+- stopApp

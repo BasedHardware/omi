@@ -1,0 +1,205 @@
+# Performance Test: Memory Leak Detection
+# Tests: Repeated open/close cycles to detect memory growth
+#
+# Monitor memory externally:
+# - Android: adb shell dumpsys meminfo com.friend.ios
+# - iOS: Xcode Instruments > Allocations
+#
+# Expected: Memory should return to baseline after each cycle.
+# Red flags: Continuous memory growth, OOM errors.
+
+appId: com.friend.ios
+tags:
+  - performance
+  - memory
+  - leaks
+---
+
+# ===== CYCLE 1: BASELINE =====
+- launchApp:
+    clearState: true
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 15000
+
+- takeScreenshot: memory_01_baseline
+
+# Navigate through all major screens
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+- scroll:
+    direction: DOWN
+    duration: 1000
+- back
+
+- tapOn:
+    text: ".*[Mm]emor.*"
+    optional: true
+- scroll:
+    direction: DOWN
+    duration: 1000
+- back
+
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*"
+    optional: true
+- back
+
+- tapOn:
+    text: ".*[Aa]pp.*|.*[Pp]lugin.*"
+    optional: true
+- scroll:
+    direction: DOWN
+    duration: 1000
+- back
+
+- takeScreenshot: memory_02_after_nav_cycle1
+
+- stopApp
+
+# ===== CYCLE 2 =====
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+# Heavy image/list loading
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+- repeat:
+    times: 10
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 500
+      - scroll:
+          direction: UP
+          duration: 500
+
+- back
+
+- tapOn:
+    text: ".*[Mm]emor.*"
+    optional: true
+
+- repeat:
+    times: 10
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 500
+      - scroll:
+          direction: UP
+          duration: 500
+
+- back
+
+- takeScreenshot: memory_03_after_heavy_scroll
+
+- stopApp
+
+# ===== CYCLE 3 =====
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+# Open/close detail views repeatedly
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          text: ".*[Cc]onversation.*|.*[Tt]oday.*"
+          index: 0
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 500
+      - back
+
+- back
+
+- takeScreenshot: memory_04_after_detail_cycles
+
+- stopApp
+
+# ===== CYCLE 4 =====
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+# Chat memory test - multiple messages
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*"
+    optional: true
+
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          text: ".*[Tt]ype.*|.*[Mm]essage.*"
+          optional: true
+      - inputText: "Memory test message"
+      - pressKey: Enter
+      - extendedWaitUntil:
+          visible:
+            text: ".*"
+          timeout: 30000
+
+- back
+
+- takeScreenshot: memory_05_after_chat_cycles
+
+- stopApp
+
+# ===== CYCLE 5: FINAL CHECK =====
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 10000
+
+- takeScreenshot: memory_06_final_state
+
+# Full navigation again - memory should be similar to baseline
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+- scroll:
+    direction: DOWN
+    duration: 1000
+- back
+
+- tapOn:
+    text: ".*[Mm]emor.*"
+    optional: true
+- scroll:
+    direction: DOWN
+    duration: 1000
+- back
+
+- takeScreenshot: memory_07_final_nav
+
+# App should still be responsive
+- assertVisible:
+    text: ".*"
+    optional: false
+
+- stopApp

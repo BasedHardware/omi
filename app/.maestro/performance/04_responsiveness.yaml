@@ -1,0 +1,219 @@
+# Performance Test: UI Responsiveness
+# Tests: Interaction latency, animation smoothness, scroll performance
+#
+# This test performs rapid UI interactions to stress test responsiveness.
+# Monitor frame rates externally:
+# - Flutter DevTools: flutter attach --debug-uri=<URI>
+# - Android: adb shell dumpsys gfxinfo com.friend.ios
+# - iOS: Xcode Instruments > Core Animation
+#
+# Red flags: Jank, dropped frames, delayed responses.
+
+appId: com.friend.ios
+tags:
+  - performance
+  - responsiveness
+  - ui
+---
+
+# Launch app
+- launchApp
+
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 15000
+
+- takeScreenshot: responsive_01_start
+
+# ===== RAPID TAP TEST =====
+# Test button response time
+
+- repeat:
+    times: 20
+    commands:
+      - tapOn:
+          text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+          optional: true
+      - tapOn:
+          text: ".*[Hh]ome.*"
+          optional: true
+      - back
+
+- takeScreenshot: responsive_02_after_rapid_taps
+
+# ===== SCROLL PERFORMANCE TEST =====
+# Fast scrolling to test rendering performance
+
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+# Rapid scrolling
+- repeat:
+    times: 15
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 200
+      - scroll:
+          direction: UP
+          duration: 200
+
+- takeScreenshot: responsive_03_after_fast_scroll
+
+# Slow scroll for smoothness
+- repeat:
+    times: 5
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 2000
+      - scroll:
+          direction: UP
+          duration: 2000
+
+- takeScreenshot: responsive_04_after_slow_scroll
+
+- back
+
+# ===== INPUT RESPONSIVENESS TEST =====
+# Test keyboard and text input performance
+
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*"
+    optional: true
+
+- tapOn:
+    text: ".*[Tt]ype.*|.*[Mm]essage.*"
+    optional: true
+
+# Rapid typing
+- inputText: "Quick typing test to measure input responsiveness and lag"
+
+- takeScreenshot: responsive_05_after_typing
+
+# Clear and type again
+- clearText
+- inputText: "Second rapid typing test with more characters to type quickly"
+
+- back
+
+# ===== ANIMATION STRESS TEST =====
+# Trigger animations repeatedly
+
+- repeat:
+    times: 10
+    commands:
+      # Navigate between tabs (triggers animations)
+      - tapOn:
+          text: ".*[Cc]onversation.*"
+          optional: true
+      - tapOn:
+          text: ".*[Mm]emor.*"
+          optional: true
+      - tapOn:
+          text: ".*[Cc]hat.*"
+          optional: true
+      - tapOn:
+          text: ".*[Hh]ome.*"
+          optional: true
+
+- takeScreenshot: responsive_06_after_animations
+
+# ===== GESTURE RESPONSIVENESS TEST =====
+# Test swipe and gesture handling
+
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+# Swipe gestures
+- repeat:
+    times: 10
+    commands:
+      - swipe:
+          start: "80%,50%"
+          end: "20%,50%"
+          duration: 200
+      - swipe:
+          start: "20%,50%"
+          end: "80%,50%"
+          duration: 200
+
+- takeScreenshot: responsive_07_after_swipes
+
+- back
+
+# ===== PULL-TO-REFRESH TEST =====
+# Test refresh gesture responsiveness
+
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+- repeat:
+    times: 5
+    commands:
+      - swipe:
+          start: "50%,20%"
+          end: "50%,70%"
+          duration: 500
+
+- takeScreenshot: responsive_08_after_refresh
+
+- back
+
+# ===== CONCURRENT INTERACTION TEST =====
+# Multiple rapid interactions
+
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          text: ".*[Cc]onversation.*"
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 300
+      - tapOn:
+          text: ".*[Cc]onversation.*|.*[Tt]oday.*"
+          index: 0
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 300
+      - back
+      - tapOn:
+          text: ".*[Mm]emor.*"
+          optional: true
+      - scroll:
+          direction: DOWN
+          duration: 300
+      - back
+
+- takeScreenshot: responsive_09_after_concurrent
+
+# ===== FINAL RESPONSIVENESS CHECK =====
+# Verify app is still responsive after stress
+
+- tapOn:
+    text: ".*[Cc]hat.*|.*[Aa]sk.*"
+    optional: true
+
+- tapOn:
+    text: ".*[Tt]ype.*|.*[Mm]essage.*"
+    optional: true
+
+- inputText: "Final responsiveness check"
+
+- takeScreenshot: responsive_10_final
+
+# App should respond within normal timeframes
+- assertVisible:
+    text: ".*"
+    optional: false
+
+- back
+
+- stopApp

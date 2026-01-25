@@ -1,0 +1,145 @@
+# Performance Test: Continuous Recording
+# Tests: Long recording session for battery/memory/CPU monitoring
+#
+# This test maintains an active recording session for an extended period.
+# Monitor device stats externally using:
+# - Android: adb shell dumpsys batterystats / Android Profiler
+# - iOS: Xcode Instruments
+#
+# Run with external monitoring:
+# 1. Start system monitoring tools
+# 2. maestro test performance/02_continuous_recording.yaml
+# 3. Collect metrics after test completes
+
+appId: com.friend.ios
+tags:
+  - performance
+  - battery
+  - continuous
+---
+
+# Launch app
+- launchApp:
+    clearState: false
+
+# Wait for home
+- extendedWaitUntil:
+    visible:
+      text: ".*"
+    timeout: 15000
+
+- takeScreenshot: continuous_01_start
+
+# Note current timestamp
+- runScript:
+    script: |
+      output.recording_start = Date.now();
+
+# Start recording
+- tapOn:
+    text: ".*[Rr]ecord.*|.*[Cc]apture.*|.*[Ss]tart.*"
+    optional: true
+
+- tapOn:
+    id: ".*record.*|.*capture.*"
+    optional: true
+
+# Verify recording started
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecording.*|.*[Ll]istening.*|00:.*"
+    timeout: 15000
+
+- takeScreenshot: continuous_02_recording_started
+
+# ===== CONTINUOUS RECORDING LOOP =====
+# Run for ~30 minutes with periodic checks
+# Each iteration: ~30 seconds
+
+- repeat:
+    times: 60
+    commands:
+      # Simulate natural app interaction during recording
+      - scroll:
+          direction: DOWN
+          duration: 2000
+      - scroll:
+          direction: UP
+          duration: 2000
+
+      # Check recording is still active every ~10 iterations
+      - runFlow:
+          when:
+            iteration: 10
+          commands:
+            - takeScreenshot: continuous_progress
+            - assertVisible:
+                text: ".*[Rr]ecording.*|.*[Ll]istening.*|[0-9]+:.*"
+
+      # Small pause between interactions
+      - scroll:
+          direction: DOWN
+          duration: 1000
+
+# Take periodic screenshot
+- takeScreenshot: continuous_03_mid_recording
+
+# Continue recording for another 30 minutes
+- repeat:
+    times: 60
+    commands:
+      - scroll:
+          direction: DOWN
+          duration: 2000
+      - scroll:
+          direction: UP
+          duration: 2000
+      - scroll:
+          direction: DOWN
+          duration: 1000
+
+- takeScreenshot: continuous_04_near_end
+
+# Calculate elapsed time
+- runScript:
+    script: |
+      const elapsed = Date.now() - output.recording_start;
+      output.recording_duration_ms = elapsed;
+      output.recording_duration_min = Math.floor(elapsed / 60000);
+
+# Stop recording
+- tapOn:
+    text: ".*[Ss]top.*|.*[Ff]inish.*|.*[Dd]one.*"
+    optional: true
+
+- tapOn:
+    id: ".*stop.*"
+    optional: true
+
+# Wait for processing
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ss]aved.*|.*[Pp]rocess.*|.*[Cc]omplete.*|.*[Cc]onversation.*"
+    timeout: 60000
+
+- takeScreenshot: continuous_05_complete
+
+# Verify app is still responsive
+- tapOn:
+    text: ".*[Cc]onversation.*|.*[Hh]istory.*"
+    optional: true
+
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: continuous_06_post_recording_responsive
+
+# Check the new conversation was created
+- assertVisible:
+    text: ".*[Cc]onversation.*|.*[Tt]ranscript.*|.*[Tt]oday.*"
+    optional: false
+
+- takeScreenshot: continuous_07_final
+
+- stopApp
