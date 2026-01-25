@@ -21,8 +21,7 @@ static int cmd_imu_get(const struct shell *sh, size_t argc, char **argv)
     struct sensor_value gyro_data[3];
     struct sensor_value odr_attr;
     /* set accel/gyro sampling frequency to 12.5 Hz */
-    odr_attr.val1 = 12;
-    odr_attr.val2 = 500000;  // 12.5 Hz = 12 + 0.5
+    sensor_value_from_double(&odr_attr, 12.5);
 
     if (!device_is_ready(i2c_lsm6dso)) {
         shell_error(sh, "Device not ready");
@@ -89,20 +88,20 @@ static int imu_poweron(void)
     int ret;
 
     if (!device_is_ready(lsm6dso_en.port)) {
-        LOG_ERR("GPIO port not ready for lsm6dso_en\n");
+        LOG_ERR("GPIO port not ready for lsm6dso_en");
         return -ENODEV;
     }
 
     LOG_INF("IMU power on");
     ret = gpio_pin_configure_dt(&lsm6dso_en, (GPIO_OUTPUT | NRF_GPIO_DRIVE_S0H1));
     if (ret < 0) {
-        LOG_ERR("Failed to configure pin %d (err %d)\n", lsm6dso_en.pin, ret);
+        LOG_ERR("Failed to configure pin %d (err %d)", lsm6dso_en.pin, ret);
         return ret;
     }
 
     ret = gpio_pin_set_dt(&lsm6dso_en, 1);
     if (ret < 0) {
-        LOG_ERR("Failed to set pin %d (err %d)\n", lsm6dso_en.pin, ret);
+        LOG_ERR("Failed to set pin %d (err %d)", lsm6dso_en.pin, ret);
         return ret;
     }
     k_sleep(K_MSEC(50));
