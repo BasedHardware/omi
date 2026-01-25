@@ -1056,10 +1056,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
-                                                    Navigator.of(context).pop();
-                                                    // Remove filter
+                                                    // Get provider before pop to avoid using invalid context
                                                     final provider =
                                                         Provider.of<ConversationProvider>(context, listen: false);
+                                                    Navigator.of(context).pop();
                                                     await provider.clearDateFilter();
                                                     MixpanelManager().calendarFilterCleared();
                                                   },
@@ -1075,13 +1075,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
                                                     Navigator.of(context).pop();
-                                                    if (context.mounted) {
-                                                      final provider =
-                                                          Provider.of<ConversationProvider>(context, listen: false);
-                                                      await provider.filterConversationsByDate(selectedDate);
-                                                      MixpanelManager().calendarFilterApplied(selectedDate);
-                                                    }
+                                                    await provider.filterConversationsByDate(selectedDate);
+                                                    MixpanelManager().calendarFilterApplied(selectedDate);
                                                   },
                                                   child: Text(
                                                     context.l10n.done,

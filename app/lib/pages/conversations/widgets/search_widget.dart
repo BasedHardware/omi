@@ -108,12 +108,13 @@ class _SearchWidgetState extends State<SearchWidget> {
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: () async {
-                          Navigator.of(context).pop();
-                          // If editing existing filter, cancel clears it
-                          if (hasExistingFilter && context.mounted) {
+                          if (hasExistingFilter) {
                             final provider = Provider.of<ConversationProvider>(context, listen: false);
+                            Navigator.of(context).pop();
                             await provider.clearDateFilter();
                             MixpanelManager().calendarFilterCleared();
+                          } else {
+                            Navigator.of(context).pop();
                           }
                         },
                         child: Text(
@@ -128,12 +129,10 @@ class _SearchWidgetState extends State<SearchWidget> {
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: () async {
+                          final provider = Provider.of<ConversationProvider>(context, listen: false);
                           Navigator.of(context).pop();
-                          if (context.mounted) {
-                            final provider = Provider.of<ConversationProvider>(context, listen: false);
-                            await provider.filterConversationsByDate(selectedDate);
-                            MixpanelManager().calendarFilterApplied(selectedDate);
-                          }
+                          await provider.filterConversationsByDate(selectedDate);
+                          MixpanelManager().calendarFilterApplied(selectedDate);
                         },
                         child: Text(
                           context.l10n.done,
