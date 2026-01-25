@@ -38,7 +38,7 @@ def resolve_voice_message_language(uid: str, request_language: Optional[str]) ->
         single_language_mode = transcription_prefs.get('single_language_mode', False)
         if single_language_mode:
             return user_language, False
-        return user_language, False
+        return None, True
 
     return None, True
 
