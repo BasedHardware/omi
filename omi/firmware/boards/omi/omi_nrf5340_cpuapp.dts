@@ -1,7 +1,6 @@
 /dts-v1/;
 #include <nordic/nrf5340_cpuapp_qkaa.dtsi>
 #include "omi-pinctrl.dtsi"
-#include <zephyr/dt-bindings/sensor/lsm6dso.h>
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/gpio/nordic-nrf-gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
@@ -47,7 +46,7 @@
 		status = "okay";
 	};
 	
-	lsm6dso_en_pin: lsm6dso_en_pin {
+	lsm6dsl_en_pin: lsm6dsl_en_pin {
 		compatible = "regulator-fixed";
 		enable-gpios = <&gpio1 12 (NRF_GPIO_DRIVE_S0H1 | GPIO_ACTIVE_HIGH)>;
 		regulator-name = "LSM6DS3TR_C_EN";
@@ -120,7 +119,7 @@
 	aliases {
 		dmic0 = &pdm0;
 		buttons = &buttons;
-		lsm6dso = &lsm6ds3tr_c;
+		lsm6dsl = &lsm6ds3tr_c;
 	};
 };
 
