@@ -154,5 +154,7 @@
 	<false/>
 	<key>com.posthog.posthog.AUTO_INIT</key>
 	<false/>
+	<key>GIDClientID</key>
+	<string>$(GOOGLE_CLIENT_ID)</string>
 </dict>
 </plist>
