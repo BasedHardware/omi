@@ -59,6 +59,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/providers/focus_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -370,6 +371,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
           ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
           ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
+          ChangeNotifierProvider(create: (context) => FocusProvider()..initialize()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
