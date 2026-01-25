@@ -7733,49 +7733,49 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'الجهاز لا يدعم مزامنة WiFi، التبديل إلى البلوتوث';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health غير متاح على هذا الجهاز';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'تنزيل الصوت';
 
   @override
-  String get audioDownloadSuccess => 'تم تحميل الصوت بنجاح';
+  String get audioDownloadSuccess => 'تم تنزيل الصوت بنجاح';
 
   @override
-  String get audioDownloadFailed => 'فشل تحميل الصوت';
+  String get audioDownloadFailed => 'فشل تنزيل الصوت';
 
   @override
-  String get downloadingAudio => 'جاري تحميل الصوت...';
+  String get downloadingAudio => 'جاري تنزيل الصوت...';
 
   @override
   String get shareAudio => 'مشاركة الصوت';
 
   @override
-  String get preparingAudio => 'تحضير الصوت';
+  String get preparingAudio => 'جاري تحضير الصوت';
 
   @override
-  String get gettingAudioFiles => 'الحصول على ملفات الصوت';
+  String get gettingAudioFiles => 'جاري الحصول على ملفات الصوت...';
 
   @override
-  String get downloadingAudioProgress => 'جاري تحميل الصوت';
+  String get downloadingAudioProgress => 'جاري تنزيل الصوت';
 
   @override
-  String get processingAudio => 'معالجة الصوت';
+  String get processingAudio => 'جاري معالجة الصوت';
 
   @override
-  String get combiningAudioFiles => 'دمج ملفات الصوت';
+  String get combiningAudioFiles => 'جاري دمج ملفات الصوت...';
 
   @override
   String get audioReady => 'الصوت جاهز';
 
   @override
-  String get openingShareSheet => 'فتح قائمة المشاركة';
+  String get openingShareSheet => 'جاري فتح صفحة المشاركة...';
 
   @override
-  String get audioShareFailed => 'فشلت مشاركة الصوت';
+  String get audioShareFailed => 'فشلت المشاركة';
 
   @override
   String get dailyRecaps => 'الملخصات اليومية';

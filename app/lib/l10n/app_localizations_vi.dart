@@ -7791,49 +7791,49 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Thiết bị không hỗ trợ đồng bộ WiFi, chuyển sang Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health không khả dụng trên thiết bị này';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Tải xuống âm thanh';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Tải xuống âm thanh thành công';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Tải xuống âm thanh thất bại';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Đang tải xuống âm thanh...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Chia sẻ âm thanh';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Đang chuẩn bị âm thanh';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Đang lấy tệp âm thanh...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Đang tải xuống âm thanh';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Đang xử lý âm thanh';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Đang kết hợp tệp âm thanh...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Âm thanh đã sẵn sàng';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Đang mở trang chia sẻ...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Chia sẻ thất bại';
 
   @override
   String get dailyRecaps => 'Tóm tắt hàng ngày';

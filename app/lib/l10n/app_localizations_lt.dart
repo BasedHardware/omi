@@ -7793,49 +7793,50 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nepasiekiama šiame įrenginyje';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Atsisiųsti garsą';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Garsas sėkmingai atsisiųstas';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Nepavyko atsisiųsti garso';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Atsisiunčiamas garsas...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Bendrinti garsą';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Ruošiamas garsas';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Gaunami garso failai...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Atsisiunčiamas garsas';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Apdorojamas garsas';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Sujungiami garso failai...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Garsas paruoštas';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Atidaromas bendrinimo lapas...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Bendrinimas nepavyko';
 
   @override
   String get dailyRecaps => 'Dienos Apžvalgos';

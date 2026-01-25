@@ -2539,5 +2539,20 @@
   "largeTimeGapDetected": "Terdeteksi jeda waktu besar ({gap})",
   "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})",
   "dailyRecaps": "Ringkasan Harian",
-  "removeFilter": "Hapus Filter"
+  "removeFilter": "Hapus Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Perangkat tidak mendukung sinkronisasi WiFi, beralih ke Bluetooth",
+  "appleHealthNotAvailable": "Apple Health tidak tersedia di perangkat ini",
+  "downloadAudio": "Unduh Audio",
+  "audioDownloadSuccess": "Audio berhasil diunduh",
+  "audioDownloadFailed": "Gagal mengunduh audio",
+  "downloadingAudio": "Mengunduh audio...",
+  "shareAudio": "Bagikan Audio",
+  "preparingAudio": "Menyiapkan Audio",
+  "gettingAudioFiles": "Mendapatkan file audio...",
+  "downloadingAudioProgress": "Mengunduh Audio",
+  "processingAudio": "Memproses Audio",
+  "combiningAudioFiles": "Menggabungkan file audio...",
+  "audioReady": "Audio Siap",
+  "openingShareSheet": "Membuka lembar berbagi...",
+  "audioShareFailed": "Gagal Berbagi"
 }

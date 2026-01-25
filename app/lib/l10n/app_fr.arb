@@ -2532,5 +2532,20 @@
   "largeTimeGapDetected": "Grand écart de temps détecté ({gap})",
   "largeTimeGapsDetected": "Grands écarts de temps détectés ({gaps})",
   "dailyRecaps": "Récapitulatifs Quotidiens",
-  "removeFilter": "Supprimer le Filtre"
+  "removeFilter": "Supprimer le Filtre",
+  "deviceDoesNotSupportWifiSwitchingToBle": "L'appareil ne prend pas en charge la synchronisation WiFi, passage au Bluetooth",
+  "appleHealthNotAvailable": "Apple Health n'est pas disponible sur cet appareil",
+  "downloadAudio": "Télécharger l'audio",
+  "audioDownloadSuccess": "Audio téléchargé avec succès",
+  "audioDownloadFailed": "Échec du téléchargement de l'audio",
+  "downloadingAudio": "Téléchargement de l'audio...",
+  "shareAudio": "Partager l'audio",
+  "preparingAudio": "Préparation de l'audio",
+  "gettingAudioFiles": "Récupération des fichiers audio...",
+  "downloadingAudioProgress": "Téléchargement de l'audio",
+  "processingAudio": "Traitement de l'audio",
+  "combiningAudioFiles": "Combinaison des fichiers audio...",
+  "audioReady": "Audio prêt",
+  "openingShareSheet": "Ouverture de la feuille de partage...",
+  "audioShareFailed": "Échec du partage"
 }

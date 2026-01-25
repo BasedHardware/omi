@@ -7825,49 +7825,50 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Hang letöltése';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Hang sikeresen letöltve';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Hang letöltése sikertelen';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Hang letöltése...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Hang megosztása';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Hang előkészítése';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Hangfájlok lekérése...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Hang letöltése';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Hang feldolgozása';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Hangfájlok egyesítése...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Hang kész';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Megosztási lap megnyitása...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Megosztás sikertelen';
 
   @override
   String get dailyRecaps => 'Napi Összefoglalók';

@@ -7657,49 +7657,49 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => '기기가 WiFi 동기화를 지원하지 않습니다. Bluetooth로 전환 중';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => '이 기기에서는 Apple Health를 사용할 수 없습니다';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => '오디오 다운로드';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => '오디오가 성공적으로 다운로드되었습니다';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => '오디오 다운로드 실패';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => '오디오 다운로드 중...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => '오디오 공유';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => '오디오 준비 중';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => '오디오 파일 가져오는 중...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => '오디오 다운로드 중';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => '오디오 처리 중';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => '오디오 파일 결합 중...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => '오디오 준비 완료';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => '공유 시트 여는 중...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => '공유 실패';
 
   @override
   String get dailyRecaps => '일일 요약';

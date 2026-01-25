@@ -2532,5 +2532,20 @@
   "largeTimeGapDetected": "Wykryto dużą przerwę czasową ({gap})",
   "largeTimeGapsDetected": "Wykryto duże przerwy czasowe ({gaps})",
   "dailyRecaps": "Podsumowania Dnia",
-  "removeFilter": "Usuń Filtr"
+  "removeFilter": "Usuń Filtr",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Urządzenie nie obsługuje synchronizacji WiFi, przełączanie na Bluetooth",
+  "appleHealthNotAvailable": "Apple Health nie jest dostępne na tym urządzeniu",
+  "downloadAudio": "Pobierz dźwięk",
+  "audioDownloadSuccess": "Dźwięk został pomyślnie pobrany",
+  "audioDownloadFailed": "Nie udało się pobrać dźwięku",
+  "downloadingAudio": "Pobieranie dźwięku...",
+  "shareAudio": "Udostępnij dźwięk",
+  "preparingAudio": "Przygotowywanie dźwięku",
+  "gettingAudioFiles": "Pobieranie plików dźwiękowych...",
+  "downloadingAudioProgress": "Pobieranie dźwięku",
+  "processingAudio": "Przetwarzanie dźwięku",
+  "combiningAudioFiles": "Łączenie plików dźwiękowych...",
+  "audioReady": "Dźwięk gotowy",
+  "openingShareSheet": "Otwieranie arkusza udostępniania...",
+  "audioShareFailed": "Udostępnianie nie powiodło się"
 }

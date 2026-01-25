@@ -2506,5 +2506,20 @@
   "largeTimeGapDetected": "Stort tidsgab opdaget ({gap})",
   "largeTimeGapsDetected": "Store tidsgab opdaget ({gaps})",
   "dailyRecaps": "Daglige Opsummeringer",
-  "removeFilter": "Fjern Filter"
+  "removeFilter": "Fjern Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Enheden understøtter ikke WiFi-synkronisering, skifter til Bluetooth",
+  "appleHealthNotAvailable": "Apple Health er ikke tilgængelig på denne enhed",
+  "downloadAudio": "Download lyd",
+  "audioDownloadSuccess": "Lyd downloadet succesfuldt",
+  "audioDownloadFailed": "Kunne ikke downloade lyd",
+  "downloadingAudio": "Downloader lyd...",
+  "shareAudio": "Del lyd",
+  "preparingAudio": "Forbereder lyd",
+  "gettingAudioFiles": "Henter lydfiler...",
+  "downloadingAudioProgress": "Downloader lyd",
+  "processingAudio": "Behandler lyd",
+  "combiningAudioFiles": "Kombinerer lydfiler...",
+  "audioReady": "Lyd klar",
+  "openingShareSheet": "Åbner delingsark...",
+  "audioShareFailed": "Deling mislykkedes"
 }

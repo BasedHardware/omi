@@ -7813,49 +7813,50 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Apparaat ondersteunt geen WiFi-synchronisatie, overschakelen naar Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health is niet beschikbaar op dit apparaat';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Audio downloaden';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio succesvol gedownload';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Audio downloaden mislukt';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Audio downloaden...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Audio delen';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Audio voorbereiden';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Audiobestanden ophalen...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Audio downloaden';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Audio verwerken';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Audiobestanden combineren...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio klaar';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Deelvenster openen...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Delen mislukt';
 
   @override
   String get dailyRecaps => 'Dagelijkse Samenvattingen';

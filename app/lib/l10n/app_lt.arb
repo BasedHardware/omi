@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Aptiktas didelis laiko tarpas ({gap})",
   "largeTimeGapsDetected": "Aptikti dideli laiko tarpai ({gaps})",
   "dailyRecaps": "Dienos Apžvalgos",
-  "removeFilter": "Pašalinti Filtrą"
+  "removeFilter": "Pašalinti Filtrą",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth",
+  "appleHealthNotAvailable": "Apple Health nepasiekiama šiame įrenginyje",
+  "downloadAudio": "Atsisiųsti garsą",
+  "audioDownloadSuccess": "Garsas sėkmingai atsisiųstas",
+  "audioDownloadFailed": "Nepavyko atsisiųsti garso",
+  "downloadingAudio": "Atsisiunčiamas garsas...",
+  "shareAudio": "Bendrinti garsą",
+  "preparingAudio": "Ruošiamas garsas",
+  "gettingAudioFiles": "Gaunami garso failai...",
+  "downloadingAudioProgress": "Atsisiunčiamas garsas",
+  "processingAudio": "Apdorojamas garsas",
+  "combiningAudioFiles": "Sujungiami garso failai...",
+  "audioReady": "Garsas paruoštas",
+  "openingShareSheet": "Atidaromas bendrinimo lapas...",
+  "audioShareFailed": "Bendrinimas nepavyko"
 }

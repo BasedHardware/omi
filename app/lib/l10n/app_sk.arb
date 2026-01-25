@@ -2502,5 +2502,20 @@
   "largeTimeGapDetected": "Zistená veľká časová medzera ({gap})",
   "largeTimeGapsDetected": "Zistené veľké časové medzery ({gaps})",
   "dailyRecaps": "Denné Súhrny",
-  "removeFilter": "Odstrániť Filter"
+  "removeFilter": "Odstrániť Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Zariadenie nepodporuje WiFi synchronizáciu, prepínanie na Bluetooth",
+  "appleHealthNotAvailable": "Apple Health nie je na tomto zariadení k dispozícii",
+  "downloadAudio": "Stiahnuť zvuk",
+  "audioDownloadSuccess": "Zvuk bol úspešne stiahnutý",
+  "audioDownloadFailed": "Sťahovanie zvuku zlyhalo",
+  "downloadingAudio": "Sťahovanie zvuku...",
+  "shareAudio": "Zdieľať zvuk",
+  "preparingAudio": "Príprava zvuku",
+  "gettingAudioFiles": "Získavanie zvukových súborov...",
+  "downloadingAudioProgress": "Sťahovanie zvuku",
+  "processingAudio": "Spracovanie zvuku",
+  "combiningAudioFiles": "Kombinovanie zvukových súborov...",
+  "audioReady": "Zvuk je pripravený",
+  "openingShareSheet": "Otváranie listu zdieľania...",
+  "audioShareFailed": "Zdieľanie zlyhalo"
 }

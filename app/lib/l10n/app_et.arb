@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Tuvastati suur ajavahe ({gap})",
   "largeTimeGapsDetected": "Tuvastati suured ajavahed ({gaps})",
   "dailyRecaps": "Päevased Kokkuvõtted",
-  "removeFilter": "Eemalda Filter"
+  "removeFilter": "Eemalda Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Seade ei toeta WiFi sünkroniseerimist, lülitumine Bluetoothile",
+  "appleHealthNotAvailable": "Apple Health pole selles seadmes saadaval",
+  "downloadAudio": "Laadi heli alla",
+  "audioDownloadSuccess": "Heli on edukalt alla laaditud",
+  "audioDownloadFailed": "Heli allalaadimine ebaõnnestus",
+  "downloadingAudio": "Heli allalaadimine...",
+  "shareAudio": "Jaga heli",
+  "preparingAudio": "Heli ettevalmistamine",
+  "gettingAudioFiles": "Helifailide hankimine...",
+  "downloadingAudioProgress": "Heli allalaadimine",
+  "processingAudio": "Heli töötlemine",
+  "combiningAudioFiles": "Helifailide ühendamine...",
+  "audioReady": "Heli on valmis",
+  "openingShareSheet": "Jagamislehe avamine...",
+  "audioShareFailed": "Jagamine ebaõnnestus"
 }

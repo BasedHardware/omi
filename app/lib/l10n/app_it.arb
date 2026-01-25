@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Rilevato un grande divario temporale ({gap})",
   "largeTimeGapsDetected": "Rilevati grandi divari temporali ({gaps})",
   "dailyRecaps": "Riepiloghi Giornalieri",
-  "removeFilter": "Rimuovi Filtro"
+  "removeFilter": "Rimuovi Filtro",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Il dispositivo non supporta la sincronizzazione WiFi, passaggio al Bluetooth",
+  "appleHealthNotAvailable": "Apple Health non è disponibile su questo dispositivo",
+  "downloadAudio": "Scarica audio",
+  "audioDownloadSuccess": "Audio scaricato con successo",
+  "audioDownloadFailed": "Download audio fallito",
+  "downloadingAudio": "Download audio in corso...",
+  "shareAudio": "Condividi audio",
+  "preparingAudio": "Preparazione audio",
+  "gettingAudioFiles": "Recupero file audio...",
+  "downloadingAudioProgress": "Download audio",
+  "processingAudio": "Elaborazione audio",
+  "combiningAudioFiles": "Unione file audio...",
+  "audioReady": "Audio pronto",
+  "openingShareSheet": "Apertura foglio di condivisione...",
+  "audioShareFailed": "Condivisione fallita"
 }

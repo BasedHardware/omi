@@ -7783,49 +7783,50 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zařízení nepodporuje WiFi synchronizaci, přepínání na Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health není na tomto zařízení k dispozici';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Stáhnout zvuk';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Zvuk byl úspěšně stažen';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Stažení zvuku se nezdařilo';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Stahování zvuku...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Sdílet zvuk';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Příprava zvuku';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Získávání zvukových souborů...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Stahování zvuku';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Zpracování zvuku';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombinování zvukových souborů...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Zvuk je připraven';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Otevírání listu sdílení...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Sdílení se nezdařilo';
 
   @override
   String get dailyRecaps => 'Denní Souhrny';

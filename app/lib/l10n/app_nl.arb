@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Groot tijdsverschil gedetecteerd ({gap})",
   "largeTimeGapsDetected": "Grote tijdsverschillen gedetecteerd ({gaps})",
   "dailyRecaps": "Dagelijkse Samenvattingen",
-  "removeFilter": "Filter Verwijderen"
+  "removeFilter": "Filter Verwijderen",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Apparaat ondersteunt geen WiFi-synchronisatie, overschakelen naar Bluetooth",
+  "appleHealthNotAvailable": "Apple Health is niet beschikbaar op dit apparaat",
+  "downloadAudio": "Audio downloaden",
+  "audioDownloadSuccess": "Audio succesvol gedownload",
+  "audioDownloadFailed": "Audio downloaden mislukt",
+  "downloadingAudio": "Audio downloaden...",
+  "shareAudio": "Audio delen",
+  "preparingAudio": "Audio voorbereiden",
+  "gettingAudioFiles": "Audiobestanden ophalen...",
+  "downloadingAudioProgress": "Audio downloaden",
+  "processingAudio": "Audio verwerken",
+  "combiningAudioFiles": "Audiobestanden combineren...",
+  "audioReady": "Audio klaar",
+  "openingShareSheet": "Deelvenster openen...",
+  "audioShareFailed": "Delen mislukt"
 }

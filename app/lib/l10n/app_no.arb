@@ -2497,5 +2497,20 @@
   "largeTimeGapDetected": "Stor tidsluke oppdaget ({gap})",
   "largeTimeGapsDetected": "Store tidsluker oppdaget ({gaps})",
   "dailyRecaps": "Daglige Oppsummeringer",
-  "removeFilter": "Fjern Filter"
+  "removeFilter": "Fjern Filter",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Enheten støtter ikke WiFi-synkronisering, bytter til Bluetooth",
+  "appleHealthNotAvailable": "Apple Health er ikke tilgjengelig på denne enheten",
+  "downloadAudio": "Last ned lyd",
+  "audioDownloadSuccess": "Lyd lastet ned vellykket",
+  "audioDownloadFailed": "Nedlasting av lyd mislyktes",
+  "downloadingAudio": "Laster ned lyd...",
+  "shareAudio": "Del lyd",
+  "preparingAudio": "Forbereder lyd",
+  "gettingAudioFiles": "Henter lydfiler...",
+  "downloadingAudioProgress": "Laster ned lyd",
+  "processingAudio": "Behandler lyd",
+  "combiningAudioFiles": "Kombinerer lydfiler...",
+  "audioReady": "Lyd klar",
+  "openingShareSheet": "Åpner delingsark...",
+  "audioShareFailed": "Deling mislyktes"
 }

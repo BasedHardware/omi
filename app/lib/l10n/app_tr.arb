@@ -2532,5 +2532,20 @@
   "largeTimeGapDetected": "Büyük zaman farkı tespit edildi ({gap})",
   "largeTimeGapsDetected": "Büyük zaman farkları tespit edildi ({gaps})",
   "dailyRecaps": "Günlük Özetler",
-  "removeFilter": "Filtreyi Kaldır"
+  "removeFilter": "Filtreyi Kaldır",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth'a geçiliyor",
+  "appleHealthNotAvailable": "Apple Health bu cihazda kullanılamıyor",
+  "downloadAudio": "Ses İndir",
+  "audioDownloadSuccess": "Ses başarıyla indirildi",
+  "audioDownloadFailed": "Ses indirme başarısız",
+  "downloadingAudio": "Ses indiriliyor...",
+  "shareAudio": "Sesi Paylaş",
+  "preparingAudio": "Ses Hazırlanıyor",
+  "gettingAudioFiles": "Ses dosyaları alınıyor...",
+  "downloadingAudioProgress": "Ses İndiriliyor",
+  "processingAudio": "Ses İşleniyor",
+  "combiningAudioFiles": "Ses dosyaları birleştiriliyor...",
+  "audioReady": "Ses Hazır",
+  "openingShareSheet": "Paylaşım sayfası açılıyor...",
+  "audioShareFailed": "Paylaşım Başarısız"
 }

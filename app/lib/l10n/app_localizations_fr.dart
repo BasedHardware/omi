@@ -7860,49 +7860,50 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'L\'appareil ne prend pas en charge la synchronisation WiFi, passage au Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health n\'est pas disponible sur cet appareil';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Télécharger l\'audio';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio téléchargé avec succès';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Échec du téléchargement de l\'audio';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Téléchargement de l\'audio...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Partager l\'audio';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Préparation de l\'audio';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Récupération des fichiers audio...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Téléchargement de l\'audio';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Traitement de l\'audio';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Combinaison des fichiers audio...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio prêt';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Ouverture de la feuille de partage...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Échec du partage';
 
   @override
   String get dailyRecaps => 'Récapitulatifs Quotidiens';

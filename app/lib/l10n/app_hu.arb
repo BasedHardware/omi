@@ -2593,5 +2593,20 @@
   "largeTimeGapDetected": "Nagy időeltérés észlelve ({gap})",
   "largeTimeGapsDetected": "Nagy időeltérések észlelve ({gaps})",
   "dailyRecaps": "Napi Összefoglalók",
-  "removeFilter": "Szűrő Eltávolítása"
+  "removeFilter": "Szűrő Eltávolítása",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra",
+  "appleHealthNotAvailable": "Az Apple Health nem érhető el ezen az eszközön",
+  "downloadAudio": "Hang letöltése",
+  "audioDownloadSuccess": "Hang sikeresen letöltve",
+  "audioDownloadFailed": "Hang letöltése sikertelen",
+  "downloadingAudio": "Hang letöltése...",
+  "shareAudio": "Hang megosztása",
+  "preparingAudio": "Hang előkészítése",
+  "gettingAudioFiles": "Hangfájlok lekérése...",
+  "downloadingAudioProgress": "Hang letöltése",
+  "processingAudio": "Hang feldolgozása",
+  "combiningAudioFiles": "Hangfájlok egyesítése...",
+  "audioReady": "Hang kész",
+  "openingShareSheet": "Megosztási lap megnyitása...",
+  "audioShareFailed": "Megosztás sikertelen"
 }

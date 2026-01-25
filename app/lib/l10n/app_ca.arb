@@ -2466,5 +2466,20 @@
   "largeTimeGapDetected": "S'ha detectat un gran interval de temps ({gap})",
   "largeTimeGapsDetected": "S'han detectat grans intervals de temps ({gaps})",
   "dailyRecaps": "Resums Diaris",
-  "removeFilter": "Elimina el Filtre"
+  "removeFilter": "Elimina el Filtre",
+  "deviceDoesNotSupportWifiSwitchingToBle": "El dispositiu no admet sincronització WiFi, canviant a Bluetooth",
+  "appleHealthNotAvailable": "Apple Health no està disponible en aquest dispositiu",
+  "downloadAudio": "Descarregar àudio",
+  "audioDownloadSuccess": "Àudio descarregat correctament",
+  "audioDownloadFailed": "Error en descarregar l'àudio",
+  "downloadingAudio": "Descarregant àudio...",
+  "shareAudio": "Compartir àudio",
+  "preparingAudio": "Preparant àudio",
+  "gettingAudioFiles": "Obtenint fitxers d'àudio...",
+  "downloadingAudioProgress": "Descarregant àudio",
+  "processingAudio": "Processant àudio",
+  "combiningAudioFiles": "Combinant fitxers d'àudio...",
+  "audioReady": "Àudio llest",
+  "openingShareSheet": "Obrint full de compartició...",
+  "audioShareFailed": "Error en compartir"
 }
