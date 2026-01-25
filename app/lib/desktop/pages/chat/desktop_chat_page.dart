@@ -960,13 +960,9 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildCustomNormalMessageWidget(ServerMessage message, MessageProvider provider, int chatIndex) {
-    var previousThinkingText = message.thinkings.length > 1
-        ? message.thinkings
-            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
-    var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
+    var thinkingTextRaw = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
+
     bool showTypingIndicator = provider.showTypingIndicator && chatIndex == provider.messages.length - 1;
 
     return Column(
@@ -976,7 +972,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       children: [
         showTypingIndicator && message.text.isEmpty
             ? Container(
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+                margin: const EdgeInsets.only(top: 8),
                 child: Row(
                   children: [
                     thinkingText != null
@@ -985,15 +981,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                previousThinkingText != null
-                                    ? Text(
-                                        overflow: TextOverflow.fade,
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        previousThinkingText,
-                                        style: const TextStyle(color: Colors.white60, fontSize: 14),
-                                      )
-                                    : const SizedBox.shrink(),
                                 Shimmer.fromColors(
                                   baseColor: Colors.white,
                                   highlightColor: Colors.grey,
@@ -1022,6 +1009,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       ],
     );
   }
+
 
   Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
     if (!message.askForNps) return const SizedBox();
