@@ -21,6 +21,7 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		75FA88603F1E83D88CB01366 /* TaskPromptEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13AF2A3C898648FB27B3AAAD /* ProactiveAssistants/UI/TaskPromptEditorWindow.swift */; };
 		09D62B8D1921F311FC89BE2E /* ProactiveAssistants/Core/ScreenCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0939C2E0994B5568E97B8051 /* ProactiveAssistants/Core/ScreenCaptureService.swift */; };
 		0B22125835308ECD92091FB9 /* ProactiveAssistants/Core/WindowMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85ED55DF44F55C485B0C372B /* ProactiveAssistants/Core/WindowMonitor.swift */; };
 		10A3C05DC26A1C8E371197DC /* ProactiveAssistants/Core/AssistantCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAD4F38CEA27126081686F0 /* ProactiveAssistants/Core/AssistantCoordinator.swift */; };
@@ -44,6 +45,7 @@
 		42B998822ED20D4700B97B59 /* CalendarMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998812ED20D4700B97B59 /* CalendarMonitor.swift */; };
 		42B998852ED5CB5500B97B59 /* MeetingAppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */; };
 		44B0B0DA9BF4FC604A5E6369 /* ProactiveAssistants/UI/GlowOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E9D90179904BB261222422 /* ProactiveAssistants/UI/GlowOverlayWindow.swift */; };
+		5A1D2E3F8B9C0D4E6F7A8B9C /* ProactiveAssistants/UI/GlowDemoWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2E3F4A9C0D1E5F7A8B9C0D /* ProactiveAssistants/UI/GlowDemoWindow.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
 		6F279B4E7D27C1EE2CE6BF20 /* ProactiveAssistants/Services/OverlayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2489E9D340B0C9F8BBB5D1F1 /* ProactiveAssistants/Services/OverlayService.swift */; };
 		71C77B9A313D00DCEF86272F /* ProactiveAssistants/Assistants/Focus/FocusAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB41D6B780508997C701C8F3 /* ProactiveAssistants/Assistants/Focus/FocusAssistantSettings.swift */; };
@@ -92,6 +94,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		13AF2A3C898648FB27B3AAAD /* ProactiveAssistants/UI/TaskPromptEditorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/TaskPromptEditorWindow.swift; sourceTree = "<group>"; };
 		0939C2E0994B5568E97B8051 /* ProactiveAssistants/Core/ScreenCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/ScreenCaptureService.swift; sourceTree = "<group>"; };
 		0FAD4F38CEA27126081686F0 /* ProactiveAssistants/Core/AssistantCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/AssistantCoordinator.swift; sourceTree = "<group>"; };
 		1C2D026EB5A0346DDF59E311 /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
@@ -158,6 +161,7 @@
 		CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
 		ECA12410D4472837013672C6 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		F1E9D90179904BB261222422 /* ProactiveAssistants/UI/GlowOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/GlowOverlayWindow.swift; sourceTree = "<group>"; };
+		6B2E3F4A9C0D1E5F7A8B9C0D /* ProactiveAssistants/UI/GlowDemoWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/GlowDemoWindow.swift; sourceTree = "<group>"; };
 		F2364BE82380613C3BD5E06C /* ProactiveAssistants/Core/AssistantProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/AssistantProtocol.swift; sourceTree = "<group>"; };
 		F8DCBD7DD8AB67EE93F0458C /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
 		FB8BF6EA65F96824E789314B /* ProactiveAssistants/UI/SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/SettingsWindow.swift; sourceTree = "<group>"; };
@@ -198,8 +202,10 @@
 				2489E9D340B0C9F8BBB5D1F1 /* ProactiveAssistants/Services/OverlayService.swift */,
 				C1DACC14460C6662DB2B0024 /* ProactiveAssistants/Services/AssistantSettings.swift */,
 				8F309134DEF4A3D02075D85A /* ProactiveAssistants/UI/SettingsView.swift */,
+				13AF2A3C898648FB27B3AAAD /* ProactiveAssistants/UI/TaskPromptEditorWindow.swift */,
 				FB8BF6EA65F96824E789314B /* ProactiveAssistants/UI/SettingsWindow.swift */,
 				FDE5F91C1B17F91F666FABE9 /* ProactiveAssistants/UI/GlowBorderView.swift */,
+				6B2E3F4A9C0D1E5F7A8B9C0D /* ProactiveAssistants/UI/GlowDemoWindow.swift */,
 				F1E9D90179904BB261222422 /* ProactiveAssistants/UI/GlowOverlayWindow.swift */,
 				393AD2AAD3BB3F4178507237 /* ProactiveAssistants/UI/PromptEditorWindow.swift */,
 				BD9FCF0BC89564024D642FDC /* ProactiveAssistants/Utilities/Logger.swift */,
@@ -537,6 +543,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				75FA88603F1E83D88CB01366 /* TaskPromptEditorWindow.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
@@ -566,6 +573,7 @@
 				DE4C094340B3FF19E32E8E43 /* ProactiveAssistants/UI/SettingsView.swift in Sources */,
 				D0B7BB053ECA8CC6FF7D8672 /* ProactiveAssistants/UI/SettingsWindow.swift in Sources */,
 				BFF6A75FBE7D64E08423AC71 /* ProactiveAssistants/UI/GlowBorderView.swift in Sources */,
+				5A1D2E3F8B9C0D4E6F7A8B9C /* ProactiveAssistants/UI/GlowDemoWindow.swift in Sources */,
 				44B0B0DA9BF4FC604A5E6369 /* ProactiveAssistants/UI/GlowOverlayWindow.swift in Sources */,
 				2A13DE987CB059AD8C47954E /* ProactiveAssistants/UI/PromptEditorWindow.swift in Sources */,
 				142708A3234404EB35B67CAA /* ProactiveAssistants/Utilities/Logger.swift in Sources */,
