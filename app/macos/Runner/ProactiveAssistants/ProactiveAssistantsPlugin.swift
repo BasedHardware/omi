@@ -21,6 +21,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
     private var windowMonitor: WindowMonitor?
     private var focusAssistant: FocusAssistant?
     private var taskAssistant: TaskAssistant?
+    private var adviceAssistant: AdviceAssistant?
     private var captureTimer: Timer?
     private var analysisDelayTimer: Timer?
     private var isInDelayPeriod = false
@@ -272,6 +273,14 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
                 AssistantCoordinator.shared.register(task)
             }
 
+            // Initialize Advice Assistant
+            adviceAssistant = try AdviceAssistant()
+
+            // Register Advice Assistant with coordinator
+            if let advice = adviceAssistant {
+                AssistantCoordinator.shared.register(advice)
+            }
+
         } catch {
             result(FlutterError(code: "INIT_ERROR", message: error.localizedDescription, details: nil))
             return
@@ -434,6 +443,12 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
 
             if let task = taskAssistant {
                 AssistantCoordinator.shared.register(task)
+            }
+
+            adviceAssistant = try AdviceAssistant()
+
+            if let advice = adviceAssistant {
+                AssistantCoordinator.shared.register(advice)
             }
 
         } catch {
