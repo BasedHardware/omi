@@ -28,6 +28,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
     private(set) var isMonitoring = false
     private var currentApp: String?
     private var currentWindowID: CGWindowID?
+    private var currentWindowTitle: String?
     private var lastStatus: FocusStatus?
     private var frameCount = 0
 
@@ -348,6 +349,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
         isMonitoring = false
         currentApp = nil
         currentWindowID = nil
+        currentWindowTitle = nil
         lastStatus = nil
         frameCount = 0
 
@@ -507,6 +509,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
         isMonitoring = false
         currentApp = nil
         currentWindowID = nil
+        currentWindowTitle = nil
         lastStatus = nil
         frameCount = 0
 
@@ -532,6 +535,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
         guard appName != currentApp else { return }
         currentApp = appName
         currentWindowID = nil
+        currentWindowTitle = nil  // Reset window title on app switch
 
         // Notify all assistants
         AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
@@ -567,8 +571,10 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
     private func captureFrame() async {
         guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
-        // Check for window switch
-        let (_, _, windowID) = WindowMonitor.getActiveWindowInfoStatic()
+        // Check for window switch and get window title
+        let (_, windowTitle, windowID) = WindowMonitor.getActiveWindowInfoStatic()
+
+        // Track window ID changes
         if let windowID = windowID, windowID != currentWindowID {
             let previousWindowID = currentWindowID
             currentWindowID = windowID
@@ -576,6 +582,14 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
             if previousWindowID != nil {
                 onWindowSwitch(windowID: windowID)
             }
+        }
+
+        // Track window title changes (e.g., browser tab switches)
+        if windowTitle != currentWindowTitle {
+            if let title = windowTitle, let oldTitle = currentWindowTitle {
+                log("Window title changed: '\(oldTitle)' → '\(title)'")
+            }
+            currentWindowTitle = windowTitle
         }
 
         guard !isInDelayPeriod else { return }
@@ -587,6 +601,7 @@ public class ProactiveAssistantsPlugin: NSObject, FlutterPlugin {
             let frame = CapturedFrame(
                 jpegData: jpegData,
                 appName: appName,
+                windowTitle: currentWindowTitle,
                 frameNumber: frameCount
             )
 
