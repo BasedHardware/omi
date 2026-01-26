@@ -1,0 +1,21 @@
+---
+description: "Always run tests before committing changes"
+alwaysApply: true
+---
+
+# Testing
+
+Always run tests before committing changes to verify your changes work correctly.
+
+## Test Commands
+
+- **Backend changes**: Run `backend/test.sh`
+- **App changes**: Run `app/test.sh`
+
+## Process
+
+1. After making changes, identify which test suite to run
+2. Run the appropriate test script
+3. Fix any failures
+4. Re-run tests until all pass
+5. Only then commit your changes

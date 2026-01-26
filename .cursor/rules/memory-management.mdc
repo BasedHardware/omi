@@ -1,0 +1,34 @@
+---
+description: "Memory management - free large objects immediately after use"
+globs:
+  - "backend/**/*.py"
+alwaysApply: false
+---
+
+# Memory Management
+
+Free large objects immediately after use to prevent memory leaks and improve performance.
+
+## Examples
+
+- Use `del` for byte arrays after processing
+- Use `.clear()` for dicts/lists holding large amounts of data
+- Close file handles and database connections promptly
+- Release resources in finally blocks or context managers
+
+```python
+# Good
+def process_large_data():
+    data = load_large_dataset()  # Large byte array
+    result = process(data)
+    del data  # Free memory immediately
+    return result
+
+# Good
+def process_dict():
+    cache = {}
+    # ... populate cache with large data ...
+    result = use_cache(cache)
+    cache.clear()  # Free memory
+    return result
+```
