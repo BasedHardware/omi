@@ -67,19 +67,18 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
     );
   }
 
+  // Simplified animation: removed ScaleTransition to reduce animation layers
+  // SlideTransition + color change provides sufficient visual feedback
   Widget _bubble(Animation<Offset> anim) => SlideTransition(
         position: anim,
         child: AnimatedBuilder(
           animation: _color,
-          builder: (context, _) => ScaleTransition(
-            scale: _controller,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: _color.value,
-                shape: BoxShape.circle,
-              ),
+          builder: (context, _) => Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: _color.value,
+              shape: BoxShape.circle,
             ),
           ),
         ),

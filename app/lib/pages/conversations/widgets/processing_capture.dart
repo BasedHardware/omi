@@ -667,80 +667,73 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(24.0),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header row with Processing indicator
-                Row(
+          // Use RepaintBoundary to isolate shimmer animations from parent repaints
+          child: RepaintBoundary(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              // Use single Shimmer wrapper to synchronize all shimmer animations
+              // This reduces animation overhead from 4 separate controllers to 1
+              child: Shimmer.fromColors(
+                baseColor: const Color(0xFF2A2A32),
+                highlightColor: const Color(0xFF3D3D47),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Icon placeholder with shimmer
-                    Shimmer.fromColors(
-                      baseColor: const Color(0xFF2A2A32),
-                      highlightColor: const Color(0xFF3D3D47),
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A32),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Processing label with shimmer effect on text
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Shimmer.fromColors(
-                        baseColor: Colors.white,
-                        highlightColor: Colors.grey,
-                        child: Text(
-                          context.l10n.processing,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                    // Header row with Processing indicator
+                    Row(
+                      children: [
+                        // Icon placeholder
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A2A32),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      ),
-                    ),
-                    const Spacer(),
-                    // Timestamp placeholder with shimmer
-                    Shimmer.fromColors(
-                      baseColor: const Color(0xFF2A2A32),
-                      highlightColor: const Color(0xFF3D3D47),
-                      child: Container(
-                        width: 50,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A32),
-                          borderRadius: BorderRadius.circular(4),
+                        const SizedBox(width: 8),
+                        // Processing label
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF35343B),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Text(
+                            context.l10n.processing,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
+                        const Spacer(),
+                        // Timestamp placeholder
+                        Container(
+                          width: 50,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A2A32),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Title placeholder
+                    Container(
+                      width: double.maxFinite,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A32),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Title placeholder with shimmer
-                Shimmer.fromColors(
-                  baseColor: const Color(0xFF2A2A32),
-                  highlightColor: const Color(0xFF3D3D47),
-                  child: Container(
-                    width: double.maxFinite,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A32),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

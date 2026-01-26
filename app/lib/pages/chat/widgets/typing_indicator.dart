@@ -64,20 +64,19 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   }
 
   Widget _buildBubble(Animation<Offset> animation, double size) {
+    // Simplified animation: removed ScaleTransition to reduce animation layers
+    // SlideTransition + color change provides sufficient visual feedback
     return SlideTransition(
       position: animation,
       child: AnimatedBuilder(
         animation: _colorAnimation,
         builder: (context, child) {
-          return ScaleTransition(
-            scale: _controller,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: _colorAnimation.value,
-                shape: BoxShape.circle,
-              ),
+          return Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: _colorAnimation.value,
+              shape: BoxShape.circle,
             ),
           );
         },

@@ -81,8 +81,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       child: CustomPaint(
                         painter: AudioWavePainter(
                           levels: provider.audioLevels,
-                          timestamp: DateTime.now(),
-                        ),
+                                                  ),
                       ),
                     ),
                   ),
@@ -184,7 +183,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       child: CustomPaint(
                         painter: AudioWavePainter(
                           levels: provider.audioLevels,
-                          timestamp: DateTime.now(),
                         ),
                       ),
                     ),
@@ -233,13 +231,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
 class AudioWavePainter extends CustomPainter {
   final List<double> levels;
-  // Add timestamp to control repaint frequency
-  final DateTime timestamp;
 
   AudioWavePainter({
     required this.levels,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -273,6 +268,11 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
-    return true;
+    // Only repaint if the audio levels have actually changed
+    if (levels.length != oldDelegate.levels.length) return true;
+    for (int i = 0; i < levels.length; i++) {
+      if ((levels[i] - oldDelegate.levels[i]).abs() > 0.01) return true;
+    }
+    return false;
   }
 }
