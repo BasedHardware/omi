@@ -74,12 +74,35 @@ struct GeminiRequest: Encodable {
                 let `enum`: [String]?
                 let description: String?
                 let items: Items?
+                let nestedProperties: [String: Property]?
+                let nestedRequired: [String]?
+
+                enum CodingKeys: String, CodingKey {
+                    case type
+                    case `enum`
+                    case description
+                    case items
+                    case nestedProperties = "properties"
+                    case nestedRequired = "required"
+                }
 
                 init(type: String, enum: [String]? = nil, description: String? = nil, items: Items? = nil) {
                     self.type = type
                     self.enum = `enum`
                     self.description = description
                     self.items = items
+                    self.nestedProperties = nil
+                    self.nestedRequired = nil
+                }
+
+                /// Initialize an object property with nested properties
+                init(type: String, description: String? = nil, properties: [String: Property], required: [String]) {
+                    self.type = type
+                    self.enum = nil
+                    self.description = description
+                    self.items = nil
+                    self.nestedProperties = properties
+                    self.nestedRequired = required
                 }
 
                 struct Items: Encodable {
@@ -140,7 +163,7 @@ actor GeminiClient {
         }
     }
 
-    init(apiKey: String? = nil, model: String = "gemini-2.0-flash") throws {
+    init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
         guard let key = apiKey ?? ProcessInfo.processInfo.environment["GEMINI_API_KEY"] else {
             throw GeminiClientError.missingAPIKey
         }
@@ -183,6 +206,7 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
         let (data, _) = try await URLSession.shared.data(for: urlRequest)
@@ -225,6 +249,7 @@ actor GeminiClient {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
         let (data, _) = try await URLSession.shared.data(for: urlRequest)
