@@ -33,6 +33,13 @@ actor FocusAssistant: ProactiveAssistant {
     private var pendingTasks: Set<Task<Void, Never>> = []
     private var currentApp: String?
 
+    // MARK: - Smart Analysis Filtering
+    // Skip analysis when user is focused on the same context (app + window title)
+    // Also skip during cooldown period after distraction (unless context changes)
+    private var lastAnalyzedApp: String?
+    private var lastAnalyzedWindowTitle: String?
+    private var analysisCooldownEndTime: Date?
+
     /// Get the current system prompt from settings (accessed on MainActor for thread safety)
     private var systemPrompt: String {
         get async {
@@ -106,12 +113,69 @@ actor FocusAssistant: ProactiveAssistant {
     }
 
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
+        // Smart filtering: Skip analysis if user is focused on the same context
+        if shouldSkipAnalysis(for: frame) {
+            return nil
+        }
+
+        // Update last analyzed context IMMEDIATELY when queuing (not after API response)
+        // This prevents multiple frames from being queued for the same context change
+        lastAnalyzedApp = frame.appName
+        lastAnalyzedWindowTitle = frame.windowTitle
+
         // Submit frame to internal queue for processing
         frameQueue.append(frame)
-        log("Focus: Captured frame \(frame.frameNumber): App=\(frame.appName)")
+        log("Focus: Queued frame \(frame.frameNumber) for analysis: App=\(frame.appName), Window=\(frame.windowTitle ?? "unknown")")
 
         // Return nil since we process asynchronously
         return nil
+    }
+
+    /// Determines if we should skip analysis for this frame
+    /// Returns true if:
+    /// - User is focused on the same app AND same window title
+    /// - OR we're in cooldown period after distraction (unless context changed)
+    private func shouldSkipAnalysis(for frame: CapturedFrame) -> Bool {
+        // Always analyze if we don't have a status yet
+        guard lastStatus != nil else {
+            return false
+        }
+
+        // Check if context changed (app or window title different from last analysis)
+        let contextChanged = frame.appName != lastAnalyzedApp || frame.windowTitle != lastAnalyzedWindowTitle
+
+        // Check 1: Context switch - ALWAYS analyze (bypass cooldown)
+        if contextChanged {
+            // Clear cooldown on context switch since user changed context
+            if analysisCooldownEndTime != nil {
+                log("Focus: Context switch detected, clearing cooldown - will analyze")
+                analysisCooldownEndTime = nil
+            } else {
+                log("Focus: Context changed (app: \(lastAnalyzedApp ?? "nil") → \(frame.appName), window: \(lastAnalyzedWindowTitle ?? "nil") → \(frame.windowTitle ?? "nil")) - will analyze")
+            }
+            return false
+        }
+
+        // Check 2: Are we in cooldown period after distraction?
+        if let cooldownEnd = analysisCooldownEndTime {
+            if Date() < cooldownEnd {
+                // Still in cooldown and no context switch - skip analysis
+                return true
+            } else {
+                // Cooldown expired, clear it
+                analysisCooldownEndTime = nil
+                log("Focus: Cooldown ended, resuming analysis")
+            }
+        }
+
+        // Check 3: User is focused on the same context - skip analysis
+        if lastStatus == .focused {
+            // User is focused on the same context - no need to re-analyze
+            return true
+        }
+
+        // Default: analyze (status is distracted or unknown edge case)
+        return false
     }
 
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
@@ -150,6 +214,12 @@ actor FocusAssistant: ProactiveAssistant {
             task.cancel()
         }
         pendingTasks.removeAll()
+
+        // Reset tracking state
+        lastAnalyzedApp = nil
+        lastAnalyzedWindowTitle = nil
+        lastStatus = nil
+        analysisCooldownEndTime = nil
     }
 
     // MARK: - Legacy API (for backward compatibility)
@@ -212,6 +282,9 @@ actor FocusAssistant: ProactiveAssistant {
             }
             lastProcessedFrameNum = frame.frameNumber
 
+            // Note: lastAnalyzedApp/lastAnalyzedWindowTitle are updated in analyze() when queuing,
+            // not here, to prevent multiple frames being queued for the same context change
+
             // Add to history
             analysisHistory.append(analysis)
             if analysisHistory.count > maxHistorySize {
@@ -243,6 +316,14 @@ actor FocusAssistant: ProactiveAssistant {
                     if notificationSent {
                         // Trigger red glow via callback (runs on MainActor in plugin)
                         onDistraction?()
+
+                        // Start analysis cooldown (same as notification cooldown)
+                        // This prevents continuous API calls while user is distracted
+                        let cooldownSeconds = await MainActor.run {
+                            AssistantSettings.shared.cooldownIntervalSeconds
+                        }
+                        analysisCooldownEndTime = Date().addingTimeInterval(cooldownSeconds)
+                        log("Focus: Started \(Int(cooldownSeconds))s analysis cooldown")
                     }
 
                     // Still call the callback for Flutter event streaming
