@@ -1,6 +1,19 @@
 import Cocoa
 import SwiftUI
 
+/// Preview phase for glow demonstration
+enum GlowDemoPhase {
+    case none
+    case focused
+    case distracted
+}
+
+/// Observable object to manage demo window state
+class GlowDemoState: ObservableObject {
+    static let shared = GlowDemoState()
+    @Published var phase: GlowDemoPhase = .none
+}
+
 /// A small demo window used to preview the glow effect
 class GlowDemoWindow: NSWindow {
     private static var sharedWindow: GlowDemoWindow?
@@ -20,6 +33,7 @@ class GlowDemoWindow: NSWindow {
 
     /// Closes the demo window
     static func close() {
+        GlowDemoState.shared.phase = .none
         sharedWindow?.close()
         sharedWindow = nil
     }
@@ -29,9 +43,14 @@ class GlowDemoWindow: NSWindow {
         return sharedWindow?.frame
     }
 
+    /// Updates the preview phase
+    static func setPhase(_ phase: GlowDemoPhase) {
+        GlowDemoState.shared.phase = phase
+    }
+
     private init() {
-        // Small window size for demo
-        let contentRect = NSRect(x: 0, y: 0, width: 300, height: 200)
+        // Window size for demo content
+        let contentRect = NSRect(x: 0, y: 0, width: 340, height: 220)
 
         super.init(
             contentRect: contentRect,
@@ -56,27 +75,103 @@ class GlowDemoWindow: NSWindow {
     }
 }
 
-/// Simple content view for the demo window
+/// Content view for the demo window showing focused/distracted states
 struct GlowDemoContentView: View {
+    @ObservedObject private var state = GlowDemoState.shared
+
     var body: some View {
         VStack(spacing: 16) {
-            Spacer()
+            // Preview content
+            HStack(spacing: 20) {
+                // Focused state
+                glowStatePreview(
+                    title: "Focused",
+                    description: "You're on track",
+                    color: Color(red: 0.16, green: 0.79, blue: 0.26),
+                    isActive: state.phase == .focused
+                )
 
-            Image(systemName: "sparkles")
-                .font(.system(size: 40))
-                .foregroundColor(.accentColor)
+                // Arrow between states
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary.opacity(0.5))
 
-            Text("Glow Preview")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.primary)
+                // Distracted state
+                glowStatePreview(
+                    title: "Distracted",
+                    description: "Time to refocus",
+                    color: Color(red: 0.95, green: 0.3, blue: 0.3),
+                    isActive: state.phase == .distracted
+                )
+            }
+            .padding(.vertical, 8)
 
-            Text("Watch the border effect")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-
-            Spacer()
+            // Progress indicator
+            HStack(spacing: 8) {
+                if state.phase != .none {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                    Text(state.phase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Watch the border effect")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary.opacity(0.6))
+                }
+            }
+            .frame(height: 20)
         }
+        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func glowStatePreview(title: String, description: String, color: Color, isActive: Bool) -> some View {
+        VStack(spacing: 8) {
+            // Glow indicator circle
+            ZStack {
+                // Outer glow
+                Circle()
+                    .fill(color.opacity(isActive ? 0.3 : 0.1))
+                    .frame(width: 50, height: 50)
+                    .blur(radius: isActive ? 8 : 0)
+
+                // Inner circle
+                Circle()
+                    .fill(color.opacity(isActive ? 1.0 : 0.3))
+                    .frame(width: 30, height: 30)
+
+                // Pulse animation
+                if isActive {
+                    Circle()
+                        .stroke(color.opacity(0.5), lineWidth: 2)
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(isActive ? 1.3 : 1.0)
+                        .opacity(isActive ? 0 : 1)
+                        .animation(
+                            Animation.easeOut(duration: 1.0).repeatForever(autoreverses: false),
+                            value: isActive
+                        )
+                }
+            }
+            .frame(width: 60, height: 60)
+
+            // Labels
+            Text(title)
+                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                .foregroundColor(isActive ? .primary : .secondary)
+
+            Text(description)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary.opacity(0.8))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isActive ? color.opacity(0.1) : Color.clear)
+        )
+        .animation(.easeInOut(duration: 0.3), value: isActive)
     }
 }

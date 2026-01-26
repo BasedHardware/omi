@@ -141,6 +141,9 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Found \(newTasks.count) new tasks")
 
+        // Send notification for new tasks
+        await sendTaskNotification(tasks: newTasks)
+
         // Send events to Flutter
         for task in newTasks {
             sendEvent("taskExtracted", [
@@ -148,6 +151,50 @@ actor TaskAssistant: ProactiveAssistant {
                 "task": task.toDictionary(),
                 "contextSummary": taskResult.contextSummary
             ])
+        }
+    }
+
+    /// Send a notification summarizing the extracted tasks
+    private func sendTaskNotification(tasks: [ExtractedTask]) async {
+        guard !tasks.isEmpty else { return }
+
+        let title: String
+        let message: String
+
+        if tasks.count == 1 {
+            let task = tasks[0]
+            title = "Task Found"
+            // Include priority if high
+            if task.priority == .high {
+                message = "⚡ \(task.title)"
+            } else {
+                message = task.title
+            }
+        } else {
+            title = "\(tasks.count) Tasks Found"
+            // List first 3 tasks, truncate if more
+            let taskTitles = tasks.prefix(3).map { task -> String in
+                if task.priority == .high {
+                    return "⚡ \(task.title)"
+                }
+                return task.title
+            }
+            var messageText = taskTitles.joined(separator: "\n")
+            if tasks.count > 3 {
+                messageText += "\n+\(tasks.count - 3) more..."
+            }
+            message = messageText
+        }
+
+        // Send notification immediately (extraction interval already throttles)
+        await MainActor.run {
+            NotificationService.shared.sendNotification(
+                title: title,
+                message: message,
+                assistantId: identifier,
+                applyCooldown: false
+            )
+            log("Task: Sent notification for \(tasks.count) task(s)")
         }
     }
 

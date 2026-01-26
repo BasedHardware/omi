@@ -8,10 +8,12 @@ class FocusAssistantSettings {
 
     private let enabledKey = "focusAssistantEnabled"
     private let analysisPromptKey = "focusAnalysisPrompt"
+    private let cooldownIntervalKey = "focusCooldownInterval"
 
     // MARK: - Default Values
 
     private let defaultEnabled = true
+    private let defaultCooldownInterval = 10 // minutes
 
     /// Default system prompt for focus analysis
     static let defaultAnalysisPrompt = """
@@ -46,6 +48,7 @@ class FocusAssistantSettings {
         // Register defaults
         UserDefaults.standard.register(defaults: [
             enabledKey: defaultEnabled,
+            cooldownIntervalKey: defaultCooldownInterval,
         ])
     }
 
@@ -58,6 +61,23 @@ class FocusAssistantSettings {
             UserDefaults.standard.set(newValue, forKey: enabledKey)
             NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
         }
+    }
+
+    /// Cooldown interval between notifications in minutes
+    var cooldownInterval: Int {
+        get {
+            let value = UserDefaults.standard.integer(forKey: cooldownIntervalKey)
+            return value > 0 ? value : defaultCooldownInterval
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: cooldownIntervalKey)
+            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+        }
+    }
+
+    /// Cooldown interval in seconds
+    var cooldownIntervalSeconds: TimeInterval {
+        return TimeInterval(cooldownInterval * 60)
     }
 
     /// The system prompt used for AI focus analysis

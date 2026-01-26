@@ -306,11 +306,12 @@ actor FocusAssistant: ProactiveAssistant {
                     let fullMessage = "\(analysis.appOrSite) - \(message)"
                     log("ALERT: \(message)")
 
-                    // Send notification and trigger red glow only if notification was actually sent
+                    // Send notification (analysis cooldown handles throttling, not notification cooldown)
                     let notificationSent = NotificationService.shared.sendNotification(
                         title: "Focus Alert",
                         message: fullMessage,
-                        applyCooldown: true
+                        assistantId: identifier,
+                        applyCooldown: false
                     )
 
                     if notificationSent {
@@ -320,7 +321,7 @@ actor FocusAssistant: ProactiveAssistant {
                         // Start analysis cooldown (same as notification cooldown)
                         // This prevents continuous API calls while user is distracted
                         let cooldownSeconds = await MainActor.run {
-                            AssistantSettings.shared.cooldownIntervalSeconds
+                            FocusAssistantSettings.shared.cooldownIntervalSeconds
                         }
                         analysisCooldownEndTime = Date().addingTimeInterval(cooldownSeconds)
                         log("Focus: Started \(Int(cooldownSeconds))s analysis cooldown")
@@ -339,6 +340,7 @@ actor FocusAssistant: ProactiveAssistant {
                     NotificationService.shared.sendNotification(
                         title: "OMI - Focus",
                         message: message,
+                        assistantId: identifier,
                         applyCooldown: false
                     )
                 }

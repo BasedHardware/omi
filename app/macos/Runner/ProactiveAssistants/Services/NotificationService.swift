@@ -4,11 +4,18 @@ import UserNotifications
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
 
-    private var lastNotificationTime: Date = .distantPast
+    /// Per-assistant cooldown tracking
+    private var lastNotificationTimes: [String: Date] = [:]
 
-    /// Cooldown in seconds, read from AssistantSettings
-    private var cooldownSeconds: TimeInterval {
-        return AssistantSettings.shared.cooldownIntervalSeconds
+    /// Get cooldown seconds for a specific assistant
+    private func cooldownSeconds(for assistantId: String) -> TimeInterval {
+        switch assistantId {
+        case "focus":
+            return FocusAssistantSettings.shared.cooldownIntervalSeconds
+        default:
+            // Task assistant uses extraction interval instead of notification cooldown
+            return AssistantSettings.shared.cooldownIntervalSeconds
+        }
     }
 
     private override init() {
@@ -35,15 +42,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     @discardableResult
-    func sendNotification(title: String, message: String, applyCooldown: Bool = true) -> Bool {
+    func sendNotification(title: String, message: String, assistantId: String = "default", applyCooldown: Bool = true) -> Bool {
         if applyCooldown {
-            let timeSinceLast = Date().timeIntervalSince(lastNotificationTime)
-            if timeSinceLast < cooldownSeconds {
-                let remaining = cooldownSeconds - timeSinceLast
-                log("Notification in cooldown (\(String(format: "%.1f", remaining))s remaining), skipping: \(message)")
+            let lastTime = lastNotificationTimes[assistantId] ?? .distantPast
+            let timeSinceLast = Date().timeIntervalSince(lastTime)
+            let cooldown = cooldownSeconds(for: assistantId)
+
+            if timeSinceLast < cooldown {
+                let remaining = cooldown - timeSinceLast
+                log("[\(assistantId)] Notification in cooldown (\(String(format: "%.1f", remaining))s remaining), skipping: \(message)")
                 return false
             }
-            lastNotificationTime = Date()
+            lastNotificationTimes[assistantId] = Date()
         }
 
         let content = UNMutableNotificationContent()
@@ -58,7 +68,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             trigger: nil // Deliver immediately
         )
 
-        print("Sending notification: \(title) - \(message)")
+        print("[\(assistantId)] Sending notification: \(title) - \(message)")
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("Notification error: \(error)")

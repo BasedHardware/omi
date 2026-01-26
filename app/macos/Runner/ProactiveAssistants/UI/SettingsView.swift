@@ -101,13 +101,9 @@ struct SettingsView: View {
             // Update monitoring state when it changes externally
             isMonitoring = ProactiveAssistantsPlugin.shared?.isMonitoring ?? false
         }
-        .onChange(of: isShowingPreview) { _ in
-            resizeWindowToFit()
-        }
         .onChange(of: selectedTab) { _ in
             resizeWindowToFit()
         }
-        .animation(.easeInOut(duration: 0.3), value: isShowingPreview)
         .animation(.easeInOut(duration: 0.2), value: selectedTab)
     }
 
@@ -284,19 +280,13 @@ struct SettingsView: View {
                 Toggle("", isOn: $glowOverlayEnabled)
                     .toggleStyle(.switch)
                     .labelsHidden()
-                    .disabled(isShowingPreview)
+                    .disabled(isPreviewRunning)
                     .onChange(of: glowOverlayEnabled) { newValue in
                         AssistantSettings.shared.glowOverlayEnabled = newValue
                         if newValue {
                             startGlowPreview()
                         }
                     }
-            }
-
-            // Glow Preview Section (only shown when preview is active)
-            if isShowingPreview {
-                glowPreviewSection
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
 
             Divider()
@@ -423,125 +413,10 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Glow Preview Section
-
-    private var glowPreviewSection: some View {
-        VStack(spacing: 16) {
-            // Preview header
-            HStack {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 14))
-                    .foregroundColor(.accentColor)
-                Text("Preview")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-            }
-
-            // Preview content
-            HStack(spacing: 20) {
-                // Focused state
-                glowStatePreview(
-                    title: "Focused",
-                    description: "You're on track",
-                    color: Color(red: 0.16, green: 0.79, blue: 0.26), // #28CA42
-                    isActive: previewPhase == .focused
-                )
-
-                // Arrow between states
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.secondary.opacity(0.5))
-
-                // Distracted state
-                glowStatePreview(
-                    title: "Distracted",
-                    description: "Time to refocus",
-                    color: Color(red: 0.95, green: 0.3, blue: 0.3), // Red
-                    isActive: previewPhase == .distracted
-                )
-            }
-            .padding(.vertical, 8)
-
-            // Progress indicator
-            HStack(spacing: 8) {
-                if previewPhase != .none {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                    Text(previewPhase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("Toggle on to see preview")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary.opacity(0.6))
-                }
-            }
-            .frame(height: 20)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.primary.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                )
-        )
-    }
-
-    private func glowStatePreview(title: String, description: String, color: Color, isActive: Bool) -> some View {
-        VStack(spacing: 8) {
-            // Glow indicator circle
-            ZStack {
-                // Outer glow
-                Circle()
-                    .fill(color.opacity(isActive ? 0.3 : 0.1))
-                    .frame(width: 50, height: 50)
-                    .blur(radius: isActive ? 8 : 0)
-
-                // Inner circle
-                Circle()
-                    .fill(color.opacity(isActive ? 1.0 : 0.3))
-                    .frame(width: 30, height: 30)
-
-                // Pulse animation
-                if isActive {
-                    Circle()
-                        .stroke(color.opacity(0.5), lineWidth: 2)
-                        .frame(width: 40, height: 40)
-                        .scaleEffect(isActive ? 1.3 : 1.0)
-                        .opacity(isActive ? 0 : 1)
-                        .animation(
-                            Animation.easeOut(duration: 1.0).repeatForever(autoreverses: false),
-                            value: isActive
-                        )
-                }
-            }
-            .frame(width: 60, height: 60)
-
-            // Labels
-            Text(title)
-                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                .foregroundColor(isActive ? .primary : .secondary)
-
-            Text(description)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary.opacity(0.8))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isActive ? color.opacity(0.1) : Color.clear)
-        )
-        .animation(.easeInOut(duration: 0.3), value: isActive)
-    }
-
     // MARK: - Glow Preview Logic
 
     private func startGlowPreview() {
-        isShowingPreview = true
+        isPreviewRunning = true
 
         // Show the demo window and get its frame
         let demoWindow = GlowDemoWindow.show()
@@ -549,29 +424,22 @@ struct SettingsView: View {
 
         // Phase 1: Show focused (green) glow after a small delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation {
-                previewPhase = .focused
-            }
+            GlowDemoWindow.setPhase(.focused)
             // Show glow around the demo window
             OverlayService.shared.showGlow(around: windowFrame, colorMode: .focused, isPreview: true)
         }
 
         // Phase 2: Show distracted (red) glow
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.3) {
-            withAnimation {
-                previewPhase = .distracted
-            }
+            GlowDemoWindow.setPhase(.distracted)
             // Show glow around the demo window
             OverlayService.shared.showGlow(around: windowFrame, colorMode: .distracted, isPreview: true)
         }
 
         // End preview and close demo window
         DispatchQueue.main.asyncAfter(deadline: .now() + 7.0) {
-            withAnimation {
-                previewPhase = .none
-                isShowingPreview = false
-            }
             GlowDemoWindow.close()
+            isPreviewRunning = false
         }
     }
 
@@ -644,26 +512,29 @@ struct SettingsView: View {
     }
 
     private func resizeWindowToFit() {
-        guard let window = NSApp.windows.first(where: { $0.title == "Proactive Assistant Settings" }),
-              let hostingView = window.contentView as? NSHostingView<SettingsView> else {
-            return
-        }
+        // Delay to let SwiftUI finish laying out the new content
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: { $0.title == "Proactive Assistant Settings" }),
+                  let hostingView = window.contentView as? NSHostingView<SettingsView> else {
+                return
+            }
 
-        // Get the ideal size from the hosting view
-        let fittingSize = hostingView.fittingSize
-        let newHeight = fittingSize.height
+            // Get the ideal size from the hosting view
+            let fittingSize = hostingView.fittingSize
+            let newHeight = fittingSize.height
 
-        var frame = window.frame
-        let heightDiff = newHeight - frame.height
+            var frame = window.frame
+            let heightDiff = newHeight - frame.height
 
-        // Adjust origin to keep top of window in place (macOS coordinates have origin at bottom-left)
-        frame.origin.y -= heightDiff
-        frame.size.height = newHeight
+            // Adjust origin to keep top of window in place (macOS coordinates have origin at bottom-left)
+            frame.origin.y -= heightDiff
+            frame.size.height = newHeight
 
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.25
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            window.animator().setFrame(frame, display: true)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(frame, display: true)
+            }
         }
     }
 }
