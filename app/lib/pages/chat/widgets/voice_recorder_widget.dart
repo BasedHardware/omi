@@ -80,7 +80,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       height: 40,
                       child: CustomPaint(
                         painter: AudioWavePainter(
-                          levels: provider.audioLevels,
+                          levels: List<double>.from(provider.audioLevels),
                         ),
                       ),
                     ),
@@ -182,7 +182,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       height: 40,
                       child: CustomPaint(
                         painter: AudioWavePainter(
-                          levels: provider.audioLevels,
+                          levels: List<double>.from(provider.audioLevels),
                         ),
                       ),
                     ),
@@ -233,8 +233,8 @@ class AudioWavePainter extends CustomPainter {
   final List<double> levels;
 
   AudioWavePainter({
-    required this.levels,
-  });
+    required List<double> levels,
+  }) : levels = List<double>.from(levels);
 
   @override
   void paint(Canvas canvas, Size size) {
