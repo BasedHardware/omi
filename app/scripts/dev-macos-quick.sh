@@ -52,6 +52,11 @@ done
 
 cd "$APP_DIR"
 
+# Kill any existing Omi process first (before build to avoid file locks)
+echo "Stopping any running Omi instance..."
+pkill -f "Omi.app/Contents/MacOS/Omi" 2>/dev/null || true
+sleep 0.5
+
 # Clean build if requested
 if [ "$CLEAN" = true ]; then
     echo "Cleaning Flutter build..."
@@ -73,30 +78,18 @@ fi
 
 echo "Build complete."
 
-# Re-register app with LaunchServices to ensure URL schemes are recognized
-echo "Registering app with LaunchServices..."
-LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-if [ "$BUILD_MODE" = "release" ]; then
-    APP_PATH="build/macos/Build/Products/Release-prod/Omi.app"
-else
-    APP_PATH="build/macos/Build/Products/Debug-prod/Omi.app"
-fi
-
-# Register the build with LaunchServices (skip cleanup to preserve permissions)
-$LSREGISTER -f "$APP_PATH"
-echo "LaunchServices registration complete."
-
 # Run the app
 if [ "$RUN_APP" = true ]; then
-    # Kill any existing Omi process first
-    echo "Stopping any running Omi instance..."
-    pkill -f "Omi.app/Contents/MacOS/Omi" 2>/dev/null || true
-    sleep 0.5
+    if [ "$BUILD_MODE" = "release" ]; then
+        APP_PATH="build/macos/Build/Products/Release-prod/Omi.app"
+    else
+        APP_PATH="build/macos/Build/Products/Debug-prod/Omi.app"
+    fi
 
     # Run from build directory (preserves TCC permissions)
     echo "Launching app from build directory..."
     xattr -cr "$APP_PATH"
-    open "$APP_PATH"
+    open "$APP_PATH" || "$APP_PATH/Contents/MacOS/Omi" &
 fi
 
 echo "Done!"
