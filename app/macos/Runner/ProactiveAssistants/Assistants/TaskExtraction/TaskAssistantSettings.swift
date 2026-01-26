@@ -131,7 +131,7 @@ class TaskAssistantSettings {
         - ❌ DON'T extract "Book flights" (they're doing it right now)
 
         FORMAT REQUIREMENTS (if extracting a task):
-        - Keep the task title SHORT and concise (100-150 characters max to fit in notification banner)
+        - Keep the task title SHORT and concise (100 characters max to fit in notification banner)
         - Start with a verb: "Review", "Send", "Call", "Fix", "Update", "Reply to", "Submit"
         - Include essential context: WHO, WHAT (e.g., "Reply to John about Q4 report")
         - Remove time references from title (put in inferred_deadline field)
