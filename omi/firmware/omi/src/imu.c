@@ -34,8 +34,6 @@ LOG_MODULE_REGISTER(imu, CONFIG_LOG_DEFAULT_LEVEL);
 /* LSM6DS3TR-C timestamp resolution:
  * - TIMER_HR = 0: 1 LSB = 6.4 ms (default)
  * - TIMER_HR = 1: 1 LSB = 25 us
- *
- * You said you want 6.4ms mode.
  */
 #define LSM6DS_TIMESTAMP_TICK_US_6P4MS 6400ULL
 
@@ -45,13 +43,7 @@ LOG_MODULE_REGISTER(imu, CONFIG_LOG_DEFAULT_LEVEL);
 static int lsm6dsl_power_ensure_on(void);
 
 static const struct i2c_dt_spec lsm6dsl_i2c = I2C_DT_SPEC_GET(DT_ALIAS(lsm6dsl));
-#if DT_NODE_HAS_PROP(DT_NODELABEL(lsm6dsl_en_pin), gpios)
-static const struct gpio_dt_spec lsm6dsl_en = GPIO_DT_SPEC_GET(DT_NODELABEL(lsm6dsl_en_pin), gpios);
-#elif DT_NODE_HAS_PROP(DT_NODELABEL(lsm6dsl_en_pin), enable_gpios)
 static const struct gpio_dt_spec lsm6dsl_en = GPIO_DT_SPEC_GET(DT_NODELABEL(lsm6dsl_en_pin), enable_gpios);
-#else
-static const struct gpio_dt_spec lsm6dsl_en = {0};
-#endif
 static const struct device *const lsm6dsl_dev = DEVICE_DT_GET(DT_ALIAS(lsm6dsl));
 
 static void lsm6dsl_force_minimal_run_mode(void)
@@ -77,7 +69,7 @@ static int lsm6dsl_power_ensure_on(void)
 		return 0;
 	}
 
-	/* Best-effort: ensure enable pin is configured and driven high. */
+	/* ensure enable pin is configured and driven high. */
 	int err = gpio_pin_configure_dt(&lsm6dsl_en, GPIO_OUTPUT);
 	if (err < 0) {
 		LOG_WRN("Failed to configure lsm6dsl_en gpio (err %d)", err);
@@ -91,7 +83,7 @@ static int lsm6dsl_power_ensure_on(void)
 	}
 
 	/* Give IMU time to be ready for I2C transactions. */
-	k_sleep(K_MSEC(LSM6DS_POWER_ON_DELAY_MS));
+	k_msleep(LSM6DS_POWER_ON_DELAY_MS);
 	LOG_INF("lsm6dsl_en asserted");
 
 	return 0;
@@ -146,19 +138,7 @@ static int lsm6dsl_timestamp_disable(void)
 	return 0;
 }
 
-static void lsm6dsl_timestamp_restart_best_effort(void)
-{
-	/* Some LSM6DS variants reset the timestamp counter when timer_en is toggled.
-	 * Even if it doesn't reset, we will read and store a matching base_ts.
-	 */
-	LOG_DBG("Restarting timestamp (toggle timer_en)");
-	(void)lsm6dsl_timestamp_disable();
-	k_sleep(K_MSEC(2));
-	(void)lsm6dsl_timestamp_enable();
-	k_sleep(K_MSEC(2));
-}
-
-static int lsm6dsl_timestamp_reset_by_datasheet(void)
+static int lsm6dsl_timestamp_reset(void)
 {
 	/* LSM6DS3TR-C datasheet: to reset the timestamp timer, store 0xAA in TIMESTAMP2 (0x42). */
 	if (!device_is_ready(lsm6dsl_i2c.bus)) {
@@ -173,7 +153,7 @@ static int lsm6dsl_timestamp_reset_by_datasheet(void)
 	}
 
 	/* Give the IMU a moment to apply the reset. */
-	k_sleep(K_MSEC(2));
+	k_msleep(2);
 	LOG_DBG("Timestamp reset requested (TIMESTAMP2=0xAA)");
 	return 0;
 }
@@ -250,12 +230,10 @@ void lsm6dsl_time_prepare_for_system_off(void)
 		LOG_WRN("system_off prep: timestamp enable failed (err %d)", err);
 	}
 
-	/* Reset timestamp so it starts near 0 for maximum off-duration (datasheet method). */
-	err = lsm6dsl_timestamp_reset_by_datasheet();
+	/* Reset timestamp so it starts near 0 */
+	err = lsm6dsl_timestamp_reset();
 	if (err) {
 		LOG_WRN("system_off prep: timestamp reset failed (err %d)", err);
-		/* Fall back to older best-effort restart. */
-		lsm6dsl_timestamp_restart_best_effort();
 	}
 
 	uint32_t ts;
