@@ -39,7 +39,7 @@ class FocusAssistantSettings {
         - Acknowledge transitions (e.g., "Welcome back to coding!")
         - Avoid repetitive messages by varying your responses based on what you've already said
 
-        Always provide a short coaching message based on what you see:
+        Always provide a short coaching message based on what you see (100-150 characters max to fit in notification banner):
         - If distracted: Create a unique message to help them refocus. Vary your approach - be playful, direct, or motivational.
         - If focused: Acknowledge their work with variety - don't just say "Nice focus!" every time.
         """
