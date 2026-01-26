@@ -48,23 +48,29 @@ struct ExtractedTask: Codable {
 // MARK: - Task Extraction Result
 
 struct TaskExtractionResult: Codable, AssistantResult {
-    let tasks: [ExtractedTask]
+    let hasNewTask: Bool
+    let task: ExtractedTask?
     let contextSummary: String
     let currentActivity: String
 
     enum CodingKeys: String, CodingKey {
-        case tasks
+        case hasNewTask = "has_new_task"
+        case task
         case contextSummary = "context_summary"
         case currentActivity = "current_activity"
     }
 
     /// Convert to dictionary for Flutter
     func toDictionary() -> [String: Any] {
-        return [
-            "tasks": tasks.map { $0.toDictionary() },
+        var dict: [String: Any] = [
+            "hasNewTask": hasNewTask,
             "contextSummary": contextSummary,
             "currentActivity": currentActivity
         ]
+        if let task = task {
+            dict["task"] = task.toDictionary()
+        }
+        return dict
     }
 }
 
@@ -72,7 +78,7 @@ struct TaskExtractionResult: Codable, AssistantResult {
 
 struct TaskEvent {
     let eventType: TaskEventType
-    let tasks: [ExtractedTask]
+    let task: ExtractedTask?
     let contextSummary: String?
     let timestamp: Date
 
@@ -85,18 +91,21 @@ struct TaskEvent {
 
     init(eventType: TaskEventType, result: TaskExtractionResult) {
         self.eventType = eventType
-        self.tasks = result.tasks
+        self.task = result.task
         self.contextSummary = result.contextSummary
         self.timestamp = Date()
     }
 
     /// Convert to dictionary for Flutter EventChannel
     func toDictionary() -> [String: Any] {
-        return [
+        var dict: [String: Any] = [
             "eventType": eventType.rawValue,
-            "tasks": tasks.map { $0.toDictionary() },
             "contextSummary": contextSummary ?? "",
             "timestamp": ISO8601DateFormatter().string(from: timestamp)
         ]
+        if let task = task {
+            dict["task"] = task.toDictionary()
+        }
+        return dict
     }
 }
