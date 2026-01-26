@@ -43,7 +43,7 @@ class AdviceAssistantSettings {
         2. **Contextual**: Based on what's actually on screen
         3. **Specific**: Include details (shortcuts, tool names, etc.)
 
-        FORMAT: Keep advice concise (100-150 characters max for notification banner)
+        FORMAT: Keep advice concise (100 characters max for notification banner)
 
         CONFIDENCE CALIBRATION - Use the FULL range from 0.0 to 1.0:
 
