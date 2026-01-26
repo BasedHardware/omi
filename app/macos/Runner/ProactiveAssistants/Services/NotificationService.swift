@@ -12,6 +12,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch assistantId {
         case "focus":
             return FocusAssistantSettings.shared.cooldownIntervalSeconds
+        case "advice":
+            return AdviceAssistantSettings.shared.cooldownIntervalSeconds
         default:
             // Task assistant uses extraction interval instead of notification cooldown
             return AssistantSettings.shared.cooldownIntervalSeconds
@@ -57,8 +59,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "OMI"
-        content.subtitle = title
+        content.title = title
         content.body = message
         content.sound = .default
 
