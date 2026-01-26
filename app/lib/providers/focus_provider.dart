@@ -288,9 +288,20 @@ class FocusProvider extends BaseProvider {
     await _focusService.triggerGlow(colorMode: colorMode);
   }
 
-  /// Open the native Settings window
+  /// Open the native Settings window and start monitoring if not already running
   Future<void> openSettings() async {
     if (!isSupported) return;
+
+    // Start monitoring when opening settings (if not already running)
+    if (!_isMonitoring) {
+      try {
+        await startMonitoring();
+      } catch (e) {
+        // If monitoring fails to start, still open settings so user can see permissions
+        print('FocusProvider: Failed to auto-start monitoring: $e');
+      }
+    }
+
     await _focusService.openSettings();
   }
 
