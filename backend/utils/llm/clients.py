@@ -6,22 +6,25 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.conversation import Structured
+from utils.llm.usage_tracker import get_usage_callback
 
+# Get the usage tracking callback
+_usage_callback = get_usage_callback()
 
 # Base models for general use
-llm_mini = ChatOpenAI(model='gpt-4.1-mini')
-llm_mini_stream = ChatOpenAI(model='gpt-4.1-mini', streaming=True)
-llm_large = ChatOpenAI(model='o1-preview')
-llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
-llm_high = ChatOpenAI(model='o4-mini')
-llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
-llm_medium = ChatOpenAI(model='gpt-4.1')
-llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
-llm_medium_experiment = ChatOpenAI(model='gpt-5.1')
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini_stream = ChatOpenAI(model='gpt-4.1-mini', streaming=True, callbacks=[_usage_callback])
+llm_large = ChatOpenAI(model='o1-preview', callbacks=[_usage_callback])
+llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1, callbacks=[_usage_callback])
+llm_high = ChatOpenAI(model='o4-mini', callbacks=[_usage_callback])
+llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1, callbacks=[_usage_callback])
+llm_medium = ChatOpenAI(model='gpt-4.1', callbacks=[_usage_callback])
+llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True, callbacks=[_usage_callback])
+llm_medium_experiment = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback])
 
 # Specialized models for agentic workflows
-llm_agent = ChatOpenAI(model='gpt-5.1')
-llm_agent_stream = ChatOpenAI(model='gpt-5.1', streaming=True)
+llm_agent = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback])
+llm_agent_stream = ChatOpenAI(model='gpt-5.1', streaming=True, callbacks=[_usage_callback])
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",

@@ -18,6 +18,7 @@ from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
+from utils.llm.usage_tracker import track_usage, Features
 
 
 def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
@@ -134,7 +135,8 @@ def process_voice_message_segment(
     app_id = None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
+    with track_usage(uid, Features.CHAT):
+        response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
     # check if the items in the conversations list are dict
     if memories:
