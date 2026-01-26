@@ -49,6 +49,7 @@ def record_llm_usage(
         f"{feature}.{safe_model}.input_tokens": firestore.Increment(input_tokens),
         f"{feature}.{safe_model}.output_tokens": firestore.Increment(output_tokens),
         f"{feature}.{safe_model}.call_count": firestore.Increment(1),
+        "date": doc_id,  # Store date as a field for collection-group queries
         "last_updated": datetime.now(timezone.utc),
     }
 
@@ -170,8 +171,9 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
     # Query all users' llm_usage subcollections
-    # Note: This is a collection group query
-    usage_query = db.collection_group("llm_usage").where("__name__", ">=", cutoff_id)
+    # Note: This is a collection group query; use 'date' field instead of __name__
+    # since __name__ comparisons don't work reliably for collection-group queries
+    usage_query = db.collection_group("llm_usage").where("date", ">=", cutoff_id)
 
     global_summary: Dict[str, Dict[str, int]] = {}
 
