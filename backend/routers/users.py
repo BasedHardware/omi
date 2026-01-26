@@ -1003,3 +1003,54 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+# ***********************************
+# *** Mentor Notification Settings ***
+# ***********************************
+
+
+class MentorNotificationSettingsResponse(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+class MentorNotificationSettingsUpdate(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+@router.get('/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse)
+def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's mentor notification frequency preference.
+
+    Returns:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    frequency = notification_db.get_mentor_notification_frequency(uid)
+    return MentorNotificationSettingsResponse(frequency=frequency)
+
+
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+def update_mentor_notification_settings(
+    data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's mentor notification frequency preference.
+
+    Parameters:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    try:
+        notification_db.set_mentor_notification_frequency(uid, data.frequency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}

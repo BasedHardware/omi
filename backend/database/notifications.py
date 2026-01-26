@@ -135,6 +135,53 @@ def set_daily_summary_enabled(uid: str, enabled: bool) -> bool:
     return True
 
 
+# **************************************
+# *** Mentor Notification Frequency ***
+# **************************************
+
+# Default: 0 (disabled by default, user must explicitly enable)
+# Range: 0-5 where 0=disabled, 1=most selective, 5=most proactive
+DEFAULT_MENTOR_NOTIFICATION_FREQUENCY = 0
+
+
+def get_mentor_notification_frequency(uid: str) -> int:
+    """
+    Get user's mentor notification frequency preference.
+    Returns 0-5 where:
+    - 0 = disabled
+    - 1 = ultra selective (least frequent)
+    - 3 = balanced (default)
+    - 5 = very proactive (most frequent)
+    """
+    user_ref = db.collection('users').document(uid).get()
+    if user_ref.exists:
+        user_data = user_ref.to_dict()
+        return user_data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
+    return DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+
+
+def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
+    """
+    Set user's mentor notification frequency preference.
+
+    Args:
+        uid: User ID
+        frequency: Notification frequency (0-5)
+
+    Returns:
+        True if successful
+
+    Raises:
+        ValueError if frequency is not in valid range
+    """
+    if not (0 <= frequency <= 5):
+        raise ValueError(f"Invalid frequency: {frequency}. Must be 0-5.")
+
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'mentor_notification_frequency': frequency}, merge=True)
+    return True
+
+
 def get_all_tokens(uid: str) -> list[str]:
     """Get all device tokens for a user from subcollection and legacy field"""
     tokens = []
