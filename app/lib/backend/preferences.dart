@@ -181,10 +181,10 @@ class SharedPreferencesUtil {
 
   bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
 
-  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 3 (balanced)
+  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 
-  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 3);
+  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
 
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
