@@ -20,7 +20,8 @@ actor TaskAssistant: ProactiveAssistant {
     private let geminiClient: GeminiClient
     private var isRunning = false
     private var lastAnalysisTime: Date = .distantPast
-    private var previousTasks: [String: ExtractedTask] = [:] // Track by title hash
+    private var previousTasks: [ExtractedTask] = [] // Last 10 extracted tasks for context
+    private let maxPreviousTasks = 10
     private var currentApp: String?
     private var pendingFrame: CapturedFrame?
     private var processingTask: Task<Void, Never>?
@@ -55,7 +56,8 @@ actor TaskAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        self.geminiClient = try GeminiClient(apiKey: apiKey)
+        // Use Gemini 3 Pro for better task extraction quality
+        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-3-pro-preview")
 
         // Start processing loop
         Task {
@@ -113,88 +115,52 @@ actor TaskAssistant: ProactiveAssistant {
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
         guard let taskResult = result as? TaskExtractionResult else { return }
 
+        // Check if AI found a new task
+        guard taskResult.hasNewTask, let task = taskResult.task else {
+            return
+        }
+
         // Get min confidence threshold
         let threshold = await minConfidence
+        let confidencePercent = Int(task.confidence * 100)
 
-        // Filter tasks by confidence
-        let highConfidenceTasks = taskResult.tasks.filter { $0.confidence >= threshold }
-
-        if highConfidenceTasks.isEmpty {
-            log("Task: No high-confidence tasks found")
+        // Check confidence threshold
+        guard task.confidence >= threshold else {
+            log("Task: [\(confidencePercent)% < \(Int(threshold * 100))%] Filtered: \"\(task.title)\"")
             return
         }
 
-        // Check for new tasks (not seen before)
-        var newTasks: [ExtractedTask] = []
-        for task in highConfidenceTasks {
-            let taskKey = task.title.lowercased().trimmingCharacters(in: .whitespaces)
-            if previousTasks[taskKey] == nil {
-                newTasks.append(task)
-                previousTasks[taskKey] = task
-            }
+        log("Task: [\(confidencePercent)% conf.] \"\(task.title)\"")
+
+        // Add to previous tasks (keep last 10 for context)
+        previousTasks.insert(task, at: 0)
+        if previousTasks.count > maxPreviousTasks {
+            previousTasks.removeLast()
         }
 
-        if newTasks.isEmpty {
-            log("Task: No new tasks (all \(highConfidenceTasks.count) tasks already known)")
-            return
-        }
+        // Send notification
+        await sendTaskNotification(task: task)
 
-        log("Task: Found \(newTasks.count) new tasks")
-
-        // Send notification for new tasks
-        await sendTaskNotification(tasks: newTasks)
-
-        // Send events to Flutter
-        for task in newTasks {
-            sendEvent("taskExtracted", [
-                "assistant": identifier,
-                "task": task.toDictionary(),
-                "contextSummary": taskResult.contextSummary
-            ])
-        }
+        // Send event to Flutter
+        sendEvent("taskExtracted", [
+            "assistant": identifier,
+            "task": task.toDictionary(),
+            "contextSummary": taskResult.contextSummary
+        ])
     }
 
-    /// Send a notification summarizing the extracted tasks
-    private func sendTaskNotification(tasks: [ExtractedTask]) async {
-        guard !tasks.isEmpty else { return }
-
-        let title: String
-        let message: String
-
-        if tasks.count == 1 {
-            let task = tasks[0]
-            title = "Task Found"
-            // Include priority if high
-            if task.priority == .high {
-                message = "⚡ \(task.title)"
-            } else {
-                message = task.title
-            }
-        } else {
-            title = "\(tasks.count) Tasks Found"
-            // List first 3 tasks, truncate if more
-            let taskTitles = tasks.prefix(3).map { task -> String in
-                if task.priority == .high {
-                    return "⚡ \(task.title)"
-                }
-                return task.title
-            }
-            var messageText = taskTitles.joined(separator: "\n")
-            if tasks.count > 3 {
-                messageText += "\n+\(tasks.count - 3) more..."
-            }
-            message = messageText
-        }
+    /// Send a notification for the extracted task
+    private func sendTaskNotification(task: ExtractedTask) async {
+        let message = task.title
 
         // Send notification immediately (extraction interval already throttles)
         await MainActor.run {
             NotificationService.shared.sendNotification(
-                title: title,
+                title: "",
                 message: message,
                 assistantId: identifier,
                 applyCooldown: false
             )
-            log("Task: Sent notification for \(tasks.count) task(s)")
         }
     }
 
@@ -229,9 +195,6 @@ actor TaskAssistant: ProactiveAssistant {
                 return
             }
 
-            log("Task: Extracted \(result.tasks.count) tasks from \(frame.appName)")
-            log("Task: Activity: \(result.currentActivity)")
-
             // Handle the result
             await handleResult(result) { type, data in
                 Task { @MainActor in
@@ -244,33 +207,50 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     private func extractTasks(from jpegData: Data, appName: String) async throws -> TaskExtractionResult? {
-        let prompt = "Analyze this screenshot from \(appName) and extract any visible tasks, action items, or to-dos:"
+        // Build context with previous tasks
+        var prompt = "Analyze this screenshot from \(appName).\n\n"
+
+        if !previousTasks.isEmpty {
+            prompt += "PREVIOUSLY EXTRACTED TASKS (do not re-extract these or semantically similar tasks):\n"
+            for (index, task) in previousTasks.enumerated() {
+                prompt += "\(index + 1). \(task.title)"
+                if let description = task.description {
+                    prompt += " - \(description)"
+                }
+                prompt += "\n"
+            }
+            prompt += "\nLook for ONE NEW task that is NOT already in the list above."
+        } else {
+            prompt += "Look for ONE task to extract."
+        }
 
         // Get current system prompt from settings
         let currentSystemPrompt = await systemPrompt
 
-        // Build response schema for task extraction
-        let taskSchema = GeminiRequest.GenerationConfig.ResponseSchema.Property.Items(
-            type: "object",
-            properties: [
-                "title": .init(type: "string", description: "Brief, actionable task title"),
-                "description": .init(type: "string", description: "Optional additional context"),
-                "priority": .init(type: "string", enum: ["high", "medium", "low"], description: "Task priority"),
-                "source_app": .init(type: "string", description: "App where task was found"),
-                "inferred_deadline": .init(type: "string", description: "Deadline if visible or implied"),
-                "confidence": .init(type: "number", description: "Confidence score 0.0-1.0")
-            ],
-            required: ["title", "priority", "source_app", "confidence"]
-        )
+        // Build response schema for single task extraction with conditional logic
+        let taskProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
+            "title": .init(type: "string", description: "Brief, actionable task title"),
+            "description": .init(type: "string", description: "Optional additional context"),
+            "priority": .init(type: "string", enum: ["high", "medium", "low"], description: "Task priority"),
+            "source_app": .init(type: "string", description: "App where task was found"),
+            "inferred_deadline": .init(type: "string", description: "Deadline if visible or implied"),
+            "confidence": .init(type: "number", description: "Confidence score 0.0-1.0")
+        ]
 
         let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
             type: "object",
             properties: [
-                "tasks": .init(type: "array", description: "List of extracted tasks", items: taskSchema),
+                "has_new_task": .init(type: "boolean", description: "True if a new task was found that is not in the previous tasks list"),
+                "task": .init(
+                    type: "object",
+                    description: "The extracted task (only if has_new_task is true)",
+                    properties: taskProperties,
+                    required: ["title", "priority", "source_app", "confidence"]
+                ),
                 "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
                 "current_activity": .init(type: "string", description: "High-level description of user's activity")
             ],
-            required: ["tasks", "context_summary", "current_activity"]
+            required: ["has_new_task", "context_summary", "current_activity"]
         )
 
         do {
