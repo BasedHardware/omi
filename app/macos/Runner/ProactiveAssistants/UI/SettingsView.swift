@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsTab: String, CaseIterable {
     case focus = "Focus"
     case tasks = "Tasks"
+    case advice = "Advice"
 }
 
 /// SwiftUI view for Proactive Assistants settings
@@ -23,8 +24,13 @@ struct SettingsView: View {
 
     // Task Assistant states
     @State private var taskEnabled: Bool
-    @State private var extractionInterval: Double
-    @State private var minConfidence: Double
+    @State private var taskExtractionInterval: Double
+    @State private var taskMinConfidence: Double
+
+    // Advice Assistant states
+    @State private var adviceEnabled: Bool
+    @State private var adviceExtractionInterval: Double
+    @State private var adviceMinConfidence: Double
 
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
@@ -50,8 +56,13 @@ struct SettingsView: View {
 
         // Task settings
         _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
-        _extractionInterval = State(initialValue: TaskAssistantSettings.shared.extractionInterval)
-        _minConfidence = State(initialValue: TaskAssistantSettings.shared.minConfidence)
+        _taskExtractionInterval = State(initialValue: TaskAssistantSettings.shared.extractionInterval)
+        _taskMinConfidence = State(initialValue: TaskAssistantSettings.shared.minConfidence)
+
+        // Advice settings
+        _adviceEnabled = State(initialValue: AdviceAssistantSettings.shared.isEnabled)
+        _adviceExtractionInterval = State(initialValue: AdviceAssistantSettings.shared.extractionInterval)
+        _adviceMinConfidence = State(initialValue: AdviceAssistantSettings.shared.minConfidence)
     }
 
     var body: some View {
@@ -85,6 +96,8 @@ struct SettingsView: View {
                     focusTabContent
                 case .tasks:
                     tasksTabContent
+                case .advice:
+                    adviceTabContent
                 }
             }
             .padding(20)
@@ -96,6 +109,7 @@ struct SettingsView: View {
             // Update state when settings change externally
             focusEnabled = FocusAssistantSettings.shared.isEnabled
             taskEnabled = TaskAssistantSettings.shared.isEnabled
+            adviceEnabled = AdviceAssistantSettings.shared.isEnabled
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             // Update monitoring state when it changes externally
@@ -185,7 +199,7 @@ struct SettingsView: View {
     private func tabButton(for tab: SettingsTab) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: tab == .focus ? "eye.fill" : "checklist")
+                Image(systemName: tabIcon(for: tab))
                     .font(.system(size: 14))
                 Text(tab.rawValue)
                     .font(.system(size: 14, weight: .medium))
@@ -341,14 +355,14 @@ struct SettingsView: View {
                 subtitle: "How often to scan for new tasks",
                 icon: "clock"
             ) {
-                Picker("", selection: $extractionInterval) {
+                Picker("", selection: $taskExtractionInterval) {
                     ForEach(extractionIntervalOptions, id: \.self) { seconds in
                         Text(formatExtractionInterval(seconds)).tag(seconds)
                     }
                 }
                 .pickerStyle(.menu)
                 .frame(width: 120)
-                .onChange(of: extractionInterval) { newValue in
+                .onChange(of: taskExtractionInterval) { newValue in
                     TaskAssistantSettings.shared.extractionInterval = newValue
                 }
             }
@@ -376,14 +390,14 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Text("\(Int(minConfidence * 100))%")
+                    Text("\(Int(taskMinConfidence * 100))%")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                         .frame(width: 40, alignment: .trailing)
                 }
 
-                Slider(value: $minConfidence, in: 0.3...0.9, step: 0.1)
-                    .onChange(of: minConfidence) { newValue in
+                Slider(value: $taskMinConfidence, in: 0.3...0.9, step: 0.1)
+                    .onChange(of: taskMinConfidence) { newValue in
                         TaskAssistantSettings.shared.minConfidence = newValue
                     }
             }
@@ -410,6 +424,118 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
+        }
+    }
+
+    // MARK: - Advice Tab Content
+
+    private var adviceTabContent: some View {
+        VStack(spacing: 20) {
+            // Advice Assistant Toggle
+            settingRow(
+                title: "Advice Assistant",
+                subtitle: "Get proactive tips and suggestions",
+                icon: "lightbulb.fill"
+            ) {
+                Toggle("", isOn: $adviceEnabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: adviceEnabled) { newValue in
+                        AdviceAssistantSettings.shared.isEnabled = newValue
+                    }
+            }
+
+            Divider()
+                .background(Color.primary.opacity(0.1))
+
+            // Extraction Interval
+            settingRow(
+                title: "Advice Interval",
+                subtitle: "How often to check for advice opportunities",
+                icon: "clock"
+            ) {
+                Picker("", selection: $adviceExtractionInterval) {
+                    ForEach(extractionIntervalOptions, id: \.self) { seconds in
+                        Text(formatExtractionInterval(seconds)).tag(seconds)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 120)
+                .onChange(of: adviceExtractionInterval) { newValue in
+                    AdviceAssistantSettings.shared.extractionInterval = newValue
+                }
+            }
+
+            Divider()
+                .background(Color.primary.opacity(0.1))
+
+            // Minimum Confidence
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: "gauge.with.dots.needle.67percent")
+                        .font(.system(size: 16))
+                        .foregroundColor(.accentColor)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Minimum Confidence")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.primary)
+
+                        Text("Only show advice above this confidence level")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Text("\(Int(adviceMinConfidence * 100))%")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 40, alignment: .trailing)
+                }
+
+                Slider(value: $adviceMinConfidence, in: 0.5...0.95, step: 0.05)
+                    .onChange(of: adviceMinConfidence) { newValue in
+                        AdviceAssistantSettings.shared.minConfidence = newValue
+                    }
+            }
+
+            Divider()
+                .background(Color.primary.opacity(0.1))
+
+            // Advice Prompt - opens in separate window
+            settingRow(
+                title: "Advice Prompt",
+                subtitle: "Customize AI instructions for advice",
+                icon: "text.alignleft"
+            ) {
+                Button(action: {
+                    AdvicePromptEditorWindow.show()
+                }) {
+                    HStack(spacing: 4) {
+                        Text("Edit")
+                            .font(.system(size: 12))
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 11))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: - Tab Icon Helper
+
+    private func tabIcon(for tab: SettingsTab) -> String {
+        switch tab {
+        case .focus:
+            return "eye.fill"
+        case .tasks:
+            return "checklist"
+        case .advice:
+            return "lightbulb.fill"
         }
     }
 
