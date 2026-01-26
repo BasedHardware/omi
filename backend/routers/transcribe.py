@@ -1493,6 +1493,13 @@ async def _stream_handler(
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
 
+                # Trigger realtime integrations (including mentor notifications)
+                from utils.app_integrations import trigger_realtime_integrations
+                try:
+                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
+                except Exception as e:
+                    print(f"Error triggering realtime integrations: {e}", uid, session_id)
+
                 # Onboarding: pass segments to handler for answer detection
                 if onboarding_handler and not onboarding_handler.completed:
                     onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])

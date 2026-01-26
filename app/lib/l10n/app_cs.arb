@@ -2464,5 +2464,22 @@
   "chooseTransferMethod": "Vyberte metodu přenosu",
   "fastTransferSpeed": "~150 KB/s přes WiFi",
   "largeTimeGapDetected": "Zjištěna velká časová mezera ({gap})",
-  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})"
+  "largeTimeGapsDetected": "Zjištěny velké časové mezery ({gaps})",
+  "dailyRecaps": "Denní Souhrny",
+  "removeFilter": "Odstranit Filtr",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Zařízení nepodporuje WiFi synchronizaci, přepínání na Bluetooth",
+  "appleHealthNotAvailable": "Apple Health není na tomto zařízení k dispozici",
+  "downloadAudio": "Stáhnout zvuk",
+  "audioDownloadSuccess": "Zvuk byl úspěšně stažen",
+  "audioDownloadFailed": "Stažení zvuku se nezdařilo",
+  "downloadingAudio": "Stahování zvuku...",
+  "shareAudio": "Sdílet zvuk",
+  "preparingAudio": "Příprava zvuku",
+  "gettingAudioFiles": "Získávání zvukových souborů...",
+  "downloadingAudioProgress": "Stahování zvuku",
+  "processingAudio": "Zpracování zvuku",
+  "combiningAudioFiles": "Kombinování zvukových souborů...",
+  "audioReady": "Zvuk je připraven",
+  "openingShareSheet": "Otevírání listu sdílení...",
+  "audioShareFailed": "Sdílení se nezdařilo"
 }

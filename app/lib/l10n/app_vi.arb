@@ -2500,5 +2500,22 @@
   "chooseTransferMethod": "Chọn phương thức chuyển",
   "fastTransferSpeed": "~150 KB/s qua WiFi",
   "largeTimeGapDetected": "Phát hiện khoảng cách thời gian lớn ({gap})",
-  "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})"
+  "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})",
+  "dailyRecaps": "Tóm tắt hàng ngày",
+  "removeFilter": "Xóa bộ lọc",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Thiết bị không hỗ trợ đồng bộ WiFi, chuyển sang Bluetooth",
+  "appleHealthNotAvailable": "Apple Health không khả dụng trên thiết bị này",
+  "downloadAudio": "Tải xuống âm thanh",
+  "audioDownloadSuccess": "Tải xuống âm thanh thành công",
+  "audioDownloadFailed": "Tải xuống âm thanh thất bại",
+  "downloadingAudio": "Đang tải xuống âm thanh...",
+  "shareAudio": "Chia sẻ âm thanh",
+  "preparingAudio": "Đang chuẩn bị âm thanh",
+  "gettingAudioFiles": "Đang lấy tệp âm thanh...",
+  "downloadingAudioProgress": "Đang tải xuống âm thanh",
+  "processingAudio": "Đang xử lý âm thanh",
+  "combiningAudioFiles": "Đang kết hợp tệp âm thanh...",
+  "audioReady": "Âm thanh đã sẵn sàng",
+  "openingShareSheet": "Đang mở trang chia sẻ...",
+  "audioShareFailed": "Chia sẻ thất bại"
 }

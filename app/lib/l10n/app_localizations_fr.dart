@@ -7860,8 +7860,54 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'L\'appareil ne prend pas en charge la synchronisation WiFi, passage au Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health n\'est pas disponible sur cet appareil';
+
+  @override
+  String get downloadAudio => 'Télécharger l\'audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio téléchargé avec succès';
+
+  @override
+  String get audioDownloadFailed => 'Échec du téléchargement de l\'audio';
+
+  @override
+  String get downloadingAudio => 'Téléchargement de l\'audio...';
+
+  @override
+  String get shareAudio => 'Partager l\'audio';
+
+  @override
+  String get preparingAudio => 'Préparation de l\'audio';
+
+  @override
+  String get gettingAudioFiles => 'Récupération des fichiers audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Téléchargement de l\'audio';
+
+  @override
+  String get processingAudio => 'Traitement de l\'audio';
+
+  @override
+  String get combiningAudioFiles => 'Combinaison des fichiers audio...';
+
+  @override
+  String get audioReady => 'Audio prêt';
+
+  @override
+  String get openingShareSheet => 'Ouverture de la feuille de partage...';
+
+  @override
+  String get audioShareFailed => 'Échec du partage';
+
+  @override
+  String get dailyRecaps => 'Récapitulatifs Quotidiens';
+
+  @override
+  String get removeFilter => 'Supprimer le Filtre';
 }

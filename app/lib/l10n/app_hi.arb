@@ -2496,5 +2496,22 @@
   "chooseTransferMethod": "स्थानांतरण विधि चुनें",
   "fastTransferSpeed": "~150 KB/s WiFi के माध्यम से",
   "largeTimeGapDetected": "बड़ा समय अंतराल पाया गया ({gap})",
-  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})"
+  "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})",
+  "dailyRecaps": "दैनिक सारांश",
+  "removeFilter": "फ़िल्टर हटाएं",
+  "deviceDoesNotSupportWifiSwitchingToBle": "डिवाइस WiFi सिंक का समर्थन नहीं करता, Bluetooth पर स्विच कर रहा है",
+  "appleHealthNotAvailable": "इस डिवाइस पर Apple Health उपलब्ध नहीं है",
+  "downloadAudio": "ऑडियो डाउनलोड करें",
+  "audioDownloadSuccess": "ऑडियो सफलतापूर्वक डाउनलोड हुआ",
+  "audioDownloadFailed": "ऑडियो डाउनलोड विफल",
+  "downloadingAudio": "ऑडियो डाउनलोड हो रहा है...",
+  "shareAudio": "ऑडियो साझा करें",
+  "preparingAudio": "ऑडियो तैयार हो रहा है",
+  "gettingAudioFiles": "ऑडियो फाइलें प्राप्त हो रही हैं...",
+  "downloadingAudioProgress": "ऑडियो डाउनलोड हो रहा है",
+  "processingAudio": "ऑडियो संसाधित हो रहा है",
+  "combiningAudioFiles": "ऑडियो फाइलें मिलाई जा रही हैं...",
+  "audioReady": "ऑडियो तैयार है",
+  "openingShareSheet": "साझा करने की शीट खुल रही है...",
+  "audioShareFailed": "साझा करना विफल"
 }

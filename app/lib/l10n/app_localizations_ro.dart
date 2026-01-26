@@ -7826,8 +7826,54 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Dispozitivul nu acceptă sincronizare WiFi, comutare la Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nu este disponibil pe acest dispozitiv';
+
+  @override
+  String get downloadAudio => 'Descarcă audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio descărcat cu succes';
+
+  @override
+  String get audioDownloadFailed => 'Descărcarea audio a eșuat';
+
+  @override
+  String get downloadingAudio => 'Se descarcă audio...';
+
+  @override
+  String get shareAudio => 'Partajează audio';
+
+  @override
+  String get preparingAudio => 'Se pregătește audio';
+
+  @override
+  String get gettingAudioFiles => 'Se obțin fișierele audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Se descarcă audio';
+
+  @override
+  String get processingAudio => 'Se procesează audio';
+
+  @override
+  String get combiningAudioFiles => 'Se combină fișierele audio...';
+
+  @override
+  String get audioReady => 'Audio pregătit';
+
+  @override
+  String get openingShareSheet => 'Se deschide foaia de partajare...';
+
+  @override
+  String get audioShareFailed => 'Partajarea a eșuat';
+
+  @override
+  String get dailyRecaps => 'Recapitulări Zilnice';
+
+  @override
+  String get removeFilter => 'Eliminare Filtru';
 }

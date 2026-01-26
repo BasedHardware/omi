@@ -2495,5 +2495,22 @@
   "chooseTransferMethod": "เลือกวิธีการถ่ายโอน",
   "fastTransferSpeed": "~150 KB/s ผ่าน WiFi",
   "largeTimeGapDetected": "ตรวจพบช่วงเวลาห่างมาก ({gap})",
-  "largeTimeGapsDetected": "ตรวจพบช่วงเวลาห่างมากหลายช่วง ({gaps})"
+  "largeTimeGapsDetected": "ตรวจพบช่วงเวลาห่างมากหลายช่วง ({gaps})",
+  "dailyRecaps": "สรุปรายวัน",
+  "removeFilter": "ลบตัวกรอง",
+  "deviceDoesNotSupportWifiSwitchingToBle": "อุปกรณ์ไม่รองรับการซิงค์ WiFi กำลังเปลี่ยนไปใช้ Bluetooth",
+  "appleHealthNotAvailable": "Apple Health ไม่พร้อมใช้งานบนอุปกรณ์นี้",
+  "downloadAudio": "ดาวน์โหลดเสียง",
+  "audioDownloadSuccess": "ดาวน์โหลดเสียงสำเร็จ",
+  "audioDownloadFailed": "ดาวน์โหลดเสียงล้มเหลว",
+  "downloadingAudio": "กำลังดาวน์โหลดเสียง...",
+  "shareAudio": "แชร์เสียง",
+  "preparingAudio": "กำลังเตรียมเสียง",
+  "gettingAudioFiles": "กำลังรับไฟล์เสียง...",
+  "downloadingAudioProgress": "กำลังดาวน์โหลดเสียง",
+  "processingAudio": "กำลังประมวลผลเสียง",
+  "combiningAudioFiles": "กำลังรวมไฟล์เสียง...",
+  "audioReady": "เสียงพร้อมแล้ว",
+  "openingShareSheet": "กำลังเปิดแผ่นแชร์...",
+  "audioShareFailed": "แชร์ล้มเหลว"
 }

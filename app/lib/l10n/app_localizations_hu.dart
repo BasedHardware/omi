@@ -7825,8 +7825,54 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';
+
+  @override
+  String get downloadAudio => 'Hang letöltése';
+
+  @override
+  String get audioDownloadSuccess => 'Hang sikeresen letöltve';
+
+  @override
+  String get audioDownloadFailed => 'Hang letöltése sikertelen';
+
+  @override
+  String get downloadingAudio => 'Hang letöltése...';
+
+  @override
+  String get shareAudio => 'Hang megosztása';
+
+  @override
+  String get preparingAudio => 'Hang előkészítése';
+
+  @override
+  String get gettingAudioFiles => 'Hangfájlok lekérése...';
+
+  @override
+  String get downloadingAudioProgress => 'Hang letöltése';
+
+  @override
+  String get processingAudio => 'Hang feldolgozása';
+
+  @override
+  String get combiningAudioFiles => 'Hangfájlok egyesítése...';
+
+  @override
+  String get audioReady => 'Hang kész';
+
+  @override
+  String get openingShareSheet => 'Megosztási lap megnyitása...';
+
+  @override
+  String get audioShareFailed => 'Megosztás sikertelen';
+
+  @override
+  String get dailyRecaps => 'Napi Összefoglalók';
+
+  @override
+  String get removeFilter => 'Szűrő Eltávolítása';
 }

@@ -7793,8 +7793,54 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nepasiekiama šiame įrenginyje';
+
+  @override
+  String get downloadAudio => 'Atsisiųsti garsą';
+
+  @override
+  String get audioDownloadSuccess => 'Garsas sėkmingai atsisiųstas';
+
+  @override
+  String get audioDownloadFailed => 'Nepavyko atsisiųsti garso';
+
+  @override
+  String get downloadingAudio => 'Atsisiunčiamas garsas...';
+
+  @override
+  String get shareAudio => 'Bendrinti garsą';
+
+  @override
+  String get preparingAudio => 'Ruošiamas garsas';
+
+  @override
+  String get gettingAudioFiles => 'Gaunami garso failai...';
+
+  @override
+  String get downloadingAudioProgress => 'Atsisiunčiamas garsas';
+
+  @override
+  String get processingAudio => 'Apdorojamas garsas';
+
+  @override
+  String get combiningAudioFiles => 'Sujungiami garso failai...';
+
+  @override
+  String get audioReady => 'Garsas paruoštas';
+
+  @override
+  String get openingShareSheet => 'Atidaromas bendrinimo lapas...';
+
+  @override
+  String get audioShareFailed => 'Bendrinimas nepavyko';
+
+  @override
+  String get dailyRecaps => 'Dienos Apžvalgos';
+
+  @override
+  String get removeFilter => 'Pašalinti Filtrą';
 }

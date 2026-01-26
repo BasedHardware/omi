@@ -7655,8 +7655,53 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'デバイスはWiFi同期をサポートしていません。Bluetoothに切り替えています';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Healthはこのデバイスでは利用できません';
+
+  @override
+  String get downloadAudio => '音声をダウンロード';
+
+  @override
+  String get audioDownloadSuccess => '音声のダウンロードに成功しました';
+
+  @override
+  String get audioDownloadFailed => '音声のダウンロードに失敗しました';
+
+  @override
+  String get downloadingAudio => '音声をダウンロード中...';
+
+  @override
+  String get shareAudio => '音声を共有';
+
+  @override
+  String get preparingAudio => '音声を準備中';
+
+  @override
+  String get gettingAudioFiles => '音声ファイルを取得中...';
+
+  @override
+  String get downloadingAudioProgress => '音声をダウンロード中';
+
+  @override
+  String get processingAudio => '音声を処理中';
+
+  @override
+  String get combiningAudioFiles => '音声ファイルを結合中...';
+
+  @override
+  String get audioReady => '音声の準備完了';
+
+  @override
+  String get openingShareSheet => '共有シートを開いています...';
+
+  @override
+  String get audioShareFailed => '共有に失敗しました';
+
+  @override
+  String get dailyRecaps => 'デイリーレキャップ';
+
+  @override
+  String get removeFilter => 'フィルターを削除';
 }

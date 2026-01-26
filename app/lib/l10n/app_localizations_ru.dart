@@ -7813,8 +7813,54 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Устройство не поддерживает синхронизацию WiFi, переключение на Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health недоступно на этом устройстве';
+
+  @override
+  String get downloadAudio => 'Скачать аудио';
+
+  @override
+  String get audioDownloadSuccess => 'Аудио успешно скачано';
+
+  @override
+  String get audioDownloadFailed => 'Не удалось скачать аудио';
+
+  @override
+  String get downloadingAudio => 'Скачивание аудио...';
+
+  @override
+  String get shareAudio => 'Поделиться аудио';
+
+  @override
+  String get preparingAudio => 'Подготовка аудио';
+
+  @override
+  String get gettingAudioFiles => 'Получение аудиофайлов...';
+
+  @override
+  String get downloadingAudioProgress => 'Скачивание аудио';
+
+  @override
+  String get processingAudio => 'Обработка аудио';
+
+  @override
+  String get combiningAudioFiles => 'Объединение аудиофайлов...';
+
+  @override
+  String get audioReady => 'Аудио готово';
+
+  @override
+  String get openingShareSheet => 'Открытие листа общего доступа...';
+
+  @override
+  String get audioShareFailed => 'Не удалось поделиться';
+
+  @override
+  String get dailyRecaps => 'Ежедневные сводки';
+
+  @override
+  String get removeFilter => 'Удалить фильтр';
 }

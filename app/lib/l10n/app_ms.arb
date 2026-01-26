@@ -2495,5 +2495,22 @@
   "chooseTransferMethod": "Pilih kaedah pemindahan",
   "fastTransferSpeed": "~150 KB/s melalui WiFi",
   "largeTimeGapDetected": "Jurang masa besar dikesan ({gap})",
-  "largeTimeGapsDetected": "Jurang masa besar dikesan ({gaps})"
+  "largeTimeGapsDetected": "Jurang masa besar dikesan ({gaps})",
+  "dailyRecaps": "Ringkasan Harian",
+  "removeFilter": "Alih Keluar Penapis",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Peranti tidak menyokong penyegerakan WiFi, bertukar kepada Bluetooth",
+  "appleHealthNotAvailable": "Apple Health tidak tersedia pada peranti ini",
+  "downloadAudio": "Muat turun Audio",
+  "audioDownloadSuccess": "Audio berjaya dimuat turun",
+  "audioDownloadFailed": "Gagal memuat turun audio",
+  "downloadingAudio": "Memuat turun audio...",
+  "shareAudio": "Kongsi Audio",
+  "preparingAudio": "Menyediakan Audio",
+  "gettingAudioFiles": "Mendapatkan fail audio...",
+  "downloadingAudioProgress": "Memuat turun Audio",
+  "processingAudio": "Memproses Audio",
+  "combiningAudioFiles": "Menggabungkan fail audio...",
+  "audioReady": "Audio Sedia",
+  "openingShareSheet": "Membuka helaian perkongsian...",
+  "audioShareFailed": "Perkongsian Gagal"
 }

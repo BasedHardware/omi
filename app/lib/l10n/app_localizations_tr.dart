@@ -7801,8 +7801,54 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth\'a geçiliyor';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health bu cihazda kullanılamıyor';
+
+  @override
+  String get downloadAudio => 'Ses İndir';
+
+  @override
+  String get audioDownloadSuccess => 'Ses başarıyla indirildi';
+
+  @override
+  String get audioDownloadFailed => 'Ses indirme başarısız';
+
+  @override
+  String get downloadingAudio => 'Ses indiriliyor...';
+
+  @override
+  String get shareAudio => 'Sesi Paylaş';
+
+  @override
+  String get preparingAudio => 'Ses Hazırlanıyor';
+
+  @override
+  String get gettingAudioFiles => 'Ses dosyaları alınıyor...';
+
+  @override
+  String get downloadingAudioProgress => 'Ses İndiriliyor';
+
+  @override
+  String get processingAudio => 'Ses İşleniyor';
+
+  @override
+  String get combiningAudioFiles => 'Ses dosyaları birleştiriliyor...';
+
+  @override
+  String get audioReady => 'Ses Hazır';
+
+  @override
+  String get openingShareSheet => 'Paylaşım sayfası açılıyor...';
+
+  @override
+  String get audioShareFailed => 'Paylaşım Başarısız';
+
+  @override
+  String get dailyRecaps => 'Günlük Özetler';
+
+  @override
+  String get removeFilter => 'Filtreyi Kaldır';
 }

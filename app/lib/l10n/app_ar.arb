@@ -2462,5 +2462,22 @@
   "chooseTransferMethod": "اختر طريقة النقل",
   "fastTransferSpeed": "~150 كيلوبايت/ثانية عبر WiFi",
   "largeTimeGapDetected": "تم اكتشاف فجوة زمنية كبيرة ({gap})",
-  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})"
+  "largeTimeGapsDetected": "تم اكتشاف فجوات زمنية كبيرة ({gaps})",
+  "shareAudio": "مشاركة الصوت",
+  "preparingAudio": "جاري تحضير الصوت",
+  "gettingAudioFiles": "جاري الحصول على ملفات الصوت...",
+  "downloadingAudioProgress": "جاري تنزيل الصوت",
+  "processingAudio": "جاري معالجة الصوت",
+  "combiningAudioFiles": "جاري دمج ملفات الصوت...",
+  "audioReady": "الصوت جاهز",
+  "openingShareSheet": "جاري فتح صفحة المشاركة...",
+  "audioShareFailed": "فشلت المشاركة",
+  "audioDownloadSuccess": "تم تنزيل الصوت بنجاح",
+  "audioDownloadFailed": "فشل تنزيل الصوت",
+  "downloadingAudio": "جاري تنزيل الصوت...",
+  "dailyRecaps": "الملخصات اليومية",
+  "removeFilter": "إزالة الفلتر",
+  "deviceDoesNotSupportWifiSwitchingToBle": "الجهاز لا يدعم مزامنة WiFi، التبديل إلى البلوتوث",
+  "appleHealthNotAvailable": "Apple Health غير متاح على هذا الجهاز",
+  "downloadAudio": "تنزيل الصوت"
 }

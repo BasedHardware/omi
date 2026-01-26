@@ -7788,8 +7788,54 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'O dispositivo não suporta sincronização WiFi, mudando para Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health não está disponível neste dispositivo';
+
+  @override
+  String get downloadAudio => 'Baixar áudio';
+
+  @override
+  String get audioDownloadSuccess => 'Áudio baixado com sucesso';
+
+  @override
+  String get audioDownloadFailed => 'Falha ao baixar áudio';
+
+  @override
+  String get downloadingAudio => 'Baixando áudio...';
+
+  @override
+  String get shareAudio => 'Compartilhar áudio';
+
+  @override
+  String get preparingAudio => 'Preparando áudio';
+
+  @override
+  String get gettingAudioFiles => 'Obtendo arquivos de áudio...';
+
+  @override
+  String get downloadingAudioProgress => 'Baixando áudio';
+
+  @override
+  String get processingAudio => 'Processando áudio';
+
+  @override
+  String get combiningAudioFiles => 'Combinando arquivos de áudio...';
+
+  @override
+  String get audioReady => 'Áudio pronto';
+
+  @override
+  String get openingShareSheet => 'Abrindo planilha de compartilhamento...';
+
+  @override
+  String get audioShareFailed => 'Falha ao compartilhar';
+
+  @override
+  String get dailyRecaps => 'Resumos Diários';
+
+  @override
+  String get removeFilter => 'Remover Filtro';
 }

@@ -7783,8 +7783,54 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zařízení nepodporuje WiFi synchronizaci, přepínání na Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health není na tomto zařízení k dispozici';
+
+  @override
+  String get downloadAudio => 'Stáhnout zvuk';
+
+  @override
+  String get audioDownloadSuccess => 'Zvuk byl úspěšně stažen';
+
+  @override
+  String get audioDownloadFailed => 'Stažení zvuku se nezdařilo';
+
+  @override
+  String get downloadingAudio => 'Stahování zvuku...';
+
+  @override
+  String get shareAudio => 'Sdílet zvuk';
+
+  @override
+  String get preparingAudio => 'Příprava zvuku';
+
+  @override
+  String get gettingAudioFiles => 'Získávání zvukových souborů...';
+
+  @override
+  String get downloadingAudioProgress => 'Stahování zvuku';
+
+  @override
+  String get processingAudio => 'Zpracování zvuku';
+
+  @override
+  String get combiningAudioFiles => 'Kombinování zvukových souborů...';
+
+  @override
+  String get audioReady => 'Zvuk je připraven';
+
+  @override
+  String get openingShareSheet => 'Otevírání listu sdílení...';
+
+  @override
+  String get audioShareFailed => 'Sdílení se nezdařilo';
+
+  @override
+  String get dailyRecaps => 'Denní Souhrny';
+
+  @override
+  String get removeFilter => 'Odstranit Filtr';
 }

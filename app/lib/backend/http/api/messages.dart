@@ -119,12 +119,13 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
   });
 }
 
-Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files) async* {
+Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {String? language}) async* {
   var messageId = "1000"; // Default new message
 
   await for (var line in makeMultipartStreamingApiCall(
     url: '${Env.apiBaseUrl}v2/voice-messages',
     files: files,
+    fields: language != null ? {'language': language} : {},
   )) {
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
@@ -174,11 +175,12 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-Future<String> transcribeVoiceMessage(File audioFile) async {
+Future<String> transcribeVoiceMessage(File audioFile, {String? language}) async {
   try {
     var response = await makeMultipartApiCall(
       url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
       files: [audioFile],
+      fields: language != null ? {'language': language} : {},
     );
 
     if (response.statusCode == 200) {

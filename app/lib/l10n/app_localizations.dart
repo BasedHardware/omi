@@ -14528,6 +14528,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Apple Health is not available on this device'**
   String get appleHealthNotAvailable;
+
+  /// No description provided for @downloadAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Audio'**
+  String get downloadAudio;
+
+  /// No description provided for @audioDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio downloaded successfully'**
+  String get audioDownloadSuccess;
+
+  /// No description provided for @audioDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download audio'**
+  String get audioDownloadFailed;
+
+  /// No description provided for @downloadingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading audio...'**
+  String get downloadingAudio;
+
+  /// No description provided for @shareAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Audio'**
+  String get shareAudio;
+
+  /// No description provided for @preparingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing Audio'**
+  String get preparingAudio;
+
+  /// No description provided for @gettingAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting audio files...'**
+  String get gettingAudioFiles;
+
+  /// No description provided for @downloadingAudioProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Audio'**
+  String get downloadingAudioProgress;
+
+  /// No description provided for @processingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing Audio'**
+  String get processingAudio;
+
+  /// No description provided for @combiningAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Combining audio files...'**
+  String get combiningAudioFiles;
+
+  /// No description provided for @audioReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Ready'**
+  String get audioReady;
+
+  /// No description provided for @openingShareSheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening share sheet...'**
+  String get openingShareSheet;
+
+  /// No description provided for @audioShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Failed'**
+  String get audioShareFailed;
+
+  /// No description provided for @dailyRecaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps'**
+  String get dailyRecaps;
+
+  /// No description provided for @removeFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Filter'**
+  String get removeFilter;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Union, Optional
 import hashlib
 import os
 
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -38,7 +39,7 @@ from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
@@ -51,6 +52,8 @@ from utils.subscription import (
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from models.notification_message import NotificationMessage
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
@@ -860,13 +863,6 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
     This bypasses the time check and sends a summary immediately.
     Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
     """
-    from datetime import datetime, time
-    import pytz
-    from utils.llm.external_integrations import generate_comprehensive_daily_summary
-    from models.conversation import Conversation
-    from utils.notifications import send_notification
-    from models.notification_message import NotificationMessage
-
     time_zone_name = notification_db.get_user_time_zone(uid)
     tokens = notification_db.get_all_tokens(uid)
 
@@ -891,14 +887,24 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
                 start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
                 end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
             else:
-                # Use today
+                # Use past 24 hours
                 now_in_user_tz = datetime.now(user_tz)
-                date_str = now_in_user_tz.strftime('%Y-%m-%d')
-                start_of_day = user_tz.localize(datetime.combine(now_in_user_tz.date(), time.min))
-                end_of_day = now_in_user_tz
+                end_date_utc = now_in_user_tz.astimezone(pytz.utc)
+                start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
 
-            start_date_utc = start_of_day.astimezone(pytz.utc)
-            end_date_utc = end_of_day.astimezone(pytz.utc)
+                # Determine display date based on current hour
+                if now_in_user_tz.hour < 12:
+                    display_date = now_in_user_tz.date() - timedelta(days=1)
+                else:
+                    display_date = now_in_user_tz.date()
+                date_str = display_date.strftime('%Y-%m-%d')
+                # Skip the conversion below since we already have UTC times
+                start_of_day = None
+                end_of_day = None
+
+            if start_of_day and end_of_day:
+                start_date_utc = start_of_day.astimezone(pytz.utc)
+                end_date_utc = end_of_day.astimezone(pytz.utc)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
     else:
@@ -908,9 +914,16 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
             end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
         else:
-            date_str = now_utc.strftime('%Y-%m-%d')
-            start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
+            # Use past 24 hours
             end_date_utc = now_utc
+            start_date_utc = now_utc - timedelta(hours=24)
+
+            # Determine display date based on current hour
+            if now_utc.hour < 12:
+                display_date = now_utc.date() - timedelta(days=1)
+            else:
+                display_date = now_utc.date()
+            date_str = display_date.strftime('%Y-%m-%d')
 
     # Get conversations for the date
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
@@ -989,4 +1002,55 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
         raise HTTPException(status_code=404, detail='Daily summary not found')
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
+    return {'status': 'ok'}
+
+
+# ***********************************
+# *** Mentor Notification Settings ***
+# ***********************************
+
+
+class MentorNotificationSettingsResponse(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+class MentorNotificationSettingsUpdate(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+@router.get('/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse)
+def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's mentor notification frequency preference.
+
+    Returns:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    frequency = notification_db.get_mentor_notification_frequency(uid)
+    return MentorNotificationSettingsResponse(frequency=frequency)
+
+
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+def update_mentor_notification_settings(
+    data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's mentor notification frequency preference.
+
+    Parameters:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    try:
+        notification_db.set_mentor_notification_frequency(uid, data.frequency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     return {'status': 'ok'}

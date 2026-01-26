@@ -7778,8 +7778,54 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zariadenie nepodporuje WiFi synchronizáciu, prepínanie na Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nie je na tomto zariadení k dispozícii';
+
+  @override
+  String get downloadAudio => 'Stiahnuť zvuk';
+
+  @override
+  String get audioDownloadSuccess => 'Zvuk bol úspešne stiahnutý';
+
+  @override
+  String get audioDownloadFailed => 'Sťahovanie zvuku zlyhalo';
+
+  @override
+  String get downloadingAudio => 'Sťahovanie zvuku...';
+
+  @override
+  String get shareAudio => 'Zdieľať zvuk';
+
+  @override
+  String get preparingAudio => 'Príprava zvuku';
+
+  @override
+  String get gettingAudioFiles => 'Získavanie zvukových súborov...';
+
+  @override
+  String get downloadingAudioProgress => 'Sťahovanie zvuku';
+
+  @override
+  String get processingAudio => 'Spracovanie zvuku';
+
+  @override
+  String get combiningAudioFiles => 'Kombinovanie zvukových súborov...';
+
+  @override
+  String get audioReady => 'Zvuk je pripravený';
+
+  @override
+  String get openingShareSheet => 'Otváranie listu zdieľania...';
+
+  @override
+  String get audioShareFailed => 'Zdieľanie zlyhalo';
+
+  @override
+  String get dailyRecaps => 'Denné Súhrny';
+
+  @override
+  String get removeFilter => 'Odstrániť Filter';
 }

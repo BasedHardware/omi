@@ -2495,5 +2495,22 @@
   "chooseTransferMethod": "Valitse siirtotapa",
   "fastTransferSpeed": "~150 KB/s WiFin kautta",
   "largeTimeGapDetected": "Havaittu suuri aikaväli ({gap})",
-  "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})"
+  "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})",
+  "dailyRecaps": "Päivittäiset Yhteenvedot",
+  "removeFilter": "Poista Suodatin",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Laite ei tue WiFi-synkronointia, vaihdetaan Bluetoothiin",
+  "appleHealthNotAvailable": "Apple Health ei ole käytettävissä tässä laitteessa",
+  "downloadAudio": "Lataa ääni",
+  "audioDownloadSuccess": "Ääni ladattu onnistuneesti",
+  "audioDownloadFailed": "Äänen lataus epäonnistui",
+  "downloadingAudio": "Ladataan ääntä...",
+  "shareAudio": "Jaa ääni",
+  "preparingAudio": "Valmistellaan ääntä",
+  "gettingAudioFiles": "Haetaan äänitiedostoja...",
+  "downloadingAudioProgress": "Ladataan ääntä",
+  "processingAudio": "Käsitellään ääntä",
+  "combiningAudioFiles": "Yhdistetään äänitiedostoja...",
+  "audioReady": "Ääni valmis",
+  "openingShareSheet": "Avataan jakamisnäyttöä...",
+  "audioShareFailed": "Jakaminen epäonnistui"
 }

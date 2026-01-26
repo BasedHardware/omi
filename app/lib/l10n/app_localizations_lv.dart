@@ -7806,8 +7806,53 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nav pieejams šajā ierīcē';
+
+  @override
+  String get downloadAudio => 'Lejupielādēt audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio veiksmīgi lejupielādēts';
+
+  @override
+  String get audioDownloadFailed => 'Audio lejupielāde neizdevās';
+
+  @override
+  String get downloadingAudio => 'Lejupielādē audio...';
+
+  @override
+  String get shareAudio => 'Kopīgot audio';
+
+  @override
+  String get preparingAudio => 'Sagatavo audio';
+
+  @override
+  String get gettingAudioFiles => 'Iegūst audio failus...';
+
+  @override
+  String get downloadingAudioProgress => 'Lejupielādē audio';
+
+  @override
+  String get processingAudio => 'Apstrādā audio';
+
+  @override
+  String get combiningAudioFiles => 'Apvieno audio failus...';
+
+  @override
+  String get audioReady => 'Audio gatavs';
+
+  @override
+  String get openingShareSheet => 'Atver kopīgošanas lapu...';
+
+  @override
+  String get audioShareFailed => 'Kopīgošana neizdevās';
+
+  @override
+  String get dailyRecaps => 'Dienas Kopsavilkumi';
+
+  @override
+  String get removeFilter => 'Noņemt Filtru';
 }

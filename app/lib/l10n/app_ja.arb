@@ -2496,5 +2496,22 @@
   "chooseTransferMethod": "転送方法を選択",
   "fastTransferSpeed": "WiFi経由で約150 KB/s",
   "largeTimeGapDetected": "大きな時間差が検出されました ({gap})",
-  "largeTimeGapsDetected": "大きな時間差が検出されました ({gaps})"
+  "largeTimeGapsDetected": "大きな時間差が検出されました ({gaps})",
+  "dailyRecaps": "デイリーレキャップ",
+  "removeFilter": "フィルターを削除",
+  "deviceDoesNotSupportWifiSwitchingToBle": "デバイスはWiFi同期をサポートしていません。Bluetoothに切り替えています",
+  "appleHealthNotAvailable": "Apple Healthはこのデバイスでは利用できません",
+  "downloadAudio": "音声をダウンロード",
+  "audioDownloadSuccess": "音声のダウンロードに成功しました",
+  "audioDownloadFailed": "音声のダウンロードに失敗しました",
+  "downloadingAudio": "音声をダウンロード中...",
+  "shareAudio": "音声を共有",
+  "preparingAudio": "音声を準備中",
+  "gettingAudioFiles": "音声ファイルを取得中...",
+  "downloadingAudioProgress": "音声をダウンロード中",
+  "processingAudio": "音声を処理中",
+  "combiningAudioFiles": "音声ファイルを結合中...",
+  "audioReady": "音声の準備完了",
+  "openingShareSheet": "共有シートを開いています...",
+  "audioShareFailed": "共有に失敗しました"
 }

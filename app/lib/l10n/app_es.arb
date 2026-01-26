@@ -2496,5 +2496,22 @@
   "chooseTransferMethod": "Elegir método de transferencia",
   "fastTransferSpeed": "~150 KB/s vía WiFi",
   "largeTimeGapDetected": "Se detectó una brecha de tiempo grande ({gap})",
-  "largeTimeGapsDetected": "Se detectaron brechas de tiempo grandes ({gaps})"
+  "largeTimeGapsDetected": "Se detectaron brechas de tiempo grandes ({gaps})",
+  "dailyRecaps": "Resúmenes Diarios",
+  "removeFilter": "Eliminar Filtro",
+  "deviceDoesNotSupportWifiSwitchingToBle": "El dispositivo no admite sincronización WiFi, cambiando a Bluetooth",
+  "appleHealthNotAvailable": "Apple Health no está disponible en este dispositivo",
+  "downloadAudio": "Descargar audio",
+  "audioDownloadSuccess": "Audio descargado correctamente",
+  "audioDownloadFailed": "Error al descargar el audio",
+  "downloadingAudio": "Descargando audio...",
+  "shareAudio": "Compartir audio",
+  "preparingAudio": "Preparando audio",
+  "gettingAudioFiles": "Obteniendo archivos de audio...",
+  "downloadingAudioProgress": "Descargando audio",
+  "processingAudio": "Procesando audio",
+  "combiningAudioFiles": "Combinando archivos de audio...",
+  "audioReady": "Audio listo",
+  "openingShareSheet": "Abriendo hoja de compartir...",
+  "audioShareFailed": "Error al compartir"
 }

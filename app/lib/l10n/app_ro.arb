@@ -2495,5 +2495,22 @@
   "chooseTransferMethod": "Alegeți metoda de transfer",
   "fastTransferSpeed": "~150 KB/s prin WiFi",
   "largeTimeGapDetected": "A fost detectată o diferență mare de timp ({gap})",
-  "largeTimeGapsDetected": "Au fost detectate diferențe mari de timp ({gaps})"
+  "largeTimeGapsDetected": "Au fost detectate diferențe mari de timp ({gaps})",
+  "dailyRecaps": "Recapitulări Zilnice",
+  "removeFilter": "Eliminare Filtru",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Dispozitivul nu acceptă sincronizare WiFi, comutare la Bluetooth",
+  "appleHealthNotAvailable": "Apple Health nu este disponibil pe acest dispozitiv",
+  "downloadAudio": "Descarcă audio",
+  "audioDownloadSuccess": "Audio descărcat cu succes",
+  "audioDownloadFailed": "Descărcarea audio a eșuat",
+  "downloadingAudio": "Se descarcă audio...",
+  "shareAudio": "Partajează audio",
+  "preparingAudio": "Se pregătește audio",
+  "gettingAudioFiles": "Se obțin fișierele audio...",
+  "downloadingAudioProgress": "Se descarcă audio",
+  "processingAudio": "Se procesează audio",
+  "combiningAudioFiles": "Se combină fișierele audio...",
+  "audioReady": "Audio pregătit",
+  "openingShareSheet": "Se deschide foaia de partajare...",
+  "audioShareFailed": "Partajarea a eșuat"
 }

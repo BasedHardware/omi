@@ -7788,8 +7788,53 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Seade ei toeta WiFi sünkroniseerimist, lülitumine Bluetoothile';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health pole selles seadmes saadaval';
+
+  @override
+  String get downloadAudio => 'Laadi heli alla';
+
+  @override
+  String get audioDownloadSuccess => 'Heli on edukalt alla laaditud';
+
+  @override
+  String get audioDownloadFailed => 'Heli allalaadimine ebaõnnestus';
+
+  @override
+  String get downloadingAudio => 'Heli allalaadimine...';
+
+  @override
+  String get shareAudio => 'Jaga heli';
+
+  @override
+  String get preparingAudio => 'Heli ettevalmistamine';
+
+  @override
+  String get gettingAudioFiles => 'Helifailide hankimine...';
+
+  @override
+  String get downloadingAudioProgress => 'Heli allalaadimine';
+
+  @override
+  String get processingAudio => 'Heli töötlemine';
+
+  @override
+  String get combiningAudioFiles => 'Helifailide ühendamine...';
+
+  @override
+  String get audioReady => 'Heli on valmis';
+
+  @override
+  String get openingShareSheet => 'Jagamislehe avamine...';
+
+  @override
+  String get audioShareFailed => 'Jagamine ebaõnnestus';
+
+  @override
+  String get dailyRecaps => 'Päevased Kokkuvõtted';
+
+  @override
+  String get removeFilter => 'Eemalda Filter';
 }

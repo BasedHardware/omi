@@ -7791,8 +7791,53 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Thiết bị không hỗ trợ đồng bộ WiFi, chuyển sang Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health không khả dụng trên thiết bị này';
+
+  @override
+  String get downloadAudio => 'Tải xuống âm thanh';
+
+  @override
+  String get audioDownloadSuccess => 'Tải xuống âm thanh thành công';
+
+  @override
+  String get audioDownloadFailed => 'Tải xuống âm thanh thất bại';
+
+  @override
+  String get downloadingAudio => 'Đang tải xuống âm thanh...';
+
+  @override
+  String get shareAudio => 'Chia sẻ âm thanh';
+
+  @override
+  String get preparingAudio => 'Đang chuẩn bị âm thanh';
+
+  @override
+  String get gettingAudioFiles => 'Đang lấy tệp âm thanh...';
+
+  @override
+  String get downloadingAudioProgress => 'Đang tải xuống âm thanh';
+
+  @override
+  String get processingAudio => 'Đang xử lý âm thanh';
+
+  @override
+  String get combiningAudioFiles => 'Đang kết hợp tệp âm thanh...';
+
+  @override
+  String get audioReady => 'Âm thanh đã sẵn sàng';
+
+  @override
+  String get openingShareSheet => 'Đang mở trang chia sẻ...';
+
+  @override
+  String get audioShareFailed => 'Chia sẻ thất bại';
+
+  @override
+  String get dailyRecaps => 'Tóm tắt hàng ngày';
+
+  @override
+  String get removeFilter => 'Xóa bộ lọc';
 }

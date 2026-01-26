@@ -7820,8 +7820,54 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Устройството не поддържа WiFi синхронизация, превключване към Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health не е налично на това устройство';
+
+  @override
+  String get downloadAudio => 'Изтегляне на аудио';
+
+  @override
+  String get audioDownloadSuccess => 'Аудиото е изтеглено успешно';
+
+  @override
+  String get audioDownloadFailed => 'Неуспешно изтегляне на аудио';
+
+  @override
+  String get downloadingAudio => 'Изтегляне на аудио...';
+
+  @override
+  String get shareAudio => 'Споделяне на аудио';
+
+  @override
+  String get preparingAudio => 'Подготовка на аудио';
+
+  @override
+  String get gettingAudioFiles => 'Получаване на аудио файлове...';
+
+  @override
+  String get downloadingAudioProgress => 'Изтегляне на аудио';
+
+  @override
+  String get processingAudio => 'Обработка на аудио';
+
+  @override
+  String get combiningAudioFiles => 'Комбиниране на аудио файлове...';
+
+  @override
+  String get audioReady => 'Аудиото е готово';
+
+  @override
+  String get openingShareSheet => 'Отваряне на страницата за споделяне...';
+
+  @override
+  String get audioShareFailed => 'Споделянето е неуспешно';
+
+  @override
+  String get dailyRecaps => 'Дневни резюмета';
+
+  @override
+  String get removeFilter => 'Премахни филтъра';
 }

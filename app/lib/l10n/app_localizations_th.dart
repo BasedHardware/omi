@@ -7751,8 +7751,53 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'อุปกรณ์ไม่รองรับการซิงค์ WiFi กำลังเปลี่ยนไปใช้ Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health ไม่พร้อมใช้งานบนอุปกรณ์นี้';
+
+  @override
+  String get downloadAudio => 'ดาวน์โหลดเสียง';
+
+  @override
+  String get audioDownloadSuccess => 'ดาวน์โหลดเสียงสำเร็จ';
+
+  @override
+  String get audioDownloadFailed => 'ดาวน์โหลดเสียงล้มเหลว';
+
+  @override
+  String get downloadingAudio => 'กำลังดาวน์โหลดเสียง...';
+
+  @override
+  String get shareAudio => 'แชร์เสียง';
+
+  @override
+  String get preparingAudio => 'กำลังเตรียมเสียง';
+
+  @override
+  String get gettingAudioFiles => 'กำลังรับไฟล์เสียง...';
+
+  @override
+  String get downloadingAudioProgress => 'กำลังดาวน์โหลดเสียง';
+
+  @override
+  String get processingAudio => 'กำลังประมวลผลเสียง';
+
+  @override
+  String get combiningAudioFiles => 'กำลังรวมไฟล์เสียง...';
+
+  @override
+  String get audioReady => 'เสียงพร้อมแล้ว';
+
+  @override
+  String get openingShareSheet => 'กำลังเปิดแผ่นแชร์...';
+
+  @override
+  String get audioShareFailed => 'แชร์ล้มเหลว';
+
+  @override
+  String get dailyRecaps => 'สรุปรายวัน';
+
+  @override
+  String get removeFilter => 'ลบตัวกรอง';
 }

@@ -2495,5 +2495,22 @@
   "chooseTransferMethod": "Επιλέξτε μέθοδο μεταφοράς",
   "fastTransferSpeed": "~150 KB/s μέσω WiFi",
   "largeTimeGapDetected": "Εντοπίστηκε μεγάλο χρονικό κενό ({gap})",
-  "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})"
+  "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})",
+  "dailyRecaps": "Ημερήσιες Περιλήψεις",
+  "removeFilter": "Κατάργηση Φίλτρου",
+  "deviceDoesNotSupportWifiSwitchingToBle": "Η συσκευή δεν υποστηρίζει συγχρονισμό WiFi, μετάβαση σε Bluetooth",
+  "appleHealthNotAvailable": "Το Apple Health δεν είναι διαθέσιμο σε αυτήν τη συσκευή",
+  "downloadAudio": "Λήψη ήχου",
+  "audioDownloadSuccess": "Ο ήχος λήφθηκε επιτυχώς",
+  "audioDownloadFailed": "Αποτυχία λήψης ήχου",
+  "downloadingAudio": "Λήψη ήχου...",
+  "shareAudio": "Κοινοποίηση ήχου",
+  "preparingAudio": "Προετοιμασία ήχου",
+  "gettingAudioFiles": "Λήψη αρχείων ήχου...",
+  "downloadingAudioProgress": "Λήψη ήχου",
+  "processingAudio": "Επεξεργασία ήχου",
+  "combiningAudioFiles": "Συνδυασμός αρχείων ήχου...",
+  "audioReady": "Ο ήχος είναι έτοιμος",
+  "openingShareSheet": "Άνοιγμα φύλλου κοινοποίησης...",
+  "audioShareFailed": "Η κοινοποίηση απέτυχε"
 }

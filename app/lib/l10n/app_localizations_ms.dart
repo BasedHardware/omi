@@ -7811,8 +7811,54 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Peranti tidak menyokong penyegerakan WiFi, bertukar kepada Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health tidak tersedia pada peranti ini';
+
+  @override
+  String get downloadAudio => 'Muat turun Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio berjaya dimuat turun';
+
+  @override
+  String get audioDownloadFailed => 'Gagal memuat turun audio';
+
+  @override
+  String get downloadingAudio => 'Memuat turun audio...';
+
+  @override
+  String get shareAudio => 'Kongsi Audio';
+
+  @override
+  String get preparingAudio => 'Menyediakan Audio';
+
+  @override
+  String get gettingAudioFiles => 'Mendapatkan fail audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Memuat turun Audio';
+
+  @override
+  String get processingAudio => 'Memproses Audio';
+
+  @override
+  String get combiningAudioFiles => 'Menggabungkan fail audio...';
+
+  @override
+  String get audioReady => 'Audio Sedia';
+
+  @override
+  String get openingShareSheet => 'Membuka helaian perkongsian...';
+
+  @override
+  String get audioShareFailed => 'Perkongsian Gagal';
+
+  @override
+  String get dailyRecaps => 'Ringkasan Harian';
+
+  @override
+  String get removeFilter => 'Alih Keluar Penapis';
 }

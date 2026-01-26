@@ -1121,6 +1121,60 @@ class MixpanelManager {
     });
   }
 
+  void transcriptSegmentTapped({
+    required String conversationId,
+    required double segmentStartSeconds,
+    required double seekPositionSeconds,
+  }) {
+    track('Transcript Segment Tapped', properties: {
+      'conversation_id': conversationId,
+      'segment_start_seconds': segmentStartSeconds,
+      'seek_position_seconds': seekPositionSeconds,
+    });
+  }
+
+  void audioShareStarted({
+    required String conversationId,
+    required int audioFileCount,
+  }) {
+    track('Audio Share Started', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+    });
+  }
+
+  void audioShareCompleted({
+    required String conversationId,
+    required int audioFileCount,
+    required bool wasCombined,
+    required int durationSeconds,
+  }) {
+    track('Audio Share Completed', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+      'was_combined': wasCombined,
+      'duration_seconds': durationSeconds,
+    });
+  }
+
+  void audioShareFailed({
+    required String conversationId,
+    String? errorMessage,
+  }) {
+    track('Audio Share Failed', properties: {
+      'conversation_id': conversationId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void audioShareCancelled({
+    required String conversationId,
+  }) {
+    track('Audio Share Cancelled', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
   void actionItemExported({
     required String actionItemId,
     required String appName,

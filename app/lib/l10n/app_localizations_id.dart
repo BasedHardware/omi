@@ -7800,8 +7800,54 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Perangkat tidak mendukung sinkronisasi WiFi, beralih ke Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health tidak tersedia di perangkat ini';
+
+  @override
+  String get downloadAudio => 'Unduh Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio berhasil diunduh';
+
+  @override
+  String get audioDownloadFailed => 'Gagal mengunduh audio';
+
+  @override
+  String get downloadingAudio => 'Mengunduh audio...';
+
+  @override
+  String get shareAudio => 'Bagikan Audio';
+
+  @override
+  String get preparingAudio => 'Menyiapkan Audio';
+
+  @override
+  String get gettingAudioFiles => 'Mendapatkan file audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Mengunduh Audio';
+
+  @override
+  String get processingAudio => 'Memproses Audio';
+
+  @override
+  String get combiningAudioFiles => 'Menggabungkan file audio...';
+
+  @override
+  String get audioReady => 'Audio Siap';
+
+  @override
+  String get openingShareSheet => 'Membuka lembar berbagi...';
+
+  @override
+  String get audioShareFailed => 'Gagal Berbagi';
+
+  @override
+  String get dailyRecaps => 'Ringkasan Harian';
+
+  @override
+  String get removeFilter => 'Hapus Filter';
 }

@@ -46,10 +46,11 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     return changelogs
 
 
-def get_recent_changelogs(limit: int = 5) -> List[Announcement]:
+def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> List[Announcement]:
     """
     Get the most recent app changelog announcements.
-    Returns up to `limit` changelogs sorted by version descending
+    Returns up to `limit` changelogs sorted by version descending.
+    If max_version is provided, only returns changelogs with app_version <= max_version.
     """
     announcements_ref = db.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.CHANGELOG.value)).where(
@@ -63,6 +64,9 @@ def get_recent_changelogs(limit: int = 5) -> List[Announcement]:
         data = doc.to_dict()
         app_version = data.get("app_version")
         if app_version:
+            # Filter out versions newer than max_version if specified
+            if max_version and _compare_versions(app_version, max_version) > 0:
+                continue
             changelogs.append(Announcement.from_dict(data))
 
     # Sort by version descending

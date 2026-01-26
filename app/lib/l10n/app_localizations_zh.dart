@@ -7645,8 +7645,53 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => '设备不支持WiFi同步,正在切换到蓝牙';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => '此设备上不可用Apple Health';
+
+  @override
+  String get downloadAudio => '下载音频';
+
+  @override
+  String get audioDownloadSuccess => '音频下载成功';
+
+  @override
+  String get audioDownloadFailed => '音频下载失败';
+
+  @override
+  String get downloadingAudio => '正在下载音频...';
+
+  @override
+  String get shareAudio => '分享音频';
+
+  @override
+  String get preparingAudio => '正在准备音频';
+
+  @override
+  String get gettingAudioFiles => '正在获取音频文件...';
+
+  @override
+  String get downloadingAudioProgress => '正在下载音频';
+
+  @override
+  String get processingAudio => '正在处理音频';
+
+  @override
+  String get combiningAudioFiles => '正在合并音频文件...';
+
+  @override
+  String get audioReady => '音频已准备好';
+
+  @override
+  String get openingShareSheet => '正在打开分享页面...';
+
+  @override
+  String get audioShareFailed => '分享失败';
+
+  @override
+  String get dailyRecaps => '每日回顾';
+
+  @override
+  String get removeFilter => '移除筛选';
 }

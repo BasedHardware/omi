@@ -266,10 +266,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       // Navigate
+      if (!mounted) return;
       switch (pageAlias) {
         case "apps":
           if (detailPageId != null && detailPageId.isNotEmpty) {
-            var app = await context.read<AppProvider>().getAppFromId(detailPageId);
+            final appProvider = context.read<AppProvider>();
+            var app = await appProvider.getAppFromId(detailPageId);
             if (app != null && mounted) {
               Navigator.push(
                 context,
@@ -281,7 +283,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "chat":
-          print('inside chat alias $detailPageId');
+          Logger.debug('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
@@ -467,6 +469,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
       Logger.debug('[Freemium] Error checking dialog: $e');
+      return false;
     });
   }
 
@@ -978,12 +981,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ),
                       if (shouldShowSearchButton) const SizedBox(width: 8),
-                      // Calendar button
+                      // Daily Recaps toggle button
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: convoProvider.selectedDate != null
+                          color: convoProvider.showDailySummaries
                               ? Colors.deepPurple.withValues(alpha: 0.5)
                               : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -991,20 +994,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            convoProvider.selectedDate != null
-                                ? FontAwesomeIcons.calendarDay
-                                : FontAwesomeIcons.calendarDays,
+                            FontAwesomeIcons.clockRotateLeft,
                             size: 16,
-                            color: Colors.white70,
+                            color: convoProvider.showDailySummaries ? Colors.white : Colors.white70,
                           ),
-                          onPressed: () async {
+                          onPressed: () {
                             HapticFeedback.mediumImpact();
-                            if (convoProvider.selectedDate != null) {
-                              await convoProvider.clearDateFilter();
-                              MixpanelManager().calendarFilterCleared();
-                            } else {
-                              // Open date picker
-                              DateTime selectedDate = DateTime.now();
+                            convoProvider.toggleDailySummaries();
+                          },
+                        ),
+                      ),
+                      // Calendar button - only show when date filter is active
+                      if (convoProvider.selectedDate != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              FontAwesomeIcons.calendarDay,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              // Open date picker to change date, cancel clears filter
+                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
                               await showCupertinoModalPopup<void>(
                                 context: context,
                                 builder: (BuildContext context) {
@@ -1019,7 +1039,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       top: false,
                                       child: Column(
                                         children: [
-                                          // Header with Cancel and Done buttons
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                             decoration: const BoxDecoration(
@@ -1036,9 +1055,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               children: [
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
-                                                  onPressed: () => Navigator.of(context).pop(),
+                                                  onPressed: () async {
+                                                    // Get provider before pop to avoid using invalid context
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
+                                                    Navigator.of(context).pop();
+                                                    await provider.clearDateFilter();
+                                                    MixpanelManager().calendarFilterCleared();
+                                                  },
                                                   child: Text(
-                                                    context.l10n.cancel,
+                                                    context.l10n.removeFilter,
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 16,
@@ -1049,13 +1075,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
                                                     Navigator.of(context).pop();
-                                                    if (context.mounted) {
-                                                      final provider =
-                                                          Provider.of<ConversationProvider>(context, listen: false);
-                                                      await provider.filterConversationsByDate(selectedDate);
-                                                      MixpanelManager().calendarFilterApplied(selectedDate);
-                                                    }
+                                                    await provider.filterConversationsByDate(selectedDate);
+                                                    MixpanelManager().calendarFilterApplied(selectedDate);
                                                   },
                                                   child: Text(
                                                     context.l10n.done,
@@ -1069,7 +1093,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               ],
                                             ),
                                           ),
-                                          // Date picker
                                           Expanded(
                                             child: Material(
                                               color: ResponsiveHelper.backgroundSecondary,
@@ -1094,10 +1117,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   );
                                 },
                               );
-                            }
-                          },
+                            },
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(width: 8),
                     ],
                   );

@@ -7806,8 +7806,54 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Urządzenie nie obsługuje synchronizacji WiFi, przełączanie na Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nie jest dostępne na tym urządzeniu';
+
+  @override
+  String get downloadAudio => 'Pobierz dźwięk';
+
+  @override
+  String get audioDownloadSuccess => 'Dźwięk został pomyślnie pobrany';
+
+  @override
+  String get audioDownloadFailed => 'Nie udało się pobrać dźwięku';
+
+  @override
+  String get downloadingAudio => 'Pobieranie dźwięku...';
+
+  @override
+  String get shareAudio => 'Udostępnij dźwięk';
+
+  @override
+  String get preparingAudio => 'Przygotowywanie dźwięku';
+
+  @override
+  String get gettingAudioFiles => 'Pobieranie plików dźwiękowych...';
+
+  @override
+  String get downloadingAudioProgress => 'Pobieranie dźwięku';
+
+  @override
+  String get processingAudio => 'Przetwarzanie dźwięku';
+
+  @override
+  String get combiningAudioFiles => 'Łączenie plików dźwiękowych...';
+
+  @override
+  String get audioReady => 'Dźwięk gotowy';
+
+  @override
+  String get openingShareSheet => 'Otwieranie arkusza udostępniania...';
+
+  @override
+  String get audioShareFailed => 'Udostępnianie nie powiodło się';
+
+  @override
+  String get dailyRecaps => 'Podsumowania Dnia';
+
+  @override
+  String get removeFilter => 'Usuń Filtr';
 }

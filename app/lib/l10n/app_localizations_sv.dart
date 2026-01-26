@@ -7794,8 +7794,53 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Enheten stöder inte WiFi-synkronisering, byter till Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health är inte tillgängligt på denna enhet';
+
+  @override
+  String get downloadAudio => 'Ladda ner ljud';
+
+  @override
+  String get audioDownloadSuccess => 'Ljud nedladdat framgångsrikt';
+
+  @override
+  String get audioDownloadFailed => 'Misslyckades att ladda ner ljud';
+
+  @override
+  String get downloadingAudio => 'Laddar ner ljud...';
+
+  @override
+  String get shareAudio => 'Dela ljud';
+
+  @override
+  String get preparingAudio => 'Förbereder ljud';
+
+  @override
+  String get gettingAudioFiles => 'Hämtar ljudfiler...';
+
+  @override
+  String get downloadingAudioProgress => 'Laddar ner ljud';
+
+  @override
+  String get processingAudio => 'Bearbetar ljud';
+
+  @override
+  String get combiningAudioFiles => 'Kombinerar ljudfiler...';
+
+  @override
+  String get audioReady => 'Ljud klart';
+
+  @override
+  String get openingShareSheet => 'Öppnar delningsblad...';
+
+  @override
+  String get audioShareFailed => 'Delning misslyckades';
+
+  @override
+  String get dailyRecaps => 'Dagliga Sammanfattningar';
+
+  @override
+  String get removeFilter => 'Ta Bort Filter';
 }
