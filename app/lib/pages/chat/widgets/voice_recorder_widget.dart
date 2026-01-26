@@ -81,7 +81,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       child: CustomPaint(
                         painter: AudioWavePainter(
                           levels: provider.audioLevels,
-                                                  ),
+                        ),
                       ),
                     ),
                   ),
