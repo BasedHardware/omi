@@ -26,7 +26,8 @@ class SettingsWindow: NSWindow {
     }
 
     private init() {
-        let contentRect = NSRect(x: 0, y: 0, width: 400, height: 480)
+        // Initial size will be adjusted after hosting view is set
+        let contentRect = NSRect(x: 0, y: 0, width: 420, height: 100)
 
         super.init(
             contentRect: contentRect,
@@ -39,9 +40,6 @@ class SettingsWindow: NSWindow {
         self.isReleasedWhenClosed = false
         self.delegate = self
 
-        // Center on screen
-        self.center()
-
         // Create SwiftUI view
         let settingsView = SettingsView(onClose: { [weak self] in
             self?.close()
@@ -49,6 +47,13 @@ class SettingsWindow: NSWindow {
 
         let hostingView = NSHostingView(rootView: settingsView)
         self.contentView = hostingView
+
+        // Resize window to fit content
+        let fittingSize = hostingView.fittingSize
+        self.setContentSize(fittingSize)
+
+        // Center on screen after sizing
+        self.center()
     }
 }
 
