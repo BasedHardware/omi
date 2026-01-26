@@ -106,7 +106,7 @@ actor TaskAssistant: ProactiveAssistant {
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
         // Store the latest frame - we'll process it when the interval has passed
         pendingFrame = frame
-        log("Task: Queued frame \(frame.frameNumber) for analysis")
+        // Note: This overwrites the previous frame, not a queue
         return nil
     }
 
