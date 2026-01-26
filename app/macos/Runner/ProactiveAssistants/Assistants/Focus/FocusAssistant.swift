@@ -125,7 +125,7 @@ actor FocusAssistant: ProactiveAssistant {
 
         // Submit frame to internal queue for processing
         frameQueue.append(frame)
-        log("Focus: Queued frame \(frame.frameNumber) for analysis: App=\(frame.appName), Window=\(frame.windowTitle ?? "unknown")")
+        log("Focus: Analyzing frame \(frame.frameNumber): App=\(frame.appName), Window=\(frame.windowTitle ?? "unknown")")
 
         // Return nil since we process asynchronously
         return nil
@@ -308,7 +308,7 @@ actor FocusAssistant: ProactiveAssistant {
 
                     // Send notification (analysis cooldown handles throttling, not notification cooldown)
                     let notificationSent = NotificationService.shared.sendNotification(
-                        title: "Focus Alert",
+                        title: "",
                         message: fullMessage,
                         assistantId: identifier,
                         applyCooldown: false
@@ -338,7 +338,7 @@ actor FocusAssistant: ProactiveAssistant {
                 if let message = analysis.message {
                     log("Back on track: \(message)")
                     NotificationService.shared.sendNotification(
-                        title: "OMI - Focus",
+                        title: "",
                         message: message,
                         assistantId: identifier,
                         applyCooldown: false
