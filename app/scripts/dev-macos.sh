@@ -79,6 +79,49 @@ else
     APP_PATH="build/macos/Build/Products/Debug-prod/Omi.app"
 fi
 
+# Clean up conflicting Swift app (OMI-COMPUTER.app) that shares the same bundle ID
+# This causes screen capture permission issues because macOS gets confused
+echo "Checking for conflicting OMI-COMPUTER.app builds..."
+CONFLICTING_BUNDLE_ID="com.omi.computer-macos"
+OMI_REPO_ROOT="$(dirname "$APP_DIR")"
+
+# Find and remove any OMI-COMPUTER.app builds with the conflicting bundle ID
+for swift_app in "$OMI_REPO_ROOT"/build/OMI-COMPUTER.app "$OMI_REPO_ROOT"/OMI-COMPUTER.app /Applications/OMI-COMPUTER.app ~/Desktop/OMI-COMPUTER.app; do
+    if [ -d "$swift_app" ]; then
+        echo "Found conflicting app: $swift_app"
+        $LSREGISTER -u "$swift_app" 2>/dev/null || true
+        echo "Removing $swift_app to resolve bundle ID conflict..."
+        rm -rf "$swift_app"
+    fi
+done
+
+# Also check LaunchServices database for any registered OMI-COMPUTER apps
+$LSREGISTER -dump 2>/dev/null | grep -o '[^"[:space:]]*OMI-COMPUTER[^"[:space:]]*\.app' | sort -u | while read -r stale_app; do
+    if [ -n "$stale_app" ]; then
+        echo "Unregistering stale: $stale_app"
+        $LSREGISTER -u "$stale_app" 2>/dev/null || true
+        # Remove if it still exists (skip Trash and mounted volumes - they're protected)
+        if [ -d "$stale_app" ] && [[ "$stale_app" != *".Trash"* ]] && [[ "$stale_app" != /Volumes/* ]]; then
+            echo "Removing $stale_app..."
+            rm -rf "$stale_app"
+        fi
+    fi
+done
+
+# Garbage collect LaunchServices database to remove stale entries
+echo "Garbage collecting LaunchServices database..."
+$LSREGISTER -gc
+echo "LaunchServices garbage collection complete."
+
+# Reset TCC (privacy) permissions for the bundle ID
+# This clears old permission entries from System Preferences
+BUNDLE_ID="com.omi.computer-macos"
+echo "Resetting TCC permissions for $BUNDLE_ID..."
+tccutil reset ScreenCapture "$BUNDLE_ID" 2>/dev/null || true
+tccutil reset Microphone "$BUNDLE_ID" 2>/dev/null || true
+tccutil reset AppleEvents "$BUNDLE_ID" 2>/dev/null || true
+echo "TCC permissions reset complete."
+
 # Unregister all known stale Omi locations that could hijack URL schemes
 echo "Clearing stale LaunchServices registrations..."
 # Current build path

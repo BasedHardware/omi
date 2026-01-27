@@ -9,7 +9,7 @@ enum FocusStatus: String, Codable {
 
 // MARK: - Screen Analysis Result
 
-struct ScreenAnalysis: Codable {
+struct ScreenAnalysis: Codable, AssistantResult {
     let status: FocusStatus
     let appOrSite: String
     let description: String
@@ -23,22 +23,17 @@ struct ScreenAnalysis: Codable {
     }
 
     /// Convert to dictionary for Flutter
-    func toDictionary() -> [String: Any?] {
-        return [
+    func toDictionary() -> [String: Any] {
+        var dict: [String: Any] = [
             "status": status.rawValue,
             "appOrSite": appOrSite,
-            "description": description,
-            "message": message
+            "description": description
         ]
+        if let message = message {
+            dict["message"] = message
+        }
+        return dict
     }
-}
-
-// MARK: - Frame for Processing
-
-struct Frame {
-    let jpegData: Data
-    let appName: String
-    let frameNum: Int
 }
 
 // MARK: - Focus Event (for Flutter communication)

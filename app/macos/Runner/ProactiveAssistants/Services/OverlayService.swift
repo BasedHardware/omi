@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Controller that manages the glow overlay window
 @MainActor
-class GlowOverlayController {
-    static let shared = GlowOverlayController()
+class OverlayService {
+    static let shared = OverlayService()
 
     private var overlayWindow: GlowOverlayWindow?
     private var dismissTask: Task<Void, Never>?
@@ -14,39 +14,67 @@ class GlowOverlayController {
     /// Show the glow effect around the currently active window
     /// - Parameter colorMode: The color mode for the glow (focused = green, distracted = red)
     func showGlowAroundActiveWindow(colorMode: GlowColorMode = .focused) {
+        // Check if glow overlay is enabled in settings
+        guard AssistantSettings.shared.glowOverlayEnabled else {
+            log("Glow overlay disabled in settings, skipping")
+            return
+        }
+
         // Get the active window's frame
         guard let windowFrame = getActiveWindowFrame() else {
             log("Could not get active window frame for glow effect")
             return
         }
 
+        showGlow(around: windowFrame, colorMode: colorMode)
+    }
+
+    /// Show the glow effect around a specific frame (used for preview)
+    /// - Parameters:
+    ///   - frame: The frame to show the glow around
+    ///   - colorMode: The color mode for the glow (focused = green, distracted = red)
+    ///   - isPreview: If true, bypasses the settings check (for preview mode)
+    func showGlow(around frame: NSRect, colorMode: GlowColorMode, isPreview: Bool = false) {
+        // Check if glow overlay is enabled in settings (unless this is a preview)
+        if !isPreview {
+            guard AssistantSettings.shared.glowOverlayEnabled else {
+                log("Glow overlay disabled in settings, skipping")
+                return
+            }
+        }
+
         // Dismiss any existing overlay
         dismissOverlay()
 
         // Create the overlay window
-        let overlay = GlowOverlayWindow(contentRect: windowFrame)
+        let overlay = GlowOverlayWindow(contentRect: frame)
 
         // Create the SwiftUI glow view with the specified color mode
-        let glowView = GlowBorderView(targetSize: windowFrame.size, colorMode: colorMode)
+        let glowView = GlowBorderView(targetSize: frame.size, colorMode: colorMode)
         let hostingView = NSHostingView(rootView: glowView)
         hostingView.frame = overlay.contentView?.bounds ?? .zero
         hostingView.autoresizingMask = [.width, .height]
 
         overlay.contentView?.addSubview(hostingView)
-        overlay.updateFrame(to: windowFrame)
+        overlay.updateFrame(to: frame)
 
         // Show the window
         overlay.orderFrontRegardless()
 
         self.overlayWindow = overlay
 
-        log("Showing \(colorMode == .focused ? "green" : "red") glow effect around window at \(windowFrame)")
+        log("Showing \(colorMode == .focused ? "green" : "red") glow effect around window at \(frame)\(isPreview ? " (preview)" : "")")
 
         // Auto-dismiss after animation completes
         dismissTask = Task {
-            try? await Task.sleep(nanoseconds: 3_500_000_000) // 3.5 seconds
-            await MainActor.run {
-                self.dismissOverlay()
+            do {
+                try await Task.sleep(nanoseconds: 3_500_000_000) // 3.5 seconds
+                await MainActor.run {
+                    self.dismissOverlay()
+                }
+            } catch {
+                // Task was cancelled (e.g., new glow shown before this one finished)
+                // Don't dismiss - the new glow's task will handle dismissal
             }
         }
     }
@@ -112,3 +140,8 @@ class GlowOverlayController {
         return nil
     }
 }
+
+// MARK: - Backward Compatibility Alias
+
+/// Alias for backward compatibility
+typealias GlowOverlayController = OverlayService

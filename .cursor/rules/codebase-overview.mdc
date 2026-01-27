@@ -1,0 +1,112 @@
+---
+description: "Omi codebase architecture overview component relationships backend Flutter firmware web plugins SDKs MCP navigation"
+alwaysApply: true
+---
+
+# Codebase Overview
+
+## System Architecture
+
+Omi is a multimodal AI wearable platform with the following components:
+
+### Core Components
+
+1. **Backend** (`backend/`) - Python/FastAPI
+   - FastAPI REST API and WebSocket server
+   - LangGraph agentic chat system
+   - Firestore, Pinecone, Redis storage
+   - LLM processing and memory extraction
+
+2. **Flutter App** (`app/`) - Dart/Flutter
+   - Cross-platform mobile/desktop app
+   - BLE device communication
+   - Real-time audio streaming
+   - State management with Provider
+
+3. **Firmware** (`omi/`, `omiGlass/`) - C/C++
+   - nRF chips (Zephyr RTOS) for Omi device
+   - ESP32-S3 (Arduino) for Omi Glass
+   - BLE services and audio codecs
+
+4. **Web** (`web/`) - Next.js/TypeScript
+   - Next.js frontend applications
+   - Firebase integration
+   - Radix UI / Shadcn/ui components
+
+5. **Plugins** (`plugins/`) - Python/Node.js
+   - Integration apps and webhooks
+   - Prompt-based apps
+   - Chat tools
+
+6. **SDKs** (`sdks/`) - Python/Swift/React Native
+   - SDKs for building integrations
+
+7. **MCP Server** (`mcp/`) - Python
+   - Model Context Protocol server
+
+## Module Hierarchy
+
+### Backend Hierarchy (strict import order)
+
+1. `database/` - Data access (lowest level)
+2. `utils/` - Business logic
+3. `routers/` - API endpoints
+4. `main.py` - Application entry
+
+**Rule**: Higher-level modules import from lower-level modules, never reverse.
+
+## Key Data Flows
+
+### Conversation Recording
+```
+Device → BLE → App → WebSocket → Backend → STT → Transcript → LLM → Firestore + Pinecone
+```
+
+### Chat Query
+```
+App → REST API → LangGraph Router → Tools → Context → LLM → Response
+```
+
+### Memory Extraction
+```
+Conversation → LLM → Extract Facts → Firestore (memories collection)
+```
+
+## Storage Architecture
+
+- **Firestore**: Primary database (conversations, memories, users)
+- **Pinecone**: Vector embeddings for semantic search
+- **Redis**: Caching (speech profiles, enabled apps)
+- **GCS**: Binary files (audio, photos)
+
+## Development Guidelines
+
+### Backend
+- No in-function imports
+- Follow module hierarchy
+- Free large objects after use
+- Use FastAPI patterns
+
+### Flutter
+- All user-facing strings use `context.l10n.keyName`
+- Use Provider for state management
+- Support all platforms (iOS, Android, macOS, Windows)
+
+### Firmware
+- Follow Zephyr/Arduino patterns
+- Support all codec types (Opus preferred)
+- Handle BLE packet fragmentation
+
+## Documentation Structure
+
+- **Architecture**: `.cursor/ARCHITECTURE.md`
+- **API Reference**: `.cursor/API_REFERENCE.md`
+- **Data Flow**: `.cursor/DATA_FLOW.md`
+- **Components**: `.cursor/*_COMPONENTS.md`
+- **External Docs**: `docs/doc/developer/`
+
+## Related Rules
+
+- Backend Architecture: `.cursor/rules/backend-architecture.mdc`
+- Flutter Architecture: `.cursor/rules/flutter-architecture.mdc`
+- Plugin Development: `.cursor/rules/plugin-development.mdc`

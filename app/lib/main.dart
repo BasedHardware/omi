@@ -160,7 +160,10 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
+  // DEBUG: Log Firebase Auth state before getIdToken
+  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 

@@ -360,6 +360,58 @@ def handle_mcp_message(
         return create_mcp_error(msg_id, -32601, f"Method not found: {method}"), None
 
 
+@router.get("/authorize", tags=["mcp"])
+async def mcp_authorize(
+    response_type: str,
+    client_id: str,
+    redirect_uri: str,
+    state: Optional[str] = None,
+    scope: Optional[str] = None,
+    code_challenge: Optional[str] = None,
+    code_challenge_method: Optional[str] = None,
+):
+    """OAuth authorize endpoint."""
+    if client_id != "omi":
+        raise HTTPException(status_code=400, detail="Invalid client_id")
+
+    redirect_url = f"{redirect_uri}?code=omi"
+    if state:
+        redirect_url += f"&state={state}"
+
+    return Response(status_code=302, headers={"Location": redirect_url})
+
+
+@router.post("/token", tags=["mcp"])
+async def mcp_token(request: Request):
+    """OAuth token endpoint."""
+    try:
+        form_data = await request.form()
+        client_secret = form_data.get("client_secret")
+        client_id = form_data.get("client_id")
+    except Exception:
+        try:
+            body = await request.json()
+            client_secret = body.get("client_secret")
+            client_id = body.get("client_id")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid request body")
+
+    if not client_secret:
+        raise HTTPException(status_code=400, detail="client_secret is required")
+
+    if client_id != "omi":
+        raise HTTPException(status_code=400, detail="Invalid client_id")
+
+    user_id = authenticate_api_key(client_secret)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return {
+        "access_token": client_secret,
+        "token_type": "Bearer",
+    }
+
+
 @router.post("/v1/mcp/sse", tags=["mcp"])
 async def mcp_streamable_http(
     request: Request,

@@ -21,16 +21,13 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
-		F4A7835A6CFE4FB4B9F7529F /* FocusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A91BDB67241E4FCBAD880407 /* FocusModels.swift */; };
-		632B5B818C36412388D04EC2 /* FocusPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C635656A5174048A95F4D10 /* FocusPlugin.swift */; };
-		3041B573CAF74828819F7967 /* GeminiService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92EBFAF784941ADA0C3E332 /* GeminiService.swift */; };
-		69CE3EB886BE42B98ADA9C2F /* GlowBorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */; };
-		8AB8159A23894B6B800F222F /* GlowOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */; };
-		1DC66A72869B4AB19125A178 /* GlowOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */; };
-		24A30D26390C45268854A232 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 196EE392F7ED41BA80F5DAF6 /* Logger.swift */; };
-		4463DC5E82314CB194726E03 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3ED79A10C004849A3F33613 /* NotificationService.swift */; };
-		24441E4A8840429A928946AE /* ScreenCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */; };
-		21CC64FCD1144AA0B4A5B523 /* WindowMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */; };
+		0444F8BEF719B284743A3BA8 /* AdviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820AB9C577A61B1AB5E61745 /* AdviceModels.swift */; };
+		08A969A6A178F1AB8C1131B9 /* AdvicePromptEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D1FAA85673DCC428A7DB51 /* AdvicePromptEditorWindow.swift */; };
+		09D62B8D1921F311FC89BE2E /* ScreenCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0939C2E0994B5568E97B8051 /* ScreenCaptureService.swift */; };
+		0B22125835308ECD92091FB9 /* WindowMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85ED55DF44F55C485B0C372B /* WindowMonitor.swift */; };
+		10A3C05DC26A1C8E371197DC /* AssistantCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FAD4F38CEA27126081686F0 /* AssistantCoordinator.swift */; };
+		142708A3234404EB35B67CAA /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD9FCF0BC89564024D642FDC /* Logger.swift */; };
+		2A13DE987CB059AD8C47954E /* PromptEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 393AD2AAD3BB3F4178507237 /* PromptEditorWindow.swift */; };
 		332689E32D863DBF00CB35A1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */; };
 		335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 335BBD1A22A9A15E00E9071D /* GeneratedPluginRegistrant.swift */; };
 		33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC10F02044A3C60003C045 /* AppDelegate.swift */; };
@@ -40,12 +37,29 @@
 		33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11172044BFA00003C045 /* PermissionManager.swift */; };
 		33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11192044BFA00003C045 /* MenuBarManager.swift */; };
 		33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC111B2044BFA00003C045 /* AudioManager.swift */; };
+		37E8024461CD7BC02CD59B08 /* GeminiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02DA6B79FAE925FAD3E95BF /* GeminiClient.swift */; };
+		3BA2C2D7ACBD4F93280939A8 /* TaskModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79AB7AE546116644A6B1E327 /* TaskModels.swift */; };
+		3D537C299E8545976F46B6F7 /* CapturedFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = C115C100487EE79BB6E7E1EB /* CapturedFrame.swift */; };
 		42B9987E2ED0814900B97B59 /* MeetingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987B2ED0814900B97B59 /* MeetingDetector.swift */; };
 		42B9987F2ED0814900B97B59 /* NubManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987C2ED0814900B97B59 /* NubManager.swift */; };
 		42B998802ED0814900B97B59 /* NubWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987D2ED0814900B97B59 /* NubWindow.swift */; };
 		42B998822ED20D4700B97B59 /* CalendarMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998812ED20D4700B97B59 /* CalendarMonitor.swift */; };
 		42B998852ED5CB5500B97B59 /* MeetingAppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */; };
+		44B0B0DA9BF4FC604A5E6369 /* GlowOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E9D90179904BB261222422 /* GlowOverlayWindow.swift */; };
+		5A1D2E3F8B9C0D4E6F7A8B9C /* GlowDemoWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B2E3F4A9C0D1E5F7A8B9C0D /* GlowDemoWindow.swift */; };
+		66AEFCFDDB096282236FEBBF /* AdviceAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB9467837E100DE83AA7DD2E /* AdviceAssistantSettings.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
+		6F279B4E7D27C1EE2CE6BF20 /* OverlayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2489E9D340B0C9F8BBB5D1F1 /* OverlayService.swift */; };
+		71C77B9A313D00DCEF86272F /* FocusAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB41D6B780508997C701C8F3 /* FocusAssistantSettings.swift */; };
+		731DE7AFC966A98B0FD1C4C9 /* AdviceAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E783090CD1C0213CE9B9F13 /* AdviceAssistant.swift */; };
+		75FA88603F1E83D88CB01366 /* TaskPromptEditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13AF2A3C898648FB27B3AAAD /* TaskPromptEditorWindow.swift */; };
+		7D3F125FD82B8178AD8839A0 /* ProactiveAssistantsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 477903B9183A4459C08EAE38 /* ProactiveAssistantsPlugin.swift */; };
+		8711EEAC08E9B51E71AD4DEB /* AssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DACC14460C6662DB2B0024 /* AssistantSettings.swift */; };
+		94660F5C4DA3110FE16FAB7E /* FocusAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6AD8736417E6F50084425AB /* FocusAssistant.swift */; };
+		AE780C504B76021A346A07F4 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6B76666973A4D2EA1FC5EF /* NotificationService.swift */; };
+		BFF6A75FBE7D64E08423AC71 /* GlowBorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE5F91C1B17F91F666FABE9 /* GlowBorderView.swift */; };
+		C59E6A6DEF4C1EE57D0391F0 /* AssistantProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2364BE82380613C3BD5E06C /* AssistantProtocol.swift */; };
+		C9D8340E1FAE86DB10755EAC /* FocusModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6A225F135104659FFA8559 /* FocusModels.swift */; };
 		CF46C6482EC157BB00BEE80A /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6472EC157BB00BEE80A /* Custom.xcconfig */; };
 		CF46C6492EC157BB00BEE80A /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6462EC157BB00BEE80A /* Base.xcconfig */; };
 		CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */; };
@@ -54,6 +68,10 @@
 		CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */; };
 		CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */; };
 		CFD3F5742E87FAFF00CFA1AD /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = CFD3F5732E87FAFF00CFA1AD /* MarkdownUI */; };
+		D0B7BB053ECA8CC6FF7D8672 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB8BF6EA65F96824E789314B /* SettingsWindow.swift */; };
+		DE4C094340B3FF19E32E8E43 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F309134DEF4A3D02075D85A /* SettingsView.swift */; };
+		E066D61DC9E132F27BA30283 /* TaskAssistantSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9FDD403FD0638EDD367905 /* TaskAssistantSettings.swift */; };
+		FA628471DE0C5B985E3C2E7A /* TaskAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E68A94CC5166BFCA07D184C /* TaskAssistant.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,17 +98,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A91BDB67241E4FCBAD880407 /* FocusModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusModels.swift; sourceTree = "<group>"; };
-		0C635656A5174048A95F4D10 /* FocusPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusPlugin.swift; sourceTree = "<group>"; };
-		E92EBFAF784941ADA0C3E332 /* GeminiService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiService.swift; sourceTree = "<group>"; };
-		8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowBorderView.swift; sourceTree = "<group>"; };
-		34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowOverlayController.swift; sourceTree = "<group>"; };
-		DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowOverlayWindow.swift; sourceTree = "<group>"; };
-		196EE392F7ED41BA80F5DAF6 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
-		D3ED79A10C004849A3F33613 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureService.swift; sourceTree = "<group>"; };
-		EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowMonitor.swift; sourceTree = "<group>"; };
+		04D1FAA85673DCC428A7DB51 /* AdvicePromptEditorWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AdvicePromptEditorWindow.swift; path = Runner/ProactiveAssistants/UI/AdvicePromptEditorWindow.swift; sourceTree = "<group>"; };
+		0939C2E0994B5568E97B8051 /* ScreenCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/ScreenCaptureService.swift; sourceTree = "<group>"; };
+		0FAD4F38CEA27126081686F0 /* AssistantCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/AssistantCoordinator.swift; sourceTree = "<group>"; };
+		13AF2A3C898648FB27B3AAAD /* TaskPromptEditorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/TaskPromptEditorWindow.swift; sourceTree = "<group>"; };
 		1C2D026EB5A0346DDF59E311 /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
+		2489E9D340B0C9F8BBB5D1F1 /* OverlayService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Services/OverlayService.swift; sourceTree = "<group>"; };
 		332689E22D863DBF00CB35A1 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		332689E42D870FC600CB35A1 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
 		332689E52D8712BB00CB35A1 /* RunnerDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerDebug.entitlements; sourceTree = "<group>"; };
@@ -116,19 +129,38 @@
 		33E51913231747F40026EE4D /* DebugProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DebugProfile.entitlements; sourceTree = "<group>"; };
 		33E51914231749380026EE4D /* Release.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = Release.entitlements; sourceTree = "<group>"; };
 		33E5194F232828860026EE4D /* AppInfo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppInfo.xcconfig; sourceTree = "<group>"; };
+		393AD2AAD3BB3F4178507237 /* PromptEditorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/PromptEditorWindow.swift; sourceTree = "<group>"; };
+		3E783090CD1C0213CE9B9F13 /* AdviceAssistant.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdviceAssistant.swift; sourceTree = "<group>"; };
 		42B9987B2ED0814900B97B59 /* MeetingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetector.swift; sourceTree = "<group>"; };
 		42B9987C2ED0814900B97B59 /* NubManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NubManager.swift; sourceTree = "<group>"; };
 		42B9987D2ED0814900B97B59 /* NubWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NubWindow.swift; sourceTree = "<group>"; };
 		42B998812ED20D4700B97B59 /* CalendarMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMonitor.swift; sourceTree = "<group>"; };
 		42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAppConstants.swift; sourceTree = "<group>"; };
+		477903B9183A4459C08EAE38 /* ProactiveAssistantsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/ProactiveAssistantsPlugin.swift; sourceTree = "<group>"; };
 		499F292DC6760DF2E1C7EE6C /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
+		6B2E3F4A9C0D1E5F7A8B9C0D /* GlowDemoWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/GlowDemoWindow.swift; sourceTree = "<group>"; };
 		727D30C5CE8BA20F9DDF5245 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
+		79AB7AE546116644A6B1E327 /* TaskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/TaskExtraction/TaskModels.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		820AB9C577A61B1AB5E61745 /* AdviceModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdviceModels.swift; sourceTree = "<group>"; };
+		85ED55DF44F55C485B0C372B /* WindowMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/WindowMonitor.swift; sourceTree = "<group>"; };
 		8D3552C3B9FB89580AB02D4C /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		8E68A94CC5166BFCA07D184C /* TaskAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift; sourceTree = "<group>"; };
+		8F309134DEF4A3D02075D85A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/SettingsView.swift; sourceTree = "<group>"; };
 		96C47D61F21F055C4264E4ED /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9E30D5C1306899D4214FF616 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
+		9F9FDD403FD0638EDD367905 /* TaskAssistantSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift; sourceTree = "<group>"; };
+		A6AD8736417E6F50084425AB /* FocusAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/Focus/FocusAssistant.swift; sourceTree = "<group>"; };
+		BB6B76666973A4D2EA1FC5EF /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Services/NotificationService.swift; sourceTree = "<group>"; };
+		BD9FCF0BC89564024D642FDC /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Utilities/Logger.swift; sourceTree = "<group>"; };
+		BE6A225F135104659FFA8559 /* FocusModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/Focus/FocusModels.swift; sourceTree = "<group>"; };
+		C02DA6B79FAE925FAD3E95BF /* GeminiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/GeminiClient.swift; sourceTree = "<group>"; };
+		C115C100487EE79BB6E7E1EB /* CapturedFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/CapturedFrame.swift; sourceTree = "<group>"; };
+		C1DACC14460C6662DB2B0024 /* AssistantSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Services/AssistantSettings.swift; sourceTree = "<group>"; };
+		CB41D6B780508997C701C8F3 /* FocusAssistantSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Assistants/Focus/FocusAssistantSettings.swift; sourceTree = "<group>"; };
+		CB9467837E100DE83AA7DD2E /* AdviceAssistantSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdviceAssistantSettings.swift; sourceTree = "<group>"; };
 		CF46C6462EC157BB00BEE80A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		CF46C6472EC157BB00BEE80A /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Custom.xcconfig; sourceTree = "<group>"; };
 		CFD3F5512E857FDC00CFA1AD /* GlobalShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutManager.swift; sourceTree = "<group>"; };
@@ -137,8 +169,12 @@
 		CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureManager.swift; sourceTree = "<group>"; };
 		CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
 		ECA12410D4472837013672C6 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
+		F1E9D90179904BB261222422 /* GlowOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/GlowOverlayWindow.swift; sourceTree = "<group>"; };
+		F2364BE82380613C3BD5E06C /* AssistantProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/Core/AssistantProtocol.swift; sourceTree = "<group>"; };
 		F8DCBD7DD8AB67EE93F0458C /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
+		FB8BF6EA65F96824E789314B /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/SettingsWindow.swift; sourceTree = "<group>"; };
 		FBFF4BAE9914B1C75B63AB20 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		FDE5F91C1B17F91F666FABE9 /* GlowBorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Runner/ProactiveAssistants/UI/GlowBorderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +190,66 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0FD016064756E5551FEABE07 /* Assistants */ = {
+			isa = PBXGroup;
+			children = (
+				2DB4B6BE7DBE3119305F4FAB /* Advice */,
+			);
+			name = Assistants;
+			sourceTree = "<group>";
+		};
+		24D47BB02F27254C00C16D9B /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				477903B9183A4459C08EAE38 /* ProactiveAssistantsPlugin.swift */,
+				F2364BE82380613C3BD5E06C /* AssistantProtocol.swift */,
+				0FAD4F38CEA27126081686F0 /* AssistantCoordinator.swift */,
+				C02DA6B79FAE925FAD3E95BF /* GeminiClient.swift */,
+				C115C100487EE79BB6E7E1EB /* CapturedFrame.swift */,
+				0939C2E0994B5568E97B8051 /* ScreenCaptureService.swift */,
+				85ED55DF44F55C485B0C372B /* WindowMonitor.swift */,
+				A6AD8736417E6F50084425AB /* FocusAssistant.swift */,
+				BE6A225F135104659FFA8559 /* FocusModels.swift */,
+				CB41D6B780508997C701C8F3 /* FocusAssistantSettings.swift */,
+				8E68A94CC5166BFCA07D184C /* TaskAssistant.swift */,
+				79AB7AE546116644A6B1E327 /* TaskModels.swift */,
+				9F9FDD403FD0638EDD367905 /* TaskAssistantSettings.swift */,
+				BB6B76666973A4D2EA1FC5EF /* NotificationService.swift */,
+				2489E9D340B0C9F8BBB5D1F1 /* OverlayService.swift */,
+				C1DACC14460C6662DB2B0024 /* AssistantSettings.swift */,
+				8F309134DEF4A3D02075D85A /* SettingsView.swift */,
+				13AF2A3C898648FB27B3AAAD /* TaskPromptEditorWindow.swift */,
+				FB8BF6EA65F96824E789314B /* SettingsWindow.swift */,
+				FDE5F91C1B17F91F666FABE9 /* GlowBorderView.swift */,
+				6B2E3F4A9C0D1E5F7A8B9C0D /* GlowDemoWindow.swift */,
+				F1E9D90179904BB261222422 /* GlowOverlayWindow.swift */,
+				393AD2AAD3BB3F4178507237 /* PromptEditorWindow.swift */,
+				BD9FCF0BC89564024D642FDC /* Logger.swift */,
+				04D1FAA85673DCC428A7DB51 /* AdvicePromptEditorWindow.swift */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		2DB4B6BE7DBE3119305F4FAB /* Advice */ = {
+			isa = PBXGroup;
+			children = (
+				3E783090CD1C0213CE9B9F13 /* AdviceAssistant.swift */,
+				CB9467837E100DE83AA7DD2E /* AdviceAssistantSettings.swift */,
+				820AB9C577A61B1AB5E61745 /* AdviceModels.swift */,
+			);
+			name = Advice;
+			path = ProactiveAssistants/Assistants/Advice;
+			sourceTree = "<group>";
+		};
+		2FB2DAFD9E8CFCC15C5770C6 /* ProactiveAssistants */ = {
+			isa = PBXGroup;
+			children = (
+				0FD016064756E5551FEABE07 /* Assistants */,
+				346AFE5FF2E58B90C0BEEB75 /* UI */,
+			);
+			name = ProactiveAssistants;
+			sourceTree = "<group>";
+		};
 		33BA886A226E78AF003329D5 /* Configs */ = {
 			isa = PBXGroup;
 			children = (
@@ -176,6 +272,7 @@
 				33CC10EE2044A3C60003C045 /* Products */,
 				7E46E8344CECDAF8A1C52DC9 /* Pods */,
 				8B6767900719AA147F326713 /* Frameworks */,
+				24D47BB02F27254C00C16D9B /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -237,10 +334,17 @@
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
-				9EC6408942B2489480331D76 /* FocusMonitor */,
 				33BA886A226E78AF003329D5 /* Configs */,
+				2FB2DAFD9E8CFCC15C5770C6 /* ProactiveAssistants */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		346AFE5FF2E58B90C0BEEB75 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = UI;
 			sourceTree = "<group>";
 		};
 		42B998842ED5CB5500B97B59 /* Constants */ = {
@@ -273,23 +377,6 @@
 				990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		9EC6408942B2489480331D76 /* FocusMonitor */ = {
-			isa = PBXGroup;
-			children = (
-				A91BDB67241E4FCBAD880407 /* FocusModels.swift */,
-				0C635656A5174048A95F4D10 /* FocusPlugin.swift */,
-				E92EBFAF784941ADA0C3E332 /* GeminiService.swift */,
-				8997E7CCCCA94D2990724CC3 /* GlowBorderView.swift */,
-				34F6DA22454F48A893FC5DE3 /* GlowOverlayController.swift */,
-				DAC179ABE20F4E0E923D9553 /* GlowOverlayWindow.swift */,
-				196EE392F7ED41BA80F5DAF6 /* Logger.swift */,
-				D3ED79A10C004849A3F33613 /* NotificationService.swift */,
-				C8FDA8EF9DE04C9C850AE89C /* ScreenCaptureService.swift */,
-				EF19BB3DA4984BC0A99B2199 /* WindowMonitor.swift */,
-			);
-			path = FocusMonitor;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -501,16 +588,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F4A7835A6CFE4FB4B9F7529F /* FocusModels.swift in Sources */,
-				632B5B818C36412388D04EC2 /* FocusPlugin.swift in Sources */,
-				3041B573CAF74828819F7967 /* GeminiService.swift in Sources */,
-				69CE3EB886BE42B98ADA9C2F /* GlowBorderView.swift in Sources */,
-				8AB8159A23894B6B800F222F /* GlowOverlayController.swift in Sources */,
-				1DC66A72869B4AB19125A178 /* GlowOverlayWindow.swift in Sources */,
-				24A30D26390C45268854A232 /* Logger.swift in Sources */,
-				4463DC5E82314CB194726E03 /* NotificationService.swift in Sources */,
-				24441E4A8840429A928946AE /* ScreenCaptureService.swift in Sources */,
-				21CC64FCD1144AA0B4A5B523 /* WindowMonitor.swift in Sources */,
+				75FA88603F1E83D88CB01366 /* TaskPromptEditorWindow.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
@@ -521,12 +599,39 @@
 				33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */,
 				33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */,
 				33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */,
+				7D3F125FD82B8178AD8839A0 /* ProactiveAssistantsPlugin.swift in Sources */,
+				C59E6A6DEF4C1EE57D0391F0 /* AssistantProtocol.swift in Sources */,
+				10A3C05DC26A1C8E371197DC /* AssistantCoordinator.swift in Sources */,
+				37E8024461CD7BC02CD59B08 /* GeminiClient.swift in Sources */,
+				3D537C299E8545976F46B6F7 /* CapturedFrame.swift in Sources */,
+				09D62B8D1921F311FC89BE2E /* ScreenCaptureService.swift in Sources */,
+				0B22125835308ECD92091FB9 /* WindowMonitor.swift in Sources */,
+				94660F5C4DA3110FE16FAB7E /* FocusAssistant.swift in Sources */,
+				C9D8340E1FAE86DB10755EAC /* FocusModels.swift in Sources */,
+				71C77B9A313D00DCEF86272F /* FocusAssistantSettings.swift in Sources */,
+				FA628471DE0C5B985E3C2E7A /* TaskAssistant.swift in Sources */,
+				3BA2C2D7ACBD4F93280939A8 /* TaskModels.swift in Sources */,
+				E066D61DC9E132F27BA30283 /* TaskAssistantSettings.swift in Sources */,
+				AE780C504B76021A346A07F4 /* NotificationService.swift in Sources */,
+				6F279B4E7D27C1EE2CE6BF20 /* OverlayService.swift in Sources */,
+				8711EEAC08E9B51E71AD4DEB /* AssistantSettings.swift in Sources */,
+				DE4C094340B3FF19E32E8E43 /* SettingsView.swift in Sources */,
+				D0B7BB053ECA8CC6FF7D8672 /* SettingsWindow.swift in Sources */,
+				BFF6A75FBE7D64E08423AC71 /* GlowBorderView.swift in Sources */,
+				5A1D2E3F8B9C0D4E6F7A8B9C /* GlowDemoWindow.swift in Sources */,
+				44B0B0DA9BF4FC604A5E6369 /* GlowOverlayWindow.swift in Sources */,
+				2A13DE987CB059AD8C47954E /* PromptEditorWindow.swift in Sources */,
+				142708A3234404EB35B67CAA /* Logger.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				42B998852ED5CB5500B97B59 /* MeetingAppConstants.swift in Sources */,
 				42B998822ED20D4700B97B59 /* CalendarMonitor.swift in Sources */,
 				CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */,
 				CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
+				731DE7AFC966A98B0FD1C4C9 /* AdviceAssistant.swift in Sources */,
+				66AEFCFDDB096282236FEBBF /* AdviceAssistantSettings.swift in Sources */,
+				0444F8BEF719B284743A3BA8 /* AdviceModels.swift in Sources */,
+				08A969A6A178F1AB8C1131B9 /* AdvicePromptEditorWindow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -617,7 +722,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -707,7 +812,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -790,7 +895,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -872,7 +977,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -954,7 +1059,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1036,7 +1141,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1118,7 +1223,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1253,7 +1358,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1282,7 +1387,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = S6DP5HF77G;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
