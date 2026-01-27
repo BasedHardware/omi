@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/action_fields_widget.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/validators.dart';
 
 class ExternalTriggerFieldsWidget extends StatelessWidget {
@@ -190,7 +191,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                                                     width: 6,
                                                   ),
                                                   Text(
-                                                    provider.getTriggerEvents()[index].title,
+                                                    provider.getTriggerEvents()[index].getLocalizedTitle(context),
                                                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                                   ),
                                                   const Spacer(),
