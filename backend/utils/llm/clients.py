@@ -32,6 +32,7 @@ llm_persona_mini_stream = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
+    callbacks=[_usage_callback],
 )
 llm_persona_medium_stream = ChatOpenAI(
     temperature=0.8,
@@ -40,6 +41,7 @@ llm_persona_medium_stream = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
+    callbacks=[_usage_callback],
 )
 
 # Gemini models for large context analysis
@@ -49,6 +51,7 @@ llm_gemini_flash = ChatOpenAI(
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Wrapped"},
+    callbacks=[_usage_callback],
 )
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")

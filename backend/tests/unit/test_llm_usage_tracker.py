@@ -59,7 +59,8 @@ def test_set_usage_context_manual_reset():
     assert usage_tracker.get_current_context() is None
 
 
-def test_llm_callback_buffers_and_flushes():
+def test_llm_callback_flushes_immediately_skips_buffer():
+    """When flush_fn is set, usage is written immediately and buffer is skipped."""
     usage_tracker.get_and_clear_buffer()
     flush_calls = []
 
@@ -83,8 +84,9 @@ def test_llm_callback_buffers_and_flushes():
     finally:
         usage_tracker.reset_usage_context(token)
 
+    # When flush_fn is set, buffer is skipped to avoid unbounded growth
     buffered = usage_tracker.get_and_clear_buffer()
-    assert buffered == {"user-3:chat:gpt-4.1-mini": {"input_tokens": 12, "output_tokens": 3}}
+    assert buffered == {}
     assert flush_calls == [("user-3", "chat", "gpt-4.1-mini", 12, 3)]
 
 
