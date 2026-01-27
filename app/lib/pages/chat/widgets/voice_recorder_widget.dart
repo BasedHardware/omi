@@ -238,6 +238,9 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Guard against empty levels to prevent divide-by-zero
+    if (levels.isEmpty) return;
+
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 4 // Slightly thicker for better visibility
