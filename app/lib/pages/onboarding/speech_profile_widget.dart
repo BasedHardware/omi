@@ -51,9 +51,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       // Check if user has set primary language
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-        await LanguageSelectionDialog.show(context);
-      }
+      final homeProvider = context.read<HomeProvider>();
+      final needsLanguage = !homeProvider.hasSetPrimaryLanguage;
+
+      if (!needsLanguage || !mounted) return;
+      await LanguageSelectionDialog.show(context);
     });
     SharedPreferencesUtil().onboardingCompleted = true;
   }
