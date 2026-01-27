@@ -5,7 +5,7 @@ description: "A Model Context Protocol server for Omi interaction and automation
 
 ## Overview
 
-The Omi MCP server enables AI assistants like Claude to interact with your Omi data using natural language. Query your memories, manage conversations, and automate workflows through AI-powered tools.
+The Omi MCP server enables AI assistants like Claude to interact with your Omi data using natural language. Query your memories, manage conversations, track action items, and automate workflows through AI-powered tools.
 
 <CardGroup cols={3}>
   <Card title="Read Memories" icon="brain">
@@ -86,6 +86,7 @@ The API key can also be provided with each tool call. If not provided, the serve
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
     | `limit` | number | No | Maximum number of memories to retrieve (default: 100) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
     | `categories` | array | No | Categories to filter by (default: []) |
 
     **Returns:** JSON object containing list of memories
@@ -128,10 +129,76 @@ The API key can also be provided with each tool call. If not provided, the serve
     **Parameters:**
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
-    | `include_discarded` | boolean | No | Include discarded conversations (default: false) |
-    | `limit` | number | No | Maximum number of conversations (default: 25) |
+    | `start_date` | string | No | Filter conversations after this date (yyyy-mm-dd) |
+    | `end_date` | string | No | Filter conversations before this date (yyyy-mm-dd) |
+    | `categories` | array | No | Categories to filter by (default: []) |
+    | `limit` | number | No | Maximum number of conversations (default: 20) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
 
     **Returns:** List of conversation objects containing transcripts, timestamps, geolocation, and structured summaries
+  </Accordion>
+  <Accordion title="get_conversation_by_id" icon="message">
+    Retrieve a conversation by ID, including transcript segments.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `conversation_id` | string | Yes | ID of the conversation to retrieve |
+
+    **Returns:** Conversation object including transcript segments
+  </Accordion>
+  <Accordion title="get_action_items" icon="list-check">
+    Retrieve a list of action items (tasks/to-dos) with optional filtering.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `limit` | number | No | Maximum number of action items (default: 50) |
+    | `offset` | number | No | Offset for pagination (default: 0) |
+    | `completed` | boolean | No | Filter by completion status |
+    | `conversation_id` | string | No | Filter by conversation ID |
+    | `start_date` | string | No | Filter by creation start date (ISO 8601) |
+    | `end_date` | string | No | Filter by creation end date (ISO 8601) |
+    | `due_start_date` | string | No | Filter by due start date (ISO 8601) |
+    | `due_end_date` | string | No | Filter by due end date (ISO 8601) |
+
+    **Returns:** JSON object containing list of action items
+  </Accordion>
+  <Accordion title="create_action_item" icon="plus">
+    Create a new action item (task/to-do).
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `description` | string | Yes | Action item description |
+    | `completed` | boolean | No | Whether the item is completed (default: false) |
+    | `due_at` | string | No | Due date (ISO 8601) |
+    | `conversation_id` | string | No | Associated conversation ID |
+
+    **Returns:** Created action item object
+  </Accordion>
+  <Accordion title="update_action_item" icon="pen">
+    Update an existing action item.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `action_item_id` | string | Yes | ID of the action item to update |
+    | `description` | string | No | Updated description |
+    | `completed` | boolean | No | Updated completion status |
+    | `due_at` | string | No | Updated due date (ISO 8601, set null to clear) |
+
+    **Returns:** Updated action item object
+  </Accordion>
+  <Accordion title="delete_action_item" icon="trash">
+    Delete an action item by ID.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `action_item_id` | string | Yes | ID of the action item to delete |
+
+    **Returns:** Status of the operation
   </Accordion>
 </AccordionGroup>
 

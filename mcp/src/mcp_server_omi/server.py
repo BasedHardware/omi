@@ -71,6 +71,10 @@ class OmiTools(str, Enum):
     EDIT_MEMORY = "edit_memory"
     GET_CONVERSATIONS = "get_conversations"
     GET_CONVERSATION_BY_ID = "get_conversation_by_id"
+    GET_ACTION_ITEMS = "get_action_items"
+    CREATE_ACTION_ITEM = "create_action_item"
+    UPDATE_ACTION_ITEM = "update_action_item"
+    DELETE_ACTION_ITEM = "delete_action_item"
 
 
 class GetMemories(BaseModel):
@@ -127,6 +131,51 @@ class GetConversationById(BaseModel):
         default=None,
     )
     conversation_id: str = Field(description="The ID of the conversation to retrieve.")
+
+
+class GetActionItems(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    completed: Optional[bool] = Field(description="Filter by completion status.", default=None)
+    conversation_id: Optional[str] = Field(description="Filter by conversation ID.", default=None)
+    start_date: Optional[str] = Field(description="Filter by creation start date (ISO 8601).", default=None)
+    end_date: Optional[str] = Field(description="Filter by creation end date (ISO 8601).", default=None)
+    due_start_date: Optional[str] = Field(description="Filter by due start date (ISO 8601).", default=None)
+    due_end_date: Optional[str] = Field(description="Filter by due end date (ISO 8601).", default=None)
+    limit: int = Field(description="The number of action items to retrieve.", default=50)
+    offset: int = Field(description="The offset of the action items to retrieve.", default=0)
+
+
+class CreateActionItem(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    description: str = Field(description="The action item description.")
+    completed: bool = Field(description="Whether the action item is completed.", default=False)
+    due_at: Optional[str] = Field(description="Due date (ISO 8601).", default=None)
+    conversation_id: Optional[str] = Field(description="Associated conversation ID.", default=None)
+
+
+class UpdateActionItem(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    action_item_id: str = Field(description="The ID of the action item to update.")
+    description: Optional[str] = Field(description="Updated description.", default=None)
+    completed: Optional[bool] = Field(description="Updated completion status.", default=None)
+    due_at: Optional[str] = Field(description="Updated due date (ISO 8601, set to null to clear).", default=None)
+
+
+class DeleteActionItem(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    action_item_id: str = Field(description="The ID of the action item to delete.")
 
 
 def get_memories(
@@ -220,6 +269,77 @@ def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
     return response.json()
 
 
+def get_action_items(
+    api_key: str,
+    completed: Optional[bool] = None,
+    conversation_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    due_start_date: Optional[str] = None,
+    due_end_date: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    params = {"limit": limit, "offset": offset}
+    if completed is not None:
+        params["completed"] = completed
+    if conversation_id:
+        params["conversation_id"] = conversation_id
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+    if due_start_date:
+        params["due_start_date"] = due_start_date
+    if due_end_date:
+        params["due_end_date"] = due_end_date
+
+    response = requests.get(
+        f"{base_url}action-items",
+        params=params,
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    return response.json()
+
+
+def create_action_item(
+    api_key: str,
+    description: str,
+    completed: bool = False,
+    due_at: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+) -> dict:
+    payload = {"description": description, "completed": completed}
+    if due_at is not None:
+        payload["due_at"] = due_at
+    if conversation_id is not None:
+        payload["conversation_id"] = conversation_id
+
+    response = requests.post(
+        f"{base_url}action-items",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=payload,
+    )
+    return response.json()
+
+
+def update_action_item(api_key: str, action_item_id: str, update_data: dict) -> dict:
+    response = requests.patch(
+        f"{base_url}action-items/{action_item_id}",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json=update_data,
+    )
+    return response.json()
+
+
+def delete_action_item(api_key: str, action_item_id: str) -> dict:
+    response = requests.delete(
+        f"{base_url}action-items/{action_item_id}",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    return response.json()
+
+
 async def serve(uid: str | None) -> None:
     logger = logging.getLogger(__name__)
     # if uid is not None:
@@ -260,6 +380,26 @@ async def serve(uid: str | None) -> None:
                 name=OmiTools.GET_CONVERSATION_BY_ID,
                 description="Retrieve a conversation by ID including each segment of the transcript.",
                 inputSchema=GetConversationById.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.GET_ACTION_ITEMS,
+                description="Retrieve a list of action items (tasks/to-dos).",
+                inputSchema=GetActionItems.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.CREATE_ACTION_ITEM,
+                description="Create a new action item (task/to-do).",
+                inputSchema=CreateActionItem.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.UPDATE_ACTION_ITEM,
+                description="Update an existing action item.",
+                inputSchema=UpdateActionItem.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.DELETE_ACTION_ITEM,
+                description="Delete an action item by ID.",
+                inputSchema=DeleteActionItem.model_json_schema(),
             ),
         ]
 
@@ -327,6 +467,49 @@ async def serve(uid: str | None) -> None:
 
         elif name == OmiTools.GET_CONVERSATION_BY_ID:
             result = get_conversation_by_id(api_key, conversation_id=arguments["conversation_id"])
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.GET_ACTION_ITEMS:
+            result = get_action_items(
+                api_key,
+                completed=arguments.get("completed"),
+                conversation_id=arguments.get("conversation_id"),
+                start_date=arguments.get("start_date"),
+                end_date=arguments.get("end_date"),
+                due_start_date=arguments.get("due_start_date"),
+                due_end_date=arguments.get("due_end_date"),
+                limit=arguments.get("limit", 50),
+                offset=arguments.get("offset", 0),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.CREATE_ACTION_ITEM:
+            result = create_action_item(
+                api_key,
+                description=arguments["description"],
+                completed=arguments.get("completed", False),
+                due_at=arguments.get("due_at"),
+                conversation_id=arguments.get("conversation_id"),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.UPDATE_ACTION_ITEM:
+            update_data = {}
+            if "description" in arguments and arguments.get("description") is not None:
+                update_data["description"] = arguments.get("description")
+            if "completed" in arguments and arguments.get("completed") is not None:
+                update_data["completed"] = arguments.get("completed")
+            if "due_at" in arguments:
+                update_data["due_at"] = arguments.get("due_at")
+            result = update_action_item(
+                api_key,
+                action_item_id=arguments["action_item_id"],
+                update_data=update_data,
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.DELETE_ACTION_ITEM:
+            result = delete_action_item(api_key, action_item_id=arguments["action_item_id"])
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         raise ValueError(f"Unknown tool: {name}")
