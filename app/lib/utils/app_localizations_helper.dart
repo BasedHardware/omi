@@ -69,7 +69,7 @@ final Map<String, String Function(AppLocalizations)> _categoryLocalizations = {
 // Mapping from capability IDs to localization getters
 final Map<String, String Function(AppLocalizations)> _capabilityLocalizations = {
   'chat': (l10n) => l10n.capabilityChat,
-  'memories': (l10n) => l10n.capabilityConversations,
+  'memories': (l10n) => l10n.capabilitySummary,
   'external_integration': (l10n) => l10n.capabilityExternalIntegration,
   'proactive_notification': (l10n) => l10n.capabilityNotification,
 };

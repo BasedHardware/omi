@@ -7929,4 +7929,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get scopeUserChat => 'User Chat';
+
+  @override
+  String get capabilitySummary => 'Summary';
 }
