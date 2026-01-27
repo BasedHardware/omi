@@ -436,7 +436,7 @@ void storage_write(void)
         }
         if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
             LOG_INF("no heartbeat sent\n");
-            // save_offset(offset);
+            save_offset(offset);
             // ensure heartbeat count resets
             heartbeat_count = 0;
         }
@@ -474,6 +474,7 @@ void storage_write(void)
                 if (stop_started) {
                     stop_started = 0;
                 } else {
+                    save_offset(offset);
                     LOG_PRINTK("done. attempting to download more files\n");
                     uint8_t stop_result[1] = {100};
 
