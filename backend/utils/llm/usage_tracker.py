@@ -85,10 +85,12 @@ class LLMUsageCallback(BaseCallbackHandler):
                         break
 
         if input_tokens > 0 or output_tokens > 0:
-            _buffer_usage(ctx.uid, ctx.feature, model, input_tokens, output_tokens)
-
             if self._flush_fn:
+                # Write immediately - skip buffering to avoid unbounded growth
                 self._flush_fn(ctx.uid, ctx.feature, model, input_tokens, output_tokens)
+            else:
+                # Buffer for batch writing when no flush_fn provided
+                _buffer_usage(ctx.uid, ctx.feature, model, input_tokens, output_tokens)
 
 
 def _buffer_usage(uid: str, feature: str, model: str, input_tokens: int, output_tokens: int):
