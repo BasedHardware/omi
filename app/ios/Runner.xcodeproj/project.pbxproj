@@ -17,6 +17,7 @@
 		422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
+		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -36,6 +37,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 42A7BA332E788BD300138969;
+			remoteInfo = omiWatchApp;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -55,6 +63,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
+				42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -87,6 +96,7 @@
 		42476A832C5E369200426330 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderHostApiImpl.swift; sourceTree = "<group>"; };
 		426B89AC2C46919D00E24442 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
+		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
@@ -226,6 +236,7 @@
 			isa = PBXGroup;
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
+				42A7BA342E788BD300138969 /* omiWatchApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -261,6 +272,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		42A7BA332E788BD300138969 /* omiWatchApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */;
+			buildPhases = (
+				42A7BA302E788BD300138969 /* Sources */,
+				42A7BA312E788BD300138969 /* Frameworks */,
+				42A7BA322E788BD300138969 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				42A7BA352E788BD300138969 /* omiWatchApp */,
+			);
+			name = omiWatchApp;
+			productName = omiWatchApp;
+			productReference = 42A7BA342E788BD300138969 /* omiWatchApp.app */;
+			productType = "com.apple.product-type.application";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -281,6 +312,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -297,6 +329,9 @@
 				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
+					42A7BA332E788BD300138969 = {
+						CreatedOnToolsVersion = 16.4;
+					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
@@ -317,6 +352,7 @@
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
+				42A7BA332E788BD300138969 /* omiWatchApp */,
 			);
 		};
 /* End PBXProject section */
@@ -488,6 +524,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = iphoneos;
+			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
+			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
@@ -579,7 +621,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
@@ -596,7 +638,7 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
@@ -615,7 +657,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-dev.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
@@ -742,7 +784,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1063,10 +1105,9 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1118,10 +1159,9 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1172,10 +1212,9 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1484,7 +1523,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1856,6 +1895,22 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				42A7BA402E788BD400138969 /* Debug */,
+				42A7BA412E788BD400138969 /* Release */,
+				42A7BA422E788BD400138969 /* Profile */,
+				42A7BA432E788BD400138969 /* Debug-prod */,
+				42A7BA442E788BD400138969 /* Profile-prod */,
+				42A7BA452E788BD400138969 /* Release-prod */,
+				42A7BA462E788BD400138969 /* Debug-dev */,
+				42A7BA472E788BD400138969 /* Profile-dev */,
+				42A7BA482E788BD400138969 /* Release-dev */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
