@@ -3,6 +3,10 @@ description: "JavaScript Node.js Express plugin patterns webhook handlers OAuth 
 globs:
   - "plugins/apps-js/**/*.js"
 alwaysApply: false
+references:
+  - docs/doc/developer/apps/Introduction.mdx
+  - plugins/apps-js/README.md
+  - plugins/README.md
 ---
 
 # JavaScript Plugin Patterns
@@ -211,6 +215,22 @@ app.post('/webhook/memory-created', express.raw({ type: 'application/json' }), (
 5. **Security**: Verify webhook signatures
 6. **Documentation**: Document your plugin API
 7. **Testing**: Test with webhook.site first
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/plugin-development.mdc` - Plugin development patterns
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API patterns
+
+### Skills
+- `.cursor/skills/omi-plugin-development/` - Plugin development workflows
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/plugin-developer/` - Plugin development specialist
+
+### Commands
+- `/create-plugin` - Scaffold new plugin structure
 
 ## Related Documentation
 

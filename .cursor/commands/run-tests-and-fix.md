@@ -15,3 +15,14 @@ Run the appropriate test suite for the changed code, fix any failures, and re-ru
    - Re-run tests
 4. Repeat until all tests pass
 5. Summarize what was fixed
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/testing.mdc` - General testing guidelines
+- `.cursor/rules/backend-testing.mdc` - Backend testing patterns
+
+### Commands
+- `/backend-test` - Run backend tests
+- `/flutter-test` - Run Flutter tests
+- `/test-integration` - Run integration tests

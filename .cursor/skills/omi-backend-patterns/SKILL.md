@@ -112,7 +112,32 @@ The chat system uses LangGraph for routing:
 
 ## Related Documentation
 
-- Backend Architecture: `.cursor/rules/backend-architecture.mdc`
-- Backend Deep Dive: `docs/doc/developer/backend/backend_deepdive.mdx`
-- Chat System: `docs/doc/developer/backend/chat_system.mdx`
-- Backend Components: `.cursor/BACKEND_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Backend Deep Dive**: `docs/doc/developer/backend/backend_deepdive.mdx` - [View online](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- **Chat System**: `docs/doc/developer/backend/chat_system.mdx` - [View online](https://docs.omi.me/doc/developer/backend/chat_system)
+- **Data Storage**: `docs/doc/developer/backend/StoringConversations.mdx` - [View online](https://docs.omi.me/doc/developer/backend/StoringConversations)
+- **Transcription**: `docs/doc/developer/backend/transcription.mdx` - [View online](https://docs.omi.me/doc/developer/backend/transcription)
+- **Backend Setup**: `docs/doc/developer/backend/Backend_Setup.mdx` - [View online](https://docs.omi.me/doc/developer/backend/Backend_Setup)
+- **Backend Architecture**: `.cursor/rules/backend-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - System architecture and module hierarchy
+- `.cursor/rules/backend-api-patterns.mdc` - FastAPI router patterns
+- `.cursor/rules/backend-database-patterns.mdc` - Database storage patterns
+- `.cursor/rules/backend-llm-patterns.mdc` - LLM integration patterns
+- `.cursor/rules/backend-testing.mdc` - Testing patterns
+- `.cursor/rules/backend-imports.mdc` - Import rules
+- `.cursor/rules/memory-management.mdc` - Memory management
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Uses this skill for API development
+- `.cursor/agents/backend-llm-engineer/` - Uses this skill for LLM integration
+- `.cursor/agents/backend-database-engineer/` - Uses this skill for database work
+
+### Commands
+- `/backend-setup` - Uses this skill for setup guidance
+- `/backend-test` - Uses this skill for testing patterns
+- `/backend-deploy` - Uses this skill for deployment patterns

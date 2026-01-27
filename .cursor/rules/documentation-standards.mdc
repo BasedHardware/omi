@@ -4,6 +4,8 @@ globs:
   - "docs/**/*.mdx"
   - "docs/**/*.md"
 alwaysApply: false
+references:
+  - docs/README.md
 ---
 
 # Documentation Standards
@@ -168,5 +170,21 @@ sequenceDiagram
 
 ## Related Documentation
 
-- Docs Structure: `docs/README.md`
-- External Docs: https://docs.omi.me/
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Documentation Index**: `docs/INDEX.md` - Complete index of all documentation
+- **Documentation Structure**: `docs/` folder (source of truth)
+- **Deployed Documentation**: [docs.omi.me](https://docs.omi.me/) - Live documentation site
+- **LLMs.txt Index**: [docs.omi.me/llms.txt](https://docs.omi.me/llms.txt) - Machine-readable documentation index
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/codebase-overview.mdc` - Codebase structure
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture
+- `.cursor/rules/flutter-architecture.mdc` - Flutter architecture
+
+### Commands
+- `/docs` - Generate or update documentation
+- `/validate-docs` - Check documentation links and formatting
+- `/update-api-docs` - Update API reference documentation

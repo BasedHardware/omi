@@ -164,7 +164,32 @@ memories = response.json()
 
 ## Related Documentation
 
-- API Reference: `.cursor/API_REFERENCE.md`
-- MCP: `docs/doc/developer/MCP.mdx`
-- Plugin Development: `docs/doc/developer/apps/Introduction.mdx`
-- OAuth: `docs/doc/developer/apps/Oauth.mdx`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **API Overview**: `docs/doc/developer/api/overview.mdx` - [View online](https://docs.omi.me/doc/developer/api/overview)
+- **API Endpoints**: `docs/api-reference/` - [View online](https://docs.omi.me/api-reference/)
+- **Memories API**: `docs/doc/developer/api/memories.mdx` - [View online](https://docs.omi.me/doc/developer/api/memories)
+- **Conversations API**: `docs/doc/developer/api/conversations.mdx` - [View online](https://docs.omi.me/doc/developer/api/conversations)
+- **Action Items API**: `docs/doc/developer/api/action-items.mdx` - [View online](https://docs.omi.me/doc/developer/api/action-items)
+- **MCP**: `docs/doc/developer/MCP.mdx` - [View online](https://docs.omi.me/doc/developer/MCP)
+- **Plugin Development**: `docs/doc/developer/apps/Introduction.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Introduction)
+- **OAuth**: `docs/doc/developer/apps/Oauth.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Oauth)
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API patterns
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture
+- `.cursor/rules/plugin-development.mdc` - Plugin development patterns
+- `.cursor/rules/web-nextjs-patterns.mdc` - Web API integration
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Uses this skill for API development
+- `.cursor/agents/plugin-developer/` - Uses this skill for plugin integration
+- `.cursor/agents/web-developer/` - Uses this skill for web integration
+- `.cursor/agents/sdk-developer/` - Uses this skill for SDK development
+
+### Commands
+- `/backend-setup` - Uses this skill for API setup
+- `/create-plugin` - Uses this skill for plugin integration
+- `/update-api-docs` - Uses this skill for API documentation

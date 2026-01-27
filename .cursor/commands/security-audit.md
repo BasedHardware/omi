@@ -15,3 +15,14 @@ Perform a security-focused review of the code.
 ## Output
 
 List all security findings with severity (Critical, High, Medium, Low) and remediation steps.
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture patterns
+- `.cursor/rules/backend-api-patterns.mdc` - API security patterns
+- `.cursor/rules/plugin-development.mdc` - Plugin security patterns
+
+### Commands
+- `/code-review` - General code review
+- `/lint-and-fix` - Fix linting issues

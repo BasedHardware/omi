@@ -4,6 +4,10 @@ globs:
   - "backend/utils/llm/**/*.py"
   - "backend/utils/retrieval/**/*.py"
 alwaysApply: false
+references:
+  - docs/doc/developer/backend/chat_system.mdx
+  - docs/doc/developer/backend/backend_deepdive.mdx
+  - backend/README.md
 ---
 
 # Backend LLM Patterns
@@ -299,6 +303,26 @@ except APIError as e:
 
 ## Related Documentation
 
-- Chat System: `docs/doc/developer/backend/chat_system.mdx`
-- Backend Components: `.cursor/BACKEND_COMPONENTS.md`
-- Retrieval System: `backend/utils/retrieval/`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Chat System**: `docs/doc/developer/backend/chat_system.mdx` - [View online](https://docs.omi.me/doc/developer/backend/chat_system)
+- **Backend Deep Dive**: `docs/doc/developer/backend/backend_deepdive.mdx` - [View online](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- **Retrieval System**: `backend/utils/retrieval/`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - System architecture and module hierarchy
+- `.cursor/rules/backend-api-patterns.mdc` - API endpoint patterns for chat
+- `.cursor/rules/backend-database-patterns.mdc` - Database patterns for memory storage
+- `.cursor/rules/backend-imports.mdc` - Import rules for LLM modules
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including LLM integration
+
+### Subagents
+- `.cursor/agents/backend-llm-engineer/` - LLM integration and LangGraph specialist
+
+### Commands
+- `/backend-setup` - Setup LLM API keys
+- `/backend-test` - Test LLM integrations
