@@ -837,12 +837,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OmiAvatar(
-                        size: 32,
-                        imageUrl: provider.messageSenderApp(message.appId)?.getImageUrl(),
-                        fallback: Image.asset(Assets.images.herologo.path, height: 24, width: 24),
-                      ),
-                      const SizedBox(width: 12),
                       // AI message bubble
                       Expanded(
                         child: OmiChatBubble(
@@ -853,7 +847,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ],
                   ),
                   Container(
-                    margin: const EdgeInsets.only(left: 50, top: 6),
+                    margin: const EdgeInsets.only(left: 4, top: 6),
                     child: Text(
                       formatChatTimestamp(message.createdAt, context: context),
                       style: TextStyle(
