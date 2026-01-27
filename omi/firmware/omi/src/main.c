@@ -206,9 +206,8 @@ int main(void)
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
 
-    // Initialize RTC from saved epoch, or use 0 if not set
-    uint64_t saved_epoch = app_settings_get_rtc_epoch();
-    init_rtc(saved_epoch);
+    // Initialize RTC from saved epoch
+    init_rtc();
     if (!rtc_is_valid()) {
         LOG_WRN("UTC time not synchronized yet");
     }

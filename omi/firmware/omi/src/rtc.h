@@ -15,10 +15,9 @@
 /**
  * @brief Initialize application timekeeping.
  *
- * @param utc_epoch_s Optional UTC epoch seconds to seed the clock. If 0, the
- *        module will try to restore a previously persisted value.
+ * Restores RTC from persisted settings if available.
  */
-void init_rtc(uint32_t utc_epoch_s);
+void init_rtc(void);
 
 /**
  * @brief Get current UTC epoch seconds.

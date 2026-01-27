@@ -118,18 +118,12 @@ uint32_t get_utc_time(void)
     return (uint32_t)now_s;
 }
 
-void init_rtc(uint32_t utc_epoch_s)
+void init_rtc(void)
 {
     static bool initialized;
     if (!initialized) {
         k_mutex_init(&rtc_lock);
         initialized = true;
-    }
-
-    if (utc_epoch_s != 0) {
-        (void)rtc_set_utc_time(utc_epoch_s);
-        LOG_INF("RTC seeded from argument: %u", utc_epoch_s);
-        return;
     }
 
     uint64_t saved_epoch_s = app_settings_get_rtc_epoch();
