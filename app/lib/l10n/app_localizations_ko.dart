@@ -419,7 +419,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceSettings => '기기 설정';
 
   @override
-  String get chatTools => '채팅 도구';
+  String get integrations => '연동';
 
   @override
   String get feedbackBug => '피드백 / 버그';
@@ -1006,7 +1006,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get comingSoon => '곧 출시';
 
   @override
-  String get chatToolsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
+  String get integrationsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
 
   @override
   String get completeAuthInBrowser => '브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.';

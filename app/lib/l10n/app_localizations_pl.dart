@@ -425,7 +425,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override
-  String get chatTools => 'Narzędzia czatu';
+  String get integrations => 'Integracje';
 
   @override
   String get feedbackBug => 'Opinia / Błąd';
@@ -1021,7 +1021,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get comingSoon => 'Wkrótce';
 
   @override
-  String get chatToolsFooter => 'Połącz swoje aplikacje, aby wyświetlać dane i metryki w czacie.';
+  String get integrationsFooter => 'Połącz swoje aplikacje, aby wyświetlać dane i metryki w czacie.';
 
   @override
   String get completeAuthInBrowser => 'Ukończ uwierzytelnianie w przeglądarce. Po zakończeniu wróć do aplikacji.';

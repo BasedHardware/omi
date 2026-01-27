@@ -423,7 +423,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
 
   @override
-  String get chatTools => 'เครื่องมือแชท';
+  String get integrations => 'การเชื่อมต่อ';
 
   @override
   String get feedbackBug => 'คำติชม / รายงานข้อผิดพลาด';
@@ -1015,7 +1015,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get comingSoon => 'เร็วๆ นี้';
 
   @override
-  String get chatToolsFooter => 'เชื่อมต่อแอปของคุณเพื่อดูข้อมูลและตัวชี้วัดในแชท';
+  String get integrationsFooter => 'เชื่อมต่อแอปของคุณเพื่อดูข้อมูลและตัวชี้วัดในแชท';
 
   @override
   String get completeAuthInBrowser => 'กรุณายืนยันตัวตนในเบราว์เซอร์ของคุณ เมื่อเสร็จแล้วกลับมาที่แอป';

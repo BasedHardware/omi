@@ -425,7 +425,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override
-  String get chatTools => 'Pokalbių įrankiai';
+  String get integrations => 'Integracijos';
 
   @override
   String get feedbackBug => 'Atsiliepimai / Klaida';
@@ -1019,7 +1019,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get comingSoon => 'Greitai';
 
   @override
-  String get chatToolsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
+  String get integrationsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
 
   @override
   String get completeAuthInBrowser => 'Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.';

@@ -419,7 +419,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceSettings => '设备设置';
 
   @override
-  String get chatTools => '聊天工具';
+  String get integrations => '集成';
 
   @override
   String get feedbackBug => '反馈 / Bug';
@@ -1005,7 +1005,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get comingSoon => '即将推出';
 
   @override
-  String get chatToolsFooter => '连接您的应用以在聊天中查看数据和指标。';
+  String get integrationsFooter => '连接您的应用以在聊天中查看数据和指标。';
 
   @override
   String get completeAuthInBrowser => '请在浏览器中完成身份验证。';

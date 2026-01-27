@@ -426,7 +426,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override
-  String get chatTools => 'Sohbet Araçları';
+  String get integrations => 'Entegrasyonlar';
 
   @override
   String get feedbackBug => 'Geri Bildirim / Hata';
@@ -1020,7 +1020,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get comingSoon => 'Yakında';
 
   @override
-  String get chatToolsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
+  String get integrationsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
 
   @override
   String get completeAuthInBrowser =>

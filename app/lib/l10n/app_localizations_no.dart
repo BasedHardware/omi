@@ -425,7 +425,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
-  String get chatTools => 'Chatverktøy';
+  String get integrations => 'Integrasjoner';
 
   @override
   String get feedbackBug => 'Tilbakemelding / Feil';
@@ -1020,7 +1020,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Koble til appene dine for å se data og måledata i chat.';
+  String get integrationsFooter => 'Koble til appene dine for å se data og måledata i chat.';
 
   @override
   String get completeAuthInBrowser =>

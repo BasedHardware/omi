@@ -426,7 +426,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
-  String get chatTools => 'Alat Sembang';
+  String get integrations => 'Integrasi';
 
   @override
   String get feedbackBug => 'Maklum Balas / Pepijat';
@@ -1021,7 +1021,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get comingSoon => 'Akan Datang';
 
   @override
-  String get chatToolsFooter => 'Sambungkan aplikasi anda untuk melihat data dan metrik dalam sembang.';
+  String get integrationsFooter => 'Sambungkan aplikasi anda untuk melihat data dan metrik dalam sembang.';
 
   @override
   String get completeAuthInBrowser =>

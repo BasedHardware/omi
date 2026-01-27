@@ -426,7 +426,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceSettings => 'Налаштування пристрою';
 
   @override
-  String get chatTools => 'Інструменти чату';
+  String get integrations => 'Інтеграції';
 
   @override
   String get feedbackBug => 'Відгук / Помилка';
@@ -1021,7 +1021,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get comingSoon => 'Незабаром';
 
   @override
-  String get chatToolsFooter => 'Підключіть свої додатки для перегляду даних та метрик у чаті.';
+  String get integrationsFooter => 'Підключіть свої додатки для перегляду даних та метрик у чаті.';
 
   @override
   String get completeAuthInBrowser =>

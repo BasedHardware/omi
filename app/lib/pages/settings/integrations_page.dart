@@ -687,7 +687,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          context.l10n.chatTools,
+          context.l10n.integrations,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -730,7 +730,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        context.l10n.chatToolsFooter,
+                        context.l10n.integrationsFooter,
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 14,

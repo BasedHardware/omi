@@ -421,7 +421,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override
-  String get chatTools => 'أدوات الدردشة';
+  String get integrations => 'التكاملات';
 
   @override
   String get feedbackBug => 'ملاحظات / خطأ';
@@ -1012,7 +1012,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get comingSoon => 'قريباً';
 
   @override
-  String get chatToolsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
+  String get integrationsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
 
   @override
   String get completeAuthInBrowser => 'يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.';

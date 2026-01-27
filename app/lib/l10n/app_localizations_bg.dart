@@ -427,7 +427,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceSettings => 'Настройки на устройството';
 
   @override
-  String get chatTools => 'Инструменти за чат';
+  String get integrations => 'Интеграции';
 
   @override
   String get feedbackBug => 'Обратна връзка / Грешка';
@@ -1023,7 +1023,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get comingSoon => 'Скоро';
 
   @override
-  String get chatToolsFooter => 'Свържете вашите приложения, за да виждате данни и метрики в чата.';
+  String get integrationsFooter => 'Свържете вашите приложения, за да виждате данни и метрики в чата.';
 
   @override
   String get completeAuthInBrowser =>

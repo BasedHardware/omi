@@ -963,11 +963,11 @@ abstract class AppLocalizations {
   /// **'Device Settings'**
   String get deviceSettings;
 
-  /// Chat tools menu item
+  /// Integrations menu item
   ///
   /// In en, this message translates to:
-  /// **'Chat Tools'**
-  String get chatTools;
+  /// **'Integrations'**
+  String get integrations;
 
   /// Feedback menu item
   ///
@@ -2079,11 +2079,11 @@ abstract class AppLocalizations {
   /// **'Coming Soon'**
   String get comingSoon;
 
-  /// No description provided for @chatToolsFooter.
+  /// No description provided for @integrationsFooter.
   ///
   /// In en, this message translates to:
   /// **'Connect your apps to view data and metrics in chat.'**
-  String get chatToolsFooter;
+  String get integrationsFooter;
 
   /// No description provided for @completeAuthInBrowser.
   ///

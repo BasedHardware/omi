@@ -428,7 +428,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
-  String get chatTools => 'Csevegés eszközök';
+  String get integrations => 'Integrációk';
 
   @override
   String get feedbackBug => 'Visszajelzés / hiba';
@@ -1025,7 +1025,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get comingSoon => 'Hamarosan';
 
   @override
-  String get chatToolsFooter =>
+  String get integrationsFooter =>
       'Csatlakoztasd az alkalmazásaidat az adatok és metrikák megjelenítéséhez a csevegésben.';
 
   @override

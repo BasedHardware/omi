@@ -427,7 +427,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override
-  String get chatTools => 'Nástroje chatu';
+  String get integrations => 'Integrácie';
 
   @override
   String get feedbackBug => 'Spätná väzba / chyba';
@@ -1023,7 +1023,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get comingSoon => 'Čoskoro';
 
   @override
-  String get chatToolsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
+  String get integrationsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
 
   @override
   String get completeAuthInBrowser =>

@@ -426,7 +426,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override
-  String get chatTools => 'Tērzēšanas rīki';
+  String get integrations => 'Integrācijas';
 
   @override
   String get feedbackBug => 'Atsauksmes / Kļūda';
@@ -1020,7 +1020,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get comingSoon => 'Drīzumā';
 
   @override
-  String get chatToolsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
+  String get integrationsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
 
   @override
   String get completeAuthInBrowser =>

@@ -426,7 +426,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override
-  String get chatTools => 'Alat Obrolan';
+  String get integrations => 'Integrasi';
 
   @override
   String get feedbackBug => 'Masukan / Bug';
@@ -1021,7 +1021,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get comingSoon => 'Segera Hadir';
 
   @override
-  String get chatToolsFooter => 'Hubungkan aplikasi Anda untuk melihat data dan metrik dalam obrolan.';
+  String get integrationsFooter => 'Hubungkan aplikasi Anda untuk melihat data dan metrik dalam obrolan.';
 
   @override
   String get completeAuthInBrowser =>

@@ -419,7 +419,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceSettings => 'デバイス設定';
 
   @override
-  String get chatTools => 'チャットツール';
+  String get integrations => '連携';
 
   @override
   String get feedbackBug => 'フィードバック / バグ報告';
@@ -1007,7 +1007,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get comingSoon => '近日公開';
 
   @override
-  String get chatToolsFooter => 'アプリを接続して、チャットでデータや指標を表示できます。';
+  String get integrationsFooter => 'アプリを接続して、チャットでデータや指標を表示できます。';
 
   @override
   String get completeAuthInBrowser => 'ブラウザで認証を完了してください。完了したらアプリに戻ってください。';
