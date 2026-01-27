@@ -532,6 +532,57 @@ abstract class DeviceConnection {
     return null;
   }
 
+  // Direct WiFi Sync - device uploads directly to backend when charging
+  Future<bool> setupDirectWifiSync({
+    required String ssid,
+    required String password,
+    required String backendUrl,
+    required String authToken,
+  }) async {
+    if (await isConnected()) {
+      return await performSetupDirectWifiSync(
+        ssid: ssid,
+        password: password,
+        backendUrl: backendUrl,
+        authToken: authToken,
+      );
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performSetupDirectWifiSync({
+    required String ssid,
+    required String password,
+    required String backendUrl,
+    required String authToken,
+  }) async {
+    return false;
+  }
+
+  Future<bool> clearDirectWifiSync() async {
+    if (await isConnected()) {
+      return await performClearDirectWifiSync();
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performClearDirectWifiSync() async {
+    return false;
+  }
+
+  Future<DirectSyncStatus> getDirectSyncStatus() async {
+    if (await isConnected()) {
+      return await performGetDirectSyncStatus();
+    }
+    return DirectSyncStatus.unknown();
+  }
+
+  Future<DirectSyncStatus> performGetDirectSyncStatus() async {
+    return DirectSyncStatus.unknown();
+  }
+
   void _showDeviceDisconnectedNotification() {
     final ctx = MyApp.navigatorKey.currentContext;
     final deviceName = device.name;

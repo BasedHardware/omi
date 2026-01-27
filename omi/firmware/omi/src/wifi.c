@@ -929,3 +929,91 @@ bool wifi_is_hw_available(void)
 {
 	return is_hardware_available;
 }
+
+/* Direct sync configuration storage */
+static char direct_sync_ssid[WIFI_MAX_SSID_LEN + 1];
+static char direct_sync_password[WIFI_MAX_PASSWORD_LEN + 1];
+static char direct_sync_url[WIFI_MAX_URL_LEN + 1];
+static char direct_sync_token[WIFI_MAX_TOKEN_LEN + 1];
+static bool direct_sync_enabled = false;
+static bool direct_sync_config_valid = false;
+
+int wifi_direct_sync_set_config(const char *ssid, const char *password,
+                                const char *backend_url, const char *auth_token)
+{
+	if (!ssid || !password || !backend_url || !auth_token) {
+		return -EINVAL;
+	}
+
+	if (strlen(ssid) == 0 || strlen(ssid) > WIFI_MAX_SSID_LEN) {
+		return -EINVAL;
+	}
+
+	if (strlen(password) < WIFI_MIN_PASSWORD_LEN || strlen(password) > WIFI_MAX_PASSWORD_LEN) {
+		return -EINVAL;
+	}
+
+	strncpy(direct_sync_ssid, ssid, WIFI_MAX_SSID_LEN);
+	direct_sync_ssid[WIFI_MAX_SSID_LEN] = '\0';
+
+	strncpy(direct_sync_password, password, WIFI_MAX_PASSWORD_LEN);
+	direct_sync_password[WIFI_MAX_PASSWORD_LEN] = '\0';
+
+	strncpy(direct_sync_url, backend_url, WIFI_MAX_URL_LEN);
+	direct_sync_url[WIFI_MAX_URL_LEN] = '\0';
+
+	strncpy(direct_sync_token, auth_token, WIFI_MAX_TOKEN_LEN);
+	direct_sync_token[WIFI_MAX_TOKEN_LEN] = '\0';
+
+	direct_sync_enabled = true;
+	direct_sync_config_valid = true;
+
+	LOG_INF("Direct sync configured: SSID=%s, URL=%s", direct_sync_ssid, direct_sync_url);
+
+	return 0;
+}
+
+int wifi_direct_sync_clear_config(void)
+{
+	memset(direct_sync_ssid, 0, sizeof(direct_sync_ssid));
+	memset(direct_sync_password, 0, sizeof(direct_sync_password));
+	memset(direct_sync_url, 0, sizeof(direct_sync_url));
+	memset(direct_sync_token, 0, sizeof(direct_sync_token));
+	direct_sync_enabled = false;
+	direct_sync_config_valid = false;
+
+	LOG_INF("Direct sync configuration cleared");
+
+	return 0;
+}
+
+bool wifi_direct_sync_has_config(void)
+{
+	return direct_sync_config_valid && direct_sync_enabled;
+}
+
+int wifi_direct_sync_trigger(void)
+{
+	if (!wifi_direct_sync_has_config()) {
+		LOG_WRN("Direct sync not configured");
+		return -ENOENT;
+	}
+
+	if (!is_hardware_available) {
+		LOG_WRN("WiFi hardware not available");
+		return -ENODEV;
+	}
+
+	LOG_INF("Direct sync trigger requested");
+	return 0;
+}
+
+void wifi_on_charging_changed(bool is_charging)
+{
+	LOG_INF("Charging state changed: %s", is_charging ? "charging" : "not charging");
+
+	if (is_charging && wifi_direct_sync_has_config()) {
+		LOG_INF("Charging detected, triggering direct sync");
+		wifi_direct_sync_trigger();
+	}
+}

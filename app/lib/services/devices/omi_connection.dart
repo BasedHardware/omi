@@ -738,4 +738,148 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     }
   }
+
+  @override
+  Future<bool> performSetupDirectWifiSync({
+    required String ssid,
+    required String password,
+    required String backendUrl,
+    required String authToken,
+  }) async {
+    try {
+      if (ssid.isEmpty || ssid.length > 32) {
+        debugPrint('OmiDeviceConnection: Invalid SSID length for direct sync');
+        return false;
+      }
+
+      if (password.isEmpty || password.length < 8 || password.length > 63) {
+        debugPrint('OmiDeviceConnection: Invalid password length for direct sync');
+        return false;
+      }
+
+      final List<int> command = [];
+      command.add(0x10);
+
+      final ssidBytes = ssid.codeUnits;
+      command.add(ssidBytes.length);
+      command.addAll(ssidBytes);
+
+      final passwordBytes = password.codeUnits;
+      command.add(passwordBytes.length);
+      command.addAll(passwordBytes);
+
+      final urlBytes = backendUrl.codeUnits;
+      command.add((urlBytes.length >> 8) & 0xFF);
+      command.add(urlBytes.length & 0xFF);
+      command.addAll(urlBytes);
+
+      final tokenBytes = authToken.codeUnits;
+      command.add((tokenBytes.length >> 8) & 0xFF);
+      command.add(tokenBytes.length & 0xFF);
+      command.addAll(tokenBytes);
+
+      final completer = Completer<bool>();
+      StreamSubscription? responseSubscription;
+
+      try {
+        final stream = transport.getCharacteristicStream(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid);
+
+        responseSubscription = stream.listen((value) {
+          if (value.isNotEmpty && !completer.isCompleted) {
+            completer.complete(value[0] == 0x00);
+          }
+        });
+
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        await transport.writeCharacteristic(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid, command);
+
+        final result = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => false,
+        );
+
+        return result;
+      } finally {
+        await responseSubscription?.cancel();
+      }
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting up direct WiFi sync: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performClearDirectWifiSync() async {
+    try {
+      final completer = Completer<bool>();
+      StreamSubscription? responseSubscription;
+
+      try {
+        final stream = transport.getCharacteristicStream(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid);
+
+        responseSubscription = stream.listen((value) {
+          if (value.isNotEmpty && !completer.isCompleted) {
+            completer.complete(value[0] == 0x00);
+          }
+        });
+
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        await transport.writeCharacteristic(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid, [0x11]);
+
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => false,
+        );
+
+        return result;
+      } finally {
+        await responseSubscription?.cancel();
+      }
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error clearing direct WiFi sync: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<DirectSyncStatus> performGetDirectSyncStatus() async {
+    try {
+      final completer = Completer<DirectSyncStatus>();
+      StreamSubscription? responseSubscription;
+
+      try {
+        final stream = transport.getCharacteristicStream(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid);
+
+        responseSubscription = stream.listen((value) {
+          if (value.isNotEmpty && !completer.isCompleted) {
+            completer.complete(DirectSyncStatus.fromBytes(value));
+          }
+        });
+
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        await transport.writeCharacteristic(
+            storageDataStreamServiceUuid, storageDirectSyncCharacteristicUuid, [0x12]);
+
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => DirectSyncStatus.unknown(),
+        );
+
+        return result;
+      } finally {
+        await responseSubscription?.cancel();
+      }
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting direct sync status: $e');
+      return DirectSyncStatus.unknown();
+    }
+  }
 }

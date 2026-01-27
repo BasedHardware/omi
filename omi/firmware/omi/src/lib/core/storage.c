@@ -327,6 +327,79 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             result_buffer[0] = 0;
             break;
 
+        case 0x10: // DIRECT_SYNC_SETUP
+            LOG_INF("DIRECT_SYNC_SETUP: len=%d", len);
+            {
+                uint8_t idx = 1;
+                
+                // Parse SSID
+                if (idx >= len) { result_buffer[0] = 2; break; }
+                uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
+                if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
+                    LOG_WRN("Direct sync: Invalid SSID length");
+                    result_buffer[0] = 3; break;
+                }
+                char ds_ssid[WIFI_MAX_SSID_LEN + 1] = {0};
+                memcpy(ds_ssid, &((const uint8_t *)buf)[idx], ssid_len);
+                idx += ssid_len;
+
+                // Parse password
+                if (idx >= len) { result_buffer[0] = 4; break; }
+                uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
+                if (pwd_len < WIFI_MIN_PASSWORD_LEN || pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
+                    LOG_WRN("Direct sync: Invalid password length");
+                    result_buffer[0] = 4; break;
+                }
+                char ds_pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
+                memcpy(ds_pwd, &((const uint8_t *)buf)[idx], pwd_len);
+                idx += pwd_len;
+
+                // Parse URL (2-byte length, big-endian)
+                if (idx + 2 > len) { result_buffer[0] = 5; break; }
+                uint16_t url_len = (((const uint8_t *)buf)[idx] << 8) | ((const uint8_t *)buf)[idx + 1];
+                idx += 2;
+                if (url_len == 0 || url_len > WIFI_MAX_URL_LEN || idx + url_len > len) {
+                    LOG_WRN("Direct sync: Invalid URL length");
+                    result_buffer[0] = 5; break;
+                }
+                char ds_url[WIFI_MAX_URL_LEN + 1] = {0};
+                memcpy(ds_url, &((const uint8_t *)buf)[idx], url_len);
+                idx += url_len;
+
+                // Parse auth token (2-byte length, big-endian)
+                if (idx + 2 > len) { result_buffer[0] = 6; break; }
+                uint16_t token_len = (((const uint8_t *)buf)[idx] << 8) | ((const uint8_t *)buf)[idx + 1];
+                idx += 2;
+                if (token_len == 0 || token_len > WIFI_MAX_TOKEN_LEN || idx + token_len > len) {
+                    LOG_WRN("Direct sync: Invalid token length");
+                    result_buffer[0] = 6; break;
+                }
+                char ds_token[WIFI_MAX_TOKEN_LEN + 1] = {0};
+                memcpy(ds_token, &((const uint8_t *)buf)[idx], token_len);
+
+                int ret = wifi_direct_sync_set_config(ds_ssid, ds_pwd, ds_url, ds_token);
+                result_buffer[0] = (ret == 0) ? 0 : 7;
+            }
+            break;
+
+        case 0x11: // DIRECT_SYNC_CLEAR
+            LOG_INF("DIRECT_SYNC_CLEAR command received");
+            wifi_direct_sync_clear_config();
+            result_buffer[0] = 0;
+            break;
+
+        case 0x12: // DIRECT_SYNC_STATUS
+            LOG_INF("DIRECT_SYNC_STATUS command received");
+            {
+                uint8_t status_buffer[4] = {0};
+                status_buffer[0] = wifi_direct_sync_has_config() ? 1 : 0;  // has_config
+                status_buffer[1] = wifi_direct_sync_has_config() ? 1 : 0;  // is_enabled
+                status_buffer[2] = 0;  // is_connected (STA mode)
+                status_buffer[3] = 0;  // last_sync_result
+                bt_gatt_notify(conn, &storage_service.attrs[8], status_buffer, 4);
+                return len;
+            }
+
         default:
             LOG_WRN("Unknown WIFI command: %d", cmd);
             result_buffer[0] = 0xFF; // unknown command

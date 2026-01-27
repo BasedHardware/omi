@@ -297,6 +297,32 @@ class SharedPreferencesUtil {
 
   set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
+  // Direct WiFi Sync settings (device uploads directly to backend when charging)
+  bool get directWifiSyncEnabled => getBool('directWifiSyncEnabled');
+
+  set directWifiSyncEnabled(bool value) => saveBool('directWifiSyncEnabled', value);
+
+  String get directWifiSyncSSID => getString('directWifiSyncSSID');
+
+  set directWifiSyncSSID(String value) => saveString('directWifiSyncSSID', value);
+
+  String get directWifiSyncPassword => getString('directWifiSyncPassword');
+
+  set directWifiSyncPassword(String value) => saveString('directWifiSyncPassword', value);
+
+  String get directWifiSyncToken => getString('directWifiSyncToken');
+
+  set directWifiSyncToken(String value) => saveString('directWifiSyncToken', value);
+
+  bool get directWifiSyncConfigured => directWifiSyncSSID.isNotEmpty && directWifiSyncToken.isNotEmpty;
+
+  void clearDirectWifiSyncConfig() {
+    directWifiSyncEnabled = false;
+    directWifiSyncSSID = '';
+    directWifiSyncPassword = '';
+    directWifiSyncToken = '';
+  }
+
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);

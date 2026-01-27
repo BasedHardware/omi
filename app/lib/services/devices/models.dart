@@ -30,6 +30,40 @@ const String storageDataStreamServiceUuid = '30295780-4301-eabd-2904-2849adfeae4
 const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849adfeae43';
 const String storageReadControlCharacteristicUuid = '30295782-4301-eabd-2904-2849adfeae43';
 const String storageWifiCharacteristicUuid = '30295783-4301-eabd-2904-2849adfeae43';
+const String storageDirectSyncCharacteristicUuid = '30295784-4301-eabd-2904-2849adfeae43';
+
+class DirectSyncStatus {
+  final bool hasConfig;
+  final bool isEnabled;
+  final bool isConnected;
+  final int lastSyncResult;
+
+  DirectSyncStatus({
+    required this.hasConfig,
+    required this.isEnabled,
+    required this.isConnected,
+    required this.lastSyncResult,
+  });
+
+  factory DirectSyncStatus.unknown() => DirectSyncStatus(
+        hasConfig: false,
+        isEnabled: false,
+        isConnected: false,
+        lastSyncResult: -1,
+      );
+
+  factory DirectSyncStatus.fromBytes(List<int> bytes) {
+    if (bytes.length < 4) return DirectSyncStatus.unknown();
+    return DirectSyncStatus(
+      hasConfig: bytes[0] == 1,
+      isEnabled: bytes[1] == 1,
+      isConnected: bytes[2] == 1,
+      lastSyncResult: bytes[3],
+    );
+  }
+
+  bool get isConfigured => hasConfig && isEnabled;
+}
 
 const String accelDataStreamServiceUuid = '32403790-0000-1000-7450-bf445e5829a2';
 const String accelDataStreamCharacteristicUuid = '32403791-0000-1000-7450-bf445e5829a2';

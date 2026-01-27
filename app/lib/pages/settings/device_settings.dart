@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -40,6 +42,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // WiFi sync state
   bool _isWifiSupported = false;
+
+  // Direct sync state
+  bool _directSyncEnabled = false;
+  bool _directSyncConfigured = false;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -134,6 +140,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         if (mounted) {
           setState(() {
             _isWifiSupported = wifiSupported;
+            _directSyncEnabled = SharedPreferencesUtil().directWifiSyncEnabled;
+            _directSyncConfigured = SharedPreferencesUtil().directWifiSyncConfigured;
           });
         }
       }
@@ -634,6 +642,262 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  void _showDirectSyncSheet() {
+    final ssidController = TextEditingController(text: SharedPreferencesUtil().directWifiSyncSSID);
+    final passwordController = TextEditingController(text: SharedPreferencesUtil().directWifiSyncPassword);
+    bool isEnabled = SharedPreferencesUtil().directWifiSyncEnabled;
+    bool isLoading = false;
+    bool obscurePassword = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> saveConfig() async {
+              if (ssidController.text.isEmpty || passwordController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter WiFi SSID and password')),
+                );
+                return;
+              }
+
+              if (passwordController.text.length < 8) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password must be at least 8 characters')),
+                );
+                return;
+              }
+
+              setSheetState(() => isLoading = true);
+
+              try {
+                final deviceProvider = this.context.read<DeviceProvider>();
+                final deviceId = deviceProvider.pairedDevice?.id ?? '';
+
+                String? token = SharedPreferencesUtil().directWifiSyncToken;
+                if (token.isEmpty) {
+                  token = await generateDeviceSyncToken(deviceId);
+                  if (token == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Failed to generate sync token')),
+                    );
+                    setSheetState(() => isLoading = false);
+                    return;
+                  }
+                  SharedPreferencesUtil().directWifiSyncToken = token;
+                }
+
+                final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+                if (connection == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Device not connected')),
+                  );
+                  setSheetState(() => isLoading = false);
+                  return;
+                }
+
+                final backendUrl = '${Env.apiBaseUrl}v1/device/sync-audio';
+                final success = await connection.setupDirectWifiSync(
+                  ssid: ssidController.text,
+                  password: passwordController.text,
+                  backendUrl: backendUrl,
+                  authToken: token,
+                );
+
+                if (success) {
+                  SharedPreferencesUtil().directWifiSyncSSID = ssidController.text;
+                  SharedPreferencesUtil().directWifiSyncPassword = passwordController.text;
+                  SharedPreferencesUtil().directWifiSyncEnabled = isEnabled;
+
+                  setState(() {
+                    _directSyncEnabled = isEnabled;
+                    _directSyncConfigured = true;
+                  });
+
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(content: Text('Direct sync configured successfully')),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to configure device')),
+                  );
+                }
+              } catch (e) {
+                Logger.debug('Error configuring direct sync: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Error configuring direct sync')),
+                );
+              } finally {
+                setSheetState(() => isLoading = false);
+              }
+            }
+
+            Future<void> clearConfig() async {
+              setSheetState(() => isLoading = true);
+
+              try {
+                final deviceProvider = this.context.read<DeviceProvider>();
+                final deviceId = deviceProvider.pairedDevice?.id ?? '';
+
+                await revokeDeviceSyncToken(deviceId);
+
+                final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+                await connection?.clearDirectWifiSync();
+
+                SharedPreferencesUtil().clearDirectWifiSyncConfig();
+
+                setState(() {
+                  _directSyncEnabled = false;
+                  _directSyncConfigured = false;
+                });
+
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(content: Text('Direct sync configuration cleared')),
+                );
+              } catch (e) {
+                Logger.debug('Error clearing direct sync: $e');
+              } finally {
+                setSheetState(() => isLoading = false);
+              }
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3C3C43),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const Text(
+                        'Direct Sync',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'When your device is charging and connected to WiFi, it will automatically sync audio to the cloud.',
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Enable Direct Sync',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                          Switch(
+                            value: isEnabled,
+                            onChanged: (value) => setSheetState(() => isEnabled = value),
+                            activeColor: Colors.white,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: ssidController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'WiFi SSID',
+                          labelStyle: TextStyle(color: Colors.grey.shade500),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade700),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: obscurePassword,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'WiFi Password',
+                          labelStyle: TextStyle(color: Colors.grey.shade500),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: Colors.grey.shade700),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Colors.white),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              color: Colors.grey.shade500,
+                            ),
+                            onPressed: () => setSheetState(() => obscurePassword = !obscurePassword),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: isLoading ? null : saveConfig,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                                )
+                              : const Text('Save to Device', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      if (_directSyncConfigured) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: isLoading ? null : clearConfig,
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Clear Configuration'),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildPresetButton(String label, int level, int currentLevel, VoidCallback onTap) {
     final isSelected = level == currentLevel;
     return GestureDetector(
@@ -706,6 +970,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               title: context.l10n.wifiSync,
               chipValue: context.l10n.available,
               showChevron: false,
+            ),
+          ],
+          // Direct Sync (when charging)
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.cloudArrowUp,
+              title: 'Direct Sync',
+              chipValue: _directSyncConfigured
+                  ? (_directSyncEnabled ? 'Enabled' : 'Disabled')
+                  : 'Not Configured',
+              onTap: _showDirectSyncSheet,
             ),
           ],
         ],
