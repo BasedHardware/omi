@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -160,38 +160,51 @@ class HomeProvider extends ChangeNotifier {
 
   /// Auto-detect device language and return matching language code from availableLanguages.
   /// Returns null if no matching language is found.
-  String? _getDeviceLanguageCode() {
+  ///
+  /// This method is static and accepts parameters for testability.
+  static String? getDeviceLanguageCodeFromLocale(Locale locale, Map<String, String> languages) {
     try {
-      // Get device locale (e.g., "en_US", "ja_JP", "zh_CN")
-      final deviceLocale = Platform.localeName;
-      final languageCode = deviceLocale.split('_').first.toLowerCase();
-      final fullCode = deviceLocale.replaceAll('_', '-'); // Convert to BCP-47 format
-
-      Logger.debug('Device locale: $deviceLocale, language code: $languageCode');
+      // Get language code and country code from Locale object
+      final languageCode = locale.languageCode.toLowerCase();
+      final countryCode = locale.countryCode;
+      final fullCode = countryCode != null ? '$languageCode-${countryCode.toUpperCase()}' : languageCode;
 
       // First try exact match with full locale (e.g., "en-US", "pt-BR")
-      for (final entry in availableLanguages.entries) {
+      for (final entry in languages.entries) {
         if (entry.value.toLowerCase() == fullCode.toLowerCase()) {
-          Logger.debug('Exact match found: ${entry.key} (${entry.value})');
           return entry.value;
         }
       }
 
       // Then try matching by base language code (e.g., "en" matches "en", "ja" matches "ja")
-      for (final entry in availableLanguages.entries) {
+      for (final entry in languages.entries) {
         final availableCode = entry.value.toLowerCase();
-        if (availableCode == languageCode || availableCode.split('-').first == languageCode) {
-          Logger.debug('Base language match found: ${entry.key} (${entry.value})');
+        // Split on both '-' and '_' for compatibility
+        final availableBase = availableCode.split(RegExp(r'[-_]')).first;
+        if (availableCode == languageCode || availableBase == languageCode) {
           return entry.value;
         }
       }
 
-      Logger.debug('No matching language found for device locale: $deviceLocale');
       return null;
     } catch (e) {
       Logger.debug('Error detecting device language: $e');
       return null;
     }
+  }
+
+  /// Auto-detect device language using platform locale.
+  /// Uses PlatformDispatcher for cross-platform compatibility (including web).
+  String? _getDeviceLanguageCode() {
+    final locale = PlatformDispatcher.instance.locale;
+    Logger.debug('Device locale: ${locale.toLanguageTag()}, language: ${locale.languageCode}');
+    final result = getDeviceLanguageCodeFromLocale(locale, availableLanguages);
+    if (result != null) {
+      Logger.debug('Match found: $result');
+    } else {
+      Logger.debug('No matching language found for device locale: ${locale.toLanguageTag()}');
+    }
+    return result;
   }
 
   Future<void> setupUserPrimaryLanguage() async {
