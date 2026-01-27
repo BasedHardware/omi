@@ -7936,4 +7936,25 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get capabilitySummary => 'Summary';
+
+  @override
+  String get capabilityFeatured => 'Featured';
+
+  @override
+  String get capabilityTasks => 'Tasks';
+
+  @override
+  String get categoryPersonalityClones => 'Personality Clones';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+
+  @override
+  String get categorySocialEntertainment => 'Social & Entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productivity & Tools';
+
+  @override
+  String get categoryPersonalWellness => 'Personal & Lifestyle';
 }

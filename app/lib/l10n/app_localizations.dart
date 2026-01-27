@@ -14816,6 +14816,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Summary'**
   String get capabilitySummary;
+
+  /// No description provided for @capabilityFeatured.
+  ///
+  /// In en, this message translates to:
+  /// **'Featured'**
+  String get capabilityFeatured;
+
+  /// No description provided for @capabilityTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get capabilityTasks;
+
+  /// No description provided for @categoryPersonalityClones.
+  ///
+  /// In en, this message translates to:
+  /// **'Personality Clones'**
+  String get categoryPersonalityClones;
+
+  /// No description provided for @categoryProductivityLifestyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity & Lifestyle'**
+  String get categoryProductivityLifestyle;
+
+  /// No description provided for @categorySocialEntertainment.
+  ///
+  /// In en, this message translates to:
+  /// **'Social & Entertainment'**
+  String get categorySocialEntertainment;
+
+  /// No description provided for @categoryProductivityTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity & Tools'**
+  String get categoryProductivityTools;
+
+  /// No description provided for @categoryPersonalWellness.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal & Lifestyle'**
+  String get categoryPersonalWellness;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

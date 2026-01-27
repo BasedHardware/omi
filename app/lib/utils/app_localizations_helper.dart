@@ -64,14 +64,22 @@ final Map<String, String Function(AppLocalizations)> _categoryLocalizations = {
   'news-and-information': (l10n) => l10n.categoryNews,
   'utilities-and-tools': (l10n) => l10n.categoryUtilities,
   'other': (l10n) => l10n.categoryOther,
+  // Master categories for grouped views
+  'personality-clone': (l10n) => l10n.categoryPersonalityClones,
+  'productivity-lifestyle': (l10n) => l10n.categoryProductivityLifestyle,
+  'social-entertainment': (l10n) => l10n.categorySocialEntertainment,
+  'productivity-tools': (l10n) => l10n.categoryProductivityTools,
+  'personal-wellness': (l10n) => l10n.categoryPersonalWellness,
 };
 
 // Mapping from capability IDs to localization getters
 final Map<String, String Function(AppLocalizations)> _capabilityLocalizations = {
   'chat': (l10n) => l10n.capabilityChat,
-  'memories': (l10n) => l10n.capabilitySummary,
+  'memories': (l10n) => l10n.capabilityConversations,
   'external_integration': (l10n) => l10n.capabilityExternalIntegration,
   'proactive_notification': (l10n) => l10n.capabilityNotification,
+  'popular': (l10n) => l10n.capabilityFeatured,
+  'tasks': (l10n) => l10n.capabilityTasks,
 };
 
 // Mapping from trigger IDs to localization getters

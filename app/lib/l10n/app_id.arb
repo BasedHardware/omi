@@ -2587,5 +2587,12 @@
   "scopeUserName": "User Name",
   "scopeUserFacts": "User Facts",
   "scopeUserConversations": "User Conversations",
-  "scopeUserChat": "User Chat"
+  "scopeUserChat": "User Chat",
+  "capabilityFeatured": "Featured",
+  "capabilityTasks": "Tasks",
+  "categoryPersonalityClones": "Personality Clones",
+  "categoryProductivityLifestyle": "Productivity & Lifestyle",
+  "categorySocialEntertainment": "Social & Entertainment",
+  "categoryProductivityTools": "Productivity & Tools",
+  "categoryPersonalWellness": "Personal & Lifestyle"
 }
