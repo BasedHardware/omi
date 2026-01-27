@@ -31,6 +31,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import '../../../../backend/schema/app.dart';
 import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
 
@@ -988,7 +989,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  capability.title,
+                                  capability.getLocalizedTitle(context),
                                   style: responsive.bodySmall.copyWith(
                                     color: ResponsiveHelper.purplePrimary,
                                     fontWeight: FontWeight.w500,
