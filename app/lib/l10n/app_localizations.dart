@@ -14810,6 +14810,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'User Chat'**
   String get scopeUserChat;
+
+  /// No description provided for @capabilitySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary'**
+  String get capabilitySummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
