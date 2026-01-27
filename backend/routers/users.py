@@ -15,6 +15,7 @@ from database import (
     user_usage as user_usage_db,
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
+    llm_usage as llm_usage_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -1058,6 +1059,7 @@ def update_mentor_notification_settings(
 
 # LLM Usage Tracking Endpoints
 
+
 @router.get('/v1/users/me/llm-usage', tags=['users'])
 def get_llm_usage(
     days: int = Query(default=30, ge=1, le=365),
@@ -1068,10 +1070,8 @@ def get_llm_usage(
 
     Returns usage breakdown by feature for the specified time period.
     """
-    from database.llm_usage import get_usage_summary, get_top_features
-
-    summary = get_usage_summary(uid, days=days)
-    top_features = get_top_features(uid, days=days, limit=5)
+    summary = llm_usage_db.get_usage_summary(uid, days=days)
+    top_features = llm_usage_db.get_top_features(uid, days=days, limit=5)
 
     return {
         'summary': summary,
@@ -1091,6 +1091,4 @@ def get_llm_top_features(
 
     Returns the top N features sorted by total token consumption.
     """
-    from database.llm_usage import get_top_features
-
-    return get_top_features(uid, days=days, limit=limit)
+    return llm_usage_db.get_top_features(uid, days=days, limit=limit)
