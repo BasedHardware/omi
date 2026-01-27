@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 
 class FilterBottomSheet extends StatelessWidget {
   const FilterBottomSheet({super.key});
@@ -88,7 +89,7 @@ class FilterBottomSheet extends StatelessWidget {
                       // Categories
                       _buildSectionTitle('Categories'),
                       const SizedBox(height: 12),
-                      _buildCategoryChips(provider),
+                      _buildCategoryChips(context, provider),
 
                       const SizedBox(height: 32),
 
@@ -102,7 +103,7 @@ class FilterBottomSheet extends StatelessWidget {
                       // Capabilities
                       _buildSectionTitle('Capabilities'),
                       const SizedBox(height: 12),
-                      _buildCapabilities(provider),
+                      _buildCapabilities(context, provider),
 
                       const SizedBox(height: 100), // Extra space for bottom buttons
                     ],
@@ -229,7 +230,7 @@ class FilterBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildCategoryChips(AppProvider provider) {
+  Widget _buildCategoryChips(BuildContext context, AppProvider provider) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -248,7 +249,7 @@ class FilterBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              category.title,
+              category.getLocalizedTitle(context),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -327,7 +328,7 @@ class FilterBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildCapabilities(AppProvider provider) {
+  Widget _buildCapabilities(BuildContext context, AppProvider provider) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -346,7 +347,7 @@ class FilterBottomSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              capability.title,
+              capability.getLocalizedTitle(context),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
