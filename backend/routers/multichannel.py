@@ -28,7 +28,13 @@ from models.message_event import MessageEvent
 from utils.apps import is_audio_bytes_app_enabled
 from utils.other import endpoints as auth
 from utils.other.storage import upload_audio_chunk
-from utils.stt.streaming import process_audio_dg, get_stt_service_for_language, STTService
+from utils.stt.streaming import (
+    process_audio_dg,
+    process_audio_soniox,
+    process_audio_speechmatics,
+    get_stt_service_for_language,
+    STTService,
+)
 from utils.streaming.conversation_manager import create_in_progress_conversation, process_completed_conversation
 from utils.streaming.pusher_handler import PusherHandler
 from utils.streaming.translator import translate_segments
@@ -261,10 +267,13 @@ async def _multi_channel_stream_handler(
                 stt_sockets[i] = await process_audio_dg(
                     callback, stt_language, TARGET_SAMPLE_RATE, 1, preseconds=0, model=stt_model
                 )
-            else:
-                # Fallback to Deepgram
-                stt_sockets[i] = await process_audio_dg(
-                    callback, 'en', TARGET_SAMPLE_RATE, 1, preseconds=0, model='nova-3'
+            elif stt_service == STTService.soniox:
+                stt_sockets[i] = await process_audio_soniox(
+                    callback, TARGET_SAMPLE_RATE, stt_language, uid, preseconds=0
+                )
+            elif stt_service == STTService.speechmatics:
+                stt_sockets[i] = await process_audio_speechmatics(
+                    callback, TARGET_SAMPLE_RATE, stt_language, preseconds=0
                 )
     except Exception as e:
         print(f"multi_channel: failed to connect STT: {e}", uid, session_id)
@@ -525,7 +534,10 @@ async def _multi_channel_stream_handler(
             # Send to STT
             if stt_sockets[ch_idx]:
                 try:
-                    stt_sockets[ch_idx].send(pcm_16k)
+                    if stt_service == STTService.deepgram:
+                        stt_sockets[ch_idx].send(pcm_16k)
+                    else:
+                        await stt_sockets[ch_idx].send(pcm_16k)
                 except Exception as e:
                     if channel_packets[ch_idx] <= 5 or channel_packets[ch_idx] % 500 == 0:
                         print(
@@ -593,7 +605,10 @@ async def _multi_channel_stream_handler(
     for i, stt_socket in enumerate(stt_sockets):
         if stt_socket:
             try:
-                stt_socket.finish()
+                if stt_service == STTService.deepgram:
+                    stt_socket.finish()
+                else:
+                    await stt_socket.close()
             except Exception:
                 pass
 
