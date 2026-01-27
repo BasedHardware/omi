@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional, Callable
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from database.llm_usage import record_llm_usage
 
 # Context variable for tracking current feature
 _usage_context: contextvars.ContextVar[Optional["UsageContext"]] = contextvars.ContextVar(
@@ -30,6 +31,7 @@ _usage_buffer: Dict[str, Dict[str, int]] = {}
 @dataclass(frozen=True)
 class UsageContext:
     """Context for LLM usage tracking."""
+
     uid: str
     feature: str
 
@@ -37,6 +39,7 @@ class UsageContext:
 @dataclass
 class UsageRecord:
     """A single usage record."""
+
     uid: str
     feature: str
     model: str
@@ -155,7 +158,6 @@ def get_usage_callback() -> LLMUsageCallback:
     """Get the singleton usage callback instance."""
     global _callback_instance
     if _callback_instance is None:
-        from database.llm_usage import record_llm_usage
         _callback_instance = LLMUsageCallback(flush_fn=record_llm_usage)
     return _callback_instance
 

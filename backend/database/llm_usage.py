@@ -5,7 +5,7 @@ Stores and queries LLM token usage by feature in Firestore.
 Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, output_tokens}}}
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from google.cloud import firestore
@@ -43,7 +43,8 @@ def record_llm_usage(
 
     # Use nested field paths for atomic increments
     # Structure: {feature}.{model}.{input_tokens|output_tokens}
-    safe_model = model.replace(".", "_")  # Firestore doesn't allow dots in field names
+    # Firestore doesn't allow '.', '/', '[', ']', '*', '`' in field names
+    safe_model = model.replace(".", "_").replace("/", "_")
 
     update_data = {
         f"{feature}.{safe_model}.input_tokens": firestore.Increment(input_tokens),
@@ -91,8 +92,6 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict:
     Returns:
         Dict with total usage by feature
     """
-    from datetime import timedelta
-
     user_ref = db.collection("users").document(uid)
     usage_collection = user_ref.collection("llm_usage")
 
@@ -142,13 +141,15 @@ def get_top_features(uid: str, days: int = 30, limit: int = 3) -> List[Dict]:
     features = []
     for feature, tokens in summary.items():
         total = tokens.get("input_tokens", 0) + tokens.get("output_tokens", 0)
-        features.append({
-            "feature": feature,
-            "input_tokens": tokens.get("input_tokens", 0),
-            "output_tokens": tokens.get("output_tokens", 0),
-            "total_tokens": total,
-            "call_count": tokens.get("call_count", 0),
-        })
+        features.append(
+            {
+                "feature": feature,
+                "input_tokens": tokens.get("input_tokens", 0),
+                "output_tokens": tokens.get("output_tokens", 0),
+                "total_tokens": total,
+                "call_count": tokens.get("call_count", 0),
+            }
+        )
 
     features.sort(key=lambda x: x["total_tokens"], reverse=True)
     return features[:limit]
@@ -165,8 +166,6 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
     Returns:
         List of dicts with feature name and total tokens
     """
-    from datetime import timedelta
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_id = f"{cutoff.year}-{cutoff.month:02d}-{cutoff.day:02d}"
 
@@ -197,13 +196,15 @@ def get_global_top_features(days: int = 30, limit: int = 3) -> List[Dict]:
     features = []
     for feature, tokens in global_summary.items():
         total = tokens.get("input_tokens", 0) + tokens.get("output_tokens", 0)
-        features.append({
-            "feature": feature,
-            "input_tokens": tokens.get("input_tokens", 0),
-            "output_tokens": tokens.get("output_tokens", 0),
-            "total_tokens": total,
-            "call_count": tokens.get("call_count", 0),
-        })
+        features.append(
+            {
+                "feature": feature,
+                "input_tokens": tokens.get("input_tokens", 0),
+                "output_tokens": tokens.get("output_tokens", 0),
+                "total_tokens": total,
+                "call_count": tokens.get("call_count", 0),
+            }
+        )
 
     features.sort(key=lambda x: x["total_tokens"], reverse=True)
     return features[:limit]
