@@ -32,12 +32,13 @@ class AuthenticationProvider extends BaseProvider {
 
   void _initializeAuthListeners() {
     // DEBUG: Log initial state
-    print(
+    Logger.debug(
         'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}');
 
     Future.microtask(() {
       _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
-        print('DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}');
+        Logger.debug(
+            'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}');
         this.user = user;
         SharedPreferencesUtil().uid = user?.uid ?? '';
         SharedPreferencesUtil().email = user?.email ?? '';
