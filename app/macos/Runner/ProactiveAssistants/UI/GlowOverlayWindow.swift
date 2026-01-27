@@ -16,8 +16,9 @@ class GlowOverlayWindow: NSWindow {
         self.backgroundColor = .clear
         self.hasShadow = false
 
-        // Float above other windows but below screen saver
-        self.level = .floating
+        // Float above other windows including modal panels
+        // Using .popUpMenu level to ensure it's above settings windows
+        self.level = .popUpMenu
 
         // Click-through - don't intercept any mouse events
         self.ignoresMouseEvents = true
