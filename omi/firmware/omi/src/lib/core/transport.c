@@ -228,12 +228,6 @@ static ssize_t time_sync_write_handler(struct bt_conn *conn,
         return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
     }
 
-    // Also persist to settings for next boot
-    err = app_settings_save_rtc_epoch((uint64_t)epoch_s);
-    if (err) {
-        LOG_WRN("Failed to persist RTC epoch: %d", err);
-    }
-
     LOG_INF("Time synchronized successfully");
     return len;
 }

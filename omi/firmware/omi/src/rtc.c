@@ -60,15 +60,17 @@ bool rtc_is_valid(void)
 
 uint64_t rtc_get_utc_time_ms(void)
 {
-    int64_t now_uptime_ms = k_uptime_get();
-
     k_mutex_lock(&rtc_lock, K_FOREVER);
     if (!utc_valid) {
         k_mutex_unlock(&rtc_lock);
         return 0;
     }
-
-    uint64_t now_ms = base_epoch_ms + (uint64_t)(now_uptime_ms - base_uptime_ms);
+    int64_t now_uptime_ms = k_uptime_get();
+    int64_t delta_ms = now_uptime_ms - base_uptime_ms;
+    if (delta_ms < 0) {
+        delta_ms = 0;
+    }
+    uint64_t now_ms = base_epoch_ms + (uint64_t)delta_ms;
     k_mutex_unlock(&rtc_lock);
     return now_ms;
 }
