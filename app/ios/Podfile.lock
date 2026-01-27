@@ -239,6 +239,8 @@ PODS:
     - Flutter
   - package_info_plus (0.4.5):
     - Flutter
+  - pasteboard (0.0.1):
+    - Flutter
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -264,6 +266,7 @@ PODS:
   - SwiftCBOR (0.4.4)
   - SwiftProtobuf (1.33.3)
   - SwiftyGif (5.4.5)
+  - TwilioVoice (6.13.5)
   - url_launcher_ios (0.0.1):
     - Flutter
   - video_player_avfoundation (0.0.1):
@@ -312,12 +315,14 @@ DEPENDENCIES:
   - nordic_dfu (from `.symlinks/plugins/nordic_dfu/ios`)
   - opus_flutter_ios (from `.symlinks/plugins/opus_flutter_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
+  - pasteboard (from `.symlinks/plugins/pasteboard/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sign_in_with_apple (from `.symlinks/plugins/sign_in_with_apple/ios`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
+  - TwilioVoice (~> 6.13)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - video_player_avfoundation (from `.symlinks/plugins/video_player_avfoundation/darwin`)
   - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
@@ -359,6 +364,7 @@ SPEC REPOS:
     - SwiftCBOR
     - SwiftProtobuf
     - SwiftyGif
+    - TwilioVoice
     - ZIPFoundation
 
 EXTERNAL SOURCES:
@@ -432,6 +438,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/opus_flutter_ios/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
+  pasteboard:
+    :path: ".symlinks/plugins/pasteboard/ios"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
@@ -516,6 +524,7 @@ SPEC CHECKSUMS:
   nordic_dfu: e4fb6f461f4a290b28ea4b1dfb69071665cdfa3e
   opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
+  pasteboard: 49088aeb6119d51f976a421db60d8e1ab079b63c
   path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
@@ -529,12 +538,13 @@ SPEC CHECKSUMS:
   SwiftCBOR: ce5354ec8b660da2d6fc754462881119dbe1f963
   SwiftProtobuf: e1b437c8e31a4c5577b643249a0bb62ed4f02153
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
+  TwilioVoice: 237d012c91fc149943589628703dfd6c7cb2eb31
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
   video_player_avfoundation: dd410b52df6d2466a42d28550e33e4146928280a
   webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
   whisper_flutter_new: 9276535665f51f845831fe94859b2cccd0334a70
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
-PODFILE CHECKSUM: 0ff3dedbc65a62aff6be5119a19cb4fd9e15742d
+PODFILE CHECKSUM: 3e3a61180841518c1c2f96ad83d3761174c7ded1
 
 COCOAPODS: 1.16.2

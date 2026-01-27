@@ -27,6 +27,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'device_settings.dart';
+import 'phone_call_settings_page.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode {
@@ -427,6 +428,18 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const IntegrationsPage(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Phone Calls',
+                icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const PhoneCallSettingsPage(),
                     ),
                   );
                 },
