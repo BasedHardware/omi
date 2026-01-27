@@ -696,17 +696,19 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Processing label background placeholder (transparent text area)
+                            // Processing label background placeholder (sized by real text, invisible)
                             Container(
                               decoration: BoxDecoration(
                                 color: const Color(0xFF35343B),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              child: const Text(
-                                // Invisible placeholder to match text size
-                                '',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              child: Opacity(
+                                opacity: 0,
+                                child: Text(
+                                  context.l10n.processing,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                ),
                               ),
                             ),
                             const Spacer(),
