@@ -15,3 +15,5 @@ pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
+pytest tests/unit/test_llm_usage_tracker.py -v
+pytest tests/unit/test_llm_usage_db.py -v
