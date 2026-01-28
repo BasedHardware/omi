@@ -668,73 +668,82 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
-    // If at indent 0, use Dismissible for swipe-to-delete with animation
+    // If at indent 0, use Dismissible for swipe-to-delete with GestureDetector for swipe-to-indent
     if (indentLevel == 0) {
-      return Dismissible(
-        key: Key('dismiss_${item.id}'),
-        direction: DismissDirection.endToStart,
-        dismissThresholds: const {DismissDirection.endToStart: 0.3},
-        background: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20.0),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.delete, color: Colors.white),
-        ),
-        onDismissed: (direction) {
-          _deleteTask(item);
+      return GestureDetector(
+        onHorizontalDragEnd: (details) {
+          // Swipe right to indent (positive velocity = right direction)
+          if (details.primaryVelocity != null && details.primaryVelocity! > 200) {
+            _incrementIndent(item.id);
+          }
+          // Swipe left is handled by Dismissible below
         },
-        child: LongPressDraggable<ActionItemWithMetadata>(
-          data: item,
-          delay: const Duration(milliseconds: 150),
-          hapticFeedbackOnStart: true,
-          onDragStarted: () {
-            HapticFeedback.mediumImpact();
+        child: Dismissible(
+          key: Key('dismiss_${item.id}'),
+          direction: DismissDirection.endToStart,
+          dismissThresholds: const {DismissDirection.endToStart: 0.3},
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20.0),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.delete, color: Colors.white),
+          ),
+          onDismissed: (direction) {
+            _deleteTask(item);
           },
-          onDragEnd: (details) {
-            setState(() {
-              _hoveredItemId = null;
-            });
-          },
-          feedback: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: MediaQuery.of(context).size.width - 64,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2E),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  _buildCheckbox(item.completed),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      item.description,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          child: LongPressDraggable<ActionItemWithMetadata>(
+            data: item,
+            delay: const Duration(milliseconds: 150),
+            hapticFeedbackOnStart: true,
+            onDragStarted: () {
+              HapticFeedback.mediumImpact();
+            },
+            onDragEnd: (details) {
+              setState(() {
+                _hoveredItemId = null;
+              });
+            },
+            feedback: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: MediaQuery.of(context).size.width - 64,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2E),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    _buildCheckbox(item.completed),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        item.description,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          childWhenDragging: Opacity(
-            opacity: 0.3,
+            childWhenDragging: Opacity(
+              opacity: 0.3,
+              child: taskContent,
+            ),
             child: taskContent,
           ),
-          child: taskContent,
         ),
       );
     }
