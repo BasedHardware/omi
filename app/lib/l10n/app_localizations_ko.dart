@@ -7708,125 +7708,125 @@ class AppLocalizationsKo extends AppLocalizations {
   String get removeFilter => '필터 제거';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => '대화 분석';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => '성격 복제';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => '건강';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => '교육';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => '소통';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => '감정 지원';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => '생산성';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => '엔터테인먼트';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => '금융';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => '여행';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => '안전';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => '쇼핑';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => '소셜';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => '뉴스';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => '유틸리티';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => '기타';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => '채팅';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => '대화';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => '외부 연동';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => '알림';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => '오디오 바이트';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => '대화 생성';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => '트랜스크립트 처리됨';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => '대화 생성';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => '메모리 생성';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => '대화 읽기';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => '메모리 읽기';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => '작업 읽기';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => '사용자 이름';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => '사용자 정보';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => '사용자 대화';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => '사용자 채팅';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => '요약';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => '추천';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => '작업';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => '연동';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => '성격 복제';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => '생산성 및 라이프스타일';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => '소셜 및 엔터테인먼트';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => '생산성 도구';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => '개인 웰빙';
 }

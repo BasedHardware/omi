@@ -7835,125 +7835,125 @@ class AppLocalizationsCs extends AppLocalizations {
   String get removeFilter => 'Odstranit Filtr';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Analýza konverzací';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Klon osobnosti';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Zdraví';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Vzdělávání';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Komunikace';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Emoční podpora';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produktivita';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Zábava';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Finance';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Cestování';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Bezpečnost';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Nakupování';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sociální';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Zprávy';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Nástroje';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Ostatní';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Konverzace';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Externí integrace';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Oznámení';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Audio bajty';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Vytvoření konverzace';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Přepis zpracován';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Vytvořit konverzace';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Vytvořit vzpomínky';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Číst konverzace';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Číst vzpomínky';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Číst úkoly';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Uživatelské jméno';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Fakta o uživateli';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Konverzace uživatele';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Chat uživatele';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Souhrn';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Doporučené';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Úkoly';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrace';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Klony osobností';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produktivita a životní styl';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sociální a zábava';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Nástroje produktivity';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Osobní pohoda';
 }

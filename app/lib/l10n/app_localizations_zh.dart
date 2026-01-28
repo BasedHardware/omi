@@ -7696,125 +7696,125 @@ class AppLocalizationsZh extends AppLocalizations {
   String get removeFilter => '移除筛选';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => '对话分析';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => '人格克隆';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => '健康';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => '教育';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => '沟通';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => '情感支持';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => '生产力';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => '娱乐';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => '金融';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => '旅行';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => '安全';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => '购物';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => '社交';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => '新闻';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => '工具';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => '其他';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => '聊天';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => '对话';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => '外部集成';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => '通知';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => '音频字节';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => '创建对话';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => '转录已处理';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => '创建对话';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => '创建记忆';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => '读取对话';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => '读取记忆';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => '读取任务';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => '用户名';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => '用户信息';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => '用户对话';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => '用户聊天';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => '摘要';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => '精选';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => '任务';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => '集成';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => '人格克隆';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => '生产力与生活方式';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => '社交与娱乐';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => '生产力工具';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => '个人健康';
 }

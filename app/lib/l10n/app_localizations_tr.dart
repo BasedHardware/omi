@@ -7853,125 +7853,125 @@ class AppLocalizationsTr extends AppLocalizations {
   String get removeFilter => 'Filtreyi Kaldır';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Konuşma Analizi';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Kişilik Klonu';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Sağlık';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Eğitim';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'İletişim';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Duygusal Destek';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Verimlilik';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Eğlence';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Finans';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Seyahat';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Güvenlik';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Alışveriş';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sosyal';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Haberler';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Araçlar';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Diğer';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Sohbet';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Konuşmalar';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Harici Entegrasyon';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Bildirim';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Ses Baytları';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Konuşma Oluşturma';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transkript İşlendi';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Konuşma oluştur';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Anı oluştur';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Konuşmaları oku';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Anıları oku';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Görevleri oku';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Kullanıcı Adı';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Kullanıcı Bilgileri';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Kullanıcı Konuşmaları';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Kullanıcı Sohbeti';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Özet';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Öne Çıkanlar';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Görevler';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Entegrasyonlar';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Kişilik Klonları';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Verimlilik ve Yaşam Tarzı';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sosyal ve Eğlence';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Verimlilik Araçları';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Kişisel Sağlık';
 }

@@ -7897,125 +7897,125 @@ class AppLocalizationsEl extends AppLocalizations {
   String get removeFilter => 'Κατάργηση Φίλτρου';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Υγεία';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Εκπαίδευση';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Επικοινωνία';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Συναισθηματική υποστήριξη';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Παραγωγικότητα';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Ψυχαγωγία';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Οικονομικά';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Ταξίδια';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Ασφάλεια';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Αγορές';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Κοινωνικά';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Ειδήσεις';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Εργαλεία';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Άλλα';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Συνομιλία';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Συνομιλίες';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Εξωτερική ενσωμάτωση';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Ειδοποίηση';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Bytes ήχου';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Δημιουργία συνομιλίας';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Απομαγνητοφώνηση επεξεργάστηκε';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Δημιουργία συνομιλιών';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Δημιουργία αναμνήσεων';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Ανάγνωση συνομιλιών';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Ανάγνωση αναμνήσεων';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Ανάγνωση εργασιών';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Όνομα χρήστη';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Στοιχεία χρήστη';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Συνομιλίες χρήστη';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Συνομιλία χρήστη';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Περίληψη';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Προτεινόμενα';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Εργασίες';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Ενσωματώσεις';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Κοινωνικά & Ψυχαγωγία';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Εργαλεία παραγωγικότητας';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Προσωπική ευεξία';
 }

@@ -7858,125 +7858,125 @@ class AppLocalizationsPl extends AppLocalizations {
   String get removeFilter => 'Usuń Filtr';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Analiza rozmów';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Klon osobowości';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Zdrowie';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Edukacja';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Komunikacja';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Wsparcie emocjonalne';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produktywność';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Rozrywka';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Finanse';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Podróże';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Bezpieczeństwo';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Zakupy';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Społeczne';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Wiadomości';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Narzędzia';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Inne';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Czat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Rozmowy';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Integracja zewnętrzna';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Powiadomienie';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Bajty audio';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Tworzenie rozmowy';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transkrypcja przetworzona';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Utwórz rozmowy';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Utwórz wspomnienia';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Czytaj rozmowy';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Czytaj wspomnienia';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Czytaj zadania';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Nazwa użytkownika';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Fakty o użytkowniku';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Rozmowy użytkownika';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Czat użytkownika';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Podsumowanie';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Polecane';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Zadania';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integracje';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Klony osobowości';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produktywność i styl życia';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Społeczne i rozrywka';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Narzędzia produktywności';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Osobiste samopoczucie';
 }

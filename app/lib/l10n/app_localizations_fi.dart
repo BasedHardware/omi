@@ -7838,125 +7838,125 @@ class AppLocalizationsFi extends AppLocalizations {
   String get removeFilter => 'Poista Suodatin';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Keskusteluanalyysi';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Persoonallisuusklooni';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Terveys';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Koulutus';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Viestintä';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Tunnetuki';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Tuottavuus';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Viihde';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Talous';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Matkailu';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Turvallisuus';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Ostokset';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sosiaalinen';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Uutiset';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Työkalut';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Muut';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Keskustelut';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Ulkoinen integraatio';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Ilmoitus';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Äänitavut';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Keskustelun luominen';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Litterointi käsitelty';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Luo keskusteluja';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Luo muistoja';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Lue keskusteluja';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Lue muistoja';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Lue tehtäviä';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Käyttäjänimi';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Käyttäjän tiedot';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Käyttäjän keskustelut';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Käyttäjän chat';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Yhteenveto';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Suositellut';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Tehtävät';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integraatiot';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Persoonallisuuskloonit';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Tuottavuus ja elämäntapa';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sosiaalinen ja viihde';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Tuottavuustyökalut';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Henkilökohtainen hyvinvointi';
 }

@@ -7865,125 +7865,125 @@ class AppLocalizationsRu extends AppLocalizations {
   String get removeFilter => 'Удалить фильтр';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Анализ разговоров';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Клон личности';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Здоровье';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Образование';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Общение';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Эмоциональная поддержка';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Продуктивность';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Развлечения';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Финансы';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Путешествия';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Безопасность';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Покупки';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Социальное';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Новости';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Инструменты';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Другое';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Чат';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Разговоры';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Внешняя интеграция';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Уведомление';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Аудио байты';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Создание разговора';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Транскрипт обработан';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Создать разговоры';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Создать воспоминания';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Читать разговоры';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Читать воспоминания';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Читать задачи';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Имя пользователя';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Данные пользователя';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Разговоры пользователя';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Чат пользователя';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Сводка';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Рекомендуемые';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Задачи';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Интеграции';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Клоны личности';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Продуктивность и образ жизни';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Социальное и развлечения';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Инструменты продуктивности';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Личное благополучие';
 }
