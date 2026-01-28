@@ -427,7 +427,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceSettings => 'Настройки устройства';
 
   @override
-  String get chatTools => 'Инструменты чата';
+  String get integrations => 'Интеграции';
 
   @override
   String get feedbackBug => 'Отзыв / Ошибка';
@@ -1022,7 +1022,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get comingSoon => 'Скоро';
 
   @override
-  String get chatToolsFooter => 'Подключите ваши приложения для просмотра данных и метрик в чате.';
+  String get integrationsFooter => 'Подключите ваши приложения для просмотра данных и метрик в чате.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7863,4 +7863,151 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get removeFilter => 'Удалить фильтр';
+
+  @override
+  String get categoryConversationAnalysis => 'Анализ разговоров';
+
+  @override
+  String get categoryPersonalityClone => 'Клон личности';
+
+  @override
+  String get categoryHealth => 'Здоровье';
+
+  @override
+  String get categoryEducation => 'Образование';
+
+  @override
+  String get categoryCommunication => 'Общение';
+
+  @override
+  String get categoryEmotionalSupport => 'Эмоциональная поддержка';
+
+  @override
+  String get categoryProductivity => 'Продуктивность';
+
+  @override
+  String get categoryEntertainment => 'Развлечения';
+
+  @override
+  String get categoryFinancial => 'Финансы';
+
+  @override
+  String get categoryTravel => 'Путешествия';
+
+  @override
+  String get categorySafety => 'Безопасность';
+
+  @override
+  String get categoryShopping => 'Покупки';
+
+  @override
+  String get categorySocial => 'Социальное';
+
+  @override
+  String get categoryNews => 'Новости';
+
+  @override
+  String get categoryUtilities => 'Инструменты';
+
+  @override
+  String get categoryOther => 'Другое';
+
+  @override
+  String get capabilityChat => 'Чат';
+
+  @override
+  String get capabilityConversations => 'Разговоры';
+
+  @override
+  String get capabilityExternalIntegration => 'Внешняя интеграция';
+
+  @override
+  String get capabilityNotification => 'Уведомление';
+
+  @override
+  String get triggerAudioBytes => 'Аудио байты';
+
+  @override
+  String get triggerConversationCreation => 'Создание разговора';
+
+  @override
+  String get triggerTranscriptProcessed => 'Транскрипт обработан';
+
+  @override
+  String get actionCreateConversations => 'Создать разговоры';
+
+  @override
+  String get actionCreateMemories => 'Создать воспоминания';
+
+  @override
+  String get actionReadConversations => 'Читать разговоры';
+
+  @override
+  String get actionReadMemories => 'Читать воспоминания';
+
+  @override
+  String get actionReadTasks => 'Читать задачи';
+
+  @override
+  String get scopeUserName => 'Имя пользователя';
+
+  @override
+  String get scopeUserFacts => 'Данные пользователя';
+
+  @override
+  String get scopeUserConversations => 'Разговоры пользователя';
+
+  @override
+  String get scopeUserChat => 'Чат пользователя';
+
+  @override
+  String get capabilitySummary => 'Сводка';
+
+  @override
+  String get capabilityFeatured => 'Рекомендуемые';
+
+  @override
+  String get capabilityTasks => 'Задачи';
+
+  @override
+  String get capabilityIntegrations => 'Интеграции';
+
+  @override
+  String get categoryPersonalityClones => 'Клоны личности';
+
+  @override
+  String get categoryProductivityLifestyle => 'Продуктивность и образ жизни';
+
+  @override
+  String get categorySocialEntertainment => 'Социальное и развлечения';
+
+  @override
+  String get categoryProductivityTools => 'Инструменты продуктивности';
+
+  @override
+  String get categoryPersonalWellness => 'Личное благополучие';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категории';
+
+  @override
+  String get sortBy => 'Сортировка';
+
+  @override
+  String get highestRating => 'Высший рейтинг';
+
+  @override
+  String get lowestRating => 'Низший рейтинг';
+
+  @override
+  String get resetFilters => 'Сбросить фильтры';
+
+  @override
+  String get applyFilters => 'Применить фильтры';
+
+  @override
+  String get mostInstalls => 'Больше всего установок';
 }

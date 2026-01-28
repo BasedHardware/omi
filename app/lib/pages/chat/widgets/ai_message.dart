@@ -1140,7 +1140,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 2, left: 4),
+      padding: const EdgeInsets.only(top: 8, left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1150,6 +1150,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
+              MixpanelManager().track('Chat Message Copied', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user copied the message (silent, no UI change)
               if (_selectedNps == null) {
@@ -1161,9 +1162,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
                   SnackBar(
                     content: Text(
                       context.l10n.messageCopied,
-                      style: TextStyle(color: Colors.white, fontSize: 12.0),
+                      style: const TextStyle(color: Colors.white, fontSize: 12.0),
                     ),
-                    duration: Duration(milliseconds: 1500),
+                    duration: const Duration(milliseconds: 1500),
                   ),
                 );
               }
@@ -1208,6 +1209,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
+              MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user shared the message (silent, no UI change)
               if (_selectedNps == null) {
@@ -1234,7 +1236,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
       child: FaIcon(
         icon,
         color: isSelected ? Colors.white : Colors.grey.shade600,
-        size: 16,
+        size: 14,
       ),
     );
   }

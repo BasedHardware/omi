@@ -3,6 +3,8 @@ description: "Flutter localization - all user-facing strings must use l10n"
 globs:
   - "app/**/*.dart"
 alwaysApply: false
+references:
+  - app/README.md
 ---
 
 # Flutter Localization
@@ -27,3 +29,17 @@ Text('Hello World')
 // Good
 Text(context.l10n.helloWorld)
 ```
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure and patterns
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns including localization
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter development specialist
+
+### Commands
+- `/flutter-setup` - Setup localization

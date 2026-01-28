@@ -4,6 +4,8 @@ globs:
   - "web/**/*.tsx"
   - "web/**/*.ts"
 alwaysApply: false
+references:
+  - web/frontend/README.md
 ---
 
 # Web Next.js Patterns
@@ -245,3 +247,18 @@ export function ConversationsList() {
 
 - Web Components: `web/frontend/README.md`
 - Next.js Docs: https://nextjs.org/docs
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/web-ui-components.mdc` - UI component patterns
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API integration
+
+### Skills
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/web-developer/` - Next.js development specialist
+
+### Commands
+- `/backend-setup` - Setup backend for web integration

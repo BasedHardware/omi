@@ -427,7 +427,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceSettings => 'Seadme seaded';
 
   @override
-  String get chatTools => 'Vestlustööriistad';
+  String get integrations => 'Integratsioonid';
 
   @override
   String get feedbackBug => 'Tagasiside / viga';
@@ -1020,7 +1020,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get comingSoon => 'Tulekul';
 
   @override
-  String get chatToolsFooter => 'Ühendage oma rakendused, et vestluses andmeid ja mõõdikuid vaadata.';
+  String get integrationsFooter => 'Ühendage oma rakendused, et vestluses andmeid ja mõõdikuid vaadata.';
 
   @override
   String get completeAuthInBrowser => 'Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.';
@@ -7837,4 +7837,151 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get removeFilter => 'Eemalda Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Vestluste analüüs';
+
+  @override
+  String get categoryPersonalityClone => 'Isiksuse kloon';
+
+  @override
+  String get categoryHealth => 'Tervis';
+
+  @override
+  String get categoryEducation => 'Haridus';
+
+  @override
+  String get categoryCommunication => 'Suhtlus';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotsionaalne tugi';
+
+  @override
+  String get categoryProductivity => 'Tootlikkus';
+
+  @override
+  String get categoryEntertainment => 'Meelelahutus';
+
+  @override
+  String get categoryFinancial => 'Rahandus';
+
+  @override
+  String get categoryTravel => 'Reisimine';
+
+  @override
+  String get categorySafety => 'Turvalisus';
+
+  @override
+  String get categoryShopping => 'Ostlemine';
+
+  @override
+  String get categorySocial => 'Sotsiaalne';
+
+  @override
+  String get categoryNews => 'Uudised';
+
+  @override
+  String get categoryUtilities => 'Tööriistad';
+
+  @override
+  String get categoryOther => 'Muu';
+
+  @override
+  String get capabilityChat => 'Vestlus';
+
+  @override
+  String get capabilityConversations => 'Vestlused';
+
+  @override
+  String get capabilityExternalIntegration => 'Väline integratsioon';
+
+  @override
+  String get capabilityNotification => 'Teavitus';
+
+  @override
+  String get triggerAudioBytes => 'Heli baidid';
+
+  @override
+  String get triggerConversationCreation => 'Vestluse loomine';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkriptsioon töödeldud';
+
+  @override
+  String get actionCreateConversations => 'Loo vestlused';
+
+  @override
+  String get actionCreateMemories => 'Loo mälestused';
+
+  @override
+  String get actionReadConversations => 'Loe vestlusi';
+
+  @override
+  String get actionReadMemories => 'Loe mälestusi';
+
+  @override
+  String get actionReadTasks => 'Loe ülesandeid';
+
+  @override
+  String get scopeUserName => 'Kasutajanimi';
+
+  @override
+  String get scopeUserFacts => 'Kasutaja faktid';
+
+  @override
+  String get scopeUserConversations => 'Kasutaja vestlused';
+
+  @override
+  String get scopeUserChat => 'Kasutaja vestlus';
+
+  @override
+  String get capabilitySummary => 'Kokkuvõte';
+
+  @override
+  String get capabilityFeatured => 'Esiletõstetud';
+
+  @override
+  String get capabilityTasks => 'Ülesanded';
+
+  @override
+  String get capabilityIntegrations => 'Integratsioonid';
+
+  @override
+  String get categoryPersonalityClones => 'Isiksuse kloonid';
+
+  @override
+  String get categoryProductivityLifestyle => 'Tootlikkus ja elustiil';
+
+  @override
+  String get categorySocialEntertainment => 'Sotsiaalne ja meelelahutus';
+
+  @override
+  String get categoryProductivityTools => 'Tootlikkuse tööriistad';
+
+  @override
+  String get categoryPersonalWellness => 'Isiklik heaolu';
+
+  @override
+  String get rating => 'Hinnang';
+
+  @override
+  String get categories => 'Kategooriad';
+
+  @override
+  String get sortBy => 'Sorteeri';
+
+  @override
+  String get highestRating => 'Kõrgeim hinnang';
+
+  @override
+  String get lowestRating => 'Madalaim hinnang';
+
+  @override
+  String get resetFilters => 'Lähtesta filtrid';
+
+  @override
+  String get applyFilters => 'Rakenda filtrid';
+
+  @override
+  String get mostInstalls => 'Enim paigaldusi';
 }

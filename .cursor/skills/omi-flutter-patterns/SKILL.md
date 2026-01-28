@@ -145,7 +145,25 @@ Use `PlatformManager` for platform detection.
 
 ## Related Documentation
 
-- Flutter Architecture: `.cursor/rules/flutter-architecture.mdc`
-- BLE Protocol: `docs/doc/developer/Protocol.mdx`
-- App Setup: `docs/doc/developer/AppSetup.mdx`
-- Flutter Components: `.cursor/FLUTTER_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **App Setup**: `docs/doc/developer/AppSetup.mdx` - [View online](https://docs.omi.me/doc/developer/AppSetup)
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **Flutter Architecture**: `.cursor/rules/flutter-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure and state management
+- `.cursor/rules/flutter-backend-integration.mdc` - Backend API integration
+- `.cursor/rules/flutter-ble-protocol.mdc` - BLE device communication
+- `.cursor/rules/flutter-localization.mdc` - Localization requirements
+- `.cursor/rules/flutter-platform-specific.mdc` - Platform-specific code
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Uses this skill for Flutter development
+
+### Commands
+- `/flutter-setup` - Uses this skill for setup guidance
+- `/flutter-test` - Uses this skill for testing patterns
+- `/flutter-build` - Uses this skill for build patterns

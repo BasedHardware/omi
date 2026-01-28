@@ -3,6 +3,10 @@ description: "Flutter HTTP client REST API WebSocket real-time audio streaming a
 globs:
   - "app/lib/backend/**/*.dart"
 alwaysApply: false
+references:
+  - docs/doc/developer/api/overview.mdx
+  - .cursor/docs/API_REFERENCE.md
+  - app/README.md
 ---
 
 # Flutter Backend Integration
@@ -301,6 +305,27 @@ class Conversation {
 
 ## Related Documentation
 
-- Flutter Architecture: `.cursor/rules/flutter-architecture.mdc`
-- Flutter Components: `.cursor/FLUTTER_COMPONENTS.md`
-- API Reference: `.cursor/API_REFERENCE.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **App Setup**: `docs/doc/developer/AppSetup.mdx` - [View online](https://docs.omi.me/doc/developer/AppSetup)
+- **API Overview**: `docs/doc/developer/api/overview.mdx` - [View online](https://docs.omi.me/doc/developer/api/overview)
+- **API Endpoints**: `docs/api-reference/` - [View online](https://docs.omi.me/api-reference/)
+- **Flutter Architecture**: `.cursor/rules/flutter-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure and state management
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API patterns
+- `.cursor/rules/backend-architecture.mdc` - Backend system architecture
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns including backend integration
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter development specialist
+
+### Commands
+- `/flutter-setup` - Setup Flutter and backend connection
+- `/flutter-test` - Test backend integration

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/atoms/omi_choice_chip.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/ui/molecules/omi_popup_menu.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -117,14 +118,16 @@ class DesktopFilterChips extends StatelessWidget {
                 children: [
                   const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
                   const SizedBox(width: 8),
-                  Text(context.l10n.clearSelection, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary)),
+                  Text(context.l10n.clearSelection,
+                      style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary)),
                 ],
               ),
             ),
           if (selectedCategory != null) const PopupMenuDivider(),
           ...appProvider.categories.map((category) => PopupMenuItem(
               value: category,
-              child: Text(category.title, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
+              child: Text(category.getLocalizedTitle(context),
+                  style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))))
         ],
         onSelected: (value) {
           if (value == 'clear') {
@@ -195,7 +198,8 @@ class DesktopFilterChips extends StatelessWidget {
                   child: Row(children: [
                     const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
                     const SizedBox(width: 8),
-                    Text(context.l10n.clearSelection, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
+                    Text(context.l10n.clearSelection,
+                        style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
                   ])),
             if (selectedRating != null) const PopupMenuDivider(),
             ...List.generate(
@@ -205,7 +209,8 @@ class DesktopFilterChips extends StatelessWidget {
                     child: Row(children: [
                       const Icon(Icons.star_rounded, size: 16, color: ResponsiveHelper.purplePrimary),
                       const SizedBox(width: 8),
-                      Text(ratingOptions[index], style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))
+                      Text(ratingOptions[index],
+                          style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textSecondary))
                     ]))),
           ],
           onSelected: (value) {
@@ -276,7 +281,8 @@ class DesktopFilterChips extends StatelessWidget {
                 child: Row(children: [
                   const Icon(Icons.clear, size: 16, color: ResponsiveHelper.textTertiary),
                   const SizedBox(width: 8),
-                  Text(context.l10n.clearSelection, style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
+                  Text(context.l10n.clearSelection,
+                      style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary))
                 ])),
           if (selectedCapability != null) const PopupMenuDivider(),
           ...appProvider.capabilities.map((cap) => PopupMenuItem(

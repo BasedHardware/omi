@@ -6,6 +6,7 @@ import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
@@ -191,7 +192,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(
-          widget.capability.title,
+          widget.capability.getLocalizedTitle(context),
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,

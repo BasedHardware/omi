@@ -122,6 +122,24 @@ BLECharacteristic *pChar = pService->createCharacteristic(
 
 ## Related Documentation
 
-- Protocol: `docs/doc/developer/Protocol.mdx`
-- Firmware Components: `.cursor/FIRMWARE_COMPONENTS.md`
-- Firmware Architecture: `.cursor/rules/firmware-architecture.mdc`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **Firmware Compilation**: `docs/doc/developer/firmware/Compile_firmware.mdx` - [View online](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+- **Hardware Docs**: `docs/doc/hardware/` - [View online](https://docs.omi.me/doc/hardware/)
+- **Firmware Architecture**: `.cursor/rules/firmware-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/firmware-architecture.mdc` - Firmware system architecture
+- `.cursor/rules/firmware-ble-service.mdc` - BLE service implementation
+- `.cursor/rules/firmware-audio-codecs.mdc` - Audio codec implementation
+- `.cursor/rules/flutter-ble-protocol.mdc` - Flutter BLE integration
+
+### Subagents
+- `.cursor/agents/firmware-engineer/` - Uses this skill for firmware development
+- `.cursor/agents/flutter-developer/` - Uses this skill for BLE integration
+
+### Commands
+- `/flutter-setup` - Uses this skill for firmware setup

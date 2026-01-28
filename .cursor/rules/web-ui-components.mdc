@@ -4,6 +4,8 @@ globs:
   - "web/**/*.tsx"
   - "web/**/*.ts"
 alwaysApply: false
+references:
+  - web/frontend/README.md
 ---
 
 # Web UI Components
@@ -165,3 +167,17 @@ function ConversationCard({ conversation }) {
 - Web Next.js Patterns: `.cursor/rules/web-nextjs-patterns.mdc`
 - Shadcn/ui: https://ui.shadcn.com/
 - Radix UI: https://www.radix-ui.com/
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/web-nextjs-patterns.mdc` - Next.js App Router patterns
+
+### Skills
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/web-developer/` - Web UI development specialist
+
+### Commands
+- `/backend-setup` - Setup backend for web integration

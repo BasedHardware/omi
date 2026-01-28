@@ -486,8 +486,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Audio: ${provider.conversation.structured.title}',
+          [XFile(file.path, mimeType: 'audio/wav')],
         );
 
         // Track successful completion

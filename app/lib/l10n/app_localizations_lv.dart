@@ -426,7 +426,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override
-  String get chatTools => 'Tērzēšanas rīki';
+  String get integrations => 'Integrācijas';
 
   @override
   String get feedbackBug => 'Atsauksmes / Kļūda';
@@ -1020,7 +1020,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get comingSoon => 'Drīzumā';
 
   @override
-  String get chatToolsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
+  String get integrationsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7855,4 +7855,151 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get removeFilter => 'Noņemt Filtru';
+
+  @override
+  String get categoryConversationAnalysis => 'Sarunu analīze';
+
+  @override
+  String get categoryPersonalityClone => 'Personības klons';
+
+  @override
+  String get categoryHealth => 'Veselība';
+
+  @override
+  String get categoryEducation => 'Izglītība';
+
+  @override
+  String get categoryCommunication => 'Komunikācija';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocionālais atbalsts';
+
+  @override
+  String get categoryProductivity => 'Produktivitāte';
+
+  @override
+  String get categoryEntertainment => 'Izklaide';
+
+  @override
+  String get categoryFinancial => 'Finanses';
+
+  @override
+  String get categoryTravel => 'Ceļojumi';
+
+  @override
+  String get categorySafety => 'Drošība';
+
+  @override
+  String get categoryShopping => 'Iepirkšanās';
+
+  @override
+  String get categorySocial => 'Sociālais';
+
+  @override
+  String get categoryNews => 'Ziņas';
+
+  @override
+  String get categoryUtilities => 'Rīki';
+
+  @override
+  String get categoryOther => 'Citi';
+
+  @override
+  String get capabilityChat => 'Tērzēšana';
+
+  @override
+  String get capabilityConversations => 'Sarunas';
+
+  @override
+  String get capabilityExternalIntegration => 'Ārējā integrācija';
+
+  @override
+  String get capabilityNotification => 'Paziņojums';
+
+  @override
+  String get triggerAudioBytes => 'Audio baiti';
+
+  @override
+  String get triggerConversationCreation => 'Sarunas izveide';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripcija apstrādāta';
+
+  @override
+  String get actionCreateConversations => 'Izveidot sarunas';
+
+  @override
+  String get actionCreateMemories => 'Izveidot atmiņas';
+
+  @override
+  String get actionReadConversations => 'Lasīt sarunas';
+
+  @override
+  String get actionReadMemories => 'Lasīt atmiņas';
+
+  @override
+  String get actionReadTasks => 'Lasīt uzdevumus';
+
+  @override
+  String get scopeUserName => 'Lietotājvārds';
+
+  @override
+  String get scopeUserFacts => 'Lietotāja fakti';
+
+  @override
+  String get scopeUserConversations => 'Lietotāja sarunas';
+
+  @override
+  String get scopeUserChat => 'Lietotāja tērzēšana';
+
+  @override
+  String get capabilitySummary => 'Kopsavilkums';
+
+  @override
+  String get capabilityFeatured => 'Ieteiktie';
+
+  @override
+  String get capabilityTasks => 'Uzdevumi';
+
+  @override
+  String get capabilityIntegrations => 'Integrācijas';
+
+  @override
+  String get categoryPersonalityClones => 'Personības kloni';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitāte un dzīvesveids';
+
+  @override
+  String get categorySocialEntertainment => 'Sociālais un izklaide';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitātes rīki';
+
+  @override
+  String get categoryPersonalWellness => 'Personīgā labklājība';
+
+  @override
+  String get rating => 'Vērtējums';
+
+  @override
+  String get categories => 'Kategorijas';
+
+  @override
+  String get sortBy => 'Kārtot';
+
+  @override
+  String get highestRating => 'Augstākais vērtējums';
+
+  @override
+  String get lowestRating => 'Zemākais vērtējums';
+
+  @override
+  String get resetFilters => 'Atiestatīt filtrus';
+
+  @override
+  String get applyFilters => 'Lietot filtrus';
+
+  @override
+  String get mostInstalls => 'Visvairāk instalāciju';
 }

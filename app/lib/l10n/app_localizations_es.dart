@@ -426,7 +426,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceSettings => 'Ajustes del dispositivo';
 
   @override
-  String get chatTools => 'Herramientas de chat';
+  String get integrations => 'Integraciones';
 
   @override
   String get feedbackBug => 'Feedback / Error';
@@ -584,7 +584,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get starOngoing => 'Marcar conversación actual';
 
   @override
-  String get off => 'Off';
+  String get off => 'Desactivado';
 
   @override
   String get max => 'Máx';
@@ -1019,7 +1019,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get comingSoon => 'Próximamente';
 
   @override
-  String get chatToolsFooter => 'Conecta tus apps para ver datos y métricas en el chat.';
+  String get integrationsFooter => 'Conecta tus apps para ver datos y métricas en el chat.';
 
   @override
   String get completeAuthInBrowser => 'Por favor completa la autenticación en tu navegador.';
@@ -6822,7 +6822,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceIdLabel => 'Device ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Estado';
 
   @override
   String get statusProcessed => 'Processed';
@@ -7852,4 +7852,151 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get removeFilter => 'Eliminar Filtro';
+
+  @override
+  String get categoryConversationAnalysis => 'Análisis de conversaciones';
+
+  @override
+  String get categoryPersonalityClone => 'Clon de personalidad';
+
+  @override
+  String get categoryHealth => 'Salud';
+
+  @override
+  String get categoryEducation => 'Educación';
+
+  @override
+  String get categoryCommunication => 'Comunicación';
+
+  @override
+  String get categoryEmotionalSupport => 'Apoyo emocional';
+
+  @override
+  String get categoryProductivity => 'Productividad';
+
+  @override
+  String get categoryEntertainment => 'Entretenimiento';
+
+  @override
+  String get categoryFinancial => 'Finanzas';
+
+  @override
+  String get categoryTravel => 'Viajes';
+
+  @override
+  String get categorySafety => 'Seguridad';
+
+  @override
+  String get categoryShopping => 'Compras';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'Noticias';
+
+  @override
+  String get categoryUtilities => 'Utilidades';
+
+  @override
+  String get categoryOther => 'Otros';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversaciones';
+
+  @override
+  String get capabilityExternalIntegration => 'Integración externa';
+
+  @override
+  String get capabilityNotification => 'Notificación';
+
+  @override
+  String get triggerAudioBytes => 'Bytes de audio';
+
+  @override
+  String get triggerConversationCreation => 'Creación de conversación';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcripción procesada';
+
+  @override
+  String get actionCreateConversations => 'Crear conversaciones';
+
+  @override
+  String get actionCreateMemories => 'Crear recuerdos';
+
+  @override
+  String get actionReadConversations => 'Leer conversaciones';
+
+  @override
+  String get actionReadMemories => 'Leer recuerdos';
+
+  @override
+  String get actionReadTasks => 'Leer tareas';
+
+  @override
+  String get scopeUserName => 'Nombre de usuario';
+
+  @override
+  String get scopeUserFacts => 'Datos del usuario';
+
+  @override
+  String get scopeUserConversations => 'Conversaciones del usuario';
+
+  @override
+  String get scopeUserChat => 'Chat del usuario';
+
+  @override
+  String get capabilitySummary => 'Resumen';
+
+  @override
+  String get capabilityFeatured => 'Destacados';
+
+  @override
+  String get capabilityTasks => 'Tareas';
+
+  @override
+  String get capabilityIntegrations => 'Integraciones';
+
+  @override
+  String get categoryPersonalityClones => 'Clones de personalidad';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productividad y estilo de vida';
+
+  @override
+  String get categorySocialEntertainment => 'Social y entretenimiento';
+
+  @override
+  String get categoryProductivityTools => 'Herramientas de productividad';
+
+  @override
+  String get categoryPersonalWellness => 'Bienestar personal';
+
+  @override
+  String get rating => 'Valoración';
+
+  @override
+  String get categories => 'Categorías';
+
+  @override
+  String get sortBy => 'Ordenar';
+
+  @override
+  String get highestRating => 'Mayor valoración';
+
+  @override
+  String get lowestRating => 'Menor valoración';
+
+  @override
+  String get resetFilters => 'Restablecer filtros';
+
+  @override
+  String get applyFilters => 'Aplicar filtros';
+
+  @override
+  String get mostInstalls => 'Más instalaciones';
 }

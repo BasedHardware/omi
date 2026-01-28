@@ -426,7 +426,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
-  String get chatTools => 'Công cụ trò chuyện';
+  String get integrations => 'Tích hợp';
 
   @override
   String get feedbackBug => 'Phản hồi / Báo lỗi';
@@ -1021,7 +1021,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get comingSoon => 'Sắp ra mắt';
 
   @override
-  String get chatToolsFooter => 'Kết nối ứng dụng của bạn để xem dữ liệu và số liệu trong trò chuyện.';
+  String get integrationsFooter => 'Kết nối ứng dụng của bạn để xem dữ liệu và số liệu trong trò chuyện.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7840,4 +7840,151 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get removeFilter => 'Xóa bộ lọc';
+
+  @override
+  String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
+
+  @override
+  String get categoryPersonalityClone => 'Nhân bản tính cách';
+
+  @override
+  String get categoryHealth => 'Sức khỏe';
+
+  @override
+  String get categoryEducation => 'Giáo dục';
+
+  @override
+  String get categoryCommunication => 'Giao tiếp';
+
+  @override
+  String get categoryEmotionalSupport => 'Hỗ trợ cảm xúc';
+
+  @override
+  String get categoryProductivity => 'Năng suất';
+
+  @override
+  String get categoryEntertainment => 'Giải trí';
+
+  @override
+  String get categoryFinancial => 'Tài chính';
+
+  @override
+  String get categoryTravel => 'Du lịch';
+
+  @override
+  String get categorySafety => 'An toàn';
+
+  @override
+  String get categoryShopping => 'Mua sắm';
+
+  @override
+  String get categorySocial => 'Xã hội';
+
+  @override
+  String get categoryNews => 'Tin tức';
+
+  @override
+  String get categoryUtilities => 'Tiện ích';
+
+  @override
+  String get categoryOther => 'Khác';
+
+  @override
+  String get capabilityChat => 'Trò chuyện';
+
+  @override
+  String get capabilityConversations => 'Cuộc trò chuyện';
+
+  @override
+  String get capabilityExternalIntegration => 'Tích hợp bên ngoài';
+
+  @override
+  String get capabilityNotification => 'Thông báo';
+
+  @override
+  String get triggerAudioBytes => 'Byte âm thanh';
+
+  @override
+  String get triggerConversationCreation => 'Tạo cuộc trò chuyện';
+
+  @override
+  String get triggerTranscriptProcessed => 'Bản ghi đã xử lý';
+
+  @override
+  String get actionCreateConversations => 'Tạo cuộc trò chuyện';
+
+  @override
+  String get actionCreateMemories => 'Tạo ký ức';
+
+  @override
+  String get actionReadConversations => 'Đọc cuộc trò chuyện';
+
+  @override
+  String get actionReadMemories => 'Đọc ký ức';
+
+  @override
+  String get actionReadTasks => 'Đọc nhiệm vụ';
+
+  @override
+  String get scopeUserName => 'Tên người dùng';
+
+  @override
+  String get scopeUserFacts => 'Thông tin người dùng';
+
+  @override
+  String get scopeUserConversations => 'Cuộc trò chuyện của người dùng';
+
+  @override
+  String get scopeUserChat => 'Trò chuyện của người dùng';
+
+  @override
+  String get capabilitySummary => 'Tóm tắt';
+
+  @override
+  String get capabilityFeatured => 'Nổi bật';
+
+  @override
+  String get capabilityTasks => 'Nhiệm vụ';
+
+  @override
+  String get capabilityIntegrations => 'Tích hợp';
+
+  @override
+  String get categoryPersonalityClones => 'Nhân bản tính cách';
+
+  @override
+  String get categoryProductivityLifestyle => 'Năng suất & Phong cách sống';
+
+  @override
+  String get categorySocialEntertainment => 'Xã hội & Giải trí';
+
+  @override
+  String get categoryProductivityTools => 'Công cụ năng suất';
+
+  @override
+  String get categoryPersonalWellness => 'Sức khỏe cá nhân';
+
+  @override
+  String get rating => 'Đánh giá';
+
+  @override
+  String get categories => 'Danh mục';
+
+  @override
+  String get sortBy => 'Sắp xếp';
+
+  @override
+  String get highestRating => 'Đánh giá cao nhất';
+
+  @override
+  String get lowestRating => 'Đánh giá thấp nhất';
+
+  @override
+  String get resetFilters => 'Đặt lại bộ lọc';
+
+  @override
+  String get applyFilters => 'Áp dụng bộ lọc';
+
+  @override
+  String get mostInstalls => 'Nhiều lượt cài đặt nhất';
 }

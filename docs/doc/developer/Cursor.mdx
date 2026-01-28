@@ -1,0 +1,99 @@
+---
+title: "Cursor Configuration (.cursor)"
+description: "How Omi uses the .cursor folder (rules, skills, commands, and agents) to guide AI assistance in this repository."
+---
+
+## Overview
+
+This repo includes a `.cursor/` directory that configures Cursor + AI agents to work effectively across Omi’s codebase. It contains:
+
+- Rules that apply based on file patterns (backend/flutter/web/etc.)
+- Reusable “skills” and slash commands
+- Specialized agents (e.g. backend API, Flutter, firmware)
+- Internal reference docs for agents (not the same as the public `docs/` site)
+
+If you’re contributing to Omi and using Cursor, understanding `.cursor/` makes it much easier to add consistent automation and avoid common mistakes.
+
+---
+
+## `.cursor/` vs `docs/` (important)
+
+- **`docs/`** is the **single source of truth for user-facing documentation** and is what gets deployed to `docs.omi.me`.
+- **`.cursor/`** is **editor/agent configuration** intended to help contributors and AI tooling inside this repo.
+
+In other words: **we document `.cursor/` publicly here (so contributors can use it), but `.cursor/docs/` is not the public documentation site**.
+
+---
+
+## What’s inside `.cursor/`
+
+### Rules (`.cursor/rules/`)
+
+Rules are small, focused guidance files (typically `*.mdc`) that apply automatically based on globs (e.g. `backend/**/*.py`, `app/**/*.dart`, `web/**/*.ts(x)`).
+
+Typical rule topics:
+- **Architecture**: module boundaries + import hierarchy
+- **Testing & verification**: what to run before merging
+- **Style and conventions**: formatting, localization requirements, common mistakes
+
+### Skills (`.cursor/skills/`)
+
+Skills are reusable “playbooks” for recurring workflows. A skill folder typically contains:
+
+- `SKILL.md`: the skill’s instructions and checklists
+- `commands/`: slash commands (e.g. `/backend-test`, `/pr`)
+- `agents/`: specialized agents that focus on specific domains
+
+### Commands (`.cursor/commands/`)
+
+Legacy / general commands that show up in Cursor when you type `/`. (Many commands also live under `skills/*/commands/`.)
+
+### Agents (`.cursor/agents/`)
+
+Legacy / compatibility agent definitions. Most agents live under `skills/*/agents/`.
+
+### Internal agent docs (`.cursor/docs/`)
+
+Internal reference docs used by agents (architecture maps, component indexes, internal guidance).
+
+**Note**: These are for agent operation and contributor context, not for end users.
+
+### Hooks (`.cursor/hooks/` and `.cursor/hooks.json`)
+
+Optional hook scripts/config to observe and extend the agent loop. Useful for enforcing workflows, validation, and automation.
+
+### MCP config (`.cursor/mcp.json`)
+
+Configuration for MCP servers that provide external tools (e.g. browser testing, GitHub automation, Notion/Figma integration if enabled).
+
+---
+
+## Common contributor workflows
+
+### Add a new rule
+
+1. Add a focused rule file under `.cursor/rules/` (e.g. `backend-foo.mdc`)
+2. Ensure it targets the correct file glob(s)
+3. Keep it actionable: conventions + “how to verify”
+
+### Add a new skill
+
+1. Create `.cursor/skills/<skill-name>/SKILL.md`
+2. Put any related slash commands under `.cursor/skills/<skill-name>/commands/`
+3. Put any related agents under `.cursor/skills/<skill-name>/agents/`
+
+### Update public documentation
+
+If your change affects user-facing behavior or developer APIs:
+
+- Update `docs/` (public)
+- Add/adjust nav entries in `docs/docs.json` if you add a new page
+
+---
+
+## Safety & maintenance notes
+
+- **Don’t put secrets** (tokens, keys, credentials) in `.cursor/` files.
+- Keep rules **layer-aware** (e.g. don’t encourage importing from `routers/` inside `utils/`).
+- Prefer linking to **public docs in `docs/`** when something is user-facing, and keep `.cursor/docs/` for internal agent context.
+
