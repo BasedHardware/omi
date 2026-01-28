@@ -6,6 +6,8 @@ globs:
   - "omiGlass/**/*.c"
   - "omiGlass/**/*.h"
 alwaysApply: false
+references:
+  - docs/doc/developer/Protocol.mdx
 ---
 
 # Firmware Audio Codecs
@@ -232,3 +234,19 @@ typedef struct {
 - Firmware Architecture: `.cursor/rules/firmware-architecture.mdc`
 - Firmware BLE Service: `.cursor/rules/firmware-ble-service.mdc`
 - Protocol: `docs/doc/developer/Protocol.mdx`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/firmware-architecture.mdc` - Firmware system architecture
+- `.cursor/rules/firmware-ble-service.mdc` - BLE service for audio transmission
+- `.cursor/rules/flutter-ble-protocol.mdc` - Flutter codec handling
+
+### Skills
+- `.cursor/skills/omi-firmware-patterns/` - Firmware patterns including codecs
+
+### Subagents
+- `.cursor/agents/firmware-engineer/` - Firmware codec specialist
+
+### Commands
+- `/flutter-setup` - Setup firmware development environment

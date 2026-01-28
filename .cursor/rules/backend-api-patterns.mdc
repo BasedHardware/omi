@@ -3,6 +3,9 @@ description: "FastAPI router patterns endpoint conventions error handling authen
 globs:
   - "backend/routers/**/*.py"
 alwaysApply: false
+references:
+  - docs/doc/developer/api/overview.mdx
+  - .cursor/docs/API_REFERENCE.md
 ---
 
 # Backend API Patterns
@@ -14,12 +17,13 @@ alwaysApply: false
 ```python
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
+from utils.other import endpoints as auth
 
-router = APIRouter(prefix="/v1", tags=["conversations"])
+router = APIRouter()
 
-@router.post("/conversations")
+@router.post("/v1/conversations")
 async def create_conversation(
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
     # ... other parameters
 ):
     """Create or finalize a conversation."""
@@ -31,9 +35,9 @@ async def create_conversation(
 #### Standard CRUD Endpoints
 
 ```python
-@router.get("/resource")
+@router.get("/v1/resource")
 async def list_resources(
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
     limit: int = 25,
     offset: int = 0,
 ):
@@ -41,10 +45,10 @@ async def list_resources(
     items = await database.get_resources(uid, limit, offset)
     return {"items": items, "limit": limit, "offset": offset}
 
-@router.get("/resource/{resource_id}")
+@router.get("/v1/resource/{resource_id}")
 async def get_resource(
     resource_id: str,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get a specific resource."""
     resource = await database.get_resource(uid, resource_id)
@@ -52,20 +56,20 @@ async def get_resource(
         raise HTTPException(status_code=404, detail="Resource not found")
     return resource
 
-@router.post("/resource")
+@router.post("/v1/resource")
 async def create_resource(
     data: ResourceCreate,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a new resource."""
     resource = await database.create_resource(uid, data)
     return resource
 
-@router.put("/resource/{resource_id}")
+@router.put("/v1/resource/{resource_id}")
 async def update_resource(
     resource_id: str,
     data: ResourceUpdate,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Update a resource."""
     resource = await database.update_resource(uid, resource_id, data)
@@ -73,10 +77,10 @@ async def update_resource(
         raise HTTPException(status_code=404, detail="Resource not found")
     return resource
 
-@router.delete("/resource/{resource_id}")
+@router.delete("/v1/resource/{resource_id}")
 async def delete_resource(
     resource_id: str,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Delete a resource."""
     success = await database.delete_resource(uid, resource_id)
@@ -91,11 +95,11 @@ async def delete_resource(
 
 ```python
 from fastapi import Depends
-from utils.auth import get_current_user
+from utils.other import endpoints as auth
 
-@router.get("/protected")
+@router.get("/v1/protected")
 async def protected_endpoint(
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Endpoint requiring authentication."""
     # uid is the Firebase user ID
@@ -209,10 +213,10 @@ class ConversationCreate(BaseModel):
     transcript: str = Field(..., min_length=1)
     language: Optional[str] = "en"
 
-@router.post("/conversations")
+@router.post("/v1/conversations")
 async def create_conversation(
     data: ConversationCreate,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create conversation with validated data."""
     # data is already validated
@@ -240,7 +244,7 @@ async def rate_limited_endpoint():
 from typing import List
 from models.conversation import Conversation
 
-@router.get("/conversations", response_model=List[Conversation])
+@router.get("/v1/conversations", response_model=List[Conversation])
 async def list_conversations():
     """Return list of conversations with proper typing."""
     pass
@@ -260,12 +264,13 @@ async def list_conversations():
 ```python
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
+from utils.other import endpoints as auth
 
-router = APIRouter(prefix="/v1", tags=["memories"])
+router = APIRouter()
 
-@router.get("/memories")
+@router.get("/v1/memories")
 async def list_memories(
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
     limit: int = 25,
     offset: int = 0,
 ):
@@ -273,10 +278,10 @@ async def list_memories(
     # Implementation
     pass
 
-@router.post("/memories")
+@router.post("/v1/memories")
 async def create_memory(
     data: MemoryCreate,
-    uid: str = Depends(get_current_user),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a memory."""
     # Implementation
@@ -295,6 +300,32 @@ async def create_memory(
 
 ## Related Documentation
 
-- API Reference: `.cursor/API_REFERENCE.md`
-- Backend Components: `.cursor/BACKEND_COMPONENTS.md`
-- Backend Architecture: `.cursor/rules/backend-architecture.mdc`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **API Overview**: `docs/doc/developer/api/overview.mdx` - [View online](https://docs.omi.me/doc/developer/api/overview)
+- **API Endpoints**: `docs/api-reference/` - [View online](https://docs.omi.me/api-reference/)
+- **Memories API**: `docs/doc/developer/api/memories.mdx` - [View online](https://docs.omi.me/doc/developer/api/memories)
+- **Conversations API**: `docs/doc/developer/api/conversations.mdx` - [View online](https://docs.omi.me/doc/developer/api/conversations)
+- **Action Items API**: `docs/doc/developer/api/action-items.mdx` - [View online](https://docs.omi.me/doc/developer/api/action-items)
+- **Backend Architecture**: `.cursor/rules/backend-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - System architecture and module hierarchy
+- `.cursor/rules/backend-database-patterns.mdc` - Database access patterns
+- `.cursor/rules/backend-llm-patterns.mdc` - LLM integration for chat endpoints
+- `.cursor/rules/backend-testing.mdc` - Testing API endpoints
+- `.cursor/rules/backend-imports.mdc` - Import rules for routers
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns and workflows
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - FastAPI router development specialist
+
+### Commands
+- `/backend-setup` - Setup backend environment
+- `/backend-test` - Test API endpoints
+- `/update-api-docs` - Update API reference documentation

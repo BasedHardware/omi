@@ -3,6 +3,9 @@ description: "Flutter Dart app structure state management Provider pattern widge
 globs:
   - "app/**/*.dart"
 alwaysApply: false
+references:
+  - docs/doc/developer/AppSetup.mdx
+  - docs/doc/developer/Protocol.mdx
 ---
 
 # Flutter Architecture
@@ -246,6 +249,27 @@ try {
 
 ## Related Documentation
 
-- Flutter Components: `.cursor/FLUTTER_COMPONENTS.md`
-- Flutter Localization: `.cursor/rules/flutter-localization.mdc`
-- App Setup: `docs/doc/developer/AppSetup.mdx`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **App Setup**: `docs/doc/developer/AppSetup.mdx` - [View online](https://docs.omi.me/doc/developer/AppSetup)
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **Flutter Localization**: `.cursor/rules/flutter-localization.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-backend-integration.mdc` - Backend API integration
+- `.cursor/rules/flutter-ble-protocol.mdc` - BLE device communication
+- `.cursor/rules/flutter-localization.mdc` - Localization requirements
+- `.cursor/rules/flutter-platform-specific.mdc` - Platform-specific code
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns and workflows
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter app development specialist
+
+### Commands
+- `/flutter-setup` - Setup Flutter environment
+- `/flutter-test` - Run Flutter tests
+- `/flutter-build` - Build Flutter app

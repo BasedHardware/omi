@@ -4,6 +4,12 @@ globs:
   - "plugins/**/*.py"
   - "plugins/**/*.js"
 alwaysApply: false
+references:
+  - docs/doc/developer/apps/Introduction.mdx
+  - docs/doc/developer/apps/Integrations.mdx
+  - docs/doc/developer/apps/ChatTools.mdx
+  - plugins/README.md
+  - docs/doc/developer/apps/Oauth.mdx
 ---
 
 # Plugin Development
@@ -212,3 +218,21 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
 - Integrations: `docs/doc/developer/apps/Integrations.mdx`
 - Chat Tools: `docs/doc/developer/apps/ChatTools.mdx`
 - OAuth: `docs/doc/developer/apps/Oauth.mdx`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/plugin-apps-js.mdc` - JavaScript plugin patterns
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API patterns
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture
+
+### Skills
+- `.cursor/skills/omi-plugin-development/` - Plugin development workflows
+- `.cursor/skills/omi-api-integration/` - API integration patterns
+
+### Subagents
+- `.cursor/agents/plugin-developer/` - Plugin development specialist
+
+### Commands
+- `/create-plugin` - Scaffold new plugin structure
+- `/create-app` - Scaffold new Omi app

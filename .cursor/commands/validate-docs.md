@@ -54,3 +54,12 @@ Validate documentation for broken links, formatting errors, and consistency issu
 ## Related Documentation
 
 - Documentation Standards: `.cursor/rules/documentation-standards.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/documentation-standards.mdc` - Documentation standards
+
+### Commands
+- `/docs` - Generate documentation
+- `/update-api-docs` - Update API documentation

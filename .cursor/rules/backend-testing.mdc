@@ -4,6 +4,9 @@ globs:
   - "backend/tests/**/*.py"
   - "backend/**/*test*.py"
 alwaysApply: false
+references:
+  - backend/README.md
+  - backend/tests/integration/README.md
 ---
 
 # Backend Testing Patterns
@@ -278,5 +281,27 @@ python -m pytest tests/ -v --cov=. --cov-report=term-missing
 
 ## Related Documentation
 
-- Testing: `.cursor/rules/testing.mdc`
-- Backend Components: `.cursor/BACKEND_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Backend Deep Dive**: `docs/doc/developer/backend/backend_deepdive.mdx` - [View online](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- **Testing**: `.cursor/rules/testing.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/testing.mdc` - General testing guidelines
+- `.cursor/rules/backend-architecture.mdc` - System architecture
+- `.cursor/rules/backend-api-patterns.mdc` - API endpoint patterns
+- `.cursor/rules/backend-database-patterns.mdc` - Database testing patterns
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including testing
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Can help with API testing
+- `.cursor/agents/backend-database-engineer/` - Can help with database testing
+
+### Commands
+- `/backend-test` - Run backend tests
+- `/run-tests-and-fix` - Run tests and fix failures
+- `/test-integration` - Run integration tests

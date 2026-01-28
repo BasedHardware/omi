@@ -3,6 +3,10 @@ description: "Firestore Pinecone Redis GCS database patterns storage operations 
 globs:
   - "backend/database/**/*.py"
 alwaysApply: false
+references:
+  - docs/doc/developer/backend/StoringConversations.mdx
+  - docs/doc/developer/backend/backend_deepdive.mdx
+  - backend/README.md
 ---
 
 # Backend Database Patterns
@@ -290,6 +294,26 @@ except Exception as e:
 
 ## Related Documentation
 
-- Backend Components: `.cursor/BACKEND_COMPONENTS.md`
-- Storing Conversations: `docs/doc/developer/backend/StoringConversations.mdx`
-- Backend Architecture: `.cursor/rules/backend-architecture.mdc`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Storing Conversations**: `docs/doc/developer/backend/StoringConversations.mdx` - [View online](https://docs.omi.me/doc/developer/backend/StoringConversations)
+- **Backend Deep Dive**: `docs/doc/developer/backend/backend_deepdive.mdx` - [View online](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- **Backend Architecture**: `.cursor/rules/backend-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - System architecture and module hierarchy
+- `.cursor/rules/backend-api-patterns.mdc` - API endpoint patterns
+- `.cursor/rules/backend-llm-patterns.mdc` - LLM patterns for memory extraction
+- `.cursor/rules/backend-imports.mdc` - Import rules for database modules
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including database operations
+
+### Subagents
+- `.cursor/agents/backend-database-engineer/` - Database optimization specialist
+
+### Commands
+- `/backend-setup` - Setup database connections
+- `/backend-test` - Test database operations
