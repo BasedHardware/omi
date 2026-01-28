@@ -19,6 +19,8 @@
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
+		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
+		42BABFB92F2A81B100E78A3C /* PhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
@@ -27,12 +29,12 @@
 		9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */; };
 		AB12345678901234567890AB /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		AB12345678901234567890AC /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
-		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
 		B017E73914CFF7C22190E0C3 /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		C6DD8F6A334A31116A75C4EE /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
 		CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
 		CF0FE6152D61FDC10072C10D /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
+		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
@@ -98,6 +100,8 @@
 		426B89AC2C46919D00E24442 /* Config */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Config; sourceTree = "<group>"; };
 		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
+		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
+		42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneCallsPlugin.swift; sourceTree = "<group>"; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
 		5F7FD4162BF1232500923839 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
@@ -125,7 +129,6 @@
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CE /* AppleHealthService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleHealthService.swift; sourceTree = "<group>"; };
-		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
 		D75F0E14BC0E70ACCB7823C4 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
@@ -135,6 +138,7 @@
 		E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
+		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -244,6 +248,8 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */,
+				42BABFB72F2A81B100E78A3C /* PhoneCallsPlugin.swift */,
 				4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */,
 				422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */,
 				5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */,
@@ -516,6 +522,8 @@
 				AB12345678901234567890AC /* AppleHealthService.swift in Sources */,
 				EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */,
 				422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */,
+				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
+				42BABFB92F2A81B100E78A3C /* PhoneCallsPlugin.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 			);
@@ -526,7 +534,6 @@
 /* Begin PBXTargetDependency section */
 		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = iphoneos;
 			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
 			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
 		};
@@ -734,6 +741,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -760,8 +768,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Profile;
@@ -1287,6 +1293,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1323,8 +1330,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 			};
 			name = "Debug-prod";
 		};
@@ -1571,6 +1576,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1597,7 +1603,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -1710,6 +1715,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1739,7 +1745,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-dev";
@@ -1781,6 +1786,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1810,7 +1816,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-prod";
@@ -1852,6 +1857,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1888,7 +1894,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 			};
 			name = "Debug-dev";
 		};
