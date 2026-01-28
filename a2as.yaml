@@ -1,0 +1,742 @@
+manifest:
+  version: "0.1.2"
+  schema: https://a2as.org/cert/schema
+  subject:
+    name: basedhardware/omi
+    source: https://github.com/basedhardware/omi
+    branch: main
+    commit: "9b357690"
+    scope: [backend/utils/agent.py, backend/utils/llm/clients.py, mcp/src/mcp_server_omi/server.py]
+  issued:
+    by: A2AS.org
+    at: '2026-01-26T16:10:35Z'
+  signatures:
+    digest: sha256:pDNrWUi-kkvk6d4P8p3tnjE09ktAi3hmFxDEAfwbFaQ
+    key: ed25519:apRiOre04JgxFLmgZ3zD6d1Dd-Yg_xOl556T2f4Qw0A
+    sig: ed25519:Imf2XnpqgAeYAl6sEzzdzYHGiuboti5QcsurWW8h0RMDY4_SJ7-6dKyE_td5EN8N0On3CdQLZTZEzaqkl6c3Dw
+
+agents:
+  docs_agent:
+    type: instance
+    models: [o4-mini]
+    params:
+      function: run
+      name: Omi Documentation Agent
+      instructions: [omi_documentation_prompt]
+  omi_agent:
+    type: instance
+    models: [o4-mini]
+    tools: [docs_agent]
+    mcp: [server]
+    params:
+      function: run
+      name: Omi Agent
+      model_settings: ModelSettings(reasoning=Reasoning(effort=high))
+      instructions: ['You are a helpful assistant that answers questions from the user {uid}, using the tools you were provided.']
+
+models:
+  o4-mini:
+    type: literal
+    agents: [docs_agent, omi_agent]
+
+tools:
+  docs_agent:
+    type: agent
+    agents: [omi_agent]
+    params:
+      alias: docs_agent.as_tool
+      tool_description: Answer user questions from the Omi documentation.
+
+mcp:
+  mcp_server:
+    type: process
+    params:
+      dynamic: "True"
+  server.0:
+    type: process
+    params:
+      class: MCPServerStdio
+      cache_tools_list: "True"
+      command: uvx
+      args: [mcp-server-omi, -v]
+      instance: server
+  server.1:
+    type: process
+    params:
+      class: MCPServerStdio
+      cache_tools_list: "True"
+      command: uvx
+      args: [mcp-server-omi]
+      instance: server
+      function: send_single_message
+  server.2:
+    type: process
+    params:
+      class: MCPServerStdio
+      cache_tools_list: "True"
+      command: uvx
+      args: [mcp-server-omi, -v]
+      instance: server
+      function: interactive_chat_stream
+
+imports:
+  action_items_db: database.action_items
+  ActionItem: models.conversation.ActionItem
+  ActionItemsExtraction: models.conversation.ActionItemsExtraction
+  add_filter_category_item: database.redis_db.add_filter_category_item
+  Agent: agents.Agent
+  ai_product_options: models.trend.ai_product_options
+  AIMessage: langchain.schema.AIMessage
+  Any: typing.Any
+  App: models.app.App
+  as_completed: concurrent.futures.as_completed
+  AsyncGenerator: typing.AsyncGenerator
+  asyncio: asyncio
+  AsyncStreamingCallback: utils.retrieval.graph.AsyncStreamingCallback
+  base64: base64
+  BaseModel: pydantic.BaseModel
+  CalendarMeetingContext: models.conversation.CalendarMeetingContext
+  CategoryEnum: models.conversation.CategoryEnum
+  ceo_options: models.trend.ceo_options
+  chat_db: database.chat
+  ChatOpenAI: langchain_openai.ChatOpenAI
+  ChatPromptTemplate: langchain_core.prompts.ChatPromptTemplate
+  ChatSession: models.chat.ChatSession
+  click: click
+  company_options: models.trend.company_options
+  Conversation: models.conversation.Conversation
+  ConversationPhoto: models.conversation.ConversationPhoto
+  conversations_db: database.conversations
+  datetime: datetime.datetime
+  Dict: typing.Dict
+  Enum: enum.Enum
+  Event: models.conversation.Event
+  extract_learnings_prompt: utils.prompts.extract_learnings_prompt
+  extract_memories_prompt: utils.prompts.extract_memories_prompt
+  extract_memories_text_content_prompt: utils.prompts.extract_memories_text_content_prompt
+  Field: pydantic.Field
+  get_agentic_system_prompt_template: utils.observability.langsmith_prompts.get_agentic_system_prompt_template
+  get_memories: database.memories.get_memories
+  get_prompt_memories: utils.llms.memory.get_prompt_memories
+  get_user_name: database.auth.get_user_name
+  goals_db: database.goals
+  hardware_product_options: models.trend.hardware_product_options
+  httpx: httpx
+  HumanMessage: langchain.schema.HumanMessage
+  json: json
+  kg_db: database.knowledge_graph
+  List: typing.List
+  llm_high: clients.llm_high
+  llm_medium: utils.llm.clients.llm_medium
+  llm_medium_experiment: clients.llm_medium_experiment
+  llm_medium_stream: clients.llm_medium_stream
+  llm_mini: utils.llm.clients.llm_mini
+  llm_mini_stream: clients.llm_mini_stream
+  llm_persona_medium_stream: clients.llm_persona_medium_stream
+  llm_persona_mini_stream: clients.llm_persona_mini_stream
+  logging: logging
+  MCPServer: agents.mcp.MCPServer
+  MCPServerStdio: agents.mcp.MCPServerStdio
+  memories_db: database.memories
+  Memory: models.memories.Memory
+  MemoryCategory: models.memories.MemoryCategory
+  Message: models.chat.Message
+  MessageSender: models.chat.MessageSender
+  MessageType: models.chat.MessageType
+  ModelSettings: agents.ModelSettings
+  notification_db: database.notifications
+  OpenAI: openai.OpenAI
+  OpenAIEmbeddings: langchain_openai.OpenAIEmbeddings
+  Optional: typing.Optional
+  os: os
+  PageContext: models.chat.PageContext
+  parser: clients.parser
+  Person: models.other.Person
+  PydanticOutputParser: langchain_core.output_parsers.PydanticOutputParser
+  pytz: pytz
+  random: random
+  re: re
+  Reasoning: agents.model_settings.Reasoning
+  render_prompt: utils.observability.langsmith_prompts.render_prompt
+  requests: requests
+  ResponseTextDeltaEvent: openai.types.responses.ResponseTextDeltaEvent
+  Runner: agents.Runner
+  serve: server.serve
+  Server: mcp.server.Server
+  software_product_options: models.trend.software_product_options
+  stdio_server: mcp.server.stdio.stdio_server
+  Structured: models.conversation.Structured
+  sys: sys
+  SystemMessage: langchain.schema.SystemMessage
+  TextContent: mcp.types.TextContent
+  threading: threading
+  ThreadPoolExecutor: concurrent.futures.ThreadPoolExecutor
+  tiktoken: tiktoken
+  timedelta: datetime.timedelta
+  timezone: datetime.timezone
+  Tool: mcp.types.Tool
+  trace: agents.trace
+  traceback: traceback
+  TranscriptSegment: models.transcript_segment.TranscriptSegment
+  TrendEnum: models.trend.TrendEnum
+  TrendType: models.trend.TrendType
+  Tuple: typing.Tuple
+  users_db: database.users
+  uuid: uuid
+  ValidationError: pydantic.ValidationError
+  vector_search: database.vector_db.query_vectors
+  ZoneInfo: zoneinfo.ZoneInfo
+
+functions:
+  _get_agentic_qa_prompt:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, app, messages, context]
+    params:
+      returns: str
+  _get_agentic_qa_prompt_fallback:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [variables]
+    params:
+      returns: str
+  _get_answer_omi_question_prompt:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [messages, context]
+    params:
+      returns: str
+  _get_answer_simple_message_prompt:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, messages, app]
+    params:
+      returns: str
+  _get_goal_context:
+    type: sync
+    module: backend.utils.llm.goals
+    args: [uid, goal_title]
+    params:
+      returns: Dict
+  _get_qa_rag_prompt:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, question, context, plugin, cited, messages, tz]
+    params:
+      returns: str
+  _process_extracted_metadata:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, prompt]
+    params:
+      returns: dict
+  answer_omi_question:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [messages, context]
+    params:
+      returns: str
+  answer_omi_question_stream:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [messages, context, callbacks]
+    params:
+      returns: str
+  answer_persona_question_stream:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [app, messages, callbacks]
+    params:
+      returns: str
+  answer_simple_message:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, messages, plugin]
+    params:
+      returns: str
+  answer_simple_message_stream:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, messages, plugin, callbacks]
+    params:
+      returns: str
+  assign_conversation_to_folder:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [title, overview, category, user_folders]
+    params:
+      returns: Tuple
+  build_folders_context:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [folders]
+    params:
+      returns: str
+  call_tool:
+    type: async
+    module: mcp.src.mcp_server_omi.server
+    args: [name, arguments]
+    params:
+      returns: list[TextContent]
+  chunk_extraction:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [segments, topics, people]
+    params:
+      returns: str
+  condense_conversations:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [conversations]
+  condense_memories:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [memories, name]
+  condense_tweets:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [tweets, name]
+  create_memory:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [api_key, content, category]
+    params:
+      returns: dict
+  delete_memory:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [api_key, memory_id]
+    params:
+      returns: dict
+  describe_image:
+    type: async
+    module: backend.utils.llm.openglass
+    args: [base64_data]
+    params:
+      returns: str
+  download_image_from_url:
+    type: async
+    module: backend.utils.llm.app_generator
+    args: [url]
+    params:
+      returns: bytes
+  edit_memory:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [api_key, memory_id, content]
+    params:
+      returns: dict
+  execute_agent_chat_stream:
+    type: async
+    module: backend.utils.agent
+    args: [uid, messages, app, cited, callback_data, chat_session]
+    params:
+      returns: AsyncGenerator
+  extract_action_items:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context]
+    params:
+      returns: List[ActionItem]
+  extract_and_update_goal_progress:
+    type: sync
+    module: backend.utils.llm.goals
+    args: [uid, text]
+    params:
+      returns: Optional[Dict]
+  extract_knowledge_from_memory:
+    type: sync
+    module: backend.utils.llm.knowledge_graph
+    args: [uid, memory_content, memory_id, user_name]
+    params:
+      returns: Dict
+  extract_memories_from_text:
+    type: sync
+    module: backend.utils.llm.memories
+    args: [uid, text, text_source, user_name, memories_str]
+    params:
+      returns: List[Memory]
+  extract_question_from_conversation:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [messages]
+    params:
+      returns: str
+  extract_question_from_transcript:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, segments]
+    params:
+      returns: str
+  followup_question_prompt:
+    type: sync
+    module: backend.utils.llm.followup
+    args: [segments, people]
+  generate_app_from_prompt:
+    type: async
+    module: backend.utils.llm.app_generator
+    args: [user_prompt]
+    params:
+      returns: GeneratedAppData
+  generate_app_icon:
+    type: async
+    module: backend.utils.llm.app_generator
+    args: [app_name, app_description, category]
+    params:
+      returns: bytes
+  generate_comprehensive_daily_summary:
+    type: sync
+    module: backend.utils.llm.external_integrations
+    args: [uid, conversations, date_str, start_date_utc, end_date_utc]
+    params:
+      returns: dict
+  generate_credit_limit_notification:
+    type: async
+    module: backend.utils.llm.notifications
+    args: [uid, name]
+    params:
+      returns: Tuple
+  generate_description:
+    type: sync
+    module: backend.utils.llm.app_generator
+    args: [app_name, description]
+    params:
+      returns: str
+  generate_description_and_emoji:
+    type: sync
+    module: backend.utils.llm.app_generator
+    args: [app_name, prompt]
+    params:
+      returns: dict
+  generate_embedding:
+    type: sync
+    module: backend.utils.llm.clients
+    args: [content]
+    params:
+      returns: List[float]
+  generate_notification_message:
+    type: async
+    module: backend.utils.llm.notifications
+    args: [uid, name, plan_type]
+    params:
+      returns: Tuple
+  generate_persona_description:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [memories, name]
+  generate_persona_intro_message:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [prompt, name]
+  generate_silent_user_notification:
+    type: sync
+    module: backend.utils.llm.notifications
+    args: [name]
+    params:
+      returns: Tuple
+  generate_summary_with_prompt:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [conversation_text, prompt, language_code]
+    params:
+      returns: str
+  generate_twitter_persona_prompt:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [tweets, name]
+  get_app_result:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [transcript, photos, app, language_code]
+    params:
+      returns: str
+  get_conversation_by_id:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [api_key, conversation_id]
+    params:
+      returns: dict
+  get_conversation_summary:
+    type: sync
+    module: backend.utils.llm.external_integrations
+    args: [uid, memories]
+    params:
+      returns: str
+  get_conversations:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [logger, api_key, start_date, end_date, categories, limit, offset]
+    params:
+      returns: List
+  get_convo_id:
+    type: sync
+    module: backend.utils.llm.external_integrations
+    args: [num]
+  get_goal_advice:
+    type: sync
+    module: backend.utils.llm.goals
+    args: [uid, goal_id]
+    params:
+      returns: str
+  get_memories:
+    type: sync
+    module: mcp.src.mcp_server_omi.server
+    args: [logger, api_key, offset, limit, categories]
+    params:
+      returns: List
+  get_message_structure:
+    type: sync
+    module: backend.utils.llm.external_integrations
+    args: [text, started_at, language_code, tz, text_source_spec]
+    params:
+      returns: Structured
+  get_proactive_message:
+    type: sync
+    module: backend.utils.llm.proactive_notification
+    args: [uid, plugin_prompt, params, context, chat_messages]
+    params:
+      returns: str
+  get_relevant_memories:
+    type: async
+    module: backend.utils.llm.notifications
+    args: [uid, limit]
+    params:
+      returns: List[dict]
+  get_reprocess_transcript_structure:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [transcript, started_at, language_code, tz, title, photos, existing_action_items]
+    params:
+      returns: Structured
+  get_suggested_apps_for_conversation:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [conversation, apps]
+    params:
+      returns: Tuple
+  get_transcript_structure:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context]
+    params:
+      returns: Structured
+  identify_category_for_memory:
+    type: sync
+    module: backend.utils.llm.memories
+    args: [memory]
+    params:
+      returns: MemoryCategory
+  initial_chat_message:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, plugin, prev_messages_str]
+    params:
+      returns: str
+  initial_persona_chat_message:
+    type: sync
+    module: backend.utils.llm.persona
+    args: [uid, app, messages]
+    params:
+      returns: str
+  interactive_chat_stream:
+    type: async
+    module: backend.utils.agent
+  list_tools:
+    type: async
+    module: mcp.src.mcp_server_omi.server
+    params:
+      returns: list[Tool]
+  main:
+    type: sync
+    module: mcp.src.mcp_server_omi
+    args: [verbose]
+    params:
+      returns: None
+  new_learnings_extractor:
+    type: sync
+    module: backend.utils.llm.memories
+    args: [uid, segments, user_name, learnings_str]
+    params:
+      returns: List[Memory]
+  new_memories_extractor:
+    type: sync
+    module: backend.utils.llm.memories
+    args: [uid, segments, user_name, memories_str]
+    params:
+      returns: List[Memory]
+  normalize_filter:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [value]
+    params:
+      returns: str
+  num_tokens_from_string:
+    type: sync
+    module: backend.utils.llm.clients
+    args: [string]
+    params:
+      returns: int
+  obtain_emotional_message:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, memory, context, emotion]
+    params:
+      returns: str
+  process_memory:
+    type: sync
+    module: backend.utils.llm.knowledge_graph
+    args: [memory]
+  provide_advice_message:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, segments, context]
+    params:
+      returns: str
+  qa_rag:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, question, context, plugin, cited, messages, tz]
+    params:
+      returns: str
+  qa_rag_stream:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, question, context, plugin, cited, messages, tz, callbacks]
+    params:
+      returns: str
+  rebuild_knowledge_graph:
+    type: sync
+    module: backend.utils.llm.knowledge_graph
+    args: [uid, memories, user_name]
+    params:
+      returns: Dict
+  requires_context:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [question]
+    params:
+      returns: bool
+  resolve_memory_conflict:
+    type: sync
+    module: backend.utils.llm.memories
+    args: [new_memory, similar_memories]
+    params:
+      returns: MemoryResolution
+  retrieve_context_dates_by_question:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [question, tz]
+    params:
+      returns: List[datetime]
+  retrieve_is_an_omi_question:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [question]
+    params:
+      returns: bool
+  retrieve_is_file_question:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [question]
+    params:
+      returns: bool
+  retrieve_memory_context_params:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, memory]
+    params:
+      returns: List[str]
+  retrieve_metadata_fields_from_transcript:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, created_at, transcript_segment, tz, photos]
+    params:
+      returns: ExtractedInformation
+  retrieve_metadata_from_message:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, created_at, message_text, tz, source_spec]
+    params:
+      returns: ExtractedInformation
+  retrieve_metadata_from_text:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [uid, created_at, text, tz, source_spec]
+    params:
+      returns: ExtractedInformation
+  run:
+    type: async
+    module: backend.utils.agent
+    args: [mcp_server, uid, messages, respond, plugin, stream_callback]
+  select_best_app_for_conversation:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [conversation, apps]
+    params:
+      returns: Optional[App]
+  select_structured_filters:
+    type: sync
+    module: backend.utils.llm.chat
+    args: [question, filters_available]
+    params:
+      returns: dict
+  send_single_message:
+    type: async
+    module: backend.utils.agent
+  serve:
+    type: async
+    module: mcp.src.mcp_server_omi.server
+    args: [uid]
+    params:
+      returns: None
+  should_discard_conversation:
+    type: sync
+    module: backend.utils.llm.conversation_processing
+    args: [transcript, photos]
+    params:
+      returns: bool
+  suggest_goal:
+    type: sync
+    module: backend.utils.llm.goals
+    args: [uid]
+    params:
+      returns: Dict
+  summarize_experience_text:
+    type: sync
+    module: backend.utils.llm.external_integrations
+    args: [text, text_source_spec]
+    params:
+      returns: Structured
+  trends_extractor:
+    type: sync
+    module: backend.utils.llm.trends
+    args: [uid, memory]
+    params:
+      returns: List[Item]
+
+variables:
+  OMI_API_BASE_URL:
+    type: env
+    params:
+      caller: [os.getenv]
+      path: [mcp.src.mcp_server_omi.server]
+  OMI_API_KEY:
+    type: env
+    params:
+      caller: [os.getenv]
+      path: [mcp.src.mcp_server_omi.server]
+  OPENROUTER_API_KEY:
+    type: env
+    params:
+      caller: [os.environ.get, ChatOpenAI]
+      path: [backend.utils.llm.clients]
+
+networks:
+  openrouter.ai:
+    type: api
+    actions: [GET]
+    urls: [/api/v1]
+    protocols: [https]
+    ports: ["443"]
+    params:
+      links: [base_url]
