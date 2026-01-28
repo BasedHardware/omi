@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/speech_profile.dart';
@@ -156,6 +158,55 @@ class HomeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Auto-detect device language and return matching language code from availableLanguages.
+  /// Returns null if no matching language is found.
+  ///
+  /// This method is static and accepts parameters for testability.
+  static String? getDeviceLanguageCodeFromLocale(Locale locale, Map<String, String> languages) {
+    try {
+      // Get language code and country code from Locale object
+      final languageCode = locale.languageCode.toLowerCase();
+      final countryCode = locale.countryCode;
+      final fullCode = countryCode != null ? '$languageCode-${countryCode.toUpperCase()}' : languageCode;
+
+      // First try exact match with full locale (e.g., "en-US", "pt-BR")
+      for (final entry in languages.entries) {
+        if (entry.value.toLowerCase() == fullCode.toLowerCase()) {
+          return entry.value;
+        }
+      }
+
+      // Then try matching by base language code (e.g., "en" matches "en", "ja" matches "ja")
+      for (final entry in languages.entries) {
+        final availableCode = entry.value.toLowerCase();
+        // Split on both '-' and '_' for compatibility
+        final availableBase = availableCode.split(RegExp(r'[-_]')).first;
+        if (availableCode == languageCode || availableBase == languageCode) {
+          return entry.value;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      Logger.debug('Error detecting device language: $e');
+      return null;
+    }
+  }
+
+  /// Auto-detect device language using platform locale.
+  /// Uses PlatformDispatcher for cross-platform compatibility (including web).
+  String? _getDeviceLanguageCode() {
+    final locale = PlatformDispatcher.instance.locale;
+    Logger.debug('Device locale: ${locale.toLanguageTag()}, language: ${locale.languageCode}');
+    final result = getDeviceLanguageCodeFromLocale(locale, availableLanguages);
+    if (result != null) {
+      Logger.debug('Match found: $result');
+    } else {
+      Logger.debug('No matching language found for device locale: ${locale.toLanguageTag()}');
+    }
+    return result;
+  }
+
   Future<void> setupUserPrimaryLanguage() async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
@@ -164,11 +215,22 @@ class HomeProvider extends ChangeNotifier {
     try {
       final language = await getUserPrimaryLanguage();
       if (language == null) {
-        // User hasn't set a primary language yet
+        // User hasn't set a primary language yet - auto-detect from device
+        final deviceLanguage = _getDeviceLanguageCode();
+
+        if (deviceLanguage != null) {
+          // Auto-set the device language as the primary language
+          Logger.debug('Auto-setting primary language from device: $deviceLanguage');
+          final success = await updateUserPrimaryLanguage(deviceLanguage);
+          if (success) {
+            Logger.debug('Successfully auto-set primary language: $deviceLanguage');
+            return;
+          }
+        }
+
+        // Fallback: If auto-detection failed or API call failed, show dialog
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
-
-        // Show language dialog after a short delay to ensure UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
           if (MyApp.navigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(MyApp.navigatorKey.currentContext!);
