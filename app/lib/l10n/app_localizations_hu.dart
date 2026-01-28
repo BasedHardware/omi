@@ -452,7 +452,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appAndDeviceCopied => 'Alkalmazás és eszköz részletei másolva';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 összefoglaló';
 
   @override
   String get yourPrivacyYourControl => 'Adatvédelem, saját ellenőrzésed alatt';
@@ -6849,7 +6849,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceIdLabel => 'Eszköz azonosító';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Állapot';
 
   @override
   String get statusProcessed => 'Processed';
@@ -7877,125 +7877,149 @@ class AppLocalizationsHu extends AppLocalizations {
   String get removeFilter => 'Szűrő Eltávolítása';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Beszélgetéselemzés';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Személyiségklón';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Egészség';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Oktatás';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Kommunikáció';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Érzelmi támogatás';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Termelékenység';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Szórakozás';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Pénzügyek';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Utazás';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Biztonság';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Vásárlás';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Közösségi';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Hírek';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Eszközök';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Egyéb';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Beszélgetések';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Külső integráció';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Értesítés';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Hang bájtok';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Beszélgetés létrehozása';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Átirat feldolgozva';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Beszélgetések létrehozása';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Emlékek létrehozása';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Beszélgetések olvasása';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Emlékek olvasása';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Feladatok olvasása';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Felhasználónév';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Felhasználói adatok';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Felhasználói beszélgetések';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Felhasználói chat';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Összefoglaló';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Kiemelt';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Feladatok';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrációk';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Személyiségklónok';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Termelékenység és életmód';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Közösségi és szórakozás';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Termelékenységi eszközök';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Személyes jólét';
+
+  @override
+  String get rating => 'Értékelés';
+
+  @override
+  String get categories => 'Kategóriák';
+
+  @override
+  String get sortBy => 'Rendezés';
+
+  @override
+  String get highestRating => 'Legmagasabb értékelés';
+
+  @override
+  String get lowestRating => 'Legalacsonyabb értékelés';
+
+  @override
+  String get resetFilters => 'Szűrők visszaállítása';
+
+  @override
+  String get applyFilters => 'Szűrők alkalmazása';
+
+  @override
+  String get mostInstalls => 'Legtöbb telepítés';
 }

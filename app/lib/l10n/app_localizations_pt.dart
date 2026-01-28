@@ -582,7 +582,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get starOngoing => 'Favoritar conversa atual';
 
   @override
-  String get off => 'Off';
+  String get off => 'Desligado';
 
   @override
   String get max => 'Máx';
@@ -6810,7 +6810,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceIdLabel => 'ID do Dispositivo';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Estado';
 
   @override
   String get statusProcessed => 'Processado';
@@ -7840,125 +7840,149 @@ class AppLocalizationsPt extends AppLocalizations {
   String get removeFilter => 'Remover Filtro';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Análise de conversas';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Clone de personalidade';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Saúde';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Educação';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Comunicação';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Apoio emocional';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produtividade';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Entretenimento';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Finanças';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Viagens';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Segurança';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Compras';
 
   @override
   String get categorySocial => 'Social';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Notícias';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Utilitários';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Outros';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Conversas';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Integração externa';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Notificação';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Bytes de áudio';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Criação de conversa';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transcrição processada';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Criar conversas';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Criar memórias';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Ler conversas';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Ler memórias';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Ler tarefas';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Nome de usuário';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Dados do usuário';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Conversas do usuário';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Chat do usuário';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Resumo';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Destaque';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Tarefas';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrações';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Clones de personalidade';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produtividade e estilo de vida';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Social e entretenimento';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Ferramentas de produtividade';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Bem-estar pessoal';
+
+  @override
+  String get rating => 'Avaliação';
+
+  @override
+  String get categories => 'Categorias';
+
+  @override
+  String get sortBy => 'Ordenar';
+
+  @override
+  String get highestRating => 'Maior avaliação';
+
+  @override
+  String get lowestRating => 'Menor avaliação';
+
+  @override
+  String get resetFilters => 'Redefinir filtros';
+
+  @override
+  String get applyFilters => 'Aplicar filtros';
+
+  @override
+  String get mostInstalls => 'Mais instalações';
 }

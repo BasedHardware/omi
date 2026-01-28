@@ -7802,125 +7802,149 @@ class AppLocalizationsTh extends AppLocalizations {
   String get removeFilter => 'ลบตัวกรอง';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'โคลนบุคลิกภาพ';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'สุขภาพ';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'การศึกษา';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'การสื่อสาร';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'การสนับสนุนทางอารมณ์';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'ประสิทธิภาพ';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'ความบันเทิง';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'การเงิน';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'การเดินทาง';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'ความปลอดภัย';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'ช้อปปิ้ง';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'สังคม';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'ข่าว';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'เครื่องมือ';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'อื่นๆ';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'แชท';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'การสนทนา';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'การเชื่อมต่อภายนอก';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'การแจ้งเตือน';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'ไบต์เสียง';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'การสร้างการสนทนา';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'ถอดเสียงเสร็จสิ้น';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'สร้างการสนทนา';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'สร้างความทรงจำ';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'อ่านการสนทนา';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'อ่านความทรงจำ';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'อ่านงาน';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'ชื่อผู้ใช้';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'ข้อมูลผู้ใช้';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'การสนทนาของผู้ใช้';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'แชทของผู้ใช้';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'สรุป';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'แนะนำ';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'งาน';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'การเชื่อมต่อ';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'โคลนบุคลิกภาพ';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'ประสิทธิภาพและไลฟ์สไตล์';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'สังคมและความบันเทิง';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'เครื่องมือเพิ่มประสิทธิภาพ';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'สุขภาพส่วนบุคคล';
+
+  @override
+  String get rating => 'คะแนน';
+
+  @override
+  String get categories => 'หมวดหมู่';
+
+  @override
+  String get sortBy => 'เรียงตาม';
+
+  @override
+  String get highestRating => 'คะแนนสูงสุด';
+
+  @override
+  String get lowestRating => 'คะแนนต่ำสุด';
+
+  @override
+  String get resetFilters => 'รีเซ็ตตัวกรอง';
+
+  @override
+  String get applyFilters => 'ใช้ตัวกรอง';
+
+  @override
+  String get mostInstalls => 'ติดตั้งมากที่สุด';
 }

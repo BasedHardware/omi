@@ -7857,125 +7857,149 @@ class AppLocalizationsLv extends AppLocalizations {
   String get removeFilter => 'Noņemt Filtru';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Sarunu analīze';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Personības klons';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Veselība';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Izglītība';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Komunikācija';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Emocionālais atbalsts';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produktivitāte';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Izklaide';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Finanses';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Ceļojumi';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Drošība';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Iepirkšanās';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sociālais';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Ziņas';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Rīki';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Citi';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Tērzēšana';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Sarunas';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Ārējā integrācija';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Paziņojums';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Audio baiti';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Sarunas izveide';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transkripcija apstrādāta';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Izveidot sarunas';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Izveidot atmiņas';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Lasīt sarunas';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Lasīt atmiņas';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Lasīt uzdevumus';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Lietotājvārds';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Lietotāja fakti';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Lietotāja sarunas';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Lietotāja tērzēšana';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Kopsavilkums';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Ieteiktie';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Uzdevumi';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrācijas';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Personības kloni';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produktivitāte un dzīvesveids';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sociālais un izklaide';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Produktivitātes rīki';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Personīgā labklājība';
+
+  @override
+  String get rating => 'Vērtējums';
+
+  @override
+  String get categories => 'Kategorijas';
+
+  @override
+  String get sortBy => 'Kārtot';
+
+  @override
+  String get highestRating => 'Augstākais vērtējums';
+
+  @override
+  String get lowestRating => 'Zemākais vērtējums';
+
+  @override
+  String get resetFilters => 'Atiestatīt filtrus';
+
+  @override
+  String get applyFilters => 'Lietot filtrus';
+
+  @override
+  String get mostInstalls => 'Visvairāk instalāciju';
 }

@@ -7842,125 +7842,149 @@ class AppLocalizationsVi extends AppLocalizations {
   String get removeFilter => 'Xóa bộ lọc';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Nhân bản tính cách';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Sức khỏe';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Giáo dục';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Giao tiếp';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Hỗ trợ cảm xúc';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Năng suất';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Giải trí';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Tài chính';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Du lịch';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'An toàn';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Mua sắm';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Xã hội';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Tin tức';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Tiện ích';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Khác';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Trò chuyện';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Cuộc trò chuyện';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Tích hợp bên ngoài';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Thông báo';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Byte âm thanh';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Tạo cuộc trò chuyện';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Bản ghi đã xử lý';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Tạo cuộc trò chuyện';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Tạo ký ức';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Đọc cuộc trò chuyện';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Đọc ký ức';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Đọc nhiệm vụ';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Tên người dùng';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Thông tin người dùng';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Cuộc trò chuyện của người dùng';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Trò chuyện của người dùng';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Tóm tắt';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Nổi bật';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Nhiệm vụ';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Tích hợp';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Nhân bản tính cách';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Năng suất & Phong cách sống';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Xã hội & Giải trí';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Công cụ năng suất';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Sức khỏe cá nhân';
+
+  @override
+  String get rating => 'Đánh giá';
+
+  @override
+  String get categories => 'Danh mục';
+
+  @override
+  String get sortBy => 'Sắp xếp';
+
+  @override
+  String get highestRating => 'Đánh giá cao nhất';
+
+  @override
+  String get lowestRating => 'Đánh giá thấp nhất';
+
+  @override
+  String get resetFilters => 'Đặt lại bộ lọc';
+
+  @override
+  String get applyFilters => 'Áp dụng bộ lọc';
+
+  @override
+  String get mostInstalls => 'Nhiều lượt cài đặt nhất';
 }

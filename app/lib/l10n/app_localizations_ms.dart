@@ -7863,125 +7863,149 @@ class AppLocalizationsMs extends AppLocalizations {
   String get removeFilter => 'Alih Keluar Penapis';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Analisis Perbualan';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Klon Personaliti';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Kesihatan';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Pendidikan';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Komunikasi';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Sokongan Emosi';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produktiviti';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Hiburan';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Kewangan';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Perjalanan';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Keselamatan';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Membeli-belah';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sosial';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Berita';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Utiliti';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Lain-lain';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Sembang';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Perbualan';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Integrasi Luaran';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Pemberitahuan';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Bait Audio';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Penciptaan Perbualan';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transkrip Diproses';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Cipta perbualan';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Cipta kenangan';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Baca perbualan';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Baca kenangan';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Baca tugas';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Nama Pengguna';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Fakta Pengguna';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Perbualan Pengguna';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Sembang Pengguna';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Ringkasan';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Pilihan';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Tugas';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrasi';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Klon Personaliti';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produktiviti & Gaya Hidup';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sosial & Hiburan';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Alat Produktiviti';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Kesejahteraan Peribadi';
+
+  @override
+  String get rating => 'Penilaian';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Isih';
+
+  @override
+  String get highestRating => 'Penilaian tertinggi';
+
+  @override
+  String get lowestRating => 'Penilaian terendah';
+
+  @override
+  String get resetFilters => 'Set semula penapis';
+
+  @override
+  String get applyFilters => 'Guna penapis';
+
+  @override
+  String get mostInstalls => 'Paling banyak dipasang';
 }

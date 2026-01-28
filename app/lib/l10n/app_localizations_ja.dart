@@ -443,7 +443,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appAndDeviceCopied => 'アプリとデバイスの詳細をコピーしました';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025年のまとめ';
 
   @override
   String get yourPrivacyYourControl => 'プライバシーはあなたの手に';
@@ -573,7 +573,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get starOngoing => '進行中の会話にスターを付ける';
 
   @override
-  String get off => 'Off';
+  String get off => 'オフ';
 
   @override
   String get max => '最大';
@@ -6699,7 +6699,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceIdLabel => 'デバイスID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'ステータス';
 
   @override
   String get statusProcessed => '処理済み';
@@ -7706,125 +7706,149 @@ class AppLocalizationsJa extends AppLocalizations {
   String get removeFilter => 'フィルターを削除';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => '会話分析';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'パーソナリティクローン';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => '健康';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => '教育';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'コミュニケーション';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => '感情サポート';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => '生産性';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'エンターテインメント';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => '金融';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => '旅行';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => '安全';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'ショッピング';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'ソーシャル';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'ニュース';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'ユーティリティ';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'その他';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'チャット';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => '会話';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => '外部連携';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => '通知';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'オーディオバイト';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => '会話作成';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'トランスクリプト処理済み';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => '会話を作成';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'メモリーを作成';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => '会話を読み取り';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'メモリーを読み取り';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'タスクを読み取り';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'ユーザー名';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'ユーザー情報';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'ユーザーの会話';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'ユーザーチャット';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'サマリー';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => '注目';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'タスク';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => '連携';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'パーソナリティクローン';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => '生産性とライフスタイル';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'ソーシャルとエンターテインメント';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => '生産性ツール';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'パーソナルウェルネス';
+
+  @override
+  String get rating => '評価';
+
+  @override
+  String get categories => 'カテゴリ';
+
+  @override
+  String get sortBy => '並べ替え';
+
+  @override
+  String get highestRating => '高評価順';
+
+  @override
+  String get lowestRating => '低評価順';
+
+  @override
+  String get resetFilters => 'フィルターをリセット';
+
+  @override
+  String get applyFilters => 'フィルターを適用';
+
+  @override
+  String get mostInstalls => 'インストール数順';
 }

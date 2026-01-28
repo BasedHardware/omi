@@ -7784,125 +7784,149 @@ class AppLocalizationsAr extends AppLocalizations {
   String get removeFilter => 'إزالة الفلتر';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'تحليل المحادثة';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'استنساخ الشخصية';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'الصحة';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'التعليم';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'التواصل';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'الدعم العاطفي';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'الإنتاجية';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'الترفيه';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'المالية';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'السفر';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'الأمان';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'التسوق';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'اجتماعي';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'الأخبار';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'الأدوات';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'أخرى';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'الدردشة';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'المحادثات';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'التكامل الخارجي';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'الإشعارات';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'بايتات الصوت';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'إنشاء المحادثة';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'معالجة النص';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'إنشاء المحادثات';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'إنشاء الذكريات';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'قراءة المحادثات';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'قراءة الذكريات';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'قراءة المهام';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'اسم المستخدم';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'معلومات المستخدم';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'محادثات المستخدم';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'دردشة المستخدم';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'الملخص';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'المميزة';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'المهام';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'التكاملات';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'استنساخ الشخصيات';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'الإنتاجية ونمط الحياة';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'التواصل والترفيه';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'أدوات الإنتاجية';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'الصحة الشخصية';
+
+  @override
+  String get rating => 'التقييم';
+
+  @override
+  String get categories => 'الفئات';
+
+  @override
+  String get sortBy => 'ترتيب';
+
+  @override
+  String get highestRating => 'الأعلى تقييماً';
+
+  @override
+  String get lowestRating => 'الأقل تقييماً';
+
+  @override
+  String get resetFilters => 'إعادة تعيين الفلاتر';
+
+  @override
+  String get applyFilters => 'تطبيق الفلاتر';
+
+  @override
+  String get mostInstalls => 'الأكثر تثبيتاً';
 }

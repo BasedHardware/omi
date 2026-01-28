@@ -7865,125 +7865,149 @@ class AppLocalizationsNl extends AppLocalizations {
   String get removeFilter => 'Filter Verwijderen';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Gesprekanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Gezondheid';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Onderwijs';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Communicatie';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Emotionele ondersteuning';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Productiviteit';
 
   @override
   String get categoryEntertainment => 'Entertainment';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Financiën';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Reizen';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Veiligheid';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Winkelen';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Sociaal';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Nieuws';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Hulpmiddelen';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Overig';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Gesprekken';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Externe integratie';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Melding';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Audiobytes';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Gesprek aanmaken';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transcript verwerkt';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Gesprekken aanmaken';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Herinneringen aanmaken';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Gesprekken lezen';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Herinneringen lezen';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Taken lezen';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Gebruikersnaam';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Gebruikersgegevens';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Gebruikersgesprekken';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Gebruikerschat';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Samenvatting';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Uitgelicht';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Taken';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integraties';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Sociaal & entertainment';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Productiviteitstools';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Persoonlijk welzijn';
+
+  @override
+  String get rating => 'Beoordeling';
+
+  @override
+  String get categories => 'Categorieën';
+
+  @override
+  String get sortBy => 'Sorteren';
+
+  @override
+  String get highestRating => 'Hoogste beoordeling';
+
+  @override
+  String get lowestRating => 'Laagste beoordeling';
+
+  @override
+  String get resetFilters => 'Filters resetten';
+
+  @override
+  String get applyFilters => 'Filters toepassen';
+
+  @override
+  String get mostInstalls => 'Meeste installaties';
 }

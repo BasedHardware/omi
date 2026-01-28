@@ -7824,125 +7824,149 @@ class AppLocalizationsDa extends AppLocalizations {
   String get removeFilter => 'Fjern Filter';
 
   @override
-  String get categoryConversationAnalysis => 'Conversation Analysis';
+  String get categoryConversationAnalysis => 'Samtaleanalyse';
 
   @override
-  String get categoryPersonalityClone => 'Personality Clone';
+  String get categoryPersonalityClone => 'Personlighedsklon';
 
   @override
-  String get categoryHealth => 'Health';
+  String get categoryHealth => 'Sundhed';
 
   @override
-  String get categoryEducation => 'Education';
+  String get categoryEducation => 'Uddannelse';
 
   @override
-  String get categoryCommunication => 'Communication';
+  String get categoryCommunication => 'Kommunikation';
 
   @override
-  String get categoryEmotionalSupport => 'Emotional Support';
+  String get categoryEmotionalSupport => 'Følelsesmæssig støtte';
 
   @override
-  String get categoryProductivity => 'Productivity';
+  String get categoryProductivity => 'Produktivitet';
 
   @override
-  String get categoryEntertainment => 'Entertainment';
+  String get categoryEntertainment => 'Underholdning';
 
   @override
-  String get categoryFinancial => 'Financial';
+  String get categoryFinancial => 'Økonomi';
 
   @override
-  String get categoryTravel => 'Travel';
+  String get categoryTravel => 'Rejser';
 
   @override
-  String get categorySafety => 'Safety';
+  String get categorySafety => 'Sikkerhed';
 
   @override
   String get categoryShopping => 'Shopping';
 
   @override
-  String get categorySocial => 'Social';
+  String get categorySocial => 'Socialt';
 
   @override
-  String get categoryNews => 'News';
+  String get categoryNews => 'Nyheder';
 
   @override
-  String get categoryUtilities => 'Utilities';
+  String get categoryUtilities => 'Værktøjer';
 
   @override
-  String get categoryOther => 'Other';
+  String get categoryOther => 'Andet';
 
   @override
   String get capabilityChat => 'Chat';
 
   @override
-  String get capabilityConversations => 'Conversations';
+  String get capabilityConversations => 'Samtaler';
 
   @override
-  String get capabilityExternalIntegration => 'External Integration';
+  String get capabilityExternalIntegration => 'Ekstern integration';
 
   @override
-  String get capabilityNotification => 'Notification';
+  String get capabilityNotification => 'Notifikation';
 
   @override
-  String get triggerAudioBytes => 'Audio Bytes';
+  String get triggerAudioBytes => 'Lyd-bytes';
 
   @override
-  String get triggerConversationCreation => 'Conversation Creation';
+  String get triggerConversationCreation => 'Samtaleoprettelse';
 
   @override
-  String get triggerTranscriptProcessed => 'Transcript Processed';
+  String get triggerTranscriptProcessed => 'Transskription behandlet';
 
   @override
-  String get actionCreateConversations => 'Create conversations';
+  String get actionCreateConversations => 'Opret samtaler';
 
   @override
-  String get actionCreateMemories => 'Create memories';
+  String get actionCreateMemories => 'Opret minder';
 
   @override
-  String get actionReadConversations => 'Read conversations';
+  String get actionReadConversations => 'Læs samtaler';
 
   @override
-  String get actionReadMemories => 'Read memories';
+  String get actionReadMemories => 'Læs minder';
 
   @override
-  String get actionReadTasks => 'Read tasks';
+  String get actionReadTasks => 'Læs opgaver';
 
   @override
-  String get scopeUserName => 'User Name';
+  String get scopeUserName => 'Brugernavn';
 
   @override
-  String get scopeUserFacts => 'User Facts';
+  String get scopeUserFacts => 'Brugerfakta';
 
   @override
-  String get scopeUserConversations => 'User Conversations';
+  String get scopeUserConversations => 'Brugersamtaler';
 
   @override
-  String get scopeUserChat => 'User Chat';
+  String get scopeUserChat => 'Brugerchat';
 
   @override
-  String get capabilitySummary => 'Summary';
+  String get capabilitySummary => 'Resumé';
 
   @override
-  String get capabilityFeatured => 'Featured';
+  String get capabilityFeatured => 'Udvalgte';
 
   @override
-  String get capabilityTasks => 'Tasks';
+  String get capabilityTasks => 'Opgaver';
 
   @override
-  String get capabilityIntegrations => 'Integrations';
+  String get capabilityIntegrations => 'Integrationer';
 
   @override
-  String get categoryPersonalityClones => 'Personality Clones';
+  String get categoryPersonalityClones => 'Personlighedskloner';
 
   @override
-  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+  String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
 
   @override
-  String get categorySocialEntertainment => 'Social & Entertainment';
+  String get categorySocialEntertainment => 'Socialt og underholdning';
 
   @override
-  String get categoryProductivityTools => 'Productivity & Tools';
+  String get categoryProductivityTools => 'Produktivitetsværktøjer';
 
   @override
-  String get categoryPersonalWellness => 'Personal & Lifestyle';
+  String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Bedømmelse';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Højeste bedømmelse';
+
+  @override
+  String get lowestRating => 'Laveste bedømmelse';
+
+  @override
+  String get resetFilters => 'Nulstil filtre';
+
+  @override
+  String get applyFilters => 'Anvend filtre';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
 }

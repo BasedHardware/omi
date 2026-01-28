@@ -14864,6 +14864,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Personal & Lifestyle'**
   String get categoryPersonalWellness;
+
+  /// No description provided for @rating.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get rating;
+
+  /// No description provided for @categories.
+  ///
+  /// In en, this message translates to:
+  /// **'Categories'**
+  String get categories;
+
+  /// No description provided for @sortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get sortBy;
+
+  /// No description provided for @highestRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest Rating'**
+  String get highestRating;
+
+  /// No description provided for @lowestRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowest Rating'**
+  String get lowestRating;
+
+  /// No description provided for @resetFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset filters'**
+  String get resetFilters;
+
+  /// No description provided for @applyFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply filters'**
+  String get applyFilters;
+
+  /// No description provided for @mostInstalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Most Installs'**
+  String get mostInstalls;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

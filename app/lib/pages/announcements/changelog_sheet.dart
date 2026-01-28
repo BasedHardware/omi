@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -282,7 +283,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
               });
               _loadChangelogs();
             },
-            child: const Text('Retry'),
+            child: Text(AppLocalizations.of(context)!.retry),
           ),
         ],
       ),
