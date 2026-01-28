@@ -38,7 +38,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import '../../pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'apps/desktop_apps_page.dart';

@@ -32,8 +32,8 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
-import '../../../../backend/schema/app.dart';
-import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 
 class DesktopAppDetail extends StatefulWidget {
   final App app;
