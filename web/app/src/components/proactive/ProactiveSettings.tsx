@@ -45,14 +45,14 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 <label id="proactive-toggle-label" className="text-sm font-medium text-gray-200">Enable Proactive Monitoring</label>
                 <button
                     role="switch"
-                    aria-checked={settings.enabled}
+                    aria-checked={settings.advice.enabled}
                     aria-labelledby="proactive-toggle-label"
-                    onClick={() => updateSettings({ enabled: !settings.enabled })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.enabled ? 'bg-blue-600' : 'bg-gray-600'
+                    onClick={() => updateSettings(prev => ({ ...prev, advice: { ...prev.advice, enabled: !prev.advice.enabled } }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.advice.enabled ? 'bg-blue-600' : 'bg-gray-600'
                         }`}
                 >
                     <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-1'
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.advice.enabled ? 'translate-x-6' : 'translate-x-1'
                             }`}
                     />
                 </button>
