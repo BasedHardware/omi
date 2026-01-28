@@ -559,9 +559,9 @@
   "@deviceSettings": {
     "description": "Device settings menu item"
   },
-  "chatTools": "Chat Tools",
-  "@chatTools": {
-    "description": "Chat tools menu item"
+  "integrations": "Integrations",
+  "@integrations": {
+    "description": "Integrations menu item"
   },
   "feedbackBug": "Feedback / Bug",
   "@feedbackBug": {
@@ -1197,7 +1197,7 @@
   "vocabularyHint": "Omi, Callie, OpenAI",
   "connect": "Connect",
   "comingSoon": "Coming Soon",
-  "chatToolsFooter": "Connect your apps to view data and metrics in chat.",
+  "integrationsFooter": "Connect your apps to view data and metrics in chat.",
   "completeAuthInBrowser": "Please complete authentication in your browser. Once done, return to the app.",
   "failedToStartAuth": "Failed to start {appName} authentication",
   "@failedToStartAuth": {

@@ -429,7 +429,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
-  String get chatTools => 'Εργαλεία Συνομιλίας';
+  String get integrations => 'Ενσωματώσεις';
 
   @override
   String get feedbackBug => 'Σχόλια / Σφάλμα';
@@ -1025,7 +1025,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get comingSoon => 'Σύντομα Διαθέσιμο';
 
   @override
-  String get chatToolsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
+  String get integrationsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
 
   @override
   String get completeAuthInBrowser =>

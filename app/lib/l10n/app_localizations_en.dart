@@ -425,7 +425,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceSettings => 'Device Settings';
 
   @override
-  String get chatTools => 'Chat Tools';
+  String get integrations => 'Integrations';
 
   @override
   String get feedbackBug => 'Feedback / Bug';
@@ -1018,7 +1018,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get comingSoon => 'Coming Soon';
 
   @override
-  String get chatToolsFooter => 'Connect your apps to view data and metrics in chat.';
+  String get integrationsFooter => 'Connect your apps to view data and metrics in chat.';
 
   @override
   String get completeAuthInBrowser => 'Please complete authentication in your browser. Once done, return to the app.';

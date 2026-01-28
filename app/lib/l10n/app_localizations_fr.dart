@@ -428,7 +428,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceSettings => 'Paramètres de l\'appareil';
 
   @override
-  String get chatTools => 'Outils de chat';
+  String get integrations => 'Intégrations';
 
   @override
   String get feedbackBug => 'Retour / Bug';
@@ -1024,7 +1024,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get comingSoon => 'Bientôt disponible';
 
   @override
-  String get chatToolsFooter => 'Connectez vos applications pour afficher les données et les métriques dans le chat.';
+  String get integrationsFooter =>
+      'Connectez vos applications pour afficher les données et les métriques dans le chat.';
 
   @override
   String get completeAuthInBrowser =>

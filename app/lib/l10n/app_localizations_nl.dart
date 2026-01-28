@@ -427,7 +427,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override
-  String get chatTools => 'Chat-tools';
+  String get integrations => 'Integraties';
 
   @override
   String get feedbackBug => 'Feedback / Fout';
@@ -1022,7 +1022,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get comingSoon => 'Binnenkort beschikbaar';
 
   @override
-  String get chatToolsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
+  String get integrationsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
 
   @override
   String get completeAuthInBrowser => 'Voltooi de authenticatie in je browser. Keer daarna terug naar de app.';

@@ -426,7 +426,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
-  String get chatTools => 'Công cụ trò chuyện';
+  String get integrations => 'Tích hợp';
 
   @override
   String get feedbackBug => 'Phản hồi / Báo lỗi';
@@ -1021,7 +1021,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get comingSoon => 'Sắp ra mắt';
 
   @override
-  String get chatToolsFooter => 'Kết nối ứng dụng của bạn để xem dữ liệu và số liệu trong trò chuyện.';
+  String get integrationsFooter => 'Kết nối ứng dụng của bạn để xem dữ liệu và số liệu trong trò chuyện.';
 
   @override
   String get completeAuthInBrowser =>

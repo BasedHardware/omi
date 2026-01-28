@@ -427,7 +427,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceSettings => 'Seadme seaded';
 
   @override
-  String get chatTools => 'Vestlustööriistad';
+  String get integrations => 'Integratsioonid';
 
   @override
   String get feedbackBug => 'Tagasiside / viga';
@@ -1020,7 +1020,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get comingSoon => 'Tulekul';
 
   @override
-  String get chatToolsFooter => 'Ühendage oma rakendused, et vestluses andmeid ja mõõdikuid vaadata.';
+  String get integrationsFooter => 'Ühendage oma rakendused, et vestluses andmeid ja mõõdikuid vaadata.';
 
   @override
   String get completeAuthInBrowser => 'Palun lõpetage autentimine oma brauseris. Kui olete valmis, naasake rakendusse.';

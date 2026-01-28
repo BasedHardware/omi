@@ -428,7 +428,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceSettings => 'Setări dispozitiv';
 
   @override
-  String get chatTools => 'Instrumente chat';
+  String get integrations => 'Integrări';
 
   @override
   String get feedbackBug => 'Feedback / Eroare';
@@ -1024,7 +1024,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get comingSoon => 'În curând';
 
   @override
-  String get chatToolsFooter => 'Conectează aplicațiile tale pentru a vizualiza date și statistici în chat.';
+  String get integrationsFooter => 'Conectează aplicațiile tale pentru a vizualiza date și statistici în chat.';
 
   @override
   String get completeAuthInBrowser =>

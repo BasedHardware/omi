@@ -423,7 +423,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
-  String get chatTools => 'Chat-työkalut';
+  String get integrations => 'Integraatiot';
 
   @override
   String get feedbackBug => 'Palaute / Virhe';
@@ -1017,7 +1017,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get comingSoon => 'Tulossa pian';
 
   @override
-  String get chatToolsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
+  String get integrationsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
 
   @override
   String get completeAuthInBrowser => 'Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.';

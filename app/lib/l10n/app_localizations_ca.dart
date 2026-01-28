@@ -427,7 +427,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override
-  String get chatTools => 'Eines de xat';
+  String get integrations => 'Integracions';
 
   @override
   String get feedbackBug => 'Comentaris / Error';
@@ -1024,7 +1024,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get comingSoon => 'Properament';
 
   @override
-  String get chatToolsFooter => 'Connecteu les vostres aplicacions per veure dades i estadístiques al xat.';
+  String get integrationsFooter => 'Connecteu les vostres aplicacions per veure dades i estadístiques al xat.';
 
   @override
   String get completeAuthInBrowser =>
