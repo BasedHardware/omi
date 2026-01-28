@@ -205,6 +205,8 @@ export function useProactiveNotifications() {
 
             } catch (err) {
                 console.error('Proactive analysis error:', err);
+                const message = err instanceof Error ? err.message : 'Proactive analysis failed';
+                setError(message);
             } finally {
                 isAnalyzingRef.current = false;
                 setState('monitoring');
