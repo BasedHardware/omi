@@ -8022,4 +8022,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Legtöbb telepítés';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
 }

@@ -2603,5 +2603,6 @@
   "lowestRating": "Peringkat terendah",
   "resetFilters": "Reset filter",
   "applyFilters": "Terapkan filter",
-  "mostInstalls": "Paling banyak diinstal"
+  "mostInstalls": "Paling banyak diinstal",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

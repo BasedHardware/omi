@@ -8033,4 +8033,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Més instal·lacions';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
 }

@@ -2597,5 +2597,6 @@
   "lowestRating": "Menor avaliação",
   "resetFilters": "Redefinir filtros",
   "applyFilters": "Aplicar filtros",
-  "mostInstalls": "Mais instalações"
+  "mostInstalls": "Mais instalações",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

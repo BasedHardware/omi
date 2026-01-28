@@ -2561,5 +2561,6 @@
   "lowestRating": "Laveste vurdering",
   "resetFilters": "Tilbakestill filtre",
   "applyFilters": "Bruk filtre",
-  "mostInstalls": "Flest installasjoner"
+  "mostInstalls": "Flest installasjoner",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

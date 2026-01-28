@@ -2561,5 +2561,6 @@
   "lowestRating": "최저 평점",
   "resetFilters": "필터 초기화",
   "applyFilters": "필터 적용",
-  "mostInstalls": "설치 수"
+  "mostInstalls": "설치 수",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

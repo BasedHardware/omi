@@ -2561,5 +2561,6 @@
   "lowestRating": "Χαμηλότερη βαθμολογία",
   "resetFilters": "Επαναφορά φίλτρων",
   "applyFilters": "Εφαρμογή φίλτρων",
-  "mostInstalls": "Περισσότερες εγκαταστάσεις"
+  "mostInstalls": "Περισσότερες εγκαταστάσεις",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

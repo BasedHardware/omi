@@ -2561,5 +2561,6 @@
   "lowestRating": "Žemiausias įvertinimas",
   "resetFilters": "Atstatyti filtrus",
   "applyFilters": "Taikyti filtrus",
-  "mostInstalls": "Daugiausia įdiegimų"
+  "mostInstalls": "Daugiausia įdiegimų",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

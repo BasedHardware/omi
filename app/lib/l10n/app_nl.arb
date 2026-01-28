@@ -2561,5 +2561,6 @@
   "lowestRating": "Laagste beoordeling",
   "resetFilters": "Filters resetten",
   "applyFilters": "Filters toepassen",
-  "mostInstalls": "Meeste installaties"
+  "mostInstalls": "Meeste installaties",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

@@ -2561,5 +2561,6 @@
   "lowestRating": "คะแนนต่ำสุด",
   "resetFilters": "รีเซ็ตตัวกรอง",
   "applyFilters": "ใช้ตัวกรอง",
-  "mostInstalls": "ติดตั้งมากที่สุด"
+  "mostInstalls": "ติดตั้งมากที่สุด",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

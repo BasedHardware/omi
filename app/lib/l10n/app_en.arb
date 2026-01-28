@@ -9831,5 +9831,6 @@
   "lowestRating": "Lowest Rating",
   "resetFilters": "Reset filters",
   "applyFilters": "Apply filters",
-  "mostInstalls": "Most Installs"
+  "mostInstalls": "Most Installs",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

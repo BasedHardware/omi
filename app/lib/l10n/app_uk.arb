@@ -2561,5 +2561,6 @@
   "lowestRating": "Найнижчий рейтинг",
   "resetFilters": "Скинути фільтри",
   "applyFilters": "Застосувати фільтри",
-  "mostInstalls": "Найбільше встановлень"
+  "mostInstalls": "Найбільше встановлень",
+  "couldNotOpenUrl": "Could not open URL. Please try again."
 }

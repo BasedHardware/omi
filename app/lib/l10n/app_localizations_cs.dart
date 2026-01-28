@@ -7980,4 +7980,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Nejvíce instalací';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
 }

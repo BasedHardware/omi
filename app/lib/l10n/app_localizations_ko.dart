@@ -7853,4 +7853,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get mostInstalls => '설치 수';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
 }
