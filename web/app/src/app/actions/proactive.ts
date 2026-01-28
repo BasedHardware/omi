@@ -15,7 +15,7 @@ const DEFAULT_MODEL = 'gemini-2.0-flash';
 const ALLOWED_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
 export async function analyzeScreenAction(params: AnalyzeScreenParams): Promise<string> {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
         throw new Error('Gemini API key not configured on server');
