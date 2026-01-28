@@ -12,6 +12,25 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+/// Determines if an error is a network connectivity issue that should not be reported as a crash.
+/// Network errors are expected when offline or when DNS fails - they're not bugs.
+bool _isNetworkError(Object error) {
+  if (error is SocketException) return true;
+  if (error is TimeoutException) return true;
+  if (error is http.ClientException) {
+    final message = error.message.toLowerCase();
+    return message.contains('socketexception') ||
+        message.contains('failed host lookup') ||
+        message.contains('connection refused') ||
+        message.contains('connection reset') ||
+        message.contains('connection closed') ||
+        message.contains('network is unreachable') ||
+        message.contains('no route to host') ||
+        message.contains('nodename nor servname provided');
+  }
+  return false;
+}
+
 class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
   static const Duration requestTimeoutWrite = Duration(seconds: 300);
@@ -139,8 +158,12 @@ Future<http.Response?> makeApiCall({
 
     return response;
   } catch (e, stackTrace) {
-    Logger.debug('HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    Logger.debug('HTTP request failed: $e');
+    // Only report non-network errors to crash reporter.
+    // Network errors (offline, DNS failure, timeouts) are expected and not bugs.
+    if (!_isNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
     return null;
   }
 }
@@ -193,8 +216,10 @@ Future<http.Response> makeMultipartApiCall({
     var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
     return await http.Response.fromStream(streamedResponse);
   } catch (e, stackTrace) {
-    Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    Logger.debug('Multipart HTTP request failed: $e');
+    if (!_isNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
     rethrow;
   }
 }
@@ -253,7 +278,9 @@ Stream<String> makeStreamingApiCall({
     }
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    if (!_isNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
   }
 }
 
@@ -312,7 +339,9 @@ Stream<String> makeMultipartStreamingApiCall({
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
+    if (!_isNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
+    }
   }
 }
 
