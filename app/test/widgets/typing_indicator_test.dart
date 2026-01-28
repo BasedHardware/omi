@@ -38,7 +38,7 @@ void main() {
       expect(bubbleCount, 3);
     });
 
-    testWidgets('uses SlideTransition for animation (no nested ScaleTransition)', (tester) async {
+    testWidgets('uses SlideTransition and optimized ScaleTransition with RepaintBoundary', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -58,12 +58,19 @@ void main() {
       );
       expect(slideTransitions, findsNWidgets(3));
 
-      // Should NOT have ScaleTransition within TypingIndicator (optimization: removed redundant layer)
+      // Should have ScaleTransition (restored with optimization: 0.85-1.0 range)
       final scaleTransitions = find.descendant(
         of: typingIndicator,
         matching: find.byType(ScaleTransition),
       );
-      expect(scaleTransitions, findsNothing);
+      expect(scaleTransitions, findsNWidgets(3));
+
+      // Should have RepaintBoundary to isolate repaints (optimization)
+      final repaintBoundaries = find.descendant(
+        of: typingIndicator,
+        matching: find.byType(RepaintBoundary),
+      );
+      expect(repaintBoundaries, findsNWidgets(3));
     });
 
     testWidgets('uses AnimatedBuilder for color animation', (tester) async {
