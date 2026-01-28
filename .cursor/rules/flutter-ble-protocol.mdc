@@ -4,6 +4,9 @@ globs:
   - "app/lib/utils/bluetooth/**/*.dart"
   - "app/lib/services/**/*ble*.dart"
 alwaysApply: false
+references:
+  - docs/doc/developer/Protocol.mdx
+  - app/README.md
 ---
 
 # Flutter BLE Protocol
@@ -241,6 +244,28 @@ Future<DeviceInfo> readDeviceInfo(ble.BluetoothDevice device) async {
 
 ## Related Documentation
 
-- Protocol: `docs/doc/developer/Protocol.mdx`
-- Flutter Components: `.cursor/FLUTTER_COMPONENTS.md`
-- Firmware Components: `.cursor/FIRMWARE_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **App Setup**: `docs/doc/developer/AppSetup.mdx` - [View online](https://docs.omi.me/doc/developer/AppSetup)
+- **Firmware Compilation**: `docs/doc/developer/firmware/Compile_firmware.mdx` - [View online](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+- **Hardware Docs**: `docs/doc/hardware/` - [View online](https://docs.omi.me/doc/hardware/)
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure
+- `.cursor/rules/firmware-ble-service.mdc` - Firmware BLE implementation
+- `.cursor/rules/firmware-audio-codecs.mdc` - Audio codec patterns
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns including BLE
+- `.cursor/skills/omi-firmware-patterns/` - Firmware patterns
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter BLE integration specialist
+- `.cursor/agents/firmware-engineer/` - Firmware BLE service specialist
+
+### Commands
+- `/flutter-setup` - Setup Flutter BLE dependencies
+- `/flutter-test` - Test BLE functionality

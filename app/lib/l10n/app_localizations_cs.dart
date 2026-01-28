@@ -425,7 +425,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceSettings => 'Nastavení zařízení';
 
   @override
-  String get chatTools => 'Nástroje chatu';
+  String get integrations => 'Integrace';
 
   @override
   String get feedbackBug => 'Zpětná vazba / Chyba';
@@ -449,7 +449,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikaci a zařízení zkopírovány';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Shrnutí 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše soukromí, vaše kontrola';
@@ -1019,7 +1019,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get comingSoon => 'Již brzy';
 
   @override
-  String get chatToolsFooter => 'Připojte své aplikace k zobrazení dat a metrik v chatu.';
+  String get integrationsFooter => 'Připojte své aplikace k zobrazení dat a metrik v chatu.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7833,4 +7833,151 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get removeFilter => 'Odstranit Filtr';
+
+  @override
+  String get categoryConversationAnalysis => 'Analýza konverzací';
+
+  @override
+  String get categoryPersonalityClone => 'Klon osobnosti';
+
+  @override
+  String get categoryHealth => 'Zdraví';
+
+  @override
+  String get categoryEducation => 'Vzdělávání';
+
+  @override
+  String get categoryCommunication => 'Komunikace';
+
+  @override
+  String get categoryEmotionalSupport => 'Emoční podpora';
+
+  @override
+  String get categoryProductivity => 'Produktivita';
+
+  @override
+  String get categoryEntertainment => 'Zábava';
+
+  @override
+  String get categoryFinancial => 'Finance';
+
+  @override
+  String get categoryTravel => 'Cestování';
+
+  @override
+  String get categorySafety => 'Bezpečnost';
+
+  @override
+  String get categoryShopping => 'Nakupování';
+
+  @override
+  String get categorySocial => 'Sociální';
+
+  @override
+  String get categoryNews => 'Zprávy';
+
+  @override
+  String get categoryUtilities => 'Nástroje';
+
+  @override
+  String get categoryOther => 'Ostatní';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Konverzace';
+
+  @override
+  String get capabilityExternalIntegration => 'Externí integrace';
+
+  @override
+  String get capabilityNotification => 'Oznámení';
+
+  @override
+  String get triggerAudioBytes => 'Audio bajty';
+
+  @override
+  String get triggerConversationCreation => 'Vytvoření konverzace';
+
+  @override
+  String get triggerTranscriptProcessed => 'Přepis zpracován';
+
+  @override
+  String get actionCreateConversations => 'Vytvořit konverzace';
+
+  @override
+  String get actionCreateMemories => 'Vytvořit vzpomínky';
+
+  @override
+  String get actionReadConversations => 'Číst konverzace';
+
+  @override
+  String get actionReadMemories => 'Číst vzpomínky';
+
+  @override
+  String get actionReadTasks => 'Číst úkoly';
+
+  @override
+  String get scopeUserName => 'Uživatelské jméno';
+
+  @override
+  String get scopeUserFacts => 'Fakta o uživateli';
+
+  @override
+  String get scopeUserConversations => 'Konverzace uživatele';
+
+  @override
+  String get scopeUserChat => 'Chat uživatele';
+
+  @override
+  String get capabilitySummary => 'Souhrn';
+
+  @override
+  String get capabilityFeatured => 'Doporučené';
+
+  @override
+  String get capabilityTasks => 'Úkoly';
+
+  @override
+  String get capabilityIntegrations => 'Integrace';
+
+  @override
+  String get categoryPersonalityClones => 'Klony osobností';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivita a životní styl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociální a zábava';
+
+  @override
+  String get categoryProductivityTools => 'Nástroje produktivity';
+
+  @override
+  String get categoryPersonalWellness => 'Osobní pohoda';
+
+  @override
+  String get rating => 'Hodnocení';
+
+  @override
+  String get categories => 'Kategorie';
+
+  @override
+  String get sortBy => 'Řadit';
+
+  @override
+  String get highestRating => 'Nejvyšší hodnocení';
+
+  @override
+  String get lowestRating => 'Nejnižší hodnocení';
+
+  @override
+  String get resetFilters => 'Resetovat filtry';
+
+  @override
+  String get applyFilters => 'Použít filtry';
+
+  @override
+  String get mostInstalls => 'Nejvíce instalací';
 }

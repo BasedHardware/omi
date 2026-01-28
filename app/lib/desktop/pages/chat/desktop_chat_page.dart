@@ -11,18 +11,15 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/desktop/pages/chat/widgets/desktop_voice_recorder_widget.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/markdown_message_widget.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -38,13 +35,11 @@ import 'package:omi/ui/atoms/omi_send_button.dart';
 import 'package:omi/ui/atoms/omi_typing_indicator.dart';
 import 'package:omi/ui/molecules/omi_chat_bubble.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'widgets/desktop_message_action_menu.dart';
 
 class DesktopChatPage extends StatefulWidget {
   const DesktopChatPage({super.key});
@@ -765,53 +760,52 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildMessagesList(MessageProvider provider) {
-    return ListView.builder(
-      reverse: false,
-      controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      itemCount: provider.messages.length,
-      itemBuilder: (context, chatIndex) {
-        final message = provider.messages[chatIndex];
-        double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
-        if (chatIndex != provider.messages.length - 1) message.askForNps = false;
+    return SelectionArea(
+      child: ListView.builder(
+        reverse: false,
+        controller: scrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        itemCount: provider.messages.length,
+        itemBuilder: (context, chatIndex) {
+          final message = provider.messages[chatIndex];
+          double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
+          if (chatIndex != provider.messages.length - 1) message.askForNps = false;
 
-        double bottomPadding = 0;
+          double bottomPadding = 0;
 
-        Widget messageWidget = Container(
-          margin: EdgeInsets.only(
-            bottom: bottomPadding,
-            top: topPadding,
-          ),
-          child: GestureDetector(
-            onLongPress: () => _showMessageActionMenu(context, message),
+          Widget messageWidget = Container(
+            margin: EdgeInsets.only(
+              bottom: bottomPadding,
+              top: topPadding,
+            ),
             child: _buildModernMessageBubble(message, provider, chatIndex),
-          ),
-        );
+          );
 
-        return AnimatedContainer(
-          duration: Duration(milliseconds: 300 + (chatIndex * 50)),
-          curve: Curves.easeOutCubic,
-          child: _animationsInitialized
-              ? FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: Offset(0, 0.1 + (chatIndex * 0.02)),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: _slideController,
-                      curve: Interval(
-                        (chatIndex * 0.1).clamp(0.0, 0.8),
-                        1.0,
-                        curve: Curves.easeOutCubic,
-                      ),
-                    )),
-                    child: messageWidget,
-                  ),
-                )
-              : messageWidget,
-        );
-      },
+          return AnimatedContainer(
+            duration: Duration(milliseconds: 300 + (chatIndex * 50)),
+            curve: Curves.easeOutCubic,
+            child: _animationsInitialized
+                ? FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: Offset(0, 0.1 + (chatIndex * 0.02)),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                        parent: _slideController,
+                        curve: Interval(
+                          (chatIndex * 0.1).clamp(0.0, 0.8),
+                          1.0,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      )),
+                      child: messageWidget,
+                    ),
+                  )
+                : messageWidget,
+          );
+        },
+      ),
     );
   }
 
@@ -843,12 +837,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      OmiAvatar(
-                        size: 32,
-                        imageUrl: provider.messageSenderApp(message.appId)?.getImageUrl(),
-                        fallback: Image.asset(Assets.images.herologo.path, height: 24, width: 24),
-                      ),
-                      const SizedBox(width: 12),
                       // AI message bubble
                       Expanded(
                         child: OmiChatBubble(
@@ -859,7 +847,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                     ],
                   ),
                   Container(
-                    margin: const EdgeInsets.only(left: 50, top: 6),
+                    margin: const EdgeInsets.only(left: 4, top: 6),
                     child: Text(
                       formatChatTimestamp(message.createdAt, context: context),
                       style: TextStyle(
@@ -1003,69 +991,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ))
             : const SizedBox.shrink(),
         message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
-        _getNpsWidget(context, message, (int value, {String? reason}) {
-          provider.setMessageNps(message, value, reason: reason);
-        }),
+        if (message.text.isNotEmpty && !showTypingIndicator)
+          MessageActionBar(
+            messageText: message.text.decodeString,
+            setMessageNps: (int value, {String? reason}) {
+              provider.setMessageNps(message, value, reason: reason);
+            },
+            currentNps: message.rating,
+          ),
       ],
     );
   }
 
 
-  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
-    if (!message.askForNps) return const SizedBox();
-
-    return Padding(
-      padding: const EdgeInsetsDirectional.only(top: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(context.l10n.wasThisHelpful, style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey.shade300)),
-          const SizedBox(width: 4),
-          OmiIconButton(
-            icon: Icons.thumb_down_alt_outlined,
-            style: OmiIconButtonStyle.neutral,
-            size: 28,
-            iconSize: 14,
-            borderRadius: 6,
-            onPressed: () {
-              // For desktop, submit thumbs down without reason picker (can be enhanced later)
-              setMessageNps(-1);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.thankYouForFeedback),
-                  backgroundColor: ResponsiveHelper.backgroundTertiary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: 4),
-          OmiIconButton(
-            icon: Icons.thumb_up_alt_outlined,
-            style: OmiIconButtonStyle.neutral,
-            size: 28,
-            iconSize: 14,
-            borderRadius: 6,
-            onPressed: () {
-              setMessageNps(1);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.thankYouForFeedback),
-                  backgroundColor: ResponsiveHelper.backgroundTertiary,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildFloatingInputArea(
     MessageProvider provider,
@@ -1524,86 +1462,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showMessageActionMenu(BuildContext context, ServerMessage message) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DesktopMessageActionMenu(
-        message: message.text.decodeString,
-        onCopy: () async {
-          MixpanelManager().track('Chat Message Copied', properties: {'message': message.text});
-          await Clipboard.setData(ClipboardData(text: message.text.decodeString));
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.messageCopied),
-                backgroundColor: ResponsiveHelper.purplePrimary,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                duration: const Duration(milliseconds: 2000),
-              ),
-            );
-            Navigator.pop(context);
-          }
-        },
-        onSelectText: () {
-          MixpanelManager().track('Chat Message Text Selected', properties: {'message': message.text});
-          routeToPage(context, SelectTextScreen(message: message));
-        },
-        onShare: () {
-          MixpanelManager().track('Chat Message Shared', properties: {'message': message.text});
-          Share.share(
-            '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
-            subject: 'Chat with Omi',
-          );
-          Navigator.pop(context);
-        },
-        onReport: () {
-          if (message.sender == MessageSender.human) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.cannotReportOwnMessages),
-                backgroundColor: Colors.orange,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                duration: const Duration(milliseconds: 2000),
-              ),
-            );
-            return;
-          }
-          showDialog(
-            context: context,
-            builder: (dialogContext) {
-              return getDialog(
-                dialogContext,
-                () => Navigator.of(dialogContext).pop(),
-                () {
-                  MixpanelManager().track('Chat Message Reported', properties: {'message': message.text});
-                  Navigator.of(dialogContext).pop();
-                  Navigator.of(context).pop();
-                  context.read<MessageProvider>().removeLocalMessage(message.id);
-                  reportMessageServer(message.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.l10n.messageReportedSuccessfully),
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      duration: const Duration(milliseconds: 2000),
-                    ),
-                  );
-                },
-                context.l10n.reportMessage,
-                context.l10n.confirmReportMessage,
-              );
-            },
-          );
-        },
       ),
     );
   }

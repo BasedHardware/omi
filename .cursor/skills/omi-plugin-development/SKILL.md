@@ -173,8 +173,28 @@ async def auth():
 
 ## Related Documentation
 
-- Plugin Introduction: `docs/doc/developer/apps/Introduction.mdx`
-- Integrations: `docs/doc/developer/apps/Integrations.mdx`
-- Chat Tools: `docs/doc/developer/apps/ChatTools.mdx`
-- OAuth: `docs/doc/developer/apps/Oauth.mdx`
-- Plugin Development: `.cursor/rules/plugin-development.mdc`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Plugin Introduction**: `docs/doc/developer/apps/Introduction.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Introduction)
+- **Integrations**: `docs/doc/developer/apps/Integrations.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Integrations)
+- **Chat Tools**: `docs/doc/developer/apps/ChatTools.mdx` - [View online](https://docs.omi.me/doc/developer/apps/ChatTools)
+- **OAuth**: `docs/doc/developer/apps/Oauth.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Oauth)
+- **Prompt-Based Apps**: `docs/doc/developer/apps/PromptBased.mdx` - [View online](https://docs.omi.me/doc/developer/apps/PromptBased)
+- **Audio Streaming**: `docs/doc/developer/apps/AudioStreaming.mdx` - [View online](https://docs.omi.me/doc/developer/apps/AudioStreaming)
+- **Submitting Apps**: `docs/doc/developer/apps/Submitting.mdx` - [View online](https://docs.omi.me/doc/developer/apps/Submitting)
+- **Plugin Development**: `.cursor/rules/plugin-development.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/plugin-development.mdc` - Plugin development patterns
+- `.cursor/rules/plugin-apps-js.mdc` - JavaScript plugin patterns
+- `.cursor/rules/backend-api-patterns.mdc` - Backend API patterns
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture
+
+### Subagents
+- `.cursor/agents/plugin-developer/` - Uses this skill for plugin development
+
+### Commands
+- `/create-plugin` - Uses this skill for plugin scaffolding
+- `/create-app` - Uses this skill for app creation

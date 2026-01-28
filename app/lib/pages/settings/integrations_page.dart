@@ -1,28 +1,18 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
-import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
-import 'package:omi/services/github_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
-import 'package:omi/services/notion_service.dart';
-import 'package:omi/services/twitter_service.dart';
-import 'package:omi/services/whoop_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 
 enum IntegrationApp {
-  whoop,
   appleHealth,
-  notion,
-  twitter,
-  github,
   googleCalendar,
   gmail,
 }
@@ -34,16 +24,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'Google Calendar';
       case IntegrationApp.gmail:
         return 'Gmail';
-      case IntegrationApp.whoop:
-        return 'Whoop';
       case IntegrationApp.appleHealth:
         return 'Apple Health';
-      case IntegrationApp.notion:
-        return 'Notion';
-      case IntegrationApp.twitter:
-        return 'Twitter';
-      case IntegrationApp.github:
-        return 'GitHub';
     }
   }
 
@@ -53,16 +35,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'google_calendar';
       case IntegrationApp.gmail:
         return 'gmail';
-      case IntegrationApp.whoop:
-        return 'whoop';
       case IntegrationApp.appleHealth:
         return 'apple_health';
-      case IntegrationApp.notion:
-        return 'notion';
-      case IntegrationApp.twitter:
-        return 'twitter';
-      case IntegrationApp.github:
-        return 'github';
     }
   }
 
@@ -74,23 +48,9 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'assets/integration_app_logos/google-calendar.png';
       case IntegrationApp.gmail:
         return 'assets/integration_app_logos/gmail-logo.jpeg';
-      case IntegrationApp.whoop:
-        // Use logo from assets - file is whoop.png
-        // Direct path works even if not in generated assets file
-        return 'assets/integration_app_logos/whoop.png';
       case IntegrationApp.appleHealth:
         // Use logo from assets - file is apple-health-logo.png
         return 'assets/integration_app_logos/apple-health-logo.png';
-      case IntegrationApp.notion:
-        // Use logo from assets - file is notion-logo.png (if available)
-        // Direct path works even if not in generated assets file
-        return 'assets/integration_app_logos/notion-logo.png';
-      case IntegrationApp.twitter:
-        // Use logo from assets - file is x-logo.avif
-        return 'assets/integration_app_logos/x-logo.avif';
-      case IntegrationApp.github:
-        // Use logo from assets - file is github-logo.png
-        return 'assets/integration_app_logos/github-logo.png';
     }
   }
 
@@ -100,16 +60,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return Icons.calendar_today;
       case IntegrationApp.gmail:
         return Icons.mail;
-      case IntegrationApp.whoop:
-        return Icons.favorite; // Heart icon for health/fitness
       case IntegrationApp.appleHealth:
         return Icons.favorite; // Heart icon for health
-      case IntegrationApp.notion:
-        return Icons.note; // Note icon for Notion
-      case IntegrationApp.twitter:
-        return FontAwesomeIcons.twitter; // Twitter icon
-      case IntegrationApp.github:
-        return FontAwesomeIcons.github; // GitHub icon
     }
   }
 
@@ -119,16 +71,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return const Color(0xFF4285F4);
       case IntegrationApp.gmail:
         return const Color(0xFFEA4335);
-      case IntegrationApp.whoop:
-        return const Color(0xFF00D9FF); // Whoop brand color (cyan)
       case IntegrationApp.appleHealth:
         return const Color(0xFFFF2D55); // Apple Health brand color (pink/red)
-      case IntegrationApp.notion:
-        return const Color(0xFF000000); // Notion brand color (black)
-      case IntegrationApp.twitter:
-        return const Color(0xFF1DA1F2); // Twitter brand color (blue)
-      case IntegrationApp.github:
-        return const Color(0xFF24292E); // GitHub brand color (dark gray)
     }
   }
 
@@ -195,33 +139,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (handled) return;
     }
 
-    if (app == IntegrationApp.whoop) {
-      final service = WhoopService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) return;
-    }
-
-    if (app == IntegrationApp.notion) {
-      final service = NotionService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) return;
-    }
-
-    if (app == IntegrationApp.twitter) {
-      final service = TwitterService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) return;
-    }
-
-    if (app == IntegrationApp.github) {
-      final service = GitHubService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
-      if (handled) {
-        // After successful auth, settings will be opened in didChangeAppLifecycleState
-        return;
-      }
-    }
-
     if (app == IntegrationApp.appleHealth) {
       await _handleAppleHealthConnect();
       return;
@@ -246,6 +163,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final shouldAuth = await _showAuthDialog(IntegrationApp.appleHealth);
     if (shouldAuth == true) {
+      if (!mounted) return;
       final scaffoldMessenger = ScaffoldMessenger.of(context);
       final integrationProvider = context.read<IntegrationProvider>();
 
@@ -290,6 +208,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final shouldAuth = await _showAuthDialog(app);
     if (shouldAuth == true) {
       // Capture ScaffoldMessenger before async operation to avoid use_build_context_synchronously
+      if (!mounted) return false;
       final scaffoldMessenger = ScaffoldMessenger.of(context);
 
       final success = await authenticate();
@@ -358,44 +277,35 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     if (confirmed == true) {
       if (app == IntegrationApp.googleCalendar) {
-        await _handleDisconnect(app, GoogleCalendarService().disconnect);
-      } else if (app == IntegrationApp.whoop) {
-        await _handleDisconnect(app, WhoopService().disconnect);
-      } else if (app == IntegrationApp.notion) {
-        await _handleDisconnect(app, NotionService().disconnect);
-      } else if (app == IntegrationApp.twitter) {
-        await _handleDisconnect(app, TwitterService().disconnect);
-      } else if (app == IntegrationApp.github) {
-        await _handleDisconnect(app, GitHubService().disconnect);
+        final service = GoogleCalendarService();
+        await _handleDisconnect(app, service.disconnect);
       } else if (app == IntegrationApp.appleHealth) {
-        await _handleAppleHealthDisconnect();
-      }
-    }
-  }
+        // Capture instances before async operation to avoid use_build_context_synchronously
+        if (!mounted) return;
+        final integrationProvider = context.read<IntegrationProvider>();
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-  Future<void> _handleAppleHealthDisconnect() async {
-    final integrationProvider = context.read<IntegrationProvider>();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-    final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
-    if (success) {
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedToDisconnect),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
+        if (success) {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(context.l10n.failedToDisconnect),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
       }
     }
   }
@@ -479,8 +389,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(
-        width: 70,
-        height: 28,
+        width: 80,
+        height: 32,
         decoration: BoxDecoration(
           color: Colors.grey.shade800,
           borderRadius: BorderRadius.circular(16),
@@ -490,24 +400,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Widget _buildAppTile(IntegrationApp app, bool isLoading) {
-    final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
+    final isAvailable = app.isAvailable;
 
     return GestureDetector(
-      onTap: isAvailable && !isLoading
+      onTap: isAvailable
           ? () {
+              if (isLoading) return;
+
               if (isConnected) {
-                // If GitHub is connected, open settings page
-                if (app == IntegrationApp.github) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const GitHubSettingsPage(),
-                    ),
-                  );
-                } else {
-                  // For other apps, show disconnect dialog
-                  _disconnectApp(app);
-                }
+                // Show disconnect dialog
+                _disconnectApp(app);
               } else {
                 _connectApp(app);
               }
@@ -602,7 +505,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 child: Text(
                   context.l10n.disconnect,
                   style: const TextStyle(
-                    color: Colors.red,
+                    color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -687,7 +590,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          context.l10n.chatTools,
+          context.l10n.integrations,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -706,35 +609,31 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Expanded(
                 child: ListView(
                   children: [
-                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)).toList(),
+                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(
+                        color: Colors.grey.shade800,
+                        thickness: 1,
+                      ),
+                    ),
                     _buildCreateYourOwnAppTile(),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Footer Note
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+              // Footer
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
                 child: Row(
                   children: [
-                    FaIcon(
-                      FontAwesomeIcons.puzzlePiece,
-                      color: Colors.blue.withValues(alpha: 0.5),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
+                    const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        context.l10n.chatToolsFooter,
+                        context.l10n.integrationsFooter,
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                          fontSize: 12,
                         ),
                       ),
                     ),

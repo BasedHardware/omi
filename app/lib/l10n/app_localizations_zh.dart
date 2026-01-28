@@ -419,7 +419,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceSettings => '设备设置';
 
   @override
-  String get chatTools => '聊天工具';
+  String get integrations => '集成';
 
   @override
   String get feedbackBug => '反馈 / Bug';
@@ -1005,7 +1005,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get comingSoon => '即将推出';
 
   @override
-  String get chatToolsFooter => '连接您的应用以在聊天中查看数据和指标。';
+  String get integrationsFooter => '连接您的应用以在聊天中查看数据和指标。';
 
   @override
   String get completeAuthInBrowser => '请在浏览器中完成身份验证。';
@@ -7694,4 +7694,151 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get removeFilter => '移除筛选';
+
+  @override
+  String get categoryConversationAnalysis => '对话分析';
+
+  @override
+  String get categoryPersonalityClone => '人格克隆';
+
+  @override
+  String get categoryHealth => '健康';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryCommunication => '沟通';
+
+  @override
+  String get categoryEmotionalSupport => '情感支持';
+
+  @override
+  String get categoryProductivity => '生产力';
+
+  @override
+  String get categoryEntertainment => '娱乐';
+
+  @override
+  String get categoryFinancial => '金融';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categorySafety => '安全';
+
+  @override
+  String get categoryShopping => '购物';
+
+  @override
+  String get categorySocial => '社交';
+
+  @override
+  String get categoryNews => '新闻';
+
+  @override
+  String get categoryUtilities => '工具';
+
+  @override
+  String get categoryOther => '其他';
+
+  @override
+  String get capabilityChat => '聊天';
+
+  @override
+  String get capabilityConversations => '对话';
+
+  @override
+  String get capabilityExternalIntegration => '外部集成';
+
+  @override
+  String get capabilityNotification => '通知';
+
+  @override
+  String get triggerAudioBytes => '音频字节';
+
+  @override
+  String get triggerConversationCreation => '创建对话';
+
+  @override
+  String get triggerTranscriptProcessed => '转录已处理';
+
+  @override
+  String get actionCreateConversations => '创建对话';
+
+  @override
+  String get actionCreateMemories => '创建记忆';
+
+  @override
+  String get actionReadConversations => '读取对话';
+
+  @override
+  String get actionReadMemories => '读取记忆';
+
+  @override
+  String get actionReadTasks => '读取任务';
+
+  @override
+  String get scopeUserName => '用户名';
+
+  @override
+  String get scopeUserFacts => '用户信息';
+
+  @override
+  String get scopeUserConversations => '用户对话';
+
+  @override
+  String get scopeUserChat => '用户聊天';
+
+  @override
+  String get capabilitySummary => '摘要';
+
+  @override
+  String get capabilityFeatured => '精选';
+
+  @override
+  String get capabilityTasks => '任务';
+
+  @override
+  String get capabilityIntegrations => '集成';
+
+  @override
+  String get categoryPersonalityClones => '人格克隆';
+
+  @override
+  String get categoryProductivityLifestyle => '生产力与生活方式';
+
+  @override
+  String get categorySocialEntertainment => '社交与娱乐';
+
+  @override
+  String get categoryProductivityTools => '生产力工具';
+
+  @override
+  String get categoryPersonalWellness => '个人健康';
+
+  @override
+  String get rating => '评分';
+
+  @override
+  String get categories => '分类';
+
+  @override
+  String get sortBy => '排序';
+
+  @override
+  String get highestRating => '最高评分';
+
+  @override
+  String get lowestRating => '最低评分';
+
+  @override
+  String get resetFilters => '重置筛选';
+
+  @override
+  String get applyFilters => '应用筛选';
+
+  @override
+  String get mostInstalls => '安装最多';
 }

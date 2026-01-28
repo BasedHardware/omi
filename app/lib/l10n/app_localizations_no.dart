@@ -425,7 +425,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
-  String get chatTools => 'Chatverktøy';
+  String get integrations => 'Integrasjoner';
 
   @override
   String get feedbackBug => 'Tilbakemelding / Feil';
@@ -1020,7 +1020,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Koble til appene dine for å se data og måledata i chat.';
+  String get integrationsFooter => 'Koble til appene dine for å se data og måledata i chat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7833,4 +7833,151 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get removeFilter => 'Fjern Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtaleanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighetsklon';
+
+  @override
+  String get categoryHealth => 'Helse';
+
+  @override
+  String get categoryEducation => 'Utdanning';
+
+  @override
+  String get categoryCommunication => 'Kommunikasjon';
+
+  @override
+  String get categoryEmotionalSupport => 'Emosjonell støtte';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underholdning';
+
+  @override
+  String get categoryFinancial => 'Økonomi';
+
+  @override
+  String get categoryTravel => 'Reise';
+
+  @override
+  String get categorySafety => 'Sikkerhet';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Sosialt';
+
+  @override
+  String get categoryNews => 'Nyheter';
+
+  @override
+  String get categoryUtilities => 'Verktøy';
+
+  @override
+  String get categoryOther => 'Annet';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Samtaler';
+
+  @override
+  String get capabilityExternalIntegration => 'Ekstern integrasjon';
+
+  @override
+  String get capabilityNotification => 'Varsel';
+
+  @override
+  String get triggerAudioBytes => 'Lydbytes';
+
+  @override
+  String get triggerConversationCreation => 'Samtaleoppretting';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripsjon behandlet';
+
+  @override
+  String get actionCreateConversations => 'Opprett samtaler';
+
+  @override
+  String get actionCreateMemories => 'Opprett minner';
+
+  @override
+  String get actionReadConversations => 'Les samtaler';
+
+  @override
+  String get actionReadMemories => 'Les minner';
+
+  @override
+  String get actionReadTasks => 'Les oppgaver';
+
+  @override
+  String get scopeUserName => 'Brukernavn';
+
+  @override
+  String get scopeUserFacts => 'Brukerfakta';
+
+  @override
+  String get scopeUserConversations => 'Brukersamtaler';
+
+  @override
+  String get scopeUserChat => 'Brukerchat';
+
+  @override
+  String get capabilitySummary => 'Sammendrag';
+
+  @override
+  String get capabilityFeatured => 'Utvalgte';
+
+  @override
+  String get capabilityTasks => 'Oppgaver';
+
+  @override
+  String get capabilityIntegrations => 'Integrasjoner';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighetskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Sosialt og underholdning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsverktøy';
+
+  @override
+  String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Vurdering';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Høyeste vurdering';
+
+  @override
+  String get lowestRating => 'Laveste vurdering';
+
+  @override
+  String get resetFilters => 'Tilbakestill filtre';
+
+  @override
+  String get applyFilters => 'Bruk filtre';
+
+  @override
+  String get mostInstalls => 'Flest installasjoner';
 }

@@ -3,6 +3,9 @@ description: "Flutter platform-specific code iOS Android macOS Windows CocoaPods
 globs:
   - "app/**/*.dart"
 alwaysApply: false
+references:
+  - docs/doc/developer/AppSetup.mdx
+  - app/README.md
 ---
 
 # Flutter Platform-Specific Code
@@ -281,6 +284,23 @@ class AdaptiveButton extends BaseAdaptiveWidget {
 
 ## Related Documentation
 
-- Flutter Architecture: `.cursor/rules/flutter-architecture.mdc`
-- App Setup: `docs/doc/developer/AppSetup.mdx`
-- Flutter Components: `.cursor/FLUTTER_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **App Setup**: `docs/doc/developer/AppSetup.mdx` - [View online](https://docs.omi.me/doc/developer/AppSetup)
+- **Flutter Architecture**: `.cursor/rules/flutter-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure and patterns
+- `.cursor/rules/flutter-localization.mdc` - Localization requirements
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns including platform-specific code
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter development specialist
+
+### Commands
+- `/flutter-setup` - Setup platform-specific dependencies
+- `/flutter-build` - Build for specific platforms

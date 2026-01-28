@@ -6,6 +6,8 @@ globs:
   - "omiGlass/**/*.c"
   - "omiGlass/**/*.h"
 alwaysApply: false
+references:
+  - docs/doc/developer/Protocol.mdx
 ---
 
 # Firmware BLE Service
@@ -213,6 +215,27 @@ BT_GATT_CB_DEFINE(gatt_callbacks) = {
 
 ## Related Documentation
 
-- Firmware Architecture: `.cursor/rules/firmware-architecture.mdc`
-- Protocol: `docs/doc/developer/Protocol.mdx`
-- Firmware Components: `.cursor/FIRMWARE_COMPONENTS.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **Firmware Compilation**: `docs/doc/developer/firmware/Compile_firmware.mdx` - [View online](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+- **Hardware Docs**: `docs/doc/hardware/` - [View online](https://docs.omi.me/doc/hardware/)
+- **Firmware Architecture**: `.cursor/rules/firmware-architecture.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/firmware-architecture.mdc` - Firmware system architecture
+- `.cursor/rules/firmware-audio-codecs.mdc` - Audio codec implementation
+- `.cursor/rules/flutter-ble-protocol.mdc` - Flutter BLE integration
+
+### Skills
+- `.cursor/skills/omi-firmware-patterns/` - Firmware patterns including BLE
+- `.cursor/skills/omi-flutter-patterns/` - Flutter BLE patterns
+
+### Subagents
+- `.cursor/agents/firmware-engineer/` - Firmware BLE specialist
+- `.cursor/agents/flutter-developer/` - Flutter BLE integration specialist
+
+### Commands
+- `/flutter-setup` - Setup firmware development environment

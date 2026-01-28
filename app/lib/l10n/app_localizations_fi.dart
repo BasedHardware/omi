@@ -423,7 +423,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
-  String get chatTools => 'Chat-työkalut';
+  String get integrations => 'Integraatiot';
 
   @override
   String get feedbackBug => 'Palaute / Virhe';
@@ -447,7 +447,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appAndDeviceCopied => 'Sovelluksen ja laitteen tiedot kopioitu';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Katsaus 2025';
 
   @override
   String get yourPrivacyYourControl => 'Yksityisyytesi, sinun hallinnassasi';
@@ -582,7 +582,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get starOngoing => 'Merkitse käynnissä oleva keskustelu tähdellä';
 
   @override
-  String get off => 'Off';
+  String get off => 'Pois';
 
   @override
   String get max => 'Maks.';
@@ -1017,7 +1017,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get comingSoon => 'Tulossa pian';
 
   @override
-  String get chatToolsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
+  String get integrationsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
 
   @override
   String get completeAuthInBrowser => 'Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.';
@@ -6819,7 +6819,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceIdLabel => 'Laitteen tunnus';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Tila';
 
   @override
   String get statusProcessed => 'Käsitelty';
@@ -7836,4 +7836,151 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get removeFilter => 'Poista Suodatin';
+
+  @override
+  String get categoryConversationAnalysis => 'Keskusteluanalyysi';
+
+  @override
+  String get categoryPersonalityClone => 'Persoonallisuusklooni';
+
+  @override
+  String get categoryHealth => 'Terveys';
+
+  @override
+  String get categoryEducation => 'Koulutus';
+
+  @override
+  String get categoryCommunication => 'Viestintä';
+
+  @override
+  String get categoryEmotionalSupport => 'Tunnetuki';
+
+  @override
+  String get categoryProductivity => 'Tuottavuus';
+
+  @override
+  String get categoryEntertainment => 'Viihde';
+
+  @override
+  String get categoryFinancial => 'Talous';
+
+  @override
+  String get categoryTravel => 'Matkailu';
+
+  @override
+  String get categorySafety => 'Turvallisuus';
+
+  @override
+  String get categoryShopping => 'Ostokset';
+
+  @override
+  String get categorySocial => 'Sosiaalinen';
+
+  @override
+  String get categoryNews => 'Uutiset';
+
+  @override
+  String get categoryUtilities => 'Työkalut';
+
+  @override
+  String get categoryOther => 'Muut';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Keskustelut';
+
+  @override
+  String get capabilityExternalIntegration => 'Ulkoinen integraatio';
+
+  @override
+  String get capabilityNotification => 'Ilmoitus';
+
+  @override
+  String get triggerAudioBytes => 'Äänitavut';
+
+  @override
+  String get triggerConversationCreation => 'Keskustelun luominen';
+
+  @override
+  String get triggerTranscriptProcessed => 'Litterointi käsitelty';
+
+  @override
+  String get actionCreateConversations => 'Luo keskusteluja';
+
+  @override
+  String get actionCreateMemories => 'Luo muistoja';
+
+  @override
+  String get actionReadConversations => 'Lue keskusteluja';
+
+  @override
+  String get actionReadMemories => 'Lue muistoja';
+
+  @override
+  String get actionReadTasks => 'Lue tehtäviä';
+
+  @override
+  String get scopeUserName => 'Käyttäjänimi';
+
+  @override
+  String get scopeUserFacts => 'Käyttäjän tiedot';
+
+  @override
+  String get scopeUserConversations => 'Käyttäjän keskustelut';
+
+  @override
+  String get scopeUserChat => 'Käyttäjän chat';
+
+  @override
+  String get capabilitySummary => 'Yhteenveto';
+
+  @override
+  String get capabilityFeatured => 'Suositellut';
+
+  @override
+  String get capabilityTasks => 'Tehtävät';
+
+  @override
+  String get capabilityIntegrations => 'Integraatiot';
+
+  @override
+  String get categoryPersonalityClones => 'Persoonallisuuskloonit';
+
+  @override
+  String get categoryProductivityLifestyle => 'Tuottavuus ja elämäntapa';
+
+  @override
+  String get categorySocialEntertainment => 'Sosiaalinen ja viihde';
+
+  @override
+  String get categoryProductivityTools => 'Tuottavuustyökalut';
+
+  @override
+  String get categoryPersonalWellness => 'Henkilökohtainen hyvinvointi';
+
+  @override
+  String get rating => 'Arvio';
+
+  @override
+  String get categories => 'Kategoriat';
+
+  @override
+  String get sortBy => 'Lajittele';
+
+  @override
+  String get highestRating => 'Korkein arvio';
+
+  @override
+  String get lowestRating => 'Matalin arvio';
+
+  @override
+  String get resetFilters => 'Nollaa suodattimet';
+
+  @override
+  String get applyFilters => 'Käytä suodattimia';
+
+  @override
+  String get mostInstalls => 'Eniten asennuksia';
 }

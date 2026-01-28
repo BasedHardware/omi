@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
-import '../providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 class NotificationScopesChipsWidget extends StatelessWidget {
   const NotificationScopesChipsWidget({super.key});
 
-  Widget _buildScopeButton(NotificationScope scope, bool isSelected, VoidCallback onTap) {
+  Widget _buildScopeButton(BuildContext context, NotificationScope scope, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -23,7 +24,7 @@ class NotificationScopesChipsWidget extends StatelessWidget {
         ),
         child: Center(
           child: Text(
-            scope.title,
+            scope.getLocalizedTitle(context),
             style: TextStyle(
               color: isSelected ? Colors.black : Colors.white,
               fontSize: 14,
@@ -52,14 +53,14 @@ class NotificationScopesChipsWidget extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _buildScopeButton(scopes[i], provider.isScopesSelected(scopes[i]), () {
+                  child: _buildScopeButton(context, scopes[i], provider.isScopesSelected(scopes[i]), () {
                     provider.addOrRemoveScope(scopes[i]);
                   }),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: i + 1 < scopes.length
-                      ? _buildScopeButton(scopes[i + 1], provider.isScopesSelected(scopes[i + 1]), () {
+                      ? _buildScopeButton(context, scopes[i + 1], provider.isScopesSelected(scopes[i + 1]), () {
                           provider.addOrRemoveScope(scopes[i + 1]);
                         })
                       : const SizedBox.shrink(),

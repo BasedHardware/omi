@@ -429,7 +429,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
-  String get chatTools => 'Εργαλεία Συνομιλίας';
+  String get integrations => 'Ενσωματώσεις';
 
   @override
   String get feedbackBug => 'Σχόλια / Σφάλμα';
@@ -589,7 +589,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get starOngoing => 'Αγαπημένη Τρέχουσα Συνομιλία';
 
   @override
-  String get off => 'Off';
+  String get off => 'Απενεργ.';
 
   @override
   String get max => 'Μέγιστο';
@@ -1025,7 +1025,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get comingSoon => 'Σύντομα Διαθέσιμο';
 
   @override
-  String get chatToolsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
+  String get integrationsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7895,4 +7895,151 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get removeFilter => 'Κατάργηση Φίλτρου';
+
+  @override
+  String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
+
+  @override
+  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
+
+  @override
+  String get categoryHealth => 'Υγεία';
+
+  @override
+  String get categoryEducation => 'Εκπαίδευση';
+
+  @override
+  String get categoryCommunication => 'Επικοινωνία';
+
+  @override
+  String get categoryEmotionalSupport => 'Συναισθηματική υποστήριξη';
+
+  @override
+  String get categoryProductivity => 'Παραγωγικότητα';
+
+  @override
+  String get categoryEntertainment => 'Ψυχαγωγία';
+
+  @override
+  String get categoryFinancial => 'Οικονομικά';
+
+  @override
+  String get categoryTravel => 'Ταξίδια';
+
+  @override
+  String get categorySafety => 'Ασφάλεια';
+
+  @override
+  String get categoryShopping => 'Αγορές';
+
+  @override
+  String get categorySocial => 'Κοινωνικά';
+
+  @override
+  String get categoryNews => 'Ειδήσεις';
+
+  @override
+  String get categoryUtilities => 'Εργαλεία';
+
+  @override
+  String get categoryOther => 'Άλλα';
+
+  @override
+  String get capabilityChat => 'Συνομιλία';
+
+  @override
+  String get capabilityConversations => 'Συνομιλίες';
+
+  @override
+  String get capabilityExternalIntegration => 'Εξωτερική ενσωμάτωση';
+
+  @override
+  String get capabilityNotification => 'Ειδοποίηση';
+
+  @override
+  String get triggerAudioBytes => 'Bytes ήχου';
+
+  @override
+  String get triggerConversationCreation => 'Δημιουργία συνομιλίας';
+
+  @override
+  String get triggerTranscriptProcessed => 'Απομαγνητοφώνηση επεξεργάστηκε';
+
+  @override
+  String get actionCreateConversations => 'Δημιουργία συνομιλιών';
+
+  @override
+  String get actionCreateMemories => 'Δημιουργία αναμνήσεων';
+
+  @override
+  String get actionReadConversations => 'Ανάγνωση συνομιλιών';
+
+  @override
+  String get actionReadMemories => 'Ανάγνωση αναμνήσεων';
+
+  @override
+  String get actionReadTasks => 'Ανάγνωση εργασιών';
+
+  @override
+  String get scopeUserName => 'Όνομα χρήστη';
+
+  @override
+  String get scopeUserFacts => 'Στοιχεία χρήστη';
+
+  @override
+  String get scopeUserConversations => 'Συνομιλίες χρήστη';
+
+  @override
+  String get scopeUserChat => 'Συνομιλία χρήστη';
+
+  @override
+  String get capabilitySummary => 'Περίληψη';
+
+  @override
+  String get capabilityFeatured => 'Προτεινόμενα';
+
+  @override
+  String get capabilityTasks => 'Εργασίες';
+
+  @override
+  String get capabilityIntegrations => 'Ενσωματώσεις';
+
+  @override
+  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
+
+  @override
+  String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';
+
+  @override
+  String get categorySocialEntertainment => 'Κοινωνικά & Ψυχαγωγία';
+
+  @override
+  String get categoryProductivityTools => 'Εργαλεία παραγωγικότητας';
+
+  @override
+  String get categoryPersonalWellness => 'Προσωπική ευεξία';
+
+  @override
+  String get rating => 'Βαθμολογία';
+
+  @override
+  String get categories => 'Κατηγορίες';
+
+  @override
+  String get sortBy => 'Ταξινόμηση';
+
+  @override
+  String get highestRating => 'Υψηλότερη βαθμολογία';
+
+  @override
+  String get lowestRating => 'Χαμηλότερη βαθμολογία';
+
+  @override
+  String get resetFilters => 'Επαναφορά φίλτρων';
+
+  @override
+  String get applyFilters => 'Εφαρμογή φίλτρων';
+
+  @override
+  String get mostInstalls => 'Περισσότερες εγκαταστάσεις';
 }

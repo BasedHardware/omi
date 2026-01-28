@@ -20,7 +20,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import '../payment_webview_page.dart';
+import 'package:omi/pages/settings/payment_webview_page.dart';
 
 class PlansSheet extends StatefulWidget {
   final AnimationController waveController;
@@ -1703,7 +1703,8 @@ class _PlansSheetState extends State<PlansSheet> {
                           onPressed: () {
                             _handleCancelSubscription();
                           },
-                          child: Text(context.l10n.cancelSubscription, style: const TextStyle(color: Colors.red, fontSize: 16)),
+                          child: Text(context.l10n.cancelSubscription,
+                              style: const TextStyle(color: Colors.red, fontSize: 16)),
                         ),
                         const SizedBox(height: 8),
                       ],
