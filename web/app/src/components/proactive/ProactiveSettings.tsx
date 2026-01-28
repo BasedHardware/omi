@@ -47,8 +47,11 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
 
             {/* Enable toggle */}
             <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-200">Enable Proactive Monitoring</label>
+                <label id="proactive-toggle-label" className="text-sm font-medium text-gray-200">Enable Proactive Monitoring</label>
                 <button
+                    role="switch"
+                    aria-checked={settings.enabled}
+                    aria-labelledby="proactive-toggle-label"
                     onClick={() => updateSettings({ enabled: !settings.enabled })}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.enabled ? 'bg-blue-600' : 'bg-gray-600'
                         }`}
@@ -201,15 +204,28 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 <div className="flex gap-2">
                     <button
                         onClick={() => {
-                            if (Notification.permission === 'granted') {
-                                new Notification('Test Notification', {
-                                    body: 'If you see this, notifications are working!',
-                                    icon: '/logo.png',
-                                    tag: 'test-notification',
-                                });
+                            if (typeof window !== 'undefined' && 'Notification' in window) {
+                                if (Notification.permission === 'granted') {
+                                    new Notification('Test Notification', {
+                                        body: 'If you see this, notifications are working!',
+                                        icon: '/logo.png',
+                                        tag: 'test-notification',
+                                    });
+                                } else {
+                                    Notification.requestPermission().then((permission) => {
+                                        if (permission === 'granted') {
+                                            new Notification('Test Notification', {
+                                                body: 'If you see this, notifications are working!',
+                                                icon: '/logo.png',
+                                                tag: 'test-notification',
+                                            });
+                                        } else {
+                                            alert(`Permission status: ${permission}`);
+                                        }
+                                    });
+                                }
                             } else {
-                                alert(`Permission status: ${Notification.permission}`);
-                                Notification.requestPermission();
+                                alert('Notifications not supported in this environment');
                             }
                         }}
                         className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-xs text-white transition-colors"

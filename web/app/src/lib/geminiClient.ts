@@ -57,9 +57,11 @@ interface GeminiResponse {
     };
 }
 
+export type GeminiErrorType = 'MISSING_API_KEY' | 'NETWORK_ERROR' | 'INVALID_RESPONSE' | 'API_ERROR' | 'HTTP_ERROR';
+
 export class GeminiClientError extends Error {
     constructor(
-        public code: 'MISSING_API_KEY' | 'NETWORK_ERROR' | 'INVALID_RESPONSE' | 'API_ERROR',
+        public code: GeminiErrorType,
         message: string
     ) {
         super(message);
@@ -94,7 +96,7 @@ export async function sendImageRequest(
                     { text: prompt },
                     {
                         inline_data: {
-                            mime_type: 'image/jpeg',
+                            mime_type: imageData.type || 'image/jpeg',
                             data: base64Data,
                         },
                     },
@@ -123,6 +125,14 @@ export async function sendImageRequest(
             },
             body: JSON.stringify(request),
         });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new GeminiClientError(
+                'HTTP_ERROR',
+                `HTTP ${response.status} ${response.statusText}: ${errorText}`
+            );
+        }
 
         const data = (await response.json()) as GeminiResponse;
 

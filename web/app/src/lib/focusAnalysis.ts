@@ -98,7 +98,33 @@ export async function analyzeFocus(options: AnalyzeFocusOptions): Promise<FocusA
             responseSchema
         });
 
-        return JSON.parse(responseText) as FocusAnalysisResult;
+        const parsed: unknown = JSON.parse(responseText);
+
+        // Runtime validation
+        if (!parsed || typeof parsed !== 'object') {
+            throw new Error('Invalid response: not an object');
+        }
+
+        const result = parsed as Record<string, any>;
+
+        if (typeof result.status !== 'string' || !['focused', 'distracted'].includes(result.status)) {
+            throw new Error('Invalid response: missing or invalid status');
+        }
+
+        if (typeof result.app_or_site !== 'string') {
+            throw new Error('Invalid response: missing app_or_site');
+        }
+
+        if (typeof result.description !== 'string') {
+            throw new Error('Invalid response: missing description');
+        }
+
+        // message is optional
+        if (result.message !== undefined && typeof result.message !== 'string') {
+            throw new Error('Invalid response: message must be string if present');
+        }
+
+        return result as FocusAnalysisResult;
     } catch (error) {
         console.error('Focus Analysis Failed:', error);
         throw error;

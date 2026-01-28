@@ -4,6 +4,7 @@ import { GeminiResponseSchema } from '@/lib/geminiClient';
 
 interface AnalyzeScreenParams {
     imageBase64: string;
+    imageMimeType?: string;
     prompt: string;
     systemPrompt: string;
     responseSchema?: GeminiResponseSchema;
@@ -11,6 +12,7 @@ interface AnalyzeScreenParams {
 }
 
 const DEFAULT_MODEL = 'gemini-2.0-flash';
+const ALLOWED_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
 export async function analyzeScreenAction(params: AnalyzeScreenParams): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -19,7 +21,19 @@ export async function analyzeScreenAction(params: AnalyzeScreenParams): Promise<
         throw new Error('Gemini API key not configured on server');
     }
 
-    const { imageBase64, prompt, systemPrompt, responseSchema, model = DEFAULT_MODEL } = params;
+    const {
+        imageBase64,
+        imageMimeType = 'image/jpeg',
+        prompt,
+        systemPrompt,
+        responseSchema,
+        model = DEFAULT_MODEL
+    } = params;
+
+    // Validate model
+    if (!ALLOWED_MODELS.includes(model)) {
+        throw new Error(`Invalid model specified. Allowed: ${ALLOWED_MODELS.join(', ')}`);
+    }
 
     // Construct request payload
     const requestBody: any = {
@@ -29,7 +43,7 @@ export async function analyzeScreenAction(params: AnalyzeScreenParams): Promise<
                     { text: prompt },
                     {
                         inline_data: {
-                            mime_type: 'image/jpeg',
+                            mime_type: imageMimeType,
                             data: imageBase64,
                         },
                     },

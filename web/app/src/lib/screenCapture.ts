@@ -77,27 +77,46 @@ export function createFrameCapture(
     const { intervalMs, onFrame, onError } = options;
 
     let captureInterval: NodeJS.Timeout | null = null;
+    let startTimeout: NodeJS.Timeout | null = null;
     let isPaused = false;
     let videoElement: HTMLVideoElement | null = null;
     let canvas: HTMLCanvasElement | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
+    let initPromise: Promise<void> | null = null;
 
-    function initializeCapture(): void {
-        // Create hidden video element
-        videoElement = document.createElement('video');
-        videoElement.srcObject = new MediaStream([videoTrack]);
-        videoElement.autoplay = true;
-        videoElement.muted = true;
-        videoElement.playsInline = true;
+    function initializeCapture(): Promise<void> {
+        if (initPromise) return initPromise;
 
-        // Create canvas for frame extraction
-        canvas = document.createElement('canvas');
-        ctx = canvas.getContext('2d');
+        initPromise = new Promise((resolve, reject) => {
+            try {
+                // Create hidden video element
+                videoElement = document.createElement('video');
+                videoElement.srcObject = new MediaStream([videoTrack]);
+                videoElement.autoplay = true;
+                videoElement.muted = true;
+                videoElement.playsInline = true;
 
-        // Start playing
-        videoElement.play().catch((err) => {
-            onError(`Failed to play video: ${err.message}`);
+                // Create canvas for frame extraction
+                canvas = document.createElement('canvas');
+                ctx = canvas.getContext('2d');
+
+                if (!ctx) {
+                    throw new Error('Failed to get 2D context from canvas');
+                }
+
+                // Start playing
+                videoElement.play().then(() => resolve()).catch((err) => {
+                    onError(`Failed to play video: ${err.message}`);
+                    reject(err);
+                });
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Capture initialization failed';
+                onError(msg);
+                reject(err);
+            }
         });
+
+        return initPromise;
     }
 
     async function captureFrame(): Promise<Blob | null> {
@@ -149,8 +168,9 @@ export function createFrameCapture(
         }
 
         // Capture first frame after a short delay (let video initialize)
-        setTimeout(() => {
+        startTimeout = setTimeout(() => {
             captureAndSend();
+            startTimeout = null;
         }, 500);
 
         // Start interval
@@ -163,6 +183,11 @@ export function createFrameCapture(
             captureInterval = null;
         }
 
+        if (startTimeout) {
+            clearTimeout(startTimeout);
+            startTimeout = null;
+        }
+
         if (videoElement) {
             videoElement.srcObject = null;
             videoElement = null;
@@ -170,6 +195,7 @@ export function createFrameCapture(
 
         canvas = null;
         ctx = null;
+        initPromise = null;
         isPaused = false;
     }
 
@@ -183,9 +209,12 @@ export function createFrameCapture(
 
     async function captureNow(): Promise<Blob | null> {
         if (!videoElement) {
-            initializeCapture();
+            await initializeCapture();
             // Wait for video to initialize
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Re-check videoElement as initializeCapture is side-effectual
+            if (videoElement && (videoElement.readyState < 2)) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+            }
         }
         return captureFrame();
     }
