@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,8 +36,10 @@ void main() {
       // For CI/CD, you'd want a test-specific entry point
       await tester.pumpWidget(const _TestApp());
 
-      // Wait for app to fully initialize
-      await tester.pumpAndSettle(const Duration(seconds: 3));
+      // Wait for app to fully initialize (use pump, NOT pumpAndSettle - animations never stop)
+      for (int i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
 
       // Check if we're on a screen (home or login)
       debugPrint('=== Starting Animation Performance Test ===');
@@ -44,7 +47,7 @@ void main() {
       // Profile home screen for 10 seconds
       // This captures WaveformSection and ProcessingCapture animations
       debugPrint('Profiling HOME screen...');
-      final homeTimeline = await binding.traceAction(
+      await binding.traceAction(
         () async {
           // Let animations run for 10 seconds
           for (int i = 0; i < 100; i++) {
@@ -53,14 +56,17 @@ void main() {
         },
         reportKey: 'home_screen_animations',
       );
-      _printTimelineSummary('HOME', homeTimeline);
+      debugPrint('[HOME] Timeline captured');
 
       debugPrint('=== Test Complete ===');
     });
 
     testWidgets('Profile with frame callback metrics', (WidgetTester tester) async {
       await tester.pumpWidget(const _TestApp());
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+      // Wait for app to initialize (use pump, NOT pumpAndSettle - animations never stop)
+      for (int i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
 
       // Collect frame timing data manually
       final frameTimings = <FrameTiming>[];
@@ -125,13 +131,6 @@ void main() {
       }
     });
   });
-}
-
-void _printTimelineSummary(String screen, dynamic timeline) {
-  debugPrint('');
-  debugPrint('[$screen] Timeline captured');
-  // The timeline contains detailed trace data that can be analyzed
-  // For full analysis, export to Chrome tracing format
 }
 
 /// Minimal test app wrapper
