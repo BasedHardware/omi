@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/focus_service.dart';
 
-/// Provider for focus monitoring state management
+/// Provider for focus monitoring and task extraction state management
 class FocusProvider extends BaseProvider {
   final FocusService _focusService = FocusService();
 
@@ -14,19 +14,26 @@ class FocusProvider extends BaseProvider {
   String? _currentApp;
   String? _currentStatus;
   String? _lastMessage;
-  final List<FocusEvent> _history = [];
-  StreamSubscription<FocusEvent>? _eventSubscription;
+  final List<AssistantEvent> _history = [];
+  final List<ExtractedTask> _extractedTasks = [];
+  StreamSubscription<AssistantEvent>? _eventSubscription;
+  StreamSubscription<ExtractedTask>? _taskSubscription;
 
   // Permission states
   bool _hasScreenRecordingPermission = false;
   bool _hasNotificationPermission = false;
+
+  // Assistant states
+  List<AssistantInfo> _assistants = [];
 
   // Getters
   bool get isMonitoring => _isMonitoring;
   String? get currentApp => _currentApp;
   String? get currentStatus => _currentStatus;
   String? get lastMessage => _lastMessage;
-  List<FocusEvent> get history => List.unmodifiable(_history);
+  List<AssistantEvent> get history => List.unmodifiable(_history);
+  List<ExtractedTask> get extractedTasks => List.unmodifiable(_extractedTasks);
+  List<AssistantInfo> get assistants => List.unmodifiable(_assistants);
 
   bool get isFocused => _currentStatus == 'focused';
   bool get isDistracted => _currentStatus == 'distracted';
@@ -43,14 +50,20 @@ class FocusProvider extends BaseProvider {
 
     _focusService.initialize();
 
-    // Listen to focus events
-    _eventSubscription = _focusService.focusEvents.listen(_handleFocusEvent);
+    // Listen to all assistant events
+    _eventSubscription = _focusService.events.listen(_handleAssistantEvent);
+
+    // Listen to task events
+    _taskSubscription = _focusService.taskEvents.listen(_handleTaskEvent);
 
     // Check initial permissions
     await checkPermissions();
 
     // Get current status
     await refreshStatus();
+
+    // Get registered assistants
+    await refreshAssistants();
   }
 
   /// Check all permissions
@@ -75,8 +88,16 @@ class FocusProvider extends BaseProvider {
     }
   }
 
-  /// Handle incoming focus events
-  void _handleFocusEvent(FocusEvent event) {
+  /// Refresh list of registered assistants
+  Future<void> refreshAssistants() async {
+    if (!isSupported) return;
+
+    _assistants = await _focusService.getAssistants();
+    notifyListeners();
+  }
+
+  /// Handle incoming assistant events
+  void _handleAssistantEvent(AssistantEvent event) {
     debugPrint('FocusProvider: Received event: $event');
 
     switch (event.type) {
@@ -110,20 +131,52 @@ class FocusProvider extends BaseProvider {
       case 'refocus':
         // User just refocused - could trigger UI feedback
         break;
+
+      case 'taskExtracted':
+      case 'taskUpdated':
+      case 'taskCompleted':
+        // Task events are handled by _handleTaskEvent
+        _addToHistory(event);
+        break;
+    }
+
+    notifyListeners();
+  }
+
+  /// Handle incoming task events
+  void _handleTaskEvent(ExtractedTask task) {
+    debugPrint('FocusProvider: Received task: $task');
+
+    // Check for duplicates (by title)
+    final existingIndex = _extractedTasks.indexWhere(
+      (t) => t.title.toLowerCase() == task.title.toLowerCase(),
+    );
+
+    if (existingIndex >= 0) {
+      // Update existing task
+      _extractedTasks[existingIndex] = task;
+    } else {
+      // Add new task
+      _extractedTasks.insert(0, task);
+    }
+
+    // Keep only the last 100 tasks
+    if (_extractedTasks.length > 100) {
+      _extractedTasks.removeLast();
     }
 
     notifyListeners();
   }
 
   /// Add event to history (keep last 50)
-  void _addToHistory(FocusEvent event) {
+  void _addToHistory(AssistantEvent event) {
     _history.insert(0, event);
     if (_history.length > 50) {
       _history.removeLast();
     }
   }
 
-  /// Start focus monitoring
+  /// Start monitoring
   Future<bool> startMonitoring() async {
     if (!isSupported) return false;
 
@@ -150,7 +203,7 @@ class FocusProvider extends BaseProvider {
     }
   }
 
-  /// Stop focus monitoring
+  /// Stop monitoring
   Future<void> stopMonitoring() async {
     if (!isSupported) return;
 
@@ -178,6 +231,36 @@ class FocusProvider extends BaseProvider {
     }
   }
 
+  /// Enable a specific assistant
+  Future<void> enableAssistant(String identifier) async {
+    if (!isSupported) return;
+    await _focusService.enableAssistant(identifier);
+    await refreshAssistants();
+  }
+
+  /// Disable a specific assistant
+  Future<void> disableAssistant(String identifier) async {
+    if (!isSupported) return;
+    await _focusService.disableAssistant(identifier);
+    await refreshAssistants();
+  }
+
+  /// Toggle an assistant's enabled state
+  Future<void> toggleAssistant(String identifier) async {
+    final assistant = _assistants.firstWhere(
+      (a) => a.identifier == identifier,
+      orElse: () => AssistantInfo(identifier: '', displayName: '', enabled: false),
+    );
+
+    if (assistant.identifier.isEmpty) return;
+
+    if (assistant.enabled) {
+      await disableAssistant(identifier);
+    } else {
+      await enableAssistant(identifier);
+    }
+  }
+
   /// Request screen recording permission
   Future<void> requestScreenRecordingPermission() async {
     if (!isSupported) return;
@@ -200,14 +283,43 @@ class FocusProvider extends BaseProvider {
   }
 
   /// Trigger glow effect manually (for testing)
-  Future<void> triggerGlow() async {
+  Future<void> triggerGlow({String colorMode = 'focused'}) async {
     if (!isSupported) return;
-    await _focusService.triggerGlow();
+    await _focusService.triggerGlow(colorMode: colorMode);
   }
 
-  /// Clear history
+  /// Open the native Settings window and start monitoring if not already running
+  Future<void> openSettings() async {
+    if (!isSupported) return;
+
+    // Start monitoring when opening settings (if not already running)
+    if (!_isMonitoring) {
+      try {
+        await startMonitoring();
+      } catch (e) {
+        // If monitoring fails to start, still open settings so user can see permissions
+        print('FocusProvider: Failed to auto-start monitoring: $e');
+      }
+    }
+
+    await _focusService.openSettings();
+  }
+
+  /// Clear focus history
   void clearHistory() {
     _history.clear();
+    notifyListeners();
+  }
+
+  /// Clear extracted tasks
+  void clearTasks() {
+    _extractedTasks.clear();
+    notifyListeners();
+  }
+
+  /// Remove a specific task
+  void removeTask(ExtractedTask task) {
+    _extractedTasks.removeWhere((t) => t.title == task.title);
     notifyListeners();
   }
 
@@ -226,9 +338,20 @@ class FocusProvider extends BaseProvider {
     return (focusedCount / todayEvents.length) * 100;
   }
 
+  /// Get high-priority tasks
+  List<ExtractedTask> get highPriorityTasks {
+    return _extractedTasks.where((t) => t.isHighPriority).toList();
+  }
+
+  /// Get tasks from a specific app
+  List<ExtractedTask> tasksFromApp(String appName) {
+    return _extractedTasks.where((t) => t.sourceApp == appName).toList();
+  }
+
   @override
   void dispose() {
     _eventSubscription?.cancel();
+    _taskSubscription?.cancel();
     super.dispose();
   }
 }

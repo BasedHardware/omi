@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
-import '../providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 class CapabilitiesChipsWidget extends StatelessWidget {
   const CapabilitiesChipsWidget({super.key});
 
-  Widget _buildCapabilityButton(AppCapability capability, bool isSelected, VoidCallback onTap) {
+  Widget _buildCapabilityButton(BuildContext context, AppCapability capability, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -23,7 +24,7 @@ class CapabilitiesChipsWidget extends StatelessWidget {
         ),
         child: Center(
           child: Text(
-            capability.title,
+            capability.getLocalizedTitle(context),
             style: TextStyle(
               color: isSelected ? Colors.black : Colors.white,
               fontSize: 14,
@@ -53,14 +54,14 @@ class CapabilitiesChipsWidget extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _buildCapabilityButton(caps[i], provider.isCapabilitySelected(caps[i]), () {
+                  child: _buildCapabilityButton(context, caps[i], provider.isCapabilitySelected(caps[i]), () {
                     provider.addOrRemoveCapability(caps[i]);
                   }),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: i + 1 < caps.length
-                      ? _buildCapabilityButton(caps[i + 1], provider.isCapabilitySelected(caps[i + 1]), () {
+                      ? _buildCapabilityButton(context, caps[i + 1], provider.isCapabilitySelected(caps[i + 1]), () {
                           provider.addOrRemoveCapability(caps[i + 1]);
                         })
                       : const SizedBox.shrink(),

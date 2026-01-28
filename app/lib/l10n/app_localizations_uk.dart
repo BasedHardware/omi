@@ -7850,4 +7850,151 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get removeFilter => 'Видалити фільтр';
+
+  @override
+  String get categoryConversationAnalysis => 'Аналіз розмов';
+
+  @override
+  String get categoryPersonalityClone => 'Клон особистості';
+
+  @override
+  String get categoryHealth => 'Здоров\'я';
+
+  @override
+  String get categoryEducation => 'Освіта';
+
+  @override
+  String get categoryCommunication => 'Комунікація';
+
+  @override
+  String get categoryEmotionalSupport => 'Емоційна підтримка';
+
+  @override
+  String get categoryProductivity => 'Продуктивність';
+
+  @override
+  String get categoryEntertainment => 'Розваги';
+
+  @override
+  String get categoryFinancial => 'Фінанси';
+
+  @override
+  String get categoryTravel => 'Подорожі';
+
+  @override
+  String get categorySafety => 'Безпека';
+
+  @override
+  String get categoryShopping => 'Покупки';
+
+  @override
+  String get categorySocial => 'Соціальне';
+
+  @override
+  String get categoryNews => 'Новини';
+
+  @override
+  String get categoryUtilities => 'Інструменти';
+
+  @override
+  String get categoryOther => 'Інше';
+
+  @override
+  String get capabilityChat => 'Чат';
+
+  @override
+  String get capabilityConversations => 'Розмови';
+
+  @override
+  String get capabilityExternalIntegration => 'Зовнішня інтеграція';
+
+  @override
+  String get capabilityNotification => 'Сповіщення';
+
+  @override
+  String get triggerAudioBytes => 'Аудіо байти';
+
+  @override
+  String get triggerConversationCreation => 'Створення розмови';
+
+  @override
+  String get triggerTranscriptProcessed => 'Транскрипт оброблено';
+
+  @override
+  String get actionCreateConversations => 'Створити розмови';
+
+  @override
+  String get actionCreateMemories => 'Створити спогади';
+
+  @override
+  String get actionReadConversations => 'Читати розмови';
+
+  @override
+  String get actionReadMemories => 'Читати спогади';
+
+  @override
+  String get actionReadTasks => 'Читати завдання';
+
+  @override
+  String get scopeUserName => 'Ім\'я користувача';
+
+  @override
+  String get scopeUserFacts => 'Дані користувача';
+
+  @override
+  String get scopeUserConversations => 'Розмови користувача';
+
+  @override
+  String get scopeUserChat => 'Чат користувача';
+
+  @override
+  String get capabilitySummary => 'Підсумок';
+
+  @override
+  String get capabilityFeatured => 'Рекомендовані';
+
+  @override
+  String get capabilityTasks => 'Завдання';
+
+  @override
+  String get capabilityIntegrations => 'Інтеграції';
+
+  @override
+  String get categoryPersonalityClones => 'Клони особистості';
+
+  @override
+  String get categoryProductivityLifestyle => 'Продуктивність та спосіб життя';
+
+  @override
+  String get categorySocialEntertainment => 'Соціальне та розваги';
+
+  @override
+  String get categoryProductivityTools => 'Інструменти продуктивності';
+
+  @override
+  String get categoryPersonalWellness => 'Особисте благополуччя';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категорії';
+
+  @override
+  String get sortBy => 'Сортування';
+
+  @override
+  String get highestRating => 'Найвищий рейтинг';
+
+  @override
+  String get lowestRating => 'Найнижчий рейтинг';
+
+  @override
+  String get resetFilters => 'Скинути фільтри';
+
+  @override
+  String get applyFilters => 'Застосувати фільтри';
+
+  @override
+  String get mostInstalls => 'Найбільше встановлень';
 }

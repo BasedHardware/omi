@@ -7876,4 +7876,151 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get removeFilter => 'Eliminare Filtru';
+
+  @override
+  String get categoryConversationAnalysis => 'Analiză conversații';
+
+  @override
+  String get categoryPersonalityClone => 'Clonă de personalitate';
+
+  @override
+  String get categoryHealth => 'Sănătate';
+
+  @override
+  String get categoryEducation => 'Educație';
+
+  @override
+  String get categoryCommunication => 'Comunicare';
+
+  @override
+  String get categoryEmotionalSupport => 'Suport emoțional';
+
+  @override
+  String get categoryProductivity => 'Productivitate';
+
+  @override
+  String get categoryEntertainment => 'Divertisment';
+
+  @override
+  String get categoryFinancial => 'Financiar';
+
+  @override
+  String get categoryTravel => 'Călătorii';
+
+  @override
+  String get categorySafety => 'Siguranță';
+
+  @override
+  String get categoryShopping => 'Cumpărături';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'Știri';
+
+  @override
+  String get categoryUtilities => 'Utilitare';
+
+  @override
+  String get categoryOther => 'Altele';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversații';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrare externă';
+
+  @override
+  String get capabilityNotification => 'Notificare';
+
+  @override
+  String get triggerAudioBytes => 'Octeți audio';
+
+  @override
+  String get triggerConversationCreation => 'Creare conversație';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcriere procesată';
+
+  @override
+  String get actionCreateConversations => 'Creează conversații';
+
+  @override
+  String get actionCreateMemories => 'Creează amintiri';
+
+  @override
+  String get actionReadConversations => 'Citește conversații';
+
+  @override
+  String get actionReadMemories => 'Citește amintiri';
+
+  @override
+  String get actionReadTasks => 'Citește sarcini';
+
+  @override
+  String get scopeUserName => 'Nume utilizator';
+
+  @override
+  String get scopeUserFacts => 'Date utilizator';
+
+  @override
+  String get scopeUserConversations => 'Conversații utilizator';
+
+  @override
+  String get scopeUserChat => 'Chat utilizator';
+
+  @override
+  String get capabilitySummary => 'Rezumat';
+
+  @override
+  String get capabilityFeatured => 'Recomandate';
+
+  @override
+  String get capabilityTasks => 'Sarcini';
+
+  @override
+  String get capabilityIntegrations => 'Integrări';
+
+  @override
+  String get categoryPersonalityClones => 'Clone de personalitate';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivitate și stil de viață';
+
+  @override
+  String get categorySocialEntertainment => 'Social și divertisment';
+
+  @override
+  String get categoryProductivityTools => 'Instrumente de productivitate';
+
+  @override
+  String get categoryPersonalWellness => 'Bunăstare personală';
+
+  @override
+  String get rating => 'Evaluare';
+
+  @override
+  String get categories => 'Categorii';
+
+  @override
+  String get sortBy => 'Sortare';
+
+  @override
+  String get highestRating => 'Cea mai mare evaluare';
+
+  @override
+  String get lowestRating => 'Cea mai mică evaluare';
+
+  @override
+  String get resetFilters => 'Resetare filtre';
+
+  @override
+  String get applyFilters => 'Aplică filtre';
+
+  @override
+  String get mostInstalls => 'Cele mai multe instalări';
 }

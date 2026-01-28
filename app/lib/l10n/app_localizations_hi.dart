@@ -7818,4 +7818,151 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get removeFilter => 'फ़िल्टर हटाएं';
+
+  @override
+  String get categoryConversationAnalysis => 'वार्तालाप विश्लेषण';
+
+  @override
+  String get categoryPersonalityClone => 'व्यक्तित्व क्लोन';
+
+  @override
+  String get categoryHealth => 'स्वास्थ्य';
+
+  @override
+  String get categoryEducation => 'शिक्षा';
+
+  @override
+  String get categoryCommunication => 'संचार';
+
+  @override
+  String get categoryEmotionalSupport => 'भावनात्मक सहायता';
+
+  @override
+  String get categoryProductivity => 'उत्पादकता';
+
+  @override
+  String get categoryEntertainment => 'मनोरंजन';
+
+  @override
+  String get categoryFinancial => 'वित्तीय';
+
+  @override
+  String get categoryTravel => 'यात्रा';
+
+  @override
+  String get categorySafety => 'सुरक्षा';
+
+  @override
+  String get categoryShopping => 'खरीदारी';
+
+  @override
+  String get categorySocial => 'सामाजिक';
+
+  @override
+  String get categoryNews => 'समाचार';
+
+  @override
+  String get categoryUtilities => 'उपकरण';
+
+  @override
+  String get categoryOther => 'अन्य';
+
+  @override
+  String get capabilityChat => 'चैट';
+
+  @override
+  String get capabilityConversations => 'वार्तालाप';
+
+  @override
+  String get capabilityExternalIntegration => 'बाहरी एकीकरण';
+
+  @override
+  String get capabilityNotification => 'सूचना';
+
+  @override
+  String get triggerAudioBytes => 'ऑडियो बाइट्स';
+
+  @override
+  String get triggerConversationCreation => 'वार्तालाप निर्माण';
+
+  @override
+  String get triggerTranscriptProcessed => 'प्रतिलिपि संसाधित';
+
+  @override
+  String get actionCreateConversations => 'वार्तालाप बनाएं';
+
+  @override
+  String get actionCreateMemories => 'यादें बनाएं';
+
+  @override
+  String get actionReadConversations => 'वार्तालाप पढ़ें';
+
+  @override
+  String get actionReadMemories => 'यादें पढ़ें';
+
+  @override
+  String get actionReadTasks => 'कार्य पढ़ें';
+
+  @override
+  String get scopeUserName => 'उपयोगकर्ता नाम';
+
+  @override
+  String get scopeUserFacts => 'उपयोगकर्ता तथ्य';
+
+  @override
+  String get scopeUserConversations => 'उपयोगकर्ता वार्तालाप';
+
+  @override
+  String get scopeUserChat => 'उपयोगकर्ता चैट';
+
+  @override
+  String get capabilitySummary => 'सारांश';
+
+  @override
+  String get capabilityFeatured => 'विशेष रुप से प्रदर्शित';
+
+  @override
+  String get capabilityTasks => 'कार्य';
+
+  @override
+  String get capabilityIntegrations => 'एकीकरण';
+
+  @override
+  String get categoryPersonalityClones => 'व्यक्तित्व क्लोन';
+
+  @override
+  String get categoryProductivityLifestyle => 'उत्पादकता और जीवनशैली';
+
+  @override
+  String get categorySocialEntertainment => 'सामाजिक और मनोरंजन';
+
+  @override
+  String get categoryProductivityTools => 'उत्पादकता उपकरण';
+
+  @override
+  String get categoryPersonalWellness => 'व्यक्तिगत कल्याण';
+
+  @override
+  String get rating => 'रेटिंग';
+
+  @override
+  String get categories => 'श्रेणियाँ';
+
+  @override
+  String get sortBy => 'क्रमबद्ध करें';
+
+  @override
+  String get highestRating => 'उच्चतम रेटिंग';
+
+  @override
+  String get lowestRating => 'न्यूनतम रेटिंग';
+
+  @override
+  String get resetFilters => 'फ़िल्टर रीसेट करें';
+
+  @override
+  String get applyFilters => 'फ़िल्टर लागू करें';
+
+  @override
+  String get mostInstalls => 'सबसे अधिक इंस्टॉल';
 }

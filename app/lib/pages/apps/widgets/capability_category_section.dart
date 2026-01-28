@@ -11,6 +11,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
 
 /// A category section widget with unlimited horizontal scrolling for capability pages.
@@ -40,7 +41,7 @@ class CapabilityCategorySection extends StatelessWidget {
       (c) => c.id == app.category,
       orElse: () => Category(id: app.category, title: app.getCategoryName()),
     );
-    return category.title;
+    return category.getLocalizedTitle(context);
   }
 
   @override

@@ -6,6 +6,9 @@ globs:
   - "omiGlass/**/*.c"
   - "omiGlass/**/*.h"
 alwaysApply: false
+references:
+  - docs/doc/developer/firmware/Compile_firmware.mdx
+  - docs/doc/developer/Protocol.mdx
 ---
 
 # Firmware Architecture
@@ -252,6 +255,29 @@ static uint8_t read_firmware(struct bt_conn *conn,
 
 ## Related Documentation
 
-- Protocol: `docs/doc/developer/Protocol.mdx`
-- Firmware Components: `.cursor/FIRMWARE_COMPONENTS.md`
-- Build Guide: `omi/firmware/BUILD_AND_OTA_FLASH.md`
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **BLE Protocol**: `docs/doc/developer/Protocol.mdx` - [View online](https://docs.omi.me/doc/developer/Protocol)
+- **Firmware Compilation**: `docs/doc/developer/firmware/Compile_firmware.mdx` - [View online](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+- **Hardware Docs**: `docs/doc/hardware/` - [View online](https://docs.omi.me/doc/hardware/)
+  - Omi Consumer: `docs/doc/hardware/OmiConsumer.mdx`
+  - DevKit 2: `docs/doc/hardware/DevKit2.mdx`
+  - DevKit 1: `docs/doc/hardware/DevKit1.mdx`
+  - Omi Glass: `docs/doc/hardware/omiGlass.mdx`
+- **Build Guide**: `omi/firmware/BUILD_AND_OTA_FLASH.md`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/firmware-ble-service.mdc` - BLE service implementation
+- `.cursor/rules/firmware-audio-codecs.mdc` - Audio codec implementation
+- `.cursor/rules/flutter-ble-protocol.mdc` - Flutter BLE integration
+
+### Skills
+- `.cursor/skills/omi-firmware-patterns/` - Firmware patterns and workflows
+
+### Subagents
+- `.cursor/agents/firmware-engineer/` - Firmware development specialist
+
+### Commands
+- `/flutter-setup` - Setup firmware development environment

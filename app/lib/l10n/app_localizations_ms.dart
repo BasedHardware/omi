@@ -7861,4 +7861,151 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get removeFilter => 'Alih Keluar Penapis';
+
+  @override
+  String get categoryConversationAnalysis => 'Analisis Perbualan';
+
+  @override
+  String get categoryPersonalityClone => 'Klon Personaliti';
+
+  @override
+  String get categoryHealth => 'Kesihatan';
+
+  @override
+  String get categoryEducation => 'Pendidikan';
+
+  @override
+  String get categoryCommunication => 'Komunikasi';
+
+  @override
+  String get categoryEmotionalSupport => 'Sokongan Emosi';
+
+  @override
+  String get categoryProductivity => 'Produktiviti';
+
+  @override
+  String get categoryEntertainment => 'Hiburan';
+
+  @override
+  String get categoryFinancial => 'Kewangan';
+
+  @override
+  String get categoryTravel => 'Perjalanan';
+
+  @override
+  String get categorySafety => 'Keselamatan';
+
+  @override
+  String get categoryShopping => 'Membeli-belah';
+
+  @override
+  String get categorySocial => 'Sosial';
+
+  @override
+  String get categoryNews => 'Berita';
+
+  @override
+  String get categoryUtilities => 'Utiliti';
+
+  @override
+  String get categoryOther => 'Lain-lain';
+
+  @override
+  String get capabilityChat => 'Sembang';
+
+  @override
+  String get capabilityConversations => 'Perbualan';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrasi Luaran';
+
+  @override
+  String get capabilityNotification => 'Pemberitahuan';
+
+  @override
+  String get triggerAudioBytes => 'Bait Audio';
+
+  @override
+  String get triggerConversationCreation => 'Penciptaan Perbualan';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkrip Diproses';
+
+  @override
+  String get actionCreateConversations => 'Cipta perbualan';
+
+  @override
+  String get actionCreateMemories => 'Cipta kenangan';
+
+  @override
+  String get actionReadConversations => 'Baca perbualan';
+
+  @override
+  String get actionReadMemories => 'Baca kenangan';
+
+  @override
+  String get actionReadTasks => 'Baca tugas';
+
+  @override
+  String get scopeUserName => 'Nama Pengguna';
+
+  @override
+  String get scopeUserFacts => 'Fakta Pengguna';
+
+  @override
+  String get scopeUserConversations => 'Perbualan Pengguna';
+
+  @override
+  String get scopeUserChat => 'Sembang Pengguna';
+
+  @override
+  String get capabilitySummary => 'Ringkasan';
+
+  @override
+  String get capabilityFeatured => 'Pilihan';
+
+  @override
+  String get capabilityTasks => 'Tugas';
+
+  @override
+  String get capabilityIntegrations => 'Integrasi';
+
+  @override
+  String get categoryPersonalityClones => 'Klon Personaliti';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktiviti & Gaya Hidup';
+
+  @override
+  String get categorySocialEntertainment => 'Sosial & Hiburan';
+
+  @override
+  String get categoryProductivityTools => 'Alat Produktiviti';
+
+  @override
+  String get categoryPersonalWellness => 'Kesejahteraan Peribadi';
+
+  @override
+  String get rating => 'Penilaian';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Isih';
+
+  @override
+  String get highestRating => 'Penilaian tertinggi';
+
+  @override
+  String get lowestRating => 'Penilaian terendah';
+
+  @override
+  String get resetFilters => 'Set semula penapis';
+
+  @override
+  String get applyFilters => 'Guna penapis';
+
+  @override
+  String get mostInstalls => 'Paling banyak dipasang';
 }

@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
@@ -32,9 +33,9 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import '../../../backend/http/api/payment.dart';
-import '../../../backend/schema/app.dart';
-import '../widgets/show_app_options_sheet.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
 
@@ -2147,7 +2148,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Recent reviews from others
-        ...filteredReviews.map((review) => _buildReviewItem(review)),
+        ...filteredReviews.map((review) => _buildReviewItem(context, review)),
         // User's review section (editable)
         if (showUserReviewSection) ...[
           if (filteredReviews.isNotEmpty) const SizedBox(height: 8),
@@ -2173,7 +2174,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             editRating = userReview.score;
           });
         },
-        child: _buildReviewItem(userReview, isUserReview: true),
+        child: _buildReviewItem(context, userReview, isUserReview: true),
       );
     }
   }
@@ -2281,7 +2282,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : Text(widget.userReview == null ? 'Submit Review' : 'Update Review'),
+                  : Text(widget.userReview == null
+                      ? AppLocalizations.of(context)!.submitReview
+                      : AppLocalizations.of(context)!.updateReview),
             ),
           ),
         ],
@@ -2289,9 +2292,10 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     );
   }
 
-  Widget _buildReviewItem(AppReview review, {bool isUserReview = false}) {
+  Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
+    final l10n = AppLocalizations.of(context)!;
     final displayName =
-        isUserReview ? 'Your Review' : (review.username.isNotEmpty ? review.username : 'Anonymous User');
+        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(

@@ -449,7 +449,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appAndDeviceCopied => 'Programėlės ir įrenginio informacija nukopijuota';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 apžvalga';
 
   @override
   String get yourPrivacyYourControl => 'Jūsų privatumas, jūsų kontrolė';
@@ -7843,4 +7843,151 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get removeFilter => 'Pašalinti Filtrą';
+
+  @override
+  String get categoryConversationAnalysis => 'Pokalbių analizė';
+
+  @override
+  String get categoryPersonalityClone => 'Asmenybės klonas';
+
+  @override
+  String get categoryHealth => 'Sveikata';
+
+  @override
+  String get categoryEducation => 'Švietimas';
+
+  @override
+  String get categoryCommunication => 'Komunikacija';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocinė parama';
+
+  @override
+  String get categoryProductivity => 'Produktyvumas';
+
+  @override
+  String get categoryEntertainment => 'Pramogos';
+
+  @override
+  String get categoryFinancial => 'Finansai';
+
+  @override
+  String get categoryTravel => 'Kelionės';
+
+  @override
+  String get categorySafety => 'Saugumas';
+
+  @override
+  String get categoryShopping => 'Apsipirkimas';
+
+  @override
+  String get categorySocial => 'Socialinis';
+
+  @override
+  String get categoryNews => 'Naujienos';
+
+  @override
+  String get categoryUtilities => 'Įrankiai';
+
+  @override
+  String get categoryOther => 'Kita';
+
+  @override
+  String get capabilityChat => 'Pokalbis';
+
+  @override
+  String get capabilityConversations => 'Pokalbiai';
+
+  @override
+  String get capabilityExternalIntegration => 'Išorinė integracija';
+
+  @override
+  String get capabilityNotification => 'Pranešimas';
+
+  @override
+  String get triggerAudioBytes => 'Garso baitai';
+
+  @override
+  String get triggerConversationCreation => 'Pokalbio kūrimas';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripcija apdorota';
+
+  @override
+  String get actionCreateConversations => 'Kurti pokalbius';
+
+  @override
+  String get actionCreateMemories => 'Kurti prisiminimus';
+
+  @override
+  String get actionReadConversations => 'Skaityti pokalbius';
+
+  @override
+  String get actionReadMemories => 'Skaityti prisiminimus';
+
+  @override
+  String get actionReadTasks => 'Skaityti užduotis';
+
+  @override
+  String get scopeUserName => 'Vartotojo vardas';
+
+  @override
+  String get scopeUserFacts => 'Vartotojo faktai';
+
+  @override
+  String get scopeUserConversations => 'Vartotojo pokalbiai';
+
+  @override
+  String get scopeUserChat => 'Vartotojo pokalbis';
+
+  @override
+  String get capabilitySummary => 'Santrauka';
+
+  @override
+  String get capabilityFeatured => 'Rekomenduojami';
+
+  @override
+  String get capabilityTasks => 'Užduotys';
+
+  @override
+  String get capabilityIntegrations => 'Integracijos';
+
+  @override
+  String get categoryPersonalityClones => 'Asmenybių klonai';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktyvumas ir gyvenimo būdas';
+
+  @override
+  String get categorySocialEntertainment => 'Socialinis ir pramogos';
+
+  @override
+  String get categoryProductivityTools => 'Produktyvumo įrankiai';
+
+  @override
+  String get categoryPersonalWellness => 'Asmeninė gerovė';
+
+  @override
+  String get rating => 'Įvertinimas';
+
+  @override
+  String get categories => 'Kategorijos';
+
+  @override
+  String get sortBy => 'Rūšiuoti';
+
+  @override
+  String get highestRating => 'Aukščiausias įvertinimas';
+
+  @override
+  String get lowestRating => 'Žemiausias įvertinimas';
+
+  @override
+  String get resetFilters => 'Atstatyti filtrus';
+
+  @override
+  String get applyFilters => 'Taikyti filtrus';
+
+  @override
+  String get mostInstalls => 'Daugiausia įdiegimų';
 }

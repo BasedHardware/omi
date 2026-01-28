@@ -27,7 +27,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'device_settings.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,

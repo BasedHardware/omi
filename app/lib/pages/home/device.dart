@@ -19,7 +19,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'firmware_update.dart';
 
 class ConnectedDevice extends StatefulWidget {

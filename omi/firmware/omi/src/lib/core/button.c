@@ -18,7 +18,6 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
-#include "spi_flash.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
@@ -153,7 +152,7 @@ static inline void notify_long_tap()
 
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 1000  // 1000 ms for long press
+#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -222,7 +221,7 @@ void check_button_level(struct k_work *work_item)
         LOG_INF("single tap detected\n");
         btn_last_event = event;
 
-        turnoff_all();
+        notify_tap();
     }
 
     // Double tap
@@ -236,7 +235,7 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_INF("long press detected\n");
         btn_last_event = event;
-        notify_long_tap();
+        turnoff_all();
     }
 
     // Releases, one time event
@@ -384,11 +383,6 @@ void turnoff_all()
     accel_off();
     k_msleep(100);
 #endif
-
-    rc = flash_off();
-    if (rc) {
-        LOG_ERR("Can not suspend the spi flash module: %d", rc);
-    }
 
     if (is_sd_on()) {
         app_sd_off();

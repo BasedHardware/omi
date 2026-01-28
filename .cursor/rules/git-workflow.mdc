@@ -1,6 +1,8 @@
 ---
 description: "Git workflow branching pull request process contribution guidelines commit messages feature branches code review"
 alwaysApply: true
+references:
+  - docs/doc/developer/Contribution.mdx
 ---
 
 # Git Workflow
@@ -144,10 +146,24 @@ docs(api): update API reference documentation
 
 ### Review Process
 
-1. **Create PR**: Push branch and create PR
-2. **Wait for review**: Address review comments
-3. **Update PR**: Make requested changes
-4. **Merge**: After approval, merge PR
+1. **Use Agent Review**: Review local changes before creating PR
+   - Click "Review" in agent diff
+   - Click "Find Issues" to analyze edits
+   - Address critical issues
+   - See `.cursor/rules/agent-review.mdc` for details
+
+2. **Create PR**: Push branch and create PR
+3. **Wait for review**: Address review comments
+4. **Update PR**: Make requested changes
+5. **Merge**: After approval, merge PR
+
+### Shared Transcripts
+
+For complex PRs, consider using shared transcripts:
+- Document decision-making process
+- Share context with reviewers
+- Explain architectural choices
+- See Cursor docs for shared transcript features
 
 ### Contribution Rewards
 
@@ -169,3 +185,16 @@ See `docs/doc/developer/Contribution.mdx` for contribution rewards:
 
 - Contribution Guide: `docs/doc/developer/Contribution.mdx`
 - Coding Guidelines: `AGENTS.md`, `CLAUDE.md`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/testing.mdc` - Testing requirements
+- `.cursor/rules/formatting.mdc` - Code formatting standards
+- `.cursor/rules/documentation-standards.mdc` - Documentation standards
+
+### Commands
+- `/pr` - Create pull request with proper description
+- `/code-review` - Review code before PR
+- `/review-changes` - Use Agent Review to find issues
+- `/run-tests-and-fix` - Run tests and fix failures

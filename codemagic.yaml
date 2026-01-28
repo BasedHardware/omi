@@ -1120,6 +1120,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
         script: |
@@ -1275,6 +1276,13 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+
+      - name: Bundle .env into app
+        script: |
+          # Copy .env file into app bundle for native Swift code to access
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+          cp .env "$APP_PATH/Contents/Resources/.env"
+          echo "Bundled .env into $APP_PATH/Contents/Resources/.env"
 
       - name: Sign app for notarization
         script: |

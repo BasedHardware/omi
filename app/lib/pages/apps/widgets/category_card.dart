@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 
 class CategoryCard extends StatelessWidget {
   final Category category;
@@ -131,7 +132,7 @@ class CategoryCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                category.title,
+                category.getLocalizedTitle(context),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,

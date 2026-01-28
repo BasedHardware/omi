@@ -451,7 +451,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appAndDeviceCopied => 'Детайлите за приложението и устройството са копирани';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Обобщение 2025';
 
   @override
   String get yourPrivacyYourControl => 'Вашата поверителност, вашият контрол';
@@ -7870,4 +7870,151 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get removeFilter => 'Премахни филтъра';
+
+  @override
+  String get categoryConversationAnalysis => 'Анализ на разговори';
+
+  @override
+  String get categoryPersonalityClone => 'Клониране на личност';
+
+  @override
+  String get categoryHealth => 'Здраве';
+
+  @override
+  String get categoryEducation => 'Образование';
+
+  @override
+  String get categoryCommunication => 'Комуникация';
+
+  @override
+  String get categoryEmotionalSupport => 'Емоционална подкрепа';
+
+  @override
+  String get categoryProductivity => 'Продуктивност';
+
+  @override
+  String get categoryEntertainment => 'Забавление';
+
+  @override
+  String get categoryFinancial => 'Финанси';
+
+  @override
+  String get categoryTravel => 'Пътуване';
+
+  @override
+  String get categorySafety => 'Безопасност';
+
+  @override
+  String get categoryShopping => 'Пазаруване';
+
+  @override
+  String get categorySocial => 'Социални';
+
+  @override
+  String get categoryNews => 'Новини';
+
+  @override
+  String get categoryUtilities => 'Инструменти';
+
+  @override
+  String get categoryOther => 'Други';
+
+  @override
+  String get capabilityChat => 'Чат';
+
+  @override
+  String get capabilityConversations => 'Разговори';
+
+  @override
+  String get capabilityExternalIntegration => 'Външна интеграция';
+
+  @override
+  String get capabilityNotification => 'Известие';
+
+  @override
+  String get triggerAudioBytes => 'Аудио байтове';
+
+  @override
+  String get triggerConversationCreation => 'Създаване на разговор';
+
+  @override
+  String get triggerTranscriptProcessed => 'Обработен транскрипт';
+
+  @override
+  String get actionCreateConversations => 'Създаване на разговори';
+
+  @override
+  String get actionCreateMemories => 'Създаване на спомени';
+
+  @override
+  String get actionReadConversations => 'Четене на разговори';
+
+  @override
+  String get actionReadMemories => 'Четене на спомени';
+
+  @override
+  String get actionReadTasks => 'Четене на задачи';
+
+  @override
+  String get scopeUserName => 'Потребителско име';
+
+  @override
+  String get scopeUserFacts => 'Факти за потребителя';
+
+  @override
+  String get scopeUserConversations => 'Разговори на потребителя';
+
+  @override
+  String get scopeUserChat => 'Чат на потребителя';
+
+  @override
+  String get capabilitySummary => 'Резюме';
+
+  @override
+  String get capabilityFeatured => 'Препоръчани';
+
+  @override
+  String get capabilityTasks => 'Задачи';
+
+  @override
+  String get capabilityIntegrations => 'Интеграции';
+
+  @override
+  String get categoryPersonalityClones => 'Клонове на личности';
+
+  @override
+  String get categoryProductivityLifestyle => 'Продуктивност и начин на живот';
+
+  @override
+  String get categorySocialEntertainment => 'Социални и забавление';
+
+  @override
+  String get categoryProductivityTools => 'Инструменти за продуктивност';
+
+  @override
+  String get categoryPersonalWellness => 'Лично благосъстояние';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категории';
+
+  @override
+  String get sortBy => 'Сортиране';
+
+  @override
+  String get highestRating => 'Най-висок рейтинг';
+
+  @override
+  String get lowestRating => 'Най-нисък рейтинг';
+
+  @override
+  String get resetFilters => 'Нулиране на филтрите';
+
+  @override
+  String get applyFilters => 'Прилагане на филтрите';
+
+  @override
+  String get mostInstalls => 'Най-много инсталации';
 }

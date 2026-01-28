@@ -38,7 +38,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import '../../pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'apps/desktop_apps_page.dart';
@@ -849,21 +849,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     return Consumer<FocusProvider>(
       builder: (context, focusProvider, child) {
         final isMonitoring = focusProvider.isMonitoring;
-        final hasPermission = focusProvider.hasScreenRecordingPermission;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 2),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () async {
-                if (!hasPermission) {
-                  // Request permission
-                  await focusProvider.openScreenRecordingSettings();
-                  return;
-                }
-                // Toggle monitoring
-                await focusProvider.toggleMonitoring();
+              onTap: () {
+                // Open the native settings window
+                focusProvider.openSettings();
               },
               borderRadius: BorderRadius.circular(10),
               hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
@@ -888,11 +882,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isMonitoring
-                            ? const Color(0xFF28CA42)
-                            : hasPermission
-                                ? ResponsiveHelper.textTertiary
-                                : Colors.orange,
+                        color: isMonitoring ? const Color(0xFF28CA42) : ResponsiveHelper.textTertiary,
                         shape: BoxShape.circle,
                         boxShadow: isMonitoring
                             ? [
@@ -930,21 +920,21 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                          if (!hasPermission)
+                          if (!isMonitoring)
                             Text(
-                              'Click to grant permission',
+                              'Click to configure',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.orange.withValues(alpha: 0.8),
+                                color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
                               ),
                             ),
                         ],
                       ),
                     ),
-                    // Toggle indicator
+                    // Arrow indicator
                     Icon(
-                      isMonitoring ? FontAwesomeIcons.toggleOn : FontAwesomeIcons.toggleOff,
-                      color: isMonitoring ? const Color(0xFF28CA42) : ResponsiveHelper.textTertiary,
+                      Icons.chevron_right,
+                      color: ResponsiveHelper.textTertiary,
                       size: 18,
                     ),
                   ],

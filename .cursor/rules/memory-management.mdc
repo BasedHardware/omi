@@ -3,6 +3,8 @@ description: "Memory management - free large objects immediately after use"
 globs:
   - "backend/**/*.py"
 alwaysApply: false
+references:
+  - backend/README.md
 ---
 
 # Memory Management
@@ -32,3 +34,16 @@ def process_dict():
     cache.clear()  # Free memory
     return result
 ```
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture patterns
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including memory management
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Follows memory management practices
+- `.cursor/agents/backend-llm-engineer/` - Handles large LLM responses
+- `.cursor/agents/backend-database-engineer/` - Manages database connections

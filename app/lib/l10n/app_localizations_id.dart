@@ -450,7 +450,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get appAndDeviceCopied => 'Detail aplikasi dan perangkat disalin';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Rangkuman 2025';
 
   @override
   String get yourPrivacyYourControl => 'Privasi Anda, Kontrol Anda';
@@ -7850,4 +7850,151 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get removeFilter => 'Hapus Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Analisis Percakapan';
+
+  @override
+  String get categoryPersonalityClone => 'Klon Kepribadian';
+
+  @override
+  String get categoryHealth => 'Kesehatan';
+
+  @override
+  String get categoryEducation => 'Pendidikan';
+
+  @override
+  String get categoryCommunication => 'Komunikasi';
+
+  @override
+  String get categoryEmotionalSupport => 'Dukungan Emosional';
+
+  @override
+  String get categoryProductivity => 'Produktivitas';
+
+  @override
+  String get categoryEntertainment => 'Hiburan';
+
+  @override
+  String get categoryFinancial => 'Keuangan';
+
+  @override
+  String get categoryTravel => 'Perjalanan';
+
+  @override
+  String get categorySafety => 'Keamanan';
+
+  @override
+  String get categoryShopping => 'Belanja';
+
+  @override
+  String get categorySocial => 'Sosial';
+
+  @override
+  String get categoryNews => 'Berita';
+
+  @override
+  String get categoryUtilities => 'Utilitas';
+
+  @override
+  String get categoryOther => 'Lainnya';
+
+  @override
+  String get capabilityChat => 'Obrolan';
+
+  @override
+  String get capabilityConversations => 'Percakapan';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrasi Eksternal';
+
+  @override
+  String get capabilityNotification => 'Notifikasi';
+
+  @override
+  String get triggerAudioBytes => 'Byte Audio';
+
+  @override
+  String get triggerConversationCreation => 'Pembuatan Percakapan';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkrip Diproses';
+
+  @override
+  String get actionCreateConversations => 'Buat percakapan';
+
+  @override
+  String get actionCreateMemories => 'Buat kenangan';
+
+  @override
+  String get actionReadConversations => 'Baca percakapan';
+
+  @override
+  String get actionReadMemories => 'Baca kenangan';
+
+  @override
+  String get actionReadTasks => 'Baca tugas';
+
+  @override
+  String get scopeUserName => 'Nama Pengguna';
+
+  @override
+  String get scopeUserFacts => 'Fakta Pengguna';
+
+  @override
+  String get scopeUserConversations => 'Percakapan Pengguna';
+
+  @override
+  String get scopeUserChat => 'Obrolan Pengguna';
+
+  @override
+  String get capabilitySummary => 'Ringkasan';
+
+  @override
+  String get capabilityFeatured => 'Unggulan';
+
+  @override
+  String get capabilityTasks => 'Tugas';
+
+  @override
+  String get capabilityIntegrations => 'Integrasi';
+
+  @override
+  String get categoryPersonalityClones => 'Klon Kepribadian';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitas & Gaya Hidup';
+
+  @override
+  String get categorySocialEntertainment => 'Sosial & Hiburan';
+
+  @override
+  String get categoryProductivityTools => 'Alat Produktivitas';
+
+  @override
+  String get categoryPersonalWellness => 'Kesejahteraan Pribadi';
+
+  @override
+  String get rating => 'Peringkat';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Urutkan';
+
+  @override
+  String get highestRating => 'Peringkat tertinggi';
+
+  @override
+  String get lowestRating => 'Peringkat terendah';
+
+  @override
+  String get resetFilters => 'Reset filter';
+
+  @override
+  String get applyFilters => 'Terapkan filter';
+
+  @override
+  String get mostInstalls => 'Paling banyak diinstal';
 }
