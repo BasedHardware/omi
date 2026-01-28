@@ -14829,6 +14829,12 @@ abstract class AppLocalizations {
   /// **'Tasks'**
   String get capabilityTasks;
 
+  /// No description provided for @capabilityIntegrations.
+  ///
+  /// In en, this message translates to:
+  /// **'Integrations'**
+  String get capabilityIntegrations;
+
   /// No description provided for @categoryPersonalityClones.
   ///
   /// In en, this message translates to:

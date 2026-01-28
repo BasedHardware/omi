@@ -7977,6 +7977,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get capabilityTasks => 'Tasks';
 
   @override
+  String get capabilityIntegrations => 'Integrations';
+
+  @override
   String get categoryPersonalityClones => 'Personality Clones';
 
   @override

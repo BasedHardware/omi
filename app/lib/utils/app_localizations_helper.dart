@@ -80,6 +80,8 @@ final Map<String, String Function(AppLocalizations)> _capabilityLocalizations = 
   'proactive_notification': (l10n) => l10n.capabilityNotification,
   'popular': (l10n) => l10n.capabilityFeatured,
   'tasks': (l10n) => l10n.capabilityTasks,
+  // Section title variant (API sometimes sends "integrations" as ID)
+  'integrations': (l10n) => l10n.capabilityIntegrations,
 };
 
 // Mapping from trigger IDs to localization getters

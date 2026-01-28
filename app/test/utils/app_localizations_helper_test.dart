@@ -142,7 +142,13 @@ void main() {
       });
 
       testWidgets('localizes all known capability IDs', (tester) async {
-        final knownCapabilityIds = ['chat', 'memories', 'external_integration', 'proactive_notification'];
+        final knownCapabilityIds = [
+          'chat',
+          'memories',
+          'external_integration',
+          'proactive_notification',
+          'integrations'
+        ];
 
         for (final capabilityId in knownCapabilityIds) {
           late String localizedTitle;
