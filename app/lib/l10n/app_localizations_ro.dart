@@ -7999,4 +7999,28 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Bunăstare personală';
+
+  @override
+  String get rating => 'Evaluare';
+
+  @override
+  String get categories => 'Categorii';
+
+  @override
+  String get sortBy => 'Sortare';
+
+  @override
+  String get highestRating => 'Cea mai mare evaluare';
+
+  @override
+  String get lowestRating => 'Cea mai mică evaluare';
+
+  @override
+  String get resetFilters => 'Resetare filtre';
+
+  @override
+  String get applyFilters => 'Aplică filtre';
+
+  @override
+  String get mostInstalls => 'Cele mai multe instalări';
 }

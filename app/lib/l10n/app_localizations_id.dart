@@ -7973,4 +7973,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Kesejahteraan Pribadi';
+
+  @override
+  String get rating => 'Peringkat';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Urutkan';
+
+  @override
+  String get highestRating => 'Peringkat tertinggi';
+
+  @override
+  String get lowestRating => 'Peringkat terendah';
+
+  @override
+  String get resetFilters => 'Reset filter';
+
+  @override
+  String get applyFilters => 'Terapkan filter';
+
+  @override
+  String get mostInstalls => 'Paling banyak diinstal';
 }

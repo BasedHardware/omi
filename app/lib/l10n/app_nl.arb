@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Productiviteit & levensstijl",
   "categorySocialEntertainment": "Sociaal & entertainment",
   "categoryProductivityTools": "Productiviteitstools",
-  "categoryPersonalWellness": "Persoonlijk welzijn"
+  "categoryPersonalWellness": "Persoonlijk welzijn",
+  "rating": "Beoordeling",
+  "categories": "Categorieën",
+  "sortBy": "Sorteren",
+  "highestRating": "Hoogste beoordeling",
+  "lowestRating": "Laagste beoordeling",
+  "resetFilters": "Filters resetten",
+  "applyFilters": "Filters toepassen",
+  "mostInstalls": "Meeste installaties"
 }

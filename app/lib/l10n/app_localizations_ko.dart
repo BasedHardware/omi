@@ -7829,4 +7829,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => '개인 웰빙';
+
+  @override
+  String get rating => '평점';
+
+  @override
+  String get categories => '카테고리';
+
+  @override
+  String get sortBy => '정렬';
+
+  @override
+  String get highestRating => '최고 평점';
+
+  @override
+  String get lowestRating => '최저 평점';
+
+  @override
+  String get resetFilters => '필터 초기화';
+
+  @override
+  String get applyFilters => '필터 적용';
+
+  @override
+  String get mostInstalls => '설치 수';
 }

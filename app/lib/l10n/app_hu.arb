@@ -2649,5 +2649,13 @@
   "categoryProductivityLifestyle": "Termelékenység és életmód",
   "categorySocialEntertainment": "Közösségi és szórakozás",
   "categoryProductivityTools": "Termelékenységi eszközök",
-  "categoryPersonalWellness": "Személyes jólét"
+  "categoryPersonalWellness": "Személyes jólét",
+  "rating": "Értékelés",
+  "categories": "Kategóriák",
+  "sortBy": "Rendezés",
+  "highestRating": "Legmagasabb értékelés",
+  "lowestRating": "Legalacsonyabb értékelés",
+  "resetFilters": "Szűrők visszaállítása",
+  "applyFilters": "Szűrők alkalmazása",
+  "mostInstalls": "Legtöbb telepítés"
 }

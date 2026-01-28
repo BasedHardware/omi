@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Productivitate și stil de viață",
   "categorySocialEntertainment": "Social și divertisment",
   "categoryProductivityTools": "Instrumente de productivitate",
-  "categoryPersonalWellness": "Bunăstare personală"
+  "categoryPersonalWellness": "Bunăstare personală",
+  "rating": "Evaluare",
+  "categories": "Categorii",
+  "sortBy": "Sortare",
+  "highestRating": "Cea mai mare evaluare",
+  "lowestRating": "Cea mai mică evaluare",
+  "resetFilters": "Resetare filtre",
+  "applyFilters": "Aplică filtre",
+  "mostInstalls": "Cele mai multe instalări"
 }

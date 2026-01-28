@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
@@ -27,7 +28,7 @@ class FilterBottomSheet extends StatelessWidget {
                 child: Row(
                   children: [
                     Text(
-                      'Filters',
+                      AppLocalizations.of(context)!.filters,
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
@@ -80,28 +81,28 @@ class FilterBottomSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Rating
-                      _buildSectionTitle('Rating'),
+                      _buildSectionTitle(AppLocalizations.of(context)!.rating),
                       const SizedBox(height: 12),
                       _buildRatingSelector(provider),
 
                       const SizedBox(height: 32),
 
                       // Categories
-                      _buildSectionTitle('Categories'),
+                      _buildSectionTitle(AppLocalizations.of(context)!.categories),
                       const SizedBox(height: 12),
                       _buildCategoryChips(context, provider),
 
                       const SizedBox(height: 32),
 
                       // Sort Options
-                      _buildSectionTitle('Sort'),
+                      _buildSectionTitle(AppLocalizations.of(context)!.sortBy),
                       const SizedBox(height: 12),
-                      _buildSortOptions(provider),
+                      _buildSortOptions(context, provider),
 
                       const SizedBox(height: 32),
 
                       // Capabilities
-                      _buildSectionTitle('Capabilities'),
+                      _buildSectionTitle(AppLocalizations.of(context)!.capabilities),
                       const SizedBox(height: 12),
                       _buildCapabilities(context, provider),
 
@@ -137,9 +138,9 @@ class FilterBottomSheet extends StatelessWidget {
                             side: BorderSide(color: Colors.grey.shade600),
                           ),
                         ),
-                        child: const Text(
-                          'Reset filters',
-                          style: TextStyle(
+                        child: Text(
+                          AppLocalizations.of(context)!.resetFilters,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                             color: Colors.white,
@@ -161,9 +162,9 @@ class FilterBottomSheet extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text(
-                          'Apply filters',
-                          style: TextStyle(
+                        child: Text(
+                          AppLocalizations.of(context)!.applyFilters,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: Colors.black,
@@ -262,13 +263,14 @@ class FilterBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildSortOptions(AppProvider provider) {
+  Widget _buildSortOptions(BuildContext context, AppProvider provider) {
+    final l10n = AppLocalizations.of(context)!;
     final sortOptions = [
       {'label': 'A-Z', 'key': 'A-Z'},
       {'label': 'Z-A', 'key': 'Z-A'},
-      {'label': 'Highest Rating', 'key': 'Highest Rating'},
-      {'label': 'Lowest Rating', 'key': 'Lowest Rating'},
-      {'label': 'Most Installs', 'key': 'Most Installs'},
+      {'label': l10n.highestRating, 'key': 'Highest Rating'},
+      {'label': l10n.lowestRating, 'key': 'Lowest Rating'},
+      {'label': l10n.mostInstalls, 'key': 'Most Installs'},
     ];
 
     return Column(

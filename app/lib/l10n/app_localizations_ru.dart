@@ -7986,4 +7986,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Личное благополучие';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категории';
+
+  @override
+  String get sortBy => 'Сортировка';
+
+  @override
+  String get highestRating => 'Высший рейтинг';
+
+  @override
+  String get lowestRating => 'Низший рейтинг';
+
+  @override
+  String get resetFilters => 'Сбросить фильтры';
+
+  @override
+  String get applyFilters => 'Применить фильтры';
+
+  @override
+  String get mostInstalls => 'Больше всего установок';
 }

@@ -7966,4 +7966,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Asmeninė gerovė';
+
+  @override
+  String get rating => 'Įvertinimas';
+
+  @override
+  String get categories => 'Kategorijos';
+
+  @override
+  String get sortBy => 'Rūšiuoti';
+
+  @override
+  String get highestRating => 'Aukščiausias įvertinimas';
+
+  @override
+  String get lowestRating => 'Žemiausias įvertinimas';
+
+  @override
+  String get resetFilters => 'Atstatyti filtrus';
+
+  @override
+  String get applyFilters => 'Taikyti filtrus';
+
+  @override
+  String get mostInstalls => 'Daugiausia įdiegimų';
 }

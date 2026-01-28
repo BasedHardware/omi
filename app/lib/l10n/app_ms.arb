@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Produktiviti & Gaya Hidup",
   "categorySocialEntertainment": "Sosial & Hiburan",
   "categoryProductivityTools": "Alat Produktiviti",
-  "categoryPersonalWellness": "Kesejahteraan Peribadi"
+  "categoryPersonalWellness": "Kesejahteraan Peribadi",
+  "rating": "Penilaian",
+  "categories": "Kategori",
+  "sortBy": "Isih",
+  "highestRating": "Penilaian tertinggi",
+  "lowestRating": "Penilaian terendah",
+  "resetFilters": "Set semula penapis",
+  "applyFilters": "Guna penapis",
+  "mostInstalls": "Paling banyak dipasang"
 }

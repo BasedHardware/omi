@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "생산성 및 라이프스타일",
   "categorySocialEntertainment": "소셜 및 엔터테인먼트",
   "categoryProductivityTools": "생산성 도구",
-  "categoryPersonalWellness": "개인 웰빙"
+  "categoryPersonalWellness": "개인 웰빙",
+  "rating": "평점",
+  "categories": "카테고리",
+  "sortBy": "정렬",
+  "highestRating": "최고 평점",
+  "lowestRating": "최저 평점",
+  "resetFilters": "필터 초기화",
+  "applyFilters": "필터 적용",
+  "mostInstalls": "설치 수"
 }

@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Παραγωγικότητα & Τρόπος ζωής",
   "categorySocialEntertainment": "Κοινωνικά & Ψυχαγωγία",
   "categoryProductivityTools": "Εργαλεία παραγωγικότητας",
-  "categoryPersonalWellness": "Προσωπική ευεξία"
+  "categoryPersonalWellness": "Προσωπική ευεξία",
+  "rating": "Βαθμολογία",
+  "categories": "Κατηγορίες",
+  "sortBy": "Ταξινόμηση",
+  "highestRating": "Υψηλότερη βαθμολογία",
+  "lowestRating": "Χαμηλότερη βαθμολογία",
+  "resetFilters": "Επαναφορά φίλτρων",
+  "applyFilters": "Εφαρμογή φίλτρων",
+  "mostInstalls": "Περισσότερες εγκαταστάσεις"
 }

@@ -2554,5 +2554,13 @@
   "categoryProductivityLifestyle": "उत्पादकता और जीवनशैली",
   "categorySocialEntertainment": "सामाजिक और मनोरंजन",
   "categoryProductivityTools": "उत्पादकता उपकरण",
-  "categoryPersonalWellness": "व्यक्तिगत कल्याण"
+  "categoryPersonalWellness": "व्यक्तिगत कल्याण",
+  "rating": "रेटिंग",
+  "categories": "श्रेणियाँ",
+  "sortBy": "क्रमबद्ध करें",
+  "highestRating": "उच्चतम रेटिंग",
+  "lowestRating": "न्यूनतम रेटिंग",
+  "resetFilters": "फ़िल्टर रीसेट करें",
+  "applyFilters": "फ़िल्टर लागू करें",
+  "mostInstalls": "सबसे अधिक इंस्टॉल"
 }

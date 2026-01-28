@@ -7956,4 +7956,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Vurdering';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Høyeste vurdering';
+
+  @override
+  String get lowestRating => 'Laveste vurdering';
+
+  @override
+  String get resetFilters => 'Tilbakestill filtre';
+
+  @override
+  String get applyFilters => 'Bruk filtre';
+
+  @override
+  String get mostInstalls => 'Flest installasjoner';
 }

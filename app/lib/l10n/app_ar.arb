@@ -2520,5 +2520,13 @@
   "categoryProductivityLifestyle": "الإنتاجية ونمط الحياة",
   "categorySocialEntertainment": "التواصل والترفيه",
   "categoryProductivityTools": "أدوات الإنتاجية",
-  "categoryPersonalWellness": "الصحة الشخصية"
+  "categoryPersonalWellness": "الصحة الشخصية",
+  "rating": "التقييم",
+  "categories": "الفئات",
+  "sortBy": "ترتيب",
+  "highestRating": "الأعلى تقييماً",
+  "lowestRating": "الأقل تقييماً",
+  "resetFilters": "إعادة تعيين الفلاتر",
+  "applyFilters": "تطبيق الفلاتر",
+  "mostInstalls": "الأكثر تثبيتاً"
 }

@@ -7986,4 +7986,28 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Persoonlijk welzijn';
+
+  @override
+  String get rating => 'Beoordeling';
+
+  @override
+  String get categories => 'Categorieën';
+
+  @override
+  String get sortBy => 'Sorteren';
+
+  @override
+  String get highestRating => 'Hoogste beoordeling';
+
+  @override
+  String get lowestRating => 'Laagste beoordeling';
+
+  @override
+  String get resetFilters => 'Filters resetten';
+
+  @override
+  String get applyFilters => 'Filters toepassen';
+
+  @override
+  String get mostInstalls => 'Meeste installaties';
 }

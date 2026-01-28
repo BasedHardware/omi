@@ -7966,4 +7966,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Personligt välbefinnande';
+
+  @override
+  String get rating => 'Betyg';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sortera';
+
+  @override
+  String get highestRating => 'Högsta betyg';
+
+  @override
+  String get lowestRating => 'Lägsta betyg';
+
+  @override
+  String get resetFilters => 'Återställ filter';
+
+  @override
+  String get applyFilters => 'Tillämpa filter';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
 }

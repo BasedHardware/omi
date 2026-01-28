@@ -2554,5 +2554,13 @@
   "categoryProductivityLifestyle": "生産性とライフスタイル",
   "categorySocialEntertainment": "ソーシャルとエンターテインメント",
   "categoryProductivityTools": "生産性ツール",
-  "categoryPersonalWellness": "パーソナルウェルネス"
+  "categoryPersonalWellness": "パーソナルウェルネス",
+  "rating": "評価",
+  "categories": "カテゴリ",
+  "sortBy": "並べ替え",
+  "highestRating": "高評価順",
+  "lowestRating": "低評価順",
+  "resetFilters": "フィルターをリセット",
+  "applyFilters": "フィルターを適用",
+  "mostInstalls": "インストール数順"
 }

@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Produktyvumas ir gyvenimo būdas",
   "categorySocialEntertainment": "Socialinis ir pramogos",
   "categoryProductivityTools": "Produktyvumo įrankiai",
-  "categoryPersonalWellness": "Asmeninė gerovė"
+  "categoryPersonalWellness": "Asmeninė gerovė",
+  "rating": "Įvertinimas",
+  "categories": "Kategorijos",
+  "sortBy": "Rūšiuoti",
+  "highestRating": "Aukščiausias įvertinimas",
+  "lowestRating": "Žemiausias įvertinimas",
+  "resetFilters": "Atstatyti filtrus",
+  "applyFilters": "Taikyti filtrus",
+  "mostInstalls": "Daugiausia įdiegimų"
 }

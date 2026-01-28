@@ -8018,4 +8018,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Προσωπική ευεξία';
+
+  @override
+  String get rating => 'Βαθμολογία';
+
+  @override
+  String get categories => 'Κατηγορίες';
+
+  @override
+  String get sortBy => 'Ταξινόμηση';
+
+  @override
+  String get highestRating => 'Υψηλότερη βαθμολογία';
+
+  @override
+  String get lowestRating => 'Χαμηλότερη βαθμολογία';
+
+  @override
+  String get resetFilters => 'Επαναφορά φίλτρων';
+
+  @override
+  String get applyFilters => 'Εφαρμογή φίλτρων';
+
+  @override
+  String get mostInstalls => 'Περισσότερες εγκαταστάσεις';
 }

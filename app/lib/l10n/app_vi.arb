@@ -2558,5 +2558,13 @@
   "categoryProductivityLifestyle": "Năng suất & Phong cách sống",
   "categorySocialEntertainment": "Xã hội & Giải trí",
   "categoryProductivityTools": "Công cụ năng suất",
-  "categoryPersonalWellness": "Sức khỏe cá nhân"
+  "categoryPersonalWellness": "Sức khỏe cá nhân",
+  "rating": "Đánh giá",
+  "categories": "Danh mục",
+  "sortBy": "Sắp xếp",
+  "highestRating": "Đánh giá cao nhất",
+  "lowestRating": "Đánh giá thấp nhất",
+  "resetFilters": "Đặt lại bộ lọc",
+  "applyFilters": "Áp dụng bộ lọc",
+  "mostInstalls": "Nhiều lượt cài đặt nhất"
 }

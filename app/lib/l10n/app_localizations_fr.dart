@@ -8033,4 +8033,28 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Bien-être personnel';
+
+  @override
+  String get rating => 'Note';
+
+  @override
+  String get categories => 'Catégories';
+
+  @override
+  String get sortBy => 'Trier';
+
+  @override
+  String get highestRating => 'Meilleure note';
+
+  @override
+  String get lowestRating => 'Note la plus basse';
+
+  @override
+  String get resetFilters => 'Réinitialiser les filtres';
+
+  @override
+  String get applyFilters => 'Appliquer les filtres';
+
+  @override
+  String get mostInstalls => 'Plus d\'installations';
 }

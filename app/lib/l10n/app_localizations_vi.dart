@@ -7963,4 +7963,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Sức khỏe cá nhân';
+
+  @override
+  String get rating => 'Đánh giá';
+
+  @override
+  String get categories => 'Danh mục';
+
+  @override
+  String get sortBy => 'Sắp xếp';
+
+  @override
+  String get highestRating => 'Đánh giá cao nhất';
+
+  @override
+  String get lowestRating => 'Đánh giá thấp nhất';
+
+  @override
+  String get resetFilters => 'Đặt lại bộ lọc';
+
+  @override
+  String get applyFilters => 'Áp dụng bộ lọc';
+
+  @override
+  String get mostInstalls => 'Nhiều lượt cài đặt nhất';
 }

@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Tootlikkus ja elustiil",
   "categorySocialEntertainment": "Sotsiaalne ja meelelahutus",
   "categoryProductivityTools": "Tootlikkuse tööriistad",
-  "categoryPersonalWellness": "Isiklik heaolu"
+  "categoryPersonalWellness": "Isiklik heaolu",
+  "rating": "Hinnang",
+  "categories": "Kategooriad",
+  "sortBy": "Sorteeri",
+  "highestRating": "Kõrgeim hinnang",
+  "lowestRating": "Madalaim hinnang",
+  "resetFilters": "Lähtesta filtrid",
+  "applyFilters": "Rakenda filtrid",
+  "mostInstalls": "Enim paigaldusi"
 }

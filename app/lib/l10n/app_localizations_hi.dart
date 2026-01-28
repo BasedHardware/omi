@@ -7941,4 +7941,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'व्यक्तिगत कल्याण';
+
+  @override
+  String get rating => 'रेटिंग';
+
+  @override
+  String get categories => 'श्रेणियाँ';
+
+  @override
+  String get sortBy => 'क्रमबद्ध करें';
+
+  @override
+  String get highestRating => 'उच्चतम रेटिंग';
+
+  @override
+  String get lowestRating => 'न्यूनतम रेटिंग';
+
+  @override
+  String get resetFilters => 'फ़िल्टर रीसेट करें';
+
+  @override
+  String get applyFilters => 'फ़िल्टर लागू करें';
+
+  @override
+  String get mostInstalls => 'सबसे अधिक इंस्टॉल';
 }

@@ -7960,4 +7960,28 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Isiklik heaolu';
+
+  @override
+  String get rating => 'Hinnang';
+
+  @override
+  String get categories => 'Kategooriad';
+
+  @override
+  String get sortBy => 'Sorteeri';
+
+  @override
+  String get highestRating => 'Kõrgeim hinnang';
+
+  @override
+  String get lowestRating => 'Madalaim hinnang';
+
+  @override
+  String get resetFilters => 'Lähtesta filtrid';
+
+  @override
+  String get applyFilters => 'Rakenda filtrid';
+
+  @override
+  String get mostInstalls => 'Enim paigaldusi';
 }

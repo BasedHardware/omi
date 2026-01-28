@@ -7923,4 +7923,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'สุขภาพส่วนบุคคล';
+
+  @override
+  String get rating => 'คะแนน';
+
+  @override
+  String get categories => 'หมวดหมู่';
+
+  @override
+  String get sortBy => 'เรียงตาม';
+
+  @override
+  String get highestRating => 'คะแนนสูงสุด';
+
+  @override
+  String get lowestRating => 'คะแนนต่ำสุด';
+
+  @override
+  String get resetFilters => 'รีเซ็ตตัวกรอง';
+
+  @override
+  String get applyFilters => 'ใช้ตัวกรอง';
+
+  @override
+  String get mostInstalls => 'ติดตั้งมากที่สุด';
 }

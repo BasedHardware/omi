@@ -8010,4 +8010,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Benessere personale';
+
+  @override
+  String get rating => 'Valutazione';
+
+  @override
+  String get categories => 'Categorie';
+
+  @override
+  String get sortBy => 'Ordina';
+
+  @override
+  String get highestRating => 'Valutazione più alta';
+
+  @override
+  String get lowestRating => 'Valutazione più bassa';
+
+  @override
+  String get resetFilters => 'Reimposta filtri';
+
+  @override
+  String get applyFilters => 'Applica filtri';
+
+  @override
+  String get mostInstalls => 'Più installazioni';
 }

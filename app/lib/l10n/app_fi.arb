@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Tuottavuus ja elämäntapa",
   "categorySocialEntertainment": "Sosiaalinen ja viihde",
   "categoryProductivityTools": "Tuottavuustyökalut",
-  "categoryPersonalWellness": "Henkilökohtainen hyvinvointi"
+  "categoryPersonalWellness": "Henkilökohtainen hyvinvointi",
+  "rating": "Arvio",
+  "categories": "Kategoriat",
+  "sortBy": "Lajittele",
+  "highestRating": "Korkein arvio",
+  "lowestRating": "Matalin arvio",
+  "resetFilters": "Nollaa suodattimet",
+  "applyFilters": "Käytä suodattimia",
+  "mostInstalls": "Eniten asennuksia"
 }

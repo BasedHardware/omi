@@ -7817,4 +7817,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => '个人健康';
+
+  @override
+  String get rating => '评分';
+
+  @override
+  String get categories => '分类';
+
+  @override
+  String get sortBy => '排序';
+
+  @override
+  String get highestRating => '最高评分';
+
+  @override
+  String get lowestRating => '最低评分';
+
+  @override
+  String get resetFilters => '重置筛选';
+
+  @override
+  String get applyFilters => '应用筛选';
+
+  @override
+  String get mostInstalls => '安装最多';
 }

@@ -2588,5 +2588,13 @@
   "categoryProductivityLifestyle": "Verimlilik ve Yaşam Tarzı",
   "categorySocialEntertainment": "Sosyal ve Eğlence",
   "categoryProductivityTools": "Verimlilik Araçları",
-  "categoryPersonalWellness": "Kişisel Sağlık"
+  "categoryPersonalWellness": "Kişisel Sağlık",
+  "rating": "Puan",
+  "categories": "Kategoriler",
+  "sortBy": "Sırala",
+  "highestRating": "En yüksek puan",
+  "lowestRating": "En düşük puan",
+  "resetFilters": "Filtreleri sıfırla",
+  "applyFilters": "Filtreleri uygula",
+  "mostInstalls": "En çok yükleme"
 }

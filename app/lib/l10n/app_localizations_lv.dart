@@ -7978,4 +7978,28 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Personīgā labklājība';
+
+  @override
+  String get rating => 'Vērtējums';
+
+  @override
+  String get categories => 'Kategorijas';
+
+  @override
+  String get sortBy => 'Kārtot';
+
+  @override
+  String get highestRating => 'Augstākais vērtējums';
+
+  @override
+  String get lowestRating => 'Zemākais vērtējums';
+
+  @override
+  String get resetFilters => 'Atiestatīt filtrus';
+
+  @override
+  String get applyFilters => 'Lietot filtrus';
+
+  @override
+  String get mostInstalls => 'Visvairāk instalāciju';
 }

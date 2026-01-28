@@ -7958,4 +7958,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Personal & Lifestyle';
+
+  @override
+  String get rating => 'Rating';
+
+  @override
+  String get categories => 'Categories';
+
+  @override
+  String get sortBy => 'Sort';
+
+  @override
+  String get highestRating => 'Highest Rating';
+
+  @override
+  String get lowestRating => 'Lowest Rating';
+
+  @override
+  String get resetFilters => 'Reset filters';
+
+  @override
+  String get applyFilters => 'Apply filters';
+
+  @override
+  String get mostInstalls => 'Most Installs';
 }

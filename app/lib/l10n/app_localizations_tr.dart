@@ -7974,4 +7974,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Kişisel Sağlık';
+
+  @override
+  String get rating => 'Puan';
+
+  @override
+  String get categories => 'Kategoriler';
+
+  @override
+  String get sortBy => 'Sırala';
+
+  @override
+  String get highestRating => 'En yüksek puan';
+
+  @override
+  String get lowestRating => 'En düşük puan';
+
+  @override
+  String get resetFilters => 'Filtreleri sıfırla';
+
+  @override
+  String get applyFilters => 'Filtreleri uygula';
+
+  @override
+  String get mostInstalls => 'En çok yükleme';
 }

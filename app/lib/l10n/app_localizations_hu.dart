@@ -7998,4 +7998,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Személyes jólét';
+
+  @override
+  String get rating => 'Értékelés';
+
+  @override
+  String get categories => 'Kategóriák';
+
+  @override
+  String get sortBy => 'Rendezés';
+
+  @override
+  String get highestRating => 'Legmagasabb értékelés';
+
+  @override
+  String get lowestRating => 'Legalacsonyabb értékelés';
+
+  @override
+  String get resetFilters => 'Szűrők visszaállítása';
+
+  @override
+  String get applyFilters => 'Szűrők alkalmazása';
+
+  @override
+  String get mostInstalls => 'Legtöbb telepítés';
 }

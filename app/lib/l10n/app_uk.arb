@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Продуктивність та спосіб життя",
   "categorySocialEntertainment": "Соціальне та розваги",
   "categoryProductivityTools": "Інструменти продуктивності",
-  "categoryPersonalWellness": "Особисте благополуччя"
+  "categoryPersonalWellness": "Особисте благополуччя",
+  "rating": "Рейтинг",
+  "categories": "Категорії",
+  "sortBy": "Сортування",
+  "highestRating": "Найвищий рейтинг",
+  "lowestRating": "Найнижчий рейтинг",
+  "resetFilters": "Скинути фільтри",
+  "applyFilters": "Застосувати фільтри",
+  "mostInstalls": "Найбільше встановлень"
 }

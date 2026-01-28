@@ -8009,4 +8009,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Benestar personal';
+
+  @override
+  String get rating => 'Valoració';
+
+  @override
+  String get categories => 'Categories';
+
+  @override
+  String get sortBy => 'Ordenar';
+
+  @override
+  String get highestRating => 'Millor valoració';
+
+  @override
+  String get lowestRating => 'Pitjor valoració';
+
+  @override
+  String get resetFilters => 'Restablir filtres';
+
+  @override
+  String get applyFilters => 'Aplicar filtres';
+
+  @override
+  String get mostInstalls => 'Més instal·lacions';
 }

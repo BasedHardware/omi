@@ -2575,5 +2575,13 @@
   "categoryProductivityLifestyle": "生产力与生活方式",
   "categorySocialEntertainment": "社交与娱乐",
   "categoryProductivityTools": "生产力工具",
-  "categoryPersonalWellness": "个人健康"
+  "categoryPersonalWellness": "个人健康",
+  "rating": "评分",
+  "categories": "分类",
+  "sortBy": "排序",
+  "highestRating": "最高评分",
+  "lowestRating": "最低评分",
+  "resetFilters": "重置筛选",
+  "applyFilters": "应用筛选",
+  "mostInstalls": "安装最多"
 }

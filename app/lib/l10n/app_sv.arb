@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Produktivitet & livsstil",
   "categorySocialEntertainment": "Socialt & underhållning",
   "categoryProductivityTools": "Produktivitetsverktyg",
-  "categoryPersonalWellness": "Personligt välbefinnande"
+  "categoryPersonalWellness": "Personligt välbefinnande",
+  "rating": "Betyg",
+  "categories": "Kategorier",
+  "sortBy": "Sortera",
+  "highestRating": "Högsta betyg",
+  "lowestRating": "Lägsta betyg",
+  "resetFilters": "Återställ filter",
+  "applyFilters": "Tillämpa filter",
+  "mostInstalls": "Flest installationer"
 }

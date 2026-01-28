@@ -7993,4 +7993,28 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Лично благосъстояние';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категории';
+
+  @override
+  String get sortBy => 'Сортиране';
+
+  @override
+  String get highestRating => 'Най-висок рейтинг';
+
+  @override
+  String get lowestRating => 'Най-нисък рейтинг';
+
+  @override
+  String get resetFilters => 'Нулиране на филтрите';
+
+  @override
+  String get applyFilters => 'Прилагане на филтрите';
+
+  @override
+  String get mostInstalls => 'Най-много инсталации';
 }

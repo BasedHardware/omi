@@ -7979,4 +7979,28 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Osobiste samopoczucie';
+
+  @override
+  String get rating => 'Ocena';
+
+  @override
+  String get categories => 'Kategorie';
+
+  @override
+  String get sortBy => 'Sortuj';
+
+  @override
+  String get highestRating => 'Najwyższa ocena';
+
+  @override
+  String get lowestRating => 'Najniższa ocena';
+
+  @override
+  String get resetFilters => 'Resetuj filtry';
+
+  @override
+  String get applyFilters => 'Zastosuj filtry';
+
+  @override
+  String get mostInstalls => 'Najwięcej instalacji';
 }

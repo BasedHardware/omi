@@ -2595,5 +2595,13 @@
   "categoryProductivityLifestyle": "Produktivitas & Gaya Hidup",
   "categorySocialEntertainment": "Sosial & Hiburan",
   "categoryProductivityTools": "Alat Produktivitas",
-  "categoryPersonalWellness": "Kesejahteraan Pribadi"
+  "categoryPersonalWellness": "Kesejahteraan Pribadi",
+  "rating": "Peringkat",
+  "categories": "Kategori",
+  "sortBy": "Urutkan",
+  "highestRating": "Peringkat tertinggi",
+  "lowestRating": "Peringkat terendah",
+  "resetFilters": "Reset filter",
+  "applyFilters": "Terapkan filter",
+  "mostInstalls": "Paling banyak diinstal"
 }

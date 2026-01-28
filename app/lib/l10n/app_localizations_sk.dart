@@ -7951,4 +7951,28 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Osobná pohoda';
+
+  @override
+  String get rating => 'Hodnotenie';
+
+  @override
+  String get categories => 'Kategórie';
+
+  @override
+  String get sortBy => 'Zoradiť';
+
+  @override
+  String get highestRating => 'Najvyššie hodnotenie';
+
+  @override
+  String get lowestRating => 'Najnižšie hodnotenie';
+
+  @override
+  String get resetFilters => 'Resetovať filtre';
+
+  @override
+  String get applyFilters => 'Použiť filtre';
+
+  @override
+  String get mostInstalls => 'Najviac inštalácií';
 }

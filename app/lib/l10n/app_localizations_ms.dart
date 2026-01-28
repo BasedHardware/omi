@@ -7984,4 +7984,28 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Kesejahteraan Peribadi';
+
+  @override
+  String get rating => 'Penilaian';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Isih';
+
+  @override
+  String get highestRating => 'Penilaian tertinggi';
+
+  @override
+  String get lowestRating => 'Penilaian terendah';
+
+  @override
+  String get resetFilters => 'Set semula penapis';
+
+  @override
+  String get applyFilters => 'Guna penapis';
+
+  @override
+  String get mostInstalls => 'Paling banyak dipasang';
 }

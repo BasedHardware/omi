@@ -2522,5 +2522,13 @@
   "categoryProductivityLifestyle": "Produktivita a životní styl",
   "categorySocialEntertainment": "Sociální a zábava",
   "categoryProductivityTools": "Nástroje produktivity",
-  "categoryPersonalWellness": "Osobní pohoda"
+  "categoryPersonalWellness": "Osobní pohoda",
+  "rating": "Hodnocení",
+  "categories": "Kategorie",
+  "sortBy": "Řadit",
+  "highestRating": "Nejvyšší hodnocení",
+  "lowestRating": "Nejnižší hodnocení",
+  "resetFilters": "Resetovat filtry",
+  "applyFilters": "Použít filtry",
+  "mostInstalls": "Nejvíce instalací"
 }

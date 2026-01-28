@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "Produktivitāte un dzīvesveids",
   "categorySocialEntertainment": "Sociālais un izklaide",
   "categoryProductivityTools": "Produktivitātes rīki",
-  "categoryPersonalWellness": "Personīgā labklājība"
+  "categoryPersonalWellness": "Personīgā labklājība",
+  "rating": "Vērtējums",
+  "categories": "Kategorijas",
+  "sortBy": "Kārtot",
+  "highestRating": "Augstākais vērtējums",
+  "lowestRating": "Zemākais vērtējums",
+  "resetFilters": "Atiestatīt filtrus",
+  "applyFilters": "Lietot filtrus",
+  "mostInstalls": "Visvairāk instalāciju"
 }

@@ -2522,5 +2522,13 @@
   "categoryProductivityLifestyle": "Productivitat i estil de vida",
   "categorySocialEntertainment": "Social i entreteniment",
   "categoryProductivityTools": "Eines de productivitat",
-  "categoryPersonalWellness": "Benestar personal"
+  "categoryPersonalWellness": "Benestar personal",
+  "rating": "Valoració",
+  "categories": "Categories",
+  "sortBy": "Ordenar",
+  "highestRating": "Millor valoració",
+  "lowestRating": "Pitjor valoració",
+  "resetFilters": "Restablir filtres",
+  "applyFilters": "Aplicar filtres",
+  "mostInstalls": "Més instal·lacions"
 }

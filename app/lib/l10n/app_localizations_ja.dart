@@ -7827,4 +7827,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'パーソナルウェルネス';
+
+  @override
+  String get rating => '評価';
+
+  @override
+  String get categories => 'カテゴリ';
+
+  @override
+  String get sortBy => '並べ替え';
+
+  @override
+  String get highestRating => '高評価順';
+
+  @override
+  String get lowestRating => '低評価順';
+
+  @override
+  String get resetFilters => 'フィルターをリセット';
+
+  @override
+  String get applyFilters => 'フィルターを適用';
+
+  @override
+  String get mostInstalls => 'インストール数順';
 }

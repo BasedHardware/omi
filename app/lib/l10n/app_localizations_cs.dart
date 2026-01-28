@@ -7956,4 +7956,28 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Osobní pohoda';
+
+  @override
+  String get rating => 'Hodnocení';
+
+  @override
+  String get categories => 'Kategorie';
+
+  @override
+  String get sortBy => 'Řadit';
+
+  @override
+  String get highestRating => 'Nejvyšší hodnocení';
+
+  @override
+  String get lowestRating => 'Nejnižší hodnocení';
+
+  @override
+  String get resetFilters => 'Resetovat filtry';
+
+  @override
+  String get applyFilters => 'Použít filtry';
+
+  @override
+  String get mostInstalls => 'Nejvíce instalací';
 }

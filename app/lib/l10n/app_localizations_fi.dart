@@ -7959,4 +7959,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'Henkilökohtainen hyvinvointi';
+
+  @override
+  String get rating => 'Arvio';
+
+  @override
+  String get categories => 'Kategoriat';
+
+  @override
+  String get sortBy => 'Lajittele';
+
+  @override
+  String get highestRating => 'Korkein arvio';
+
+  @override
+  String get lowestRating => 'Matalin arvio';
+
+  @override
+  String get resetFilters => 'Nollaa suodattimet';
+
+  @override
+  String get applyFilters => 'Käytä suodattimia';
+
+  @override
+  String get mostInstalls => 'Eniten asennuksia';
 }

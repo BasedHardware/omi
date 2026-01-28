@@ -2589,5 +2589,13 @@
   "categoryProductivityLifestyle": "Produtividade e estilo de vida",
   "categorySocialEntertainment": "Social e entretenimento",
   "categoryProductivityTools": "Ferramentas de produtividade",
-  "categoryPersonalWellness": "Bem-estar pessoal"
+  "categoryPersonalWellness": "Bem-estar pessoal",
+  "rating": "Avaliação",
+  "categories": "Categorias",
+  "sortBy": "Ordenar",
+  "highestRating": "Maior avaliação",
+  "lowestRating": "Menor avaliação",
+  "resetFilters": "Redefinir filtros",
+  "applyFilters": "Aplicar filtros",
+  "mostInstalls": "Mais instalações"
 }

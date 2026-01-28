@@ -2522,5 +2522,13 @@
   "categoryProductivityLifestyle": "Продуктивност и начин на живот",
   "categorySocialEntertainment": "Социални и забавление",
   "categoryProductivityTools": "Инструменти за продуктивност",
-  "categoryPersonalWellness": "Лично благосъстояние"
+  "categoryPersonalWellness": "Лично благосъстояние",
+  "rating": "Рейтинг",
+  "categories": "Категории",
+  "sortBy": "Сортиране",
+  "highestRating": "Най-висок рейтинг",
+  "lowestRating": "Най-нисък рейтинг",
+  "resetFilters": "Нулиране на филтрите",
+  "applyFilters": "Прилагане на филтрите",
+  "mostInstalls": "Най-много инсталации"
 }

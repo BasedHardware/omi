@@ -7905,4 +7905,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get categoryPersonalWellness => 'الصحة الشخصية';
+
+  @override
+  String get rating => 'التقييم';
+
+  @override
+  String get categories => 'الفئات';
+
+  @override
+  String get sortBy => 'ترتيب';
+
+  @override
+  String get highestRating => 'الأعلى تقييماً';
+
+  @override
+  String get lowestRating => 'الأقل تقييماً';
+
+  @override
+  String get resetFilters => 'إعادة تعيين الفلاتر';
+
+  @override
+  String get applyFilters => 'تطبيق الفلاتر';
+
+  @override
+  String get mostInstalls => 'الأكثر تثبيتاً';
 }

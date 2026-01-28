@@ -2553,5 +2553,13 @@
   "categoryProductivityLifestyle": "ประสิทธิภาพและไลฟ์สไตล์",
   "categorySocialEntertainment": "สังคมและความบันเทิง",
   "categoryProductivityTools": "เครื่องมือเพิ่มประสิทธิภาพ",
-  "categoryPersonalWellness": "สุขภาพส่วนบุคคล"
+  "categoryPersonalWellness": "สุขภาพส่วนบุคคล",
+  "rating": "คะแนน",
+  "categories": "หมวดหมู่",
+  "sortBy": "เรียงตาม",
+  "highestRating": "คะแนนสูงสุด",
+  "lowestRating": "คะแนนต่ำสุด",
+  "resetFilters": "รีเซ็ตตัวกรอง",
+  "applyFilters": "ใช้ตัวกรอง",
+  "mostInstalls": "ติดตั้งมากที่สุด"
 }
