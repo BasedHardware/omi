@@ -24,6 +24,7 @@ import {
   Bell,
   Mic,
   MessageSquare,
+  Sparkles,
 } from 'lucide-react';
 
 // Discord icon SVG component
@@ -104,6 +105,7 @@ const settingsMenuItems = [
   { id: 'integrations', label: 'Integrations', icon: Puzzle },
   { id: 'developer', label: 'Developer', icon: Code },
   { id: 'account', label: 'Account', icon: Settings },
+  { id: 'proactive', label: 'Proactive Assistant', icon: Sparkles },
 ];
 
 interface SidebarProps {

@@ -9,6 +9,7 @@ import { ChatBubble } from '@/components/chat/ChatBubble';
 import { BottomNavigation } from './BottomNavigation';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
+import { ProactiveProvider, ProactiveMonitoringWidget } from '@/components/proactive';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
@@ -82,70 +83,72 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
   return (
     <ChatProvider>
       <NotificationProvider>
-        {/* Handle notification routing from chatApp query param */}
-        <ChatAppRouter />
-        {/* Prefetch memories in background for instant page load */}
-        <MemoriesPrefetcher />
-        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
-          {/* Sidebar */}
-          <Sidebar
-            isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-          />
+        <ProactiveProvider>
+          {/* Handle notification routing from chatApp query param */}
+          <ChatAppRouter />
+          {/* Prefetch memories in background for instant page load */}
+          <MemoriesPrefetcher />
+          <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
+            {/* Sidebar */}
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
 
-          {/* Main content area - flex row to support push/slide panels */}
-          <div className="flex-1 flex min-w-0 h-full overflow-hidden">
-            {/* Main content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
-              {/* Header - conditionally shown */}
-              {!hideHeader && (
-                <header
-                  className={cn(
-                    'flex-shrink-0',
-                    'flex items-center gap-4 px-4 py-4 lg:px-8',
-                    'bg-bg-primary/80 backdrop-blur-md',
-                    'border-b border-bg-tertiary'
-                  )}
-                >
-                  <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+            {/* Main content area - flex row to support push/slide panels */}
+            <div className="flex-1 flex min-w-0 h-full overflow-hidden">
+              {/* Main content */}
+              <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
+                {/* Header - conditionally shown */}
+                {!hideHeader && (
+                  <header
+                    className={cn(
+                      'flex-shrink-0',
+                      'flex items-center gap-4 px-4 py-4 lg:px-8',
+                      'bg-bg-primary/80 backdrop-blur-md',
+                      'border-b border-bg-tertiary'
+                    )}
+                  >
+                    <MobileMenuButton onClick={() => setSidebarOpen(true)} />
 
-                  {title && (
-                    <h1 className="text-xl font-display font-semibold text-text-primary">
-                      {title}
-                    </h1>
-                  )}
-                </header>
-              )}
+                    {title && (
+                      <h1 className="text-xl font-display font-semibold text-text-primary">
+                        {title}
+                      </h1>
+                    )}
+                  </header>
+                )}
 
-              {/* Mobile menu button when header is hidden */}
-              {hideHeader && (
-                <div className="lg:hidden absolute top-4 left-4 z-30">
-                  <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+                {/* Mobile menu button when header is hidden */}
+                {hideHeader && (
+                  <div className="lg:hidden absolute top-4 left-4 z-30">
+                    <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+                  </div>
+                )}
+
+                {/* Content */}
+                <div className="flex-1 overflow-hidden">
+                  {children}
                 </div>
-              )}
+              </main>
 
-              {/* Content */}
-              <div className="flex-1 overflow-hidden">
-                {children}
-              </div>
-            </main>
+              {/* Chat panel - push/slide from right */}
+              <ChatPanel />
 
-            {/* Chat panel - push/slide from right */}
-            <ChatPanel />
+              {/* Notification center - push/slide from right */}
+              <NotificationCenter />
+            </div>
 
-            {/* Notification center - push/slide from right */}
-            <NotificationCenter />
+            {/* Chat bubble - floating button */}
+            <ChatBubble />
+
+            {/* Bottom navigation - mobile only */}
+            <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />
+
+            {/* Recording indicator - handles its own fixed positioning and animates with panels */}
+            <HeaderRecordingIndicator />
           </div>
-
-          {/* Chat bubble - floating button */}
-          <ChatBubble />
-
-          {/* Bottom navigation - mobile only */}
-          <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />
-
-          {/* Recording indicator - handles its own fixed positioning and animates with panels */}
-          <HeaderRecordingIndicator />
-        </div>
+        </ProactiveProvider>
       </NotificationProvider>
     </ChatProvider>
   );
