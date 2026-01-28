@@ -102,8 +102,8 @@ export const ConversationCard = memo(function ConversationCard({
           ? 'bg-purple-primary/20 border-purple-primary shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
           // Normal selected state (viewing detail)
           : isSelected
-          ? 'bg-purple-primary/10 border-purple-primary/50 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
-          : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30',
+            ? 'bg-purple-primary/10 border-purple-primary/50 shadow-[0_0_0_1px_rgba(139,92,246,0.3)]'
+            : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30',
         // Merging state - dim the card
         isMerging && 'opacity-50 pointer-events-none'
       )}
@@ -183,9 +183,10 @@ export const ConversationCard = memo(function ConversationCard({
         <div className="flex-1 min-w-0">
           <h3
             className={cn(
-              'font-medium leading-snug transition-colors text-sm',
+              'font-medium leading-snug transition-colors text-sm truncate',
               isSelected ? 'text-purple-primary' : 'text-text-primary group-hover:text-white'
-            )}
+            )
+            }
           >
             {conversation.structured.title || 'Untitled conversation'}
           </h3>
