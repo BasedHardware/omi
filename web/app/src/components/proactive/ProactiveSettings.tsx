@@ -12,16 +12,11 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
     const { settings, updateSettings, clearAdviceHistory, previousAdvice } = useProactiveNotifications();
 
     const [showPrompt, setShowPrompt] = useState(false);
-    const [localApiKey, setLocalApiKey] = useState(settings.apiKey);
 
     // Format interval for display
     function formatInterval(ms: number): string {
         const seconds = ms / 1000;
         return seconds >= 60 ? `${seconds / 60} min` : `${seconds} sec`;
-    }
-
-    function handleApiKeyBlur() {
-        updateSettings({ apiKey: localApiKey });
     }
 
     function handleResetPrompt() {
@@ -63,29 +58,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 </button>
             </div>
 
-            {/* API Key */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-200">Gemini API Key</label>
-                <input
-                    type="password"
-                    value={localApiKey}
-                    onChange={(e) => setLocalApiKey(e.target.value)}
-                    onBlur={handleApiKeyBlur}
-                    placeholder="Enter your Gemini API key"
-                    className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
-                />
-                <p className="text-xs text-gray-500">
-                    Get your API key from{' '}
-                    <a
-                        href="https://aistudio.google.com/apikey"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 hover:underline"
-                    >
-                        Google AI Studio
-                    </a>
-                </p>
-            </div>
+
 
             {/* Analysis Interval */}
             <div className="space-y-2">
@@ -236,11 +209,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
 
                 {/* Last Analysis Log */}
                 <div className="mt-2 text-xs text-gray-500 font-mono bg-black/20 p-2 rounded max-h-32 overflow-y-auto">
-                    {localApiKey ? (
-                        <div>API Key: Set (ends with ...{localApiKey.slice(-4)})</div>
-                    ) : (
-                        <div className="text-red-400">API Key: Missing</div>
-                    )}
+                    <div>API Key: Configured server-side (.env.local)</div>
                     <div>Settings: {settings.enabled ? 'Enabled' : 'Disabled'}</div>
                     <div>Interval: {settings.analysisIntervalMs}ms</div>
                     <div>Threshold: {settings.confidenceThreshold}</div>

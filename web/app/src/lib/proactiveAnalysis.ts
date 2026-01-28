@@ -138,7 +138,41 @@ export async function analyzeFrame(options: AnalyzeFrameOptions): Promise<Advice
             responseSchema,
         });
 
-        return JSON.parse(responseText) as AdviceExtractionResult;
+        const parsed: unknown = JSON.parse(responseText);
+
+        // Runtime validation
+        if (!parsed || typeof parsed !== 'object') {
+            throw new Error('Invalid response: not an object');
+        }
+
+        const result = parsed as Record<string, any>;
+
+        if (typeof result.has_advice !== 'boolean') {
+            throw new Error('Invalid response: missing or invalid has_advice');
+        }
+
+        if (typeof result.context_summary !== 'string') {
+            throw new Error('Invalid response: missing context_summary');
+        }
+
+        if (typeof result.current_activity !== 'string') {
+            throw new Error('Invalid response: missing current_activity');
+        }
+
+        // Optional fields validation
+        if (result.advice !== undefined && typeof result.advice !== 'string') {
+            throw new Error('Invalid response: advice must be string if present');
+        }
+
+        if (result.confidence !== undefined && typeof result.confidence !== 'number') {
+            throw new Error('Invalid response: confidence must be number if present');
+        }
+
+        if (result.category !== undefined && typeof result.category !== 'string') {
+            throw new Error('Invalid response: category must be string if present');
+        }
+
+        return result as AdviceExtractionResult;
     } catch (error) {
         console.error('Proactive Analysis Failed:', error);
         throw error;
