@@ -587,7 +587,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get starOngoing => 'Aggiungi Conversazione in Corso ai Preferiti';
 
   @override
-  String get off => 'Off';
+  String get off => 'Disattivato';
 
   @override
   String get max => 'Massimo';
@@ -6858,7 +6858,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceIdLabel => 'Device ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Stato';
 
   @override
   String get statusProcessed => 'Processed';

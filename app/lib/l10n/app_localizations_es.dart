@@ -584,7 +584,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get starOngoing => 'Marcar conversación actual';
 
   @override
-  String get off => 'Off';
+  String get off => 'Desactivado';
 
   @override
   String get max => 'Máx';
@@ -6822,7 +6822,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceIdLabel => 'Device ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Estado';
 
   @override
   String get statusProcessed => 'Processed';

@@ -443,7 +443,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appAndDeviceCopied => '앱 및 기기 정보가 복사되었습니다';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 요약';
 
   @override
   String get yourPrivacyYourControl => '당신의 개인정보, 당신의 제어';

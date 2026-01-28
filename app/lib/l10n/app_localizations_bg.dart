@@ -451,7 +451,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appAndDeviceCopied => 'Детайлите за приложението и устройството са копирани';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Обобщение 2025';
 
   @override
   String get yourPrivacyYourControl => 'Вашата поверителност, вашият контрол';

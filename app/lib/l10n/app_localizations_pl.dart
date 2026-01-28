@@ -585,7 +585,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get starOngoing => 'Oznacz bieżącą rozmowę gwiazdką';
 
   @override
-  String get off => 'Off';
+  String get off => 'Wyłączone';
 
   @override
   String get max => 'Maks.';

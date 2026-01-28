@@ -450,7 +450,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get appAndDeviceCopied => 'Detail aplikasi dan perangkat disalin';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Rangkuman 2025';
 
   @override
   String get yourPrivacyYourControl => 'Privasi Anda, Kontrol Anda';

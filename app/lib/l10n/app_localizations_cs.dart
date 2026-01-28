@@ -449,7 +449,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikaci a zařízení zkopírovány';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Shrnutí 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše soukromí, vaše kontrola';

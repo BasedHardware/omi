@@ -447,7 +447,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appAndDeviceCopied => 'Sovelluksen ja laitteen tiedot kopioitu';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Katsaus 2025';
 
   @override
   String get yourPrivacyYourControl => 'Yksityisyytesi, sinun hallinnassasi';
@@ -582,7 +582,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get starOngoing => 'Merkitse käynnissä oleva keskustelu tähdellä';
 
   @override
-  String get off => 'Off';
+  String get off => 'Pois';
 
   @override
   String get max => 'Maks.';
@@ -6819,7 +6819,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceIdLabel => 'Laitteen tunnus';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Tila';
 
   @override
   String get statusProcessed => 'Käsitelty';

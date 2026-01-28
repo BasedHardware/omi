@@ -589,7 +589,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get starOngoing => 'Αγαπημένη Τρέχουσα Συνομιλία';
 
   @override
-  String get off => 'Off';
+  String get off => 'Απενεργ.';
 
   @override
   String get max => 'Μέγιστο';

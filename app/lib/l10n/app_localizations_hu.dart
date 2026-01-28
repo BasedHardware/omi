@@ -452,7 +452,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appAndDeviceCopied => 'Alkalmazás és eszköz részletei másolva';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 összefoglaló';
 
   @override
   String get yourPrivacyYourControl => 'Adatvédelem, saját ellenőrzésed alatt';
@@ -6849,7 +6849,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceIdLabel => 'Eszköz azonosító';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Állapot';
 
   @override
   String get statusProcessed => 'Processed';

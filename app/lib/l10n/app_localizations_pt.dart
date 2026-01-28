@@ -582,7 +582,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get starOngoing => 'Favoritar conversa atual';
 
   @override
-  String get off => 'Off';
+  String get off => 'Desligado';
 
   @override
   String get max => 'Máx';
@@ -6810,7 +6810,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceIdLabel => 'ID do Dispositivo';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Estado';
 
   @override
   String get statusProcessed => 'Processado';

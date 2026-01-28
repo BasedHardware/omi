@@ -451,7 +451,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikácii a zariadení boli skopírované';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Zhrnutie 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše súkromie, vaša kontrola';

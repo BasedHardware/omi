@@ -443,7 +443,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appAndDeviceCopied => 'アプリとデバイスの詳細をコピーしました';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025年のまとめ';
 
   @override
   String get yourPrivacyYourControl => 'プライバシーはあなたの手に';
@@ -573,7 +573,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get starOngoing => '進行中の会話にスターを付ける';
 
   @override
-  String get off => 'Off';
+  String get off => 'オフ';
 
   @override
   String get max => '最大';
@@ -6699,7 +6699,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceIdLabel => 'デバイスID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'ステータス';
 
   @override
   String get statusProcessed => '処理済み';

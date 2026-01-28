@@ -449,7 +449,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appAndDeviceCopied => 'Programėlės ir įrenginio informacija nukopijuota';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 apžvalga';
 
   @override
   String get yourPrivacyYourControl => 'Jūsų privatumas, jūsų kontrolė';
