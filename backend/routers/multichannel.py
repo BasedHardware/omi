@@ -138,6 +138,10 @@ async def multi_channel_listen(
         f"sample_rate={sample_rate}, codec={codec}, channels={channels}, call_id={call_id}"
     )
 
+    if channels < 1 or channels > 2:
+        await websocket.close(code=1008, reason="Invalid channel count (must be 1-2)")
+        return
+
     try:
         await websocket.accept()
     except RuntimeError as e:

@@ -4,6 +4,7 @@ from typing import Optional
 from twilio.rest import Client
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
+from twilio.request_validator import RequestValidator
 
 account_sid = os.getenv('TWILIO_ACCOUNT_SID')
 auth_token = os.getenv('TWILIO_AUTH_TOKEN')
@@ -156,3 +157,21 @@ def list_caller_ids() -> list:
         }
         for cid in caller_ids
     ]
+
+
+def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
+    """
+    Validate that a request originated from Twilio using the X-Twilio-Signature header.
+
+    Args:
+        url: The full URL of the request
+        params: The POST parameters
+        signature: The X-Twilio-Signature header value
+
+    Returns:
+        True if the signature is valid
+    """
+    if not auth_token:
+        return True
+    validator = RequestValidator(auth_token)
+    return validator.validate(url, params, signature)

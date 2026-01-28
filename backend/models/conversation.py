@@ -245,6 +245,7 @@ class ConversationSource(str, Enum):
     friend_com = 'friend_com'
     apple_watch = 'apple_watch'
     phone = 'phone'
+    phone_call = 'phone_call'
     desktop = 'desktop'
     openglass = 'openglass'
     screenpipe = 'screenpipe'

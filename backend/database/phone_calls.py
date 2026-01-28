@@ -1,5 +1,6 @@
 import copy
 import hashlib
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from database._client import db
@@ -119,3 +120,49 @@ def get_primary_phone_number(uid: str) -> Optional[dict]:
     if all_numbers:
         return all_numbers[0]
     return None
+
+
+# ************************************************
+# ********** PENDING VERIFICATIONS ***************
+# ************************************************
+
+PENDING_VERIFICATION_TTL_SECONDS = 300  # 5 minutes
+
+
+def set_pending_verification(uid: str, phone_number: str):
+    """Record that a user initiated verification for a phone number.
+
+    Uses a hash of the phone number as the document ID for efficient lookup.
+    """
+    doc_id = _hash_phone_number(phone_number)
+    db.collection('pending_verifications').document(doc_id).set(
+        {
+            'uid': uid,
+            'phone_number_hash': doc_id,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+def get_pending_verification_uid(phone_number: str) -> Optional[str]:
+    """Get the UID of the user who initiated verification for a phone number.
+
+    Returns None if no pending verification exists or if it has expired.
+    """
+    doc_id = _hash_phone_number(phone_number)
+    doc = db.collection('pending_verifications').document(doc_id).get()
+    if not doc.exists:
+        return None
+    data = doc.to_dict()
+    created_at = datetime.fromisoformat(data['created_at'])
+    elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
+    if elapsed > PENDING_VERIFICATION_TTL_SECONDS:
+        db.collection('pending_verifications').document(doc_id).delete()
+        return None
+    return data.get('uid')
+
+
+def delete_pending_verification(phone_number: str):
+    """Delete a pending verification record after it has been processed."""
+    doc_id = _hash_phone_number(phone_number)
+    db.collection('pending_verifications').document(doc_id).delete()

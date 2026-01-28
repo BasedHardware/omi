@@ -1,3 +1,4 @@
+import re
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -11,13 +12,25 @@ from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
 from utils.other import endpoints as auth
+from utils.other.endpoints import rate_limit_dependency
 from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
     check_caller_id_verified,
     delete_caller_id,
     get_caller_id,
+    validate_twilio_signature,
 )
+
+E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
+
+
+def _redact_phone(number: str) -> str:
+    """Redact a phone number for logging, showing only the last 4 digits."""
+    if len(number) > 4:
+        return number[:2] + '***' + number[-4:]
+    return '***'
+
 
 router = APIRouter()
 
@@ -79,30 +92,18 @@ def verify_phone_number(request: VerifyPhoneNumberRequest, uid: str = Depends(au
 
     try:
         result = start_caller_id_verification(phone_number)
+        phone_calls_db.set_pending_verification(uid, phone_number)
         return VerifyPhoneNumberResponse(**result)
     except TwilioRestException as e:
         # Error 21450: a validation request already exists for this number.
-        # This could mean (a) it's already verified, or (b) a verification is still pending.
+        # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
         if e.code == 21450:
             caller_id_info = get_caller_id(phone_number)
             if caller_id_info:
-                # Number IS verified in Twilio — store it locally
-                existing_numbers = phone_calls_db.get_phone_numbers(uid)
-                phone_number_id = str(uuid.uuid4())
-                phone_number_data = {
-                    'id': phone_number_id,
-                    'phone_number': phone_number,
-                    'friendly_name': caller_id_info.get('friendly_name'),
-                    'twilio_sid': caller_id_info.get('sid'),
-                    'verified_at': datetime.now(timezone.utc).isoformat(),
-                    'is_primary': len(existing_numbers) == 0,
-                }
-                phone_calls_db.upsert_phone_number(uid, phone_number_data)
-                return VerifyPhoneNumberResponse(
-                    verification_sid='already_verified',
-                    phone_number=phone_number,
-                    validation_code='000000',
-                    status='verified',
+                # Number is already verified in Twilio by someone else — block this attempt
+                raise HTTPException(
+                    status_code=409,
+                    detail="This phone number is already registered. If you own this number and previously verified it, check your settings.",
                 )
             else:
                 # Number has a pending verification — not yet verified
@@ -118,14 +119,25 @@ def verify_phone_number(request: VerifyPhoneNumberRequest, uid: str = Depends(au
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
-def check_phone_verification(request: CheckVerificationRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Check if a phone number has been verified. Poll this endpoint every 1s (60s timeout)."""
+def check_phone_verification(
+    request: CheckVerificationRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    _rate_limit=Depends(
+        rate_limit_dependency(endpoint="phone_verify_check", requests_per_window=30, window_seconds=60)
+    ),
+):
+    """Check if a phone number has been verified. Poll this endpoint every 2s (60s timeout)."""
     phone_number = request.phone_number.strip()
 
     # Check if already stored locally (avoid duplicates from repeated polling)
     existing = phone_calls_db.get_phone_number_by_number(uid, phone_number)
     if existing:
         return CheckVerificationResponse(verified=True, phone_number_id=existing['id'])
+
+    # Verify this user initiated the verification (prevent cross-user claiming)
+    pending_uid = phone_calls_db.get_pending_verification_uid(phone_number)
+    if pending_uid and pending_uid != uid:
+        return CheckVerificationResponse(verified=False)
 
     verified = check_caller_id_verified(phone_number)
     if not verified:
@@ -145,6 +157,7 @@ def check_phone_verification(request: CheckVerificationRequest, uid: str = Depen
         'is_primary': len(existing_numbers) == 0,
     }
     phone_calls_db.upsert_phone_number(uid, phone_number_data)
+    phone_calls_db.delete_pending_verification(phone_number)
 
     return CheckVerificationResponse(verified=True, phone_number_id=phone_number_id)
 
@@ -206,12 +219,20 @@ async def twiml_voice_webhook(request: Request):
     The 'From' field is the SDK identity (uid), NOT a phone number.
     We look up the user's verified caller ID from the database.
     """
+    # Validate Twilio signature
+    signature = request.headers.get('X-Twilio-Signature', '')
+    url = str(request.url)
     form_data = await request.form()
+    params = dict(form_data)
+
+    if not validate_twilio_signature(url, params, signature):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
     to_number = form_data.get('To', '')
     caller_identity = form_data.get('From', '')  # This is the uid (SDK identity)
     call_id = form_data.get('CallId', '')
 
-    print(f"twiml_voice_webhook: To={to_number}, From(identity)={caller_identity}, CallId={call_id}")
+    print(f"twiml_voice_webhook: To={_redact_phone(to_number)}, From(identity)=***, CallId={call_id}")
 
     response = VoiceResponse()
 
@@ -231,7 +252,7 @@ async def twiml_voice_webhook(request: Request):
             caller_number = primary.get('phone_number')
 
     if not caller_number:
-        print(f"twiml_voice_webhook: no verified caller ID found for uid={uid}")
+        print(f"twiml_voice_webhook: no verified caller ID found for uid=***")
         response.say('No verified caller ID found. Please verify a phone number first.')
         return Response(content=str(response), media_type='text/xml')
 
@@ -239,12 +260,19 @@ async def twiml_voice_webhook(request: Request):
     caller_number = caller_number.strip()
     to_number = to_number.strip()
 
+    # Validate destination number format
+    if not E164_PATTERN.match(to_number):
+        response.say('Invalid destination number format. Goodbye.')
+        return Response(content=str(response), media_type='text/xml')
+
     # Verify the number is still a valid outgoing caller ID in Twilio
     is_verified = check_caller_id_verified(caller_number)
-    print(f"twiml_voice_webhook: caller_id={caller_number!r}, verified_in_twilio={is_verified}, to={to_number!r}")
+    print(
+        f"twiml_voice_webhook: caller_id={_redact_phone(caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
+    )
 
     if not is_verified:
-        print(f"twiml_voice_webhook: caller_id {caller_number} is NOT verified in Twilio!")
+        print(f"twiml_voice_webhook: caller_id {_redact_phone(caller_number)} is NOT verified in Twilio!")
         response.say('Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
