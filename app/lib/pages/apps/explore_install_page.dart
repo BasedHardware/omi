@@ -17,6 +17,7 @@ import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -170,8 +171,27 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               final groupId = groupMap != null ? (groupMap['id'] as String? ?? '') : '';
               final groupApps = group['data'] as List<App>? ?? <App>[];
 
+              // Get localized section title
+              String localizedSectionTitle;
+              if (capabilityMap != null) {
+                final capability = AppCapability(
+                  title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                  id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '_') : groupId,
+                );
+                localizedSectionTitle = capability.getLocalizedTitle(context);
+              } else {
+                final category = context.read<AddAppProvider>().categories.firstWhere(
+                      (cat) => cat.id == groupId || cat.title == groupTitle,
+                      orElse: () => Category(
+                        title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                        id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
+                      ),
+                    );
+                localizedSectionTitle = category.getLocalizedTitle(context);
+              }
+
               return CategorySection(
-                categoryName: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                categoryName: localizedSectionTitle,
                 apps: groupApps,
                 showViewAll: groupApps.length > 9,
                 onViewAll: () {

@@ -7855,4 +7855,127 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get removeFilter => 'Noņemt Filtru';
+
+  @override
+  String get categoryConversationAnalysis => 'Conversation Analysis';
+
+  @override
+  String get categoryPersonalityClone => 'Personality Clone';
+
+  @override
+  String get categoryHealth => 'Health';
+
+  @override
+  String get categoryEducation => 'Education';
+
+  @override
+  String get categoryCommunication => 'Communication';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotional Support';
+
+  @override
+  String get categoryProductivity => 'Productivity';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryFinancial => 'Financial';
+
+  @override
+  String get categoryTravel => 'Travel';
+
+  @override
+  String get categorySafety => 'Safety';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'News';
+
+  @override
+  String get categoryUtilities => 'Utilities';
+
+  @override
+  String get categoryOther => 'Other';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversations';
+
+  @override
+  String get capabilityExternalIntegration => 'External Integration';
+
+  @override
+  String get capabilityNotification => 'Notification';
+
+  @override
+  String get triggerAudioBytes => 'Audio Bytes';
+
+  @override
+  String get triggerConversationCreation => 'Conversation Creation';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcript Processed';
+
+  @override
+  String get actionCreateConversations => 'Create conversations';
+
+  @override
+  String get actionCreateMemories => 'Create memories';
+
+  @override
+  String get actionReadConversations => 'Read conversations';
+
+  @override
+  String get actionReadMemories => 'Read memories';
+
+  @override
+  String get actionReadTasks => 'Read tasks';
+
+  @override
+  String get scopeUserName => 'User Name';
+
+  @override
+  String get scopeUserFacts => 'User Facts';
+
+  @override
+  String get scopeUserConversations => 'User Conversations';
+
+  @override
+  String get scopeUserChat => 'User Chat';
+
+  @override
+  String get capabilitySummary => 'Summary';
+
+  @override
+  String get capabilityFeatured => 'Featured';
+
+  @override
+  String get capabilityTasks => 'Tasks';
+
+  @override
+  String get capabilityIntegrations => 'Integrations';
+
+  @override
+  String get categoryPersonalityClones => 'Personality Clones';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+
+  @override
+  String get categorySocialEntertainment => 'Social & Entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productivity & Tools';
+
+  @override
+  String get categoryPersonalWellness => 'Personal & Lifestyle';
 }
