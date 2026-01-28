@@ -7986,5 +7986,5 @@ class AppLocalizationsEt extends AppLocalizations {
   String get mostInstalls => 'Enim paigaldusi';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'URL-i avamine ebaõnnestus. Palun proovige uuesti.';
 }

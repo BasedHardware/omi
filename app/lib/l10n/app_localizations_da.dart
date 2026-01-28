@@ -7971,5 +7971,5 @@ class AppLocalizationsDa extends AppLocalizations {
   String get mostInstalls => 'Flest installationer';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
 }

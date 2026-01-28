@@ -2584,5 +2584,5 @@
   "resetFilters": "重置筛选",
   "applyFilters": "应用筛选",
   "mostInstalls": "安装最多",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "无法打开链接，请重试。"
 }

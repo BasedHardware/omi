@@ -2562,5 +2562,5 @@
   "resetFilters": "รีเซ็ตตัวกรอง",
   "applyFilters": "ใช้ตัวกรอง",
   "mostInstalls": "ติดตั้งมากที่สุด",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง"
 }

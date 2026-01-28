@@ -2562,5 +2562,5 @@
   "resetFilters": "Lähtesta filtrid",
   "applyFilters": "Rakenda filtrid",
   "mostInstalls": "Enim paigaldusi",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "URL-i avamine ebaõnnestus. Palun proovige uuesti."
 }

@@ -7985,5 +7985,5 @@ class AppLocalizationsFi extends AppLocalizations {
   String get mostInstalls => 'Eniten asennuksia';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'URL-osoitetta ei voitu avata. Yritä uudelleen.';
 }

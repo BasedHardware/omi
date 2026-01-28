@@ -2658,5 +2658,5 @@
   "resetFilters": "Szűrők visszaállítása",
   "applyFilters": "Szűrők alkalmazása",
   "mostInstalls": "Legtöbb telepítés",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Az URL nem nyitható meg. Kérjük, próbálja újra."
 }

@@ -2562,5 +2562,5 @@
   "resetFilters": "Återställ filter",
   "applyFilters": "Tillämpa filter",
   "mostInstalls": "Flest installationer",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Det gick inte att öppna URL:en. Försök igen."
 }

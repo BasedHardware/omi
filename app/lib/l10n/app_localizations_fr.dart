@@ -8060,5 +8060,5 @@ class AppLocalizationsFr extends AppLocalizations {
   String get mostInstalls => 'Plus d\'installations';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Impossible d\'ouvrir l\'URL. Veuillez réessayer.';
 }

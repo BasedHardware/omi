@@ -7977,5 +7977,5 @@ class AppLocalizationsSk extends AppLocalizations {
   String get mostInstalls => 'Najviac inštalácií';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
 }

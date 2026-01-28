@@ -7853,5 +7853,5 @@ class AppLocalizationsJa extends AppLocalizations {
   String get mostInstalls => 'インストール数順';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'URLを開けませんでした。もう一度お試しください。';
 }

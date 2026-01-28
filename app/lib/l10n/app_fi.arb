@@ -2562,5 +2562,5 @@
   "resetFilters": "Nollaa suodattimet",
   "applyFilters": "Käytä suodattimia",
   "mostInstalls": "Eniten asennuksia",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "URL-osoitetta ei voitu avata. Yritä uudelleen."
 }

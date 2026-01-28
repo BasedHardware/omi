@@ -2597,5 +2597,5 @@
   "resetFilters": "Réinitialiser les filtres",
   "applyFilters": "Appliquer les filtres",
   "mostInstalls": "Plus d'installations",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Impossible d'ouvrir l'URL. Veuillez réessayer."
 }

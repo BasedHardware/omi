@@ -7999,5 +7999,5 @@ class AppLocalizationsId extends AppLocalizations {
   String get mostInstalls => 'Paling banyak diinstal';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Tidak dapat membuka URL. Silakan coba lagi.';
 }

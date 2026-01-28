@@ -7989,5 +7989,5 @@ class AppLocalizationsVi extends AppLocalizations {
   String get mostInstalls => 'Nhiều lượt cài đặt nhất';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Không thể mở URL. Vui lòng thử lại.';
 }

@@ -8036,5 +8036,5 @@ class AppLocalizationsIt extends AppLocalizations {
   String get mostInstalls => 'Più installazioni';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'Impossibile aprire l\'URL. Riprova.';
 }

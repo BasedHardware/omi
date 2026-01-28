@@ -2563,5 +2563,5 @@
   "resetFilters": "フィルターをリセット",
   "applyFilters": "フィルターを適用",
   "mostInstalls": "インストール数順",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "URLを開けませんでした。もう一度お試しください。"
 }

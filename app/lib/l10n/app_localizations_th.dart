@@ -7949,5 +7949,5 @@ class AppLocalizationsTh extends AppLocalizations {
   String get mostInstalls => 'ติดตั้งมากที่สุด';
 
   @override
-  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+  String get couldNotOpenUrl => 'ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง';
 }
