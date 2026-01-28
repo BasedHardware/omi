@@ -416,40 +416,6 @@ def set_github_default_repo(
     return {"status": "ok", "default_repo": default_repo}
 
 
-@router.put("/v1/integrations/github/anthropic-key", tags=['integrations'])
-def set_github_anthropic_key(
-    anthropic_api_key: str = Query(..., description="Anthropic API key for Claude Code"),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    """Set the Anthropic API key for GitHub Claude Code integration."""
-    integration = users_db.get_integration(uid, 'github')
-
-    if not integration or not integration.get('connected'):
-        raise HTTPException(status_code=401, detail="GitHub is not connected")
-
-    # Update integration with Anthropic key (stored as-is, encryption handled by Firestore)
-    integration['anthropic_api_key'] = anthropic_api_key
-    users_db.set_integration(uid, 'github', integration)
-
-    return {"status": "ok"}
-
-
-@router.delete("/v1/integrations/github/anthropic-key", tags=['integrations'])
-def delete_github_anthropic_key(uid: str = Depends(auth.get_current_user_uid)):
-    """Remove the Anthropic API key from GitHub integration."""
-    integration = users_db.get_integration(uid, 'github')
-
-    if not integration or not integration.get('connected'):
-        raise HTTPException(status_code=401, detail="GitHub is not connected")
-
-    # Remove key from integration
-    if 'anthropic_api_key' in integration:
-        del integration['anthropic_api_key']
-        users_db.set_integration(uid, 'github', integration)
-
-    return {"status": "ok"}
-
-
 # *****************************
 # ****** OAuth Initiation *****
 # *****************************
