@@ -18,6 +18,7 @@ from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
+from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 
 
 def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
@@ -134,7 +135,8 @@ def process_voice_message_segment(
     app_id = None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
+    with track_usage(uid, Features.CHAT):
+        response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
     # check if the items in the conversations list are dict
     if memories:
@@ -269,23 +271,28 @@ async def process_voice_message_segment_stream(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     callback_data = {}
-    async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
-        if chunk:
-            data = chunk.replace("\n", "__CRLF__")
-            yield f'{data}\n\n'
+    # Set usage context for streaming (can't use 'with' across yields)
+    usage_token = set_usage_context(uid, Features.CHAT)
+    try:
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
+            if chunk:
+                data = chunk.replace("\n", "__CRLF__")
+                yield f'{data}\n\n'
 
-        else:
-            response = callback_data.get('answer')
-            if response:
-                ai_message, ask_for_nps = process_message(response, callback_data)
-                ai_message_dict = ai_message.dict()
-                response_message = ResponseMessage(**ai_message_dict)
-                response_message.ask_for_nps = ask_for_nps
-                data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                yield f"done: {data}\n\n"
+            else:
+                response = callback_data.get('answer')
+                if response:
+                    ai_message, ask_for_nps = process_message(response, callback_data)
+                    ai_message_dict = ai_message.dict()
+                    response_message = ResponseMessage(**ai_message_dict)
+                    response_message.ask_for_nps = ask_for_nps
+                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {data}\n\n"
 
-                # send notification
-                send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+                    # send notification
+                    send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+    finally:
+        reset_usage_context(usage_token)
 
     return
 
