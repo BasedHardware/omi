@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
-import '../providers/add_app_provider.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 class NotificationScopesChipsWidget extends StatelessWidget {
   const NotificationScopesChipsWidget({super.key});

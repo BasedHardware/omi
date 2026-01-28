@@ -33,9 +33,9 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import '../../../backend/http/api/payment.dart';
-import '../../../backend/schema/app.dart';
-import '../widgets/show_app_options_sheet.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
 
