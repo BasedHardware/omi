@@ -2530,5 +2530,6 @@
   "lowestRating": "Pitjor valoració",
   "resetFilters": "Restablir filtres",
   "applyFilters": "Aplicar filtres",
-  "mostInstalls": "Més instal·lacions"
+  "mostInstalls": "Més instal·lacions",
+  "couldNotOpenUrl": "No s'ha pogut obrir l'URL. Torneu-ho a provar."
 }

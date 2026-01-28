@@ -2583,5 +2583,6 @@
   "lowestRating": "最低评分",
   "resetFilters": "重置筛选",
   "applyFilters": "应用筛选",
-  "mostInstalls": "安装最多"
+  "mostInstalls": "安装最多",
+  "couldNotOpenUrl": "无法打开链接，请重试。"
 }

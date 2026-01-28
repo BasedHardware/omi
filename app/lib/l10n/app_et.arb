@@ -2561,5 +2561,6 @@
   "lowestRating": "Madalaim hinnang",
   "resetFilters": "Lähtesta filtrid",
   "applyFilters": "Rakenda filtrid",
-  "mostInstalls": "Enim paigaldusi"
+  "mostInstalls": "Enim paigaldusi",
+  "couldNotOpenUrl": "URL-i avamine ebaõnnestus. Palun proovige uuesti."
 }

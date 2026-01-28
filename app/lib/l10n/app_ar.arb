@@ -2528,5 +2528,6 @@
   "lowestRating": "الأقل تقييماً",
   "resetFilters": "إعادة تعيين الفلاتر",
   "applyFilters": "تطبيق الفلاتر",
-  "mostInstalls": "الأكثر تثبيتاً"
+  "mostInstalls": "الأكثر تثبيتاً",
+  "couldNotOpenUrl": "تعذر فتح الرابط. يرجى المحاولة مرة أخرى."
 }

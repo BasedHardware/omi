@@ -14912,6 +14912,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Most Installs'**
   String get mostInstalls;
+
+  /// No description provided for @couldNotOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open URL. Please try again.'**
+  String get couldNotOpenUrl;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

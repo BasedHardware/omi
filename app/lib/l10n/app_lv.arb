@@ -2561,5 +2561,6 @@
   "lowestRating": "Zemākais vērtējums",
   "resetFilters": "Atiestatīt filtrus",
   "applyFilters": "Lietot filtrus",
-  "mostInstalls": "Visvairāk instalāciju"
+  "mostInstalls": "Visvairāk instalāciju",
+  "couldNotOpenUrl": "Nevarēja atvērt URL. Lūdzu, mēģiniet vēlreiz."
 }

@@ -7841,4 +7841,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mostInstalls => '安装最多';
+
+  @override
+  String get couldNotOpenUrl => '无法打开链接，请重试。';
 }

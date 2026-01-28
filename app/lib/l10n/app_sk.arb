@@ -2566,5 +2566,6 @@
   "lowestRating": "Najnižšie hodnotenie",
   "resetFilters": "Resetovať filtre",
   "applyFilters": "Použiť filtre",
-  "mostInstalls": "Najviac inštalácií"
+  "mostInstalls": "Najviac inštalácií",
+  "couldNotOpenUrl": "Nepodarilo sa otvoriť URL. Skúste to znova."
 }

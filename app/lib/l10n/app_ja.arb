@@ -2562,5 +2562,6 @@
   "lowestRating": "低評価順",
   "resetFilters": "フィルターをリセット",
   "applyFilters": "フィルターを適用",
-  "mostInstalls": "インストール数順"
+  "mostInstalls": "インストール数順",
+  "couldNotOpenUrl": "URLを開けませんでした。もう一度お試しください。"
 }

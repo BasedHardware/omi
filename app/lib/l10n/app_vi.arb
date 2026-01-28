@@ -2566,5 +2566,6 @@
   "lowestRating": "Đánh giá thấp nhất",
   "resetFilters": "Đặt lại bộ lọc",
   "applyFilters": "Áp dụng bộ lọc",
-  "mostInstalls": "Nhiều lượt cài đặt nhất"
+  "mostInstalls": "Nhiều lượt cài đặt nhất",
+  "couldNotOpenUrl": "Không thể mở URL. Vui lòng thử lại."
 }

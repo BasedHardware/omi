@@ -7929,4 +7929,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get mostInstalls => 'الأكثر تثبيتاً';
+
+  @override
+  String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
 }

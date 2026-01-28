@@ -7997,4 +7997,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Найбільше встановлень';
+
+  @override
+  String get couldNotOpenUrl => 'Не вдалося відкрити URL. Будь ласка, спробуйте ще раз.';
 }

@@ -7990,4 +7990,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Daugiausia įdiegimų';
+
+  @override
+  String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
 }
