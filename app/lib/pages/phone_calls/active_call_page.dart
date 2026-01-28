@@ -13,21 +13,23 @@ class ActiveCallPage extends StatefulWidget {
 
 class _ActiveCallPageState extends State<ActiveCallPage> {
   bool _popScheduled = false;
+  PhoneCallProvider? _provider;
 
   @override
   void initState() {
     super.initState();
-    context.read<PhoneCallProvider>().addListener(_onProviderChanged);
+    _provider = context.read<PhoneCallProvider>();
+    _provider!.addListener(_onProviderChanged);
   }
 
   @override
   void dispose() {
-    context.read<PhoneCallProvider>().removeListener(_onProviderChanged);
+    _provider?.removeListener(_onProviderChanged);
     super.dispose();
   }
 
   void _onProviderChanged() {
-    var state = context.read<PhoneCallProvider>().callState;
+    var state = _provider?.callState ?? PhoneCallState.idle;
     if ((state == PhoneCallState.ended || state == PhoneCallState.failed) && !_popScheduled) {
       _popScheduled = true;
       Future.delayed(const Duration(seconds: 2), () {

@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 
-enum _VerifyStatus { calling, inProgress, verified, timedOut }
+enum _VerifyStatus { calling, inProgress, missedCall, verified, timedOut }
 
 class PhoneSetupVerifyPage extends StatefulWidget {
   final String phoneNumber;
@@ -61,6 +61,10 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
       // After first poll, update to "in progress"
       if (_pollCount == 2 && mounted && _status == _VerifyStatus.calling) {
         setState(() => _status = _VerifyStatus.inProgress);
+      }
+
+      if (_pollCount == 15 && mounted && _status == _VerifyStatus.inProgress) {
+        setState(() => _status = _VerifyStatus.missedCall);
       }
 
       if (_pollCount > 30) {
@@ -149,7 +153,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
               ),
               const Spacer(),
               // Retry button (only when timed out)
-              if (_status == _VerifyStatus.timedOut) ...[
+              if (_status == _VerifyStatus.missedCall || _status == _VerifyStatus.timedOut) ...[
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.mediumImpact();
@@ -231,6 +235,16 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
             Icon(Icons.check, color: Colors.white, size: 16),
             SizedBox(width: 6),
             Text('Verified', style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500)),
+          ],
+        );
+      case _VerifyStatus.missedCall:
+        bgColor = const Color(0xFF3A2A00);
+        content = const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.phone_missed, color: Colors.orange, size: 16),
+            SizedBox(width: 6),
+            Text('Call missed', style: TextStyle(fontSize: 13, color: Colors.orange)),
           ],
         );
       case _VerifyStatus.timedOut:

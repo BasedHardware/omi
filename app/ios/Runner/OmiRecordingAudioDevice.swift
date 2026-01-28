@@ -329,7 +329,7 @@ private func ensureBuffer(_ context: OmiRecordingAudioDevice.CapturingContext,
         bl.pointee.mBuffers.mData?.deallocate()
         bl.pointee.mBuffers.mDataByteSize = needed
         bl.pointee.mBuffers.mData = UnsafeMutableRawPointer.allocate(
-            byteCount: Int(needed), alignment: 0
+            byteCount: Int(needed), alignment: 16
         )
     }
 

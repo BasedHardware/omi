@@ -21,6 +21,12 @@ Future<Map<String, dynamic>?> verifyPhoneNumber(String phoneNumber) async {
   if (response.statusCode == 200) {
     return jsonDecode(response.body);
   }
+  try {
+    var body = jsonDecode(response.body);
+    if (body['detail'] != null) {
+      return {'error': body['detail']};
+    }
+  } catch (_) {}
   return null;
 }
 

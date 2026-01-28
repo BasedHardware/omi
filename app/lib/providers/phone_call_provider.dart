@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -48,6 +49,8 @@ class PhoneCallProvider extends ChangeNotifier {
 
   // WebSocket for transcription
   WebSocketChannel? _transcriptionSocket;
+  int _wsReconnectAttempts = 0;
+  Timer? _wsReconnectTimer;
 
   // Verified phone numbers
   List<VerifiedPhoneNumber> _verifiedNumbers = [];
@@ -97,6 +100,12 @@ class PhoneCallProvider extends ChangeNotifier {
 
     if (result == null) {
       _error = 'Failed to start verification';
+      notifyListeners();
+      return false;
+    }
+
+    if (result.containsKey('error')) {
+      _error = result['error'] as String?;
       notifyListeners();
       return false;
     }
@@ -168,8 +177,13 @@ class PhoneCallProvider extends ChangeNotifier {
       return false;
     }
 
-    // Connect transcription WebSocket
-    await _connectTranscriptionSocket();
+    var micStatus = await Permission.microphone.request();
+    if (!micStatus.isGranted) {
+      _callState = PhoneCallState.failed;
+      _error = 'Microphone permission is required to make calls';
+      notifyListeners();
+      return false;
+    }
 
     // Make the call via native layer
     var callStarted = await _nativeService.makeCall(
@@ -224,6 +238,7 @@ class PhoneCallProvider extends ChangeNotifier {
     if (state == PhoneCallState.active && _callStartTime == null) {
       _callStartTime = DateTime.now();
       _startDurationTimer();
+      _connectTranscriptionSocket();
     } else if (state == PhoneCallState.ended || state == PhoneCallState.failed) {
       _onCallEnded();
     }
@@ -232,11 +247,15 @@ class PhoneCallProvider extends ChangeNotifier {
 
   void _onAudioData(Uint8List audioData, int channel) {
     // Forward audio data to WebSocket with channel prefix
-    if (_transcriptionSocket != null) {
+    var socket = _transcriptionSocket;
+    if (socket == null) return;
+    try {
       var data = Uint8List(1 + audioData.length);
       data[0] = channel; // 0x01 = user, 0x02 = remote
       data.setRange(1, data.length, audioData);
-      _transcriptionSocket!.sink.add(data);
+      socket.sink.add(data);
+    } catch (e) {
+      Logger.error('PhoneCallProvider: failed to send audio data: $e');
     }
   }
 
@@ -281,6 +300,9 @@ class PhoneCallProvider extends ChangeNotifier {
   Future<void> _connectTranscriptionSocket() async {
     if (_currentCallId == null) return;
 
+    _wsReconnectTimer?.cancel();
+    _wsReconnectTimer = null;
+
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
 
@@ -306,17 +328,45 @@ class PhoneCallProvider extends ChangeNotifier {
         },
         onError: (error) {
           Logger.error('PhoneCallProvider: WebSocket error: $error');
+          _transcriptionSocket = null;
+          _scheduleReconnect();
         },
         onDone: () {
           Logger.info('PhoneCallProvider: WebSocket closed');
+          _transcriptionSocket = null;
+          _scheduleReconnect();
         },
       );
+      _wsReconnectAttempts = 0;
     } catch (e) {
       Logger.error('PhoneCallProvider: failed to connect WebSocket: $e');
+      _transcriptionSocket = null;
+      _scheduleReconnect();
     }
   }
 
+  void _scheduleReconnect() {
+    if (_callState != PhoneCallState.active) return;
+    if (_wsReconnectAttempts >= 5) {
+      Logger.error('PhoneCallProvider: max reconnect attempts reached, giving up');
+      return;
+    }
+
+    var delay = Duration(seconds: 1 << _wsReconnectAttempts); // 1s, 2s, 4s, 8s, 16s
+    _wsReconnectAttempts++;
+    Logger.info('PhoneCallProvider: reconnecting WebSocket in ${delay.inSeconds}s (attempt $_wsReconnectAttempts)');
+
+    _wsReconnectTimer = Timer(delay, () {
+      if (_callState == PhoneCallState.active) {
+        _connectTranscriptionSocket();
+      }
+    });
+  }
+
   void _disconnectTranscriptionSocket() {
+    _wsReconnectTimer?.cancel();
+    _wsReconnectTimer = null;
+    _wsReconnectAttempts = 0;
     _transcriptionSocket?.sink.close();
     _transcriptionSocket = null;
   }

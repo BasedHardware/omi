@@ -28,6 +28,7 @@ class PhoneCallsPlugin private constructor(
     private var currentCallId: String? = null
     private var isMuted: Boolean = false
     private var isSpeakerOn: Boolean = false
+    private val audioDevice = OmiRecordingAudioDevice()
 
     companion object {
         private const val TAG = "PhoneCallsPlugin"
@@ -36,6 +37,14 @@ class PhoneCallsPlugin private constructor(
 
         fun registerWith(flutterEngine: FlutterEngine, context: Context) {
             val instance = PhoneCallsPlugin(context)
+
+            // Wire audio data callback to stream captured audio to Flutter
+            instance.audioDevice.onAudioData = { data, channel ->
+                instance.sendAudioDataEvent(data, channel)
+            }
+
+            // Set custom audio device before any Voice.connect() calls
+            Voice.setAudioDevice(instance.audioDevice)
 
             val methodChannel = MethodChannel(
                 flutterEngine.dartExecutor.binaryMessenger,
@@ -161,6 +170,7 @@ class PhoneCallsPlugin private constructor(
         val muted = call.argument<Boolean>("muted") ?: false
         isMuted = muted
         activeCall?.mute(muted)
+        audioDevice.isMicStreamMuted = muted
         result.success(null)
     }
 

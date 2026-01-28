@@ -102,6 +102,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       }
     }
 
+    var messenger = ScaffoldMessenger.of(context);
+
     var success = await provider.startCall(phoneNumber);
     if (!mounted) return;
 
@@ -110,7 +112,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         MaterialPageRoute(builder: (_) => const ActiveCallPage()),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(provider.error ?? 'Failed to start call')),
       );
     }
