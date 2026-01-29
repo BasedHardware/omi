@@ -29,6 +29,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
+  int _lastNotifiedBatteryLevel = -1;
+  DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
   Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
@@ -153,7 +155,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = true;
         }
-        notifyListeners();
+        // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
+        // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
+        final delta = (_lastNotifiedBatteryLevel - value).abs();
+        final elapsed = _lastBatteryNotifyTime == null
+            ? const Duration(minutes: 999)
+            : DateTime.now().difference(_lastBatteryNotifyTime!);
+        final crossedLowBatteryThreshold =
+            (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
+        final shouldNotify = _lastNotifiedBatteryLevel == -1 ||
+            delta >= 5 ||
+            elapsed.inMinutes >= 15 ||
+            crossedLowBatteryThreshold;
+        if (shouldNotify) {
+          _lastNotifiedBatteryLevel = value;
+          _lastBatteryNotifyTime = DateTime.now();
+          notifyListeners();
+        }
       },
     );
     notifyListeners();
