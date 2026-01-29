@@ -28,6 +28,9 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
+import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
@@ -784,6 +787,44 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                         );
                                       },
+                                    ),
+                                  ),
+                                // Floating Phone Call Button - Bottom Left
+                                // TODO: should be placed sommewhere else or better UX
+                                if (home.selectedIndex == 0)
+                                  Positioned(
+                                    left: 20,
+                                    bottom: 100,
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        HapticFeedback.mediumImpact();
+                                        MixpanelManager().bottomNavigationTabClicked('PhoneCalls');
+                                        var phoneProvider = context.read<PhoneCallProvider>();
+                                        await phoneProvider.initialLoad;
+                                        if (!context.mounted) return;
+                                        Widget destination = phoneProvider.verifiedNumbers.isNotEmpty
+                                            ? const PhoneCallsPage()
+                                            : const PhoneSetupIntroPage();
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => destination,
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.deepPurple,
+                                        ),
+                                        child: const Icon(
+                                          Icons.phone,
+                                          size: 26,
+                                          color: Colors.white,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 // Floating Chat Button - Bottom Right (only on homepage)
