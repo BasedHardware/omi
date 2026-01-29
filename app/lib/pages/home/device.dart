@@ -581,7 +581,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               const SizedBox(height: 24),
 
               // Battery Level Section
-              if (provider.connectedDevice != null) ...[
+              if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
                 _buildBatterySection(provider),
                 const SizedBox(height: 16),
               ],
