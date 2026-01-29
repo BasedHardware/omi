@@ -30,6 +30,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   int batteryLevel = -1;
   bool _hasLowBatteryAlerted = false;
+
+  // Battery notification throttling to reduce unnecessary widget rebuilds.
+  // Only notify when: first reading, ≥5% change, 15 min elapsed, or crossing 20% threshold.
+  int _lastNotifiedBatteryLevel = -1;
+  DateTime? _lastBatteryNotifyTime;
+
   Timer? _reconnectionTimer;
   DateTime? _reconnectAt;
   final int _connectionCheckSeconds = 15; // 10s periods, 5s for each scan
@@ -142,7 +148,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener = await _getBleBatteryLevelListener(
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
+        // Always update internal battery level state
         batteryLevel = value;
+
+        // Low battery alert logic (always triggers notification regardless of throttle)
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = MyApp.navigatorKey.currentContext;
@@ -151,9 +160,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = true;
+          _hasLowBatteryAlerted = false;
         }
-        notifyListeners();
+
+        // Throttle UI updates to reduce unnecessary widget rebuilds during transcription.
+        // Only notify if: first reading, ≥5% change, 15 min elapsed, or crossing 20% threshold.
+        final delta = (_lastNotifiedBatteryLevel - value).abs();
+        final elapsed = _lastBatteryNotifyTime == null
+            ? const Duration(minutes: 999)
+            : DateTime.now().difference(_lastBatteryNotifyTime!);
+
+        final crossedLowBatteryThreshold =
+            (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
+
+        final shouldNotify = _lastNotifiedBatteryLevel == -1 ||
+            delta >= 5 ||
+            elapsed.inMinutes >= 15 ||
+            crossedLowBatteryThreshold;
+
+        if (shouldNotify) {
+          _lastNotifiedBatteryLevel = value;
+          _lastBatteryNotifyTime = DateTime.now();
+          notifyListeners();
+        }
       },
     );
     notifyListeners();
