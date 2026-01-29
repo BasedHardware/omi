@@ -69,7 +69,6 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
-from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -236,6 +235,16 @@ async def _stream_handler(
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
 
+    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
+    bg_tasks: Set[asyncio.Task] = set()
+
+    def spawn(coro) -> asyncio.Task:
+        """Create a tracked background task that will be cancelled on cleanup."""
+        task = asyncio.create_task(coro)
+        bg_tasks.add(task)
+        task.add_done_callback(bg_tasks.discard)
+        return task
+
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
     if onboarding_mode:
@@ -253,7 +262,7 @@ async def _stream_handler(
             realtime_segment_buffers.extend(segments)
 
         onboarding_handler = OnboardingHandler(uid, send_onboarding_event, onboarding_stream_transcript)
-        asyncio.create_task(onboarding_handler.send_current_question())
+        spawn(onboarding_handler.send_current_question())
 
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
@@ -361,7 +370,7 @@ async def _stream_handler(
         nonlocal websocket_active
         if not websocket_active:
             return
-        return asyncio.create_task(_asend_message_event(msg))
+        return spawn(_asend_message_event(msg))
 
     # Heart beat
     started_at = time.time()
@@ -1292,7 +1301,7 @@ async def _stream_handler(
 
             duration = seg['duration']
             if duration >= SPEAKER_ID_MIN_AUDIO:
-                asyncio.create_task(_match_speaker_embedding(speaker_id, seg))
+                spawn(_match_speaker_embedding(speaker_id, seg))
 
         print("Speaker ID task ended", uid, session_id)
 
@@ -1638,7 +1647,7 @@ async def _stream_handler(
         if all(chunk is not None for chunk in image_chunks_cache[temp_id]):
             b64_image_data = "".join(image_chunks_cache[temp_id])
             del image_chunks_cache[temp_id]
-            safe_create_task(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
+            spawn(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
     # Initialize decoders based on codec
     opus_decoder = None
@@ -1692,7 +1701,7 @@ async def _stream_handler(
                             socket_to_close.finish()
                             print('Closed deepgram_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_dg_profile())
+                        spawn(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
 
@@ -1709,7 +1718,7 @@ async def _stream_handler(
                             await socket_to_close.close()
                             print('Closed soniox_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_soniox_profile())
+                        spawn(close_soniox_profile())
                 else:
                     await soniox_profile_socket.send(chunk)
 
@@ -1847,7 +1856,7 @@ async def _stream_handler(
                                     and send_speaker_sample_request is not None
                                     and current_conversation_id
                                 ):
-                                    asyncio.create_task(
+                                    spawn(
                                         send_speaker_sample_request(
                                             person_id=person_id,
                                             conv_id=current_conversation_id,
@@ -1984,6 +1993,15 @@ async def _stream_handler(
         # Clean up onboarding handler
         if onboarding_handler:
             onboarding_handler.cleanup()
+
+        # Cancel all tracked background tasks to prevent memory leaks
+        # Snapshot to avoid mutation during iteration
+        tasks_to_cancel = list(bg_tasks)
+        for task in tasks_to_cancel:
+            task.cancel()
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        bg_tasks.clear()
 
         # Clean up collections to aid garbage collection
         try:
