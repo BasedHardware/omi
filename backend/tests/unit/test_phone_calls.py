@@ -191,6 +191,20 @@ def test_check_verification_wrong_user(mock_check, mock_db, client):
     mock_db.upsert_phone_number.assert_not_called()
 
 
+@patch('routers.phone_calls.phone_calls_db')
+@patch('routers.phone_calls.check_caller_id_verified')
+def test_check_verification_no_pending_record(mock_check, mock_db, client):
+    """Cannot claim a number if no pending verification exists (expired or never started)."""
+    mock_db.get_phone_number_by_number.return_value = None
+    mock_db.get_pending_verification_uid.return_value = None  # No pending record
+    mock_check.return_value = True  # Number IS verified in Twilio
+
+    resp = client.post('/v1/phone/numbers/verify/check', json={'phone_number': '+15551234567'})
+    assert resp.status_code == 200
+    assert resp.json()['verified'] is False
+    mock_db.upsert_phone_number.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # POST /v1/phone/twiml
 # ---------------------------------------------------------------------------

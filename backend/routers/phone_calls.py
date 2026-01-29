@@ -86,7 +86,7 @@ def verify_phone_number(
 ):
     """Initiate phone number verification via Twilio caller ID validation."""
     phone_number = request.phone_number.strip()
-    if not phone_number.startswith('+'):
+    if not E164_PATTERN.match(phone_number):
         raise HTTPException(status_code=400, detail="Phone number must be in E.164 format (e.g., +15551234567)")
 
     # Check if already verified
@@ -140,7 +140,7 @@ def check_phone_verification(
 
     # Verify this user initiated the verification (prevent cross-user claiming)
     pending_uid = phone_calls_db.get_pending_verification_uid(phone_number)
-    if pending_uid and pending_uid != uid:
+    if pending_uid != uid:
         return CheckVerificationResponse(verified=False)
 
     verified = check_caller_id_verified(phone_number)
