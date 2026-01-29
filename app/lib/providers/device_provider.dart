@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
+import 'package:omi/backend/http/api/omiglass_firmware.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
+import 'package:version/version.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
@@ -45,6 +48,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
   String _latestFirmwareVersion = '';
   String get latestFirmwareVersion => _latestFirmwareVersion;
+
+  // OmiGlass firmware update details from GitHub releases
+  Map<String, dynamic> _latestOmiGlassFirmwareDetails = {};
+  Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _disconnectNotificationTimer;
   final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
@@ -399,6 +406,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
   }
 
+  bool get _isOmiGlassDevice {
+    if (pairedDevice == null) return false;
+    if (pairedDevice!.type == DeviceType.openglass) return true;
+    final name = pairedDevice!.name.toLowerCase();
+    return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
+  }
+
   Future checkFirmwareUpdates() async {
     int retryCount = 0;
     const maxRetries = 3;
@@ -406,11 +420,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     while (retryCount < maxRetries) {
       try {
+        if (_isOmiGlassDevice) {
+          return await _checkOmiGlassFirmwareUpdates();
+        }
         var (message, hasUpdate, version) = await shouldUpdateFirmware();
         _havingNewFirmware = hasUpdate;
         _latestFirmwareVersion = version.isNotEmpty ? version : message;
         notifyListeners();
-        return hasUpdate; // Return whether there's an update
+        return hasUpdate;
       } catch (e) {
         retryCount++;
         Logger.debug('Error checking firmware update (attempt $retryCount): $e');
@@ -428,8 +445,39 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return;
   }
 
+  Future<bool> _checkOmiGlassFirmwareUpdates() async {
+    _latestOmiGlassFirmwareDetails = await getLatestOmiGlassFirmware();
+    if (_latestOmiGlassFirmwareDetails.isEmpty || _latestOmiGlassFirmwareDetails['version'] == null) {
+      _havingNewFirmware = false;
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      final currentVersion = Version.parse(pairedDevice!.firmwareRevision);
+      final latestVersion = Version.parse(_latestOmiGlassFirmwareDetails['version']);
+      _havingNewFirmware = latestVersion > currentVersion;
+      _latestFirmwareVersion = _latestOmiGlassFirmwareDetails['version'];
+    } catch (e) {
+      Logger.debug('OmiGlass firmware version parse error: $e');
+      _havingNewFirmware = false;
+    }
+
+    notifyListeners();
+    return _havingNewFirmware;
+  }
+
+  // Track if user is currently viewing a firmware update page
+  bool _isOnFirmwareUpdatePage = false;
+  void setOnFirmwareUpdatePage(bool value) {
+    _isOnFirmwareUpdatePage = value;
+  }
+
   void showFirmwareUpdateDialog(BuildContext context) {
-    if (!_havingNewFirmware || !SharedPreferencesUtil().showFirmwareUpdateDialog || _isFirmwareUpdateInProgress) {
+    if (!_havingNewFirmware ||
+        !SharedPreferencesUtil().showFirmwareUpdateDialog ||
+        _isFirmwareUpdateInProgress ||
+        _isOnFirmwareUpdatePage) {
       return;
     }
 
@@ -443,11 +491,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         onConfirm: () {
           Navigator.of(context).pop();
           setFirmwareUpdateInProgress(true);
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => FirmwareUpdate(device: pairedDevice),
-            ),
-          );
+          if (_isOmiGlassDevice) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => OmiGlassOtaUpdate(
+                  device: pairedDevice,
+                  latestFirmwareDetails: _latestOmiGlassFirmwareDetails,
+                ),
+              ),
+            );
+          } else {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => FirmwareUpdate(device: pairedDevice),
+              ),
+            );
+          }
         },
         onCancel: () {
           Navigator.of(context).pop();
