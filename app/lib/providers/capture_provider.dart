@@ -130,9 +130,24 @@ class CaptureProvider extends ChangeNotifier
   double _wsSendRateKbps = 0.0;
   DateTime? _metricsLastCalculated;
   Timer? _metricsTimer;
+  // Flag to control whether metrics updates should trigger notifyListeners()
+  // When false, metrics are still calculated but don't cause widget rebuilds
+  // Set to true only when debug/metrics UI is visible to reduce battery drain
+  bool _metricsNotifyEnabled = false;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
   double get wsSendRateKbps => _wsSendRateKbps;
+
+  /// Enable or disable metrics notifications.
+  /// When enabled, metrics updates trigger notifyListeners() for UI updates.
+  /// When disabled, metrics are still calculated but don't cause widget rebuilds.
+  /// Use this to reduce battery drain by only enabling when metrics UI is visible.
+  void setMetricsNotifyEnabled(bool enabled) {
+    _metricsNotifyEnabled = enabled;
+    if (enabled) {
+      notifyListeners(); // Immediate update when enabled
+    }
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -816,7 +831,11 @@ class CaptureProvider extends ChangeNotifier
       _wsSocketBytesSent = 0;
       _metricsLastCalculated = now;
 
-      notifyListeners();
+      // Only trigger widget rebuilds if metrics UI is active
+      // This significantly reduces battery drain during transcription
+      if (_metricsNotifyEnabled) {
+        notifyListeners();
+      }
     }
   }
 
@@ -828,7 +847,10 @@ class CaptureProvider extends ChangeNotifier
     _bleReceiveRateKbps = 0.0;
     _wsSendRateKbps = 0.0;
     _metricsLastCalculated = null;
-    notifyListeners();
+    // Only notify if metrics UI is watching
+    if (_metricsNotifyEnabled) {
+      notifyListeners();
+    }
   }
 
   Future _closeBleStream() async {
