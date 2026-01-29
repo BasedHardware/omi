@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -82,7 +83,39 @@ class SpeechProfileProvider extends ChangeNotifier
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
 
+  // Audio amplitude for visualization (0.0 to 1.0)
+  double _currentAmplitude = 0.0;
+  double get currentAmplitude => _currentAmplitude;
+  DateTime? _lastAmplitudeUpdate;
+
   double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
+
+  /// Calculate RMS amplitude from PCM16 little-endian bytes
+  void _updateAmplitude(Uint8List bytes) {
+    if (bytes.length < 2) return;
+
+    // Throttle updates to ~30fps to avoid UI lag
+    final now = DateTime.now();
+    if (_lastAmplitudeUpdate != null && now.difference(_lastAmplitudeUpdate!).inMilliseconds < 33) {
+      return;
+    }
+    _lastAmplitudeUpdate = now;
+
+    double rms = 0;
+    for (int i = 0; i < bytes.length - 1; i += 2) {
+      int sample = bytes[i] | (bytes[i + 1] << 8);
+      if (sample > 32767) sample -= 65536; // Convert to signed
+      rms += sample * sample;
+    }
+
+    int sampleCount = bytes.length ~/ 2;
+    if (sampleCount > 0) {
+      rms = math.sqrt(rms / sampleCount) / 32768.0; // Normalize to 0-1
+      // Apply non-linear scaling for better visualization
+      _currentAmplitude = math.pow(rms, 0.4).clamp(0.0, 1.0).toDouble();
+      notifyListeners();
+    }
+  }
 
   void skipCurrentQuestion() {
     if (_socket?.state == SocketServiceState.connected) {
@@ -203,6 +236,9 @@ class SpeechProfileProvider extends ChangeNotifier
     await ServiceManager.instance().mic.start(
       onByteReceived: (Uint8List bytes) {
         if (bytes.isEmpty) return;
+
+        // Update amplitude for visualization
+        _updateAmplitude(bytes);
 
         // Store audio frames for speech profile upload
         audioStorage.frames.add(bytes.toList());
@@ -429,6 +465,8 @@ class SpeechProfileProvider extends ChangeNotifier
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
+    _currentAmplitude = 0.0;
+    _lastAmplitudeUpdate = null;
     _processConversationCallback = null;
 
     await _socket?.stop(reason: 'closing');

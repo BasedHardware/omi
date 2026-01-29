@@ -1,14 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -26,24 +23,21 @@ class SpeechProfileWidget extends StatefulWidget {
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
 }
 
-class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
-  late AnimationController _questionAnimationController;
-  late Animation<double> _questionFadeAnimation;
+class _SpeechProfileWidgetState extends State<SpeechProfileWidget> {
+  final ScrollController _scrollController = ScrollController();
+  final List<_ChatMessage> _messages = [];
+
+  int _lastQuestionIndex = -1;
+  int _textLengthAtQuestionStart = 0;
+
+  SpeechProfileProvider? _speechProvider;
 
   @override
   void initState() {
     super.initState();
-    _questionAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
-    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
-    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
@@ -52,33 +46,55 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   }
 
   @override
-  void dispose() {
-    final speechProvider = context.read<SpeechProfileProvider>();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _speechProvider = context.read<SpeechProfileProvider>();
+  }
 
-    speechProvider.forceCompletionTimer?.cancel();
-    speechProvider.forceCompletionTimer = null;
-    speechProvider.close();
+  @override
+  void dispose() {
+    _speechProvider?.forceCompletionTimer?.cancel();
+    _speechProvider?.forceCompletionTimer = null;
+    _speechProvider?.close();
 
     _scrollController.dispose();
-    _questionAnimationController.dispose();
-
     super.dispose();
   }
 
-  final ScrollController _scrollController = ScrollController();
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
 
-  void scrollDown() async {
-    if (_scrollController.hasClients) {
-      await Future.delayed(const Duration(milliseconds: 250));
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+  void _onQuestionChanged(SpeechProfileProvider provider) {
+    if (provider.currentQuestionIndex != _lastQuestionIndex && provider.currentQuestion.isNotEmpty) {
+      // Save the previous response if we have one (only the NEW portion since last question)
+      if (_lastQuestionIndex >= 0) {
+        final fullText = provider.text.trim();
+        final newResponse =
+            fullText.length > _textLengthAtQuestionStart ? fullText.substring(_textLengthAtQuestionStart).trim() : '';
+        if (newResponse.isNotEmpty) {
+          _messages.add(_ChatMessage(text: newResponse, isOmi: false));
+        }
+      }
+
+      // Add the new question
+      _messages.add(_ChatMessage(text: provider.currentQuestion, isOmi: true));
+      _lastQuestionIndex = provider.currentQuestionIndex;
+      _textLengthAtQuestionStart = provider.text.trim().length;
+
+      _scrollToBottom();
     }
   }
 
-  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
+  String _getLoadingText(SpeechProfileLoadingState state) {
     switch (state) {
       case SpeechProfileLoadingState.uploading:
         return context.l10n.uploadingVoiceProfile;
@@ -91,388 +107,538 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
   }
 
+  Future<void> _restartDeviceRecording() async {
+    Logger.debug("restartDeviceRecording $mounted");
+    if (mounted) {
+      Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
+      final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
+      if (device != null) {
+        Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
+      }
+    }
+  }
+
+  Future<void> _stopAllRecording() async {
+    Logger.debug("stopAllRecording $mounted");
+    if (mounted) {
+      await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+    }
+  }
+
+  void _resetChatState() {
+    _messages.clear();
+    _lastQuestionIndex = -1;
+    _textLengthAtQuestionStart = 0;
+  }
+
+  Future<void> _handleStart(SpeechProfileProvider provider) async {
+    if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+      await LanguageSelectionDialog.show(context);
+    }
+
+    // Clear previous chat history when starting fresh
+    _resetChatState();
+
+    await _stopAllRecording();
+
+    bool success = await provider.initialise(
+      usePhoneMic: true,
+      processConversationCallback: () {
+        Provider.of<CaptureProvider>(context, listen: false).forceProcessingCurrentConversation();
+      },
+    );
+
+    if (!success) return;
+
+    provider.forceCompletionTimer = Timer(Duration(seconds: provider.maxDuration), () {
+      provider.finalize();
+    });
+  }
+
+  void _showErrorDialog(String error, SpeechProfileProvider provider) {
+    String title = '';
+    String desc = '';
+    String buttonText = context.l10n.ok;
+    VoidCallback onPressed = () => Navigator.pop(context);
+
+    switch (error) {
+      case 'SOCKET_INIT_FAILED':
+        title = context.l10n.connectionError;
+        desc = context.l10n.connectionErrorDesc;
+        break;
+      case 'MULTIPLE_SPEAKERS':
+        title = context.l10n.invalidRecordingMultipleSpeakers;
+        desc = context.l10n.multipleSpeakersDesc;
+        buttonText = context.l10n.tryAgain;
+        onPressed = () {
+          provider.close();
+          Navigator.pop(context);
+        };
+        break;
+      case 'TOO_SHORT':
+        title = context.l10n.invalidRecordingMultipleSpeakers;
+        desc = context.l10n.tooShortDesc;
+        break;
+      case 'INVALID_RECORDING':
+        title = context.l10n.invalidRecordingMultipleSpeakers;
+        desc = context.l10n.invalidRecordingDesc;
+        break;
+      case 'NO_SPEECH':
+        title = context.l10n.areYouThere;
+        desc = context.l10n.noSpeechDesc;
+        break;
+      case 'SOCKET_DISCONNECTED':
+      case 'SOCKET_ERROR':
+        title = context.l10n.connectionLost;
+        desc = context.l10n.connectionLostDesc;
+        buttonText = context.l10n.tryAgain;
+        onPressed = () {
+          provider.close();
+          Navigator.pop(context);
+        };
+        break;
+      default:
+        return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => getDialog(context, onPressed, () {}, title, desc, okButtonText: buttonText, singleButton: true),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    Future restartDeviceRecording() async {
-      Logger.debug("restartDeviceRecording $mounted");
-
-      // Restart device recording, clear transcripts
-      if (mounted) {
-        Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
-        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
-        if (device != null) {
-          Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
-        }
-      }
-    }
-
-    Future stopAllRecording() async {
-      Logger.debug("stopAllRecording $mounted");
-      if (mounted) {
-        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-        // Stop any active device recording
-        await captureProvider.stopStreamDeviceRecording();
-      }
-    }
-
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) async {
-        final speechProvider = context.read<SpeechProfileProvider>();
-        speechProvider.close();
-        restartDeviceRecording();
+      onPopInvokedWithResult: (didPop, result) async {
+        context.read<SpeechProfileProvider>().close();
+        _restartDeviceRecording();
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
         builder: (context, provider, _, child) {
+          // Track question changes
+          if (provider.startedRecording && !provider.uploadingProfile && !provider.profileCompleted) {
+            _onQuestionChanged(provider);
+          }
+
           return MessageListener<SpeechProfileProvider>(
             showInfo: (info) {
-              if (info == 'SCROLL_DOWN') {
-                scrollDown();
-              } else if (info == 'NEXT_QUESTION') {
-                if (!mounted) return;
-
-                _questionAnimationController
-                  ..reset()
-                  ..forward();
+              if (info == 'SCROLL_DOWN' || info == 'NEXT_QUESTION') {
+                _scrollToBottom();
               }
             },
-            showError: (error) {
-              if (error == 'SOCKET_INIT_FAILED') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () => Navigator.pop(context),
-                    () {},
-                    context.l10n.connectionError,
-                    context.l10n.connectionErrorDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'MULTIPLE_SPEAKERS') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.multipleSpeakersDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'TOO_SHORT') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      //  Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.tooShortDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'INVALID_RECORDING') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                      //  Navigator.pop(context);
-                    },
-                    () {},
-                    // TODO: improve this
-                    context.l10n.invalidRecordingMultipleSpeakers,
-                    context.l10n.invalidRecordingDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == "NO_SPEECH") {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.areYouThere,
-                    context.l10n.noSpeechDesc,
-                    okButtonText: context.l10n.ok,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      provider.close();
-                      Navigator.pop(context);
-                    },
-                    () {},
-                    context.l10n.connectionLost,
-                    context.l10n.connectionLostDesc,
-                    okButtonText: context.l10n.tryAgain,
-                    singleButton: true,
-                  ),
-                  barrierDismissible: false,
-                );
-              }
-            },
-            child: SafeArea(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    height: 10,
-                  ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(40, !provider.startedRecording ? 20 : 0, 40, 20),
-                    child: !provider.startedRecording
-                        ? Column(
-                            children: [
-                              Text(
-                                context.l10n.speechProfileIntro,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              //Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
-                            ],
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              return ShaderMask(
-                                shaderCallback: (bounds) {
-                                  if (provider.text.split(' ').length < 10) {
-                                    return const LinearGradient(colors: [Colors.white, Colors.white])
-                                        .createShader(bounds);
-                                  }
-                                  return const LinearGradient(
-                                    colors: [Colors.transparent, Colors.white],
-                                    stops: [0.0, 0.5],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ).createShader(bounds);
-                                },
-                                blendMode: BlendMode.dstIn,
-                                child: SizedBox(
-                                  height: 100,
-                                  child: ListView(
-                                    controller: _scrollController,
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    children: [
-                                      Text(
-                                        provider.text,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w400,
-                                          height: 1.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  !provider.startedRecording
-                      ? (provider.isInitialising
-                          ? const CircularProgressIndicator(
-                              color: Colors.white,
-                            )
-                          : Column(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                const SizedBox(height: 20),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                                  decoration: BoxDecoration(
-                                    border: const GradientBoxBorder(
-                                      gradient: LinearGradient(colors: [
-                                        Color.fromARGB(127, 208, 208, 208),
-                                        Color.fromARGB(127, 188, 99, 121),
-                                        Color.fromARGB(127, 86, 101, 182),
-                                        Color.fromARGB(127, 126, 190, 236)
-                                      ]),
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: TextButton(
-                                    onPressed: () async {
-                                      // Check if user has set primary language, if not, show dialog
-                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                        await LanguageSelectionDialog.show(context);
-                                      }
-
-                                      await stopAllRecording();
-
-                                      // Initialize speech profile with phone mic as input source
-                                      // Don't pass restartDeviceRecording - we don't want to restart device recording
-                                      bool success = await provider.initialise(
-                                        usePhoneMic: true,
-                                        processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(context, listen: false)
-                                              .forceProcessingCurrentConversation();
-                                        },
-                                      );
-
-                                      if (!success) {
-                                        // Initialization failed, error dialog will be shown
-                                        return;
-                                      }
-
-                                      provider.forceCompletionTimer =
-                                          Timer(Duration(seconds: provider.maxDuration), () async {
-                                        provider.finalize();
-                                      });
-
-                                      if (!mounted) return;
-                                      _questionAnimationController.forward();
-                                    },
-                                    child: Text(
-                                      context.l10n.getStarted,
-                                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                              ],
-                            ))
-                      : provider.profileCompleted
-                          ? Container(
-                              margin: const EdgeInsets.only(top: 40),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              decoration: BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(colors: [
-                                    Color.fromARGB(127, 208, 208, 208),
-                                    Color.fromARGB(127, 188, 99, 121),
-                                    Color.fromARGB(127, 86, 101, 182),
-                                    Color.fromARGB(127, 126, 190, 236)
-                                  ]),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: TextButton(
-                                onPressed: () {
-                                  // Conversation processing already triggered in finalize()
-                                  widget.goNext();
-                                },
-                                child: Text(
-                                  context.l10n.allDone,
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                              ),
-                            )
-                          : provider.uploadingProfile
-                              ? Padding(
-                                  padding: const EdgeInsets.only(top: 40.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const SizedBox(
-                                        height: 24,
-                                        width: 24,
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 24),
-                                      Text(_getLoadingText(context, provider.loadingState),
-                                          style: const TextStyle(color: Colors.white, fontSize: 18)),
-                                    ],
-                                  ),
-                                )
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const SizedBox(height: 8),
-                                    FadeTransition(
-                                      opacity: _questionFadeAnimation,
-                                      child: Text(
-                                        provider.currentQuestion,
-                                        style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 0.9,
-                                        child: ProgressBarWithPercentage(progressValue: provider.questionProgress)),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      context.l10n.keepGoing,
-                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextButton(
-                                      onPressed: () => provider.skipCurrentQuestion(),
-                                      child: Text(
-                                        context.l10n.skipThisQuestion,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                  (!provider.startedRecording)
-                      ? TextButton(
-                          onPressed: () {
-                            widget.onSkip();
-                          },
-                          child: Text(
-                            context.l10n.skipForNow,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
-                              fontSize: 14,
-                              fontWeight: FontWeight.normal,
-                            ),
-                          ),
-                        )
-                      : const SizedBox(),
-                ],
-              ),
-            ),
+            showError: (error) => _showErrorDialog(error, provider),
+            child: _buildBody(provider),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildBody(SpeechProfileProvider provider) {
+    if (!provider.startedRecording) {
+      return _buildWelcome(provider);
+    } else if (provider.profileCompleted) {
+      return _buildComplete();
+    } else if (provider.uploadingProfile) {
+      return _buildProcessing(provider);
+    } else {
+      return _buildConversation(provider);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WELCOME STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildWelcome(SpeechProfileProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            context.l10n.speechProfileIntro,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              height: 1.4,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Start button
+          provider.isInitialising
+              ? const CircularProgressIndicator(color: Colors.white)
+              : MaterialButton(
+                  onPressed: () => _handleStart(provider),
+                  color: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                  child: Text(
+                    context.l10n.getStarted,
+                    style: const TextStyle(color: Colors.black),
+                  ),
+                ),
+
+          const SizedBox(height: 16),
+
+          // Skip button
+          TextButton(
+            onPressed: widget.onSkip,
+            child: Text(
+              context.l10n.skipForNow,
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleSkipQuestion(SpeechProfileProvider provider) {
+    // Add a skipped message to show in the chat
+    _messages.add(_ChatMessage(text: '[Skipped]', isOmi: false, isSkipped: true));
+    _scrollToBottom();
+    provider.skipCurrentQuestion();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CONVERSATION STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildConversation(SpeechProfileProvider provider) {
+    final fullText = provider.text.trim();
+    // Only show the portion of text that's new since the current question started
+    final currentResponse =
+        fullText.length > _textLengthAtQuestionStart ? fullText.substring(_textLengthAtQuestionStart).trim() : '';
+    final hasCurrentResponse = currentResponse.isNotEmpty;
+
+    // Build list items: messages + current response (if any) + typing indicator (if waiting for next question)
+    final List<Widget> chatItems = [];
+
+    // Add all saved messages
+    for (final msg in _messages) {
+      chatItems.add(_buildMessageBubble(msg.text, msg.isOmi, isSkipped: msg.isSkipped));
+    }
+
+    // Add current response if user is speaking (this updates in real-time from provider.text)
+    if (hasCurrentResponse) {
+      chatItems.add(_buildMessageBubble(currentResponse, false));
+      // Show typing indicator when user has responded (waiting for next question)
+      chatItems.add(_buildOmiTypingIndicator());
+    }
+
+    return Column(
+      children: [
+        // Top bar with just progress
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Text(
+            'Question ${provider.currentQuestionIndex + 1} of ${provider.totalQuestions > 0 ? provider.totalQuestions : 5}',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+
+        // Chat area
+        Expanded(
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            children: chatItems,
+          ),
+        ),
+
+        // Bottom: visualizer + skip
+        _buildBottomPanel(provider),
+      ],
+    );
+  }
+
+  Widget _buildBottomPanel(SpeechProfileProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _AudioWaveVisualizer(amplitude: provider.currentAmplitude),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: () => _handleSkipQuestion(provider),
+            child: Text(
+              context.l10n.skipThisQuestion,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(String text, bool isOmi, {bool isSkipped = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: isOmi ? MainAxisAlignment.start : MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Container(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSkipped
+                    ? Colors.grey.shade800
+                    : isOmi
+                        ? Colors.grey.shade900
+                        : Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isOmi ? 4 : 16),
+                  bottomRight: Radius.circular(isOmi ? 16 : 4),
+                ),
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isSkipped
+                      ? Colors.grey.shade500
+                      : isOmi
+                          ? Colors.white
+                          : Colors.black,
+                  fontSize: 15,
+                  height: 1.3,
+                  fontStyle: isSkipped ? FontStyle.italic : FontStyle.normal,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOmiTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade900,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(16),
+              ),
+            ),
+            child: _buildTypingDots(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypingDots() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (index) {
+        return Padding(
+          padding: EdgeInsets.only(right: index < 2 ? 4 : 0),
+          child: _TypingDot(delay: index * 150),
+        );
+      }),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PROCESSING STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildProcessing(SpeechProfileProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation(Colors.white),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _getLoadingText(provider.loadingState),
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // COMPLETE STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  Widget _buildComplete() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Checkmark
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+            ),
+            child: const Icon(Icons.check_rounded, color: Colors.black, size: 32),
+          ),
+
+          const SizedBox(height: 20),
+
+          Text(
+            context.l10n.youreAllSet,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            "I'll recognize your voice from now on.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Continue button
+          MaterialButton(
+            onPressed: widget.goNext,
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            child: Text(
+              context.l10n.continueButton,
+              style: const TextStyle(color: Colors.black),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatMessage {
+  final String text;
+  final bool isOmi;
+  final bool isSkipped;
+  _ChatMessage({required this.text, required this.isOmi, this.isSkipped = false});
+}
+
+class _AudioWaveVisualizer extends StatelessWidget {
+  final double amplitude;
+  static const int _barCount = 7;
+
+  const _AudioWaveVisualizer({required this.amplitude});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(_barCount, (index) {
+          // Middle bars are taller, edge bars shorter
+          final distanceFromCenter = (index - _barCount ~/ 2).abs();
+          final positionFactor = 1.0 - (distanceFromCenter * 0.12);
+
+          // Slight variation per bar for organic feel
+          final variation = ((index * 0.15) % 0.2) + 0.9;
+
+          // Calculate bar height instantly (no animation delay)
+          const baseHeight = 0.15;
+          final amplitudeHeight = amplitude * positionFactor * variation;
+          final totalHeight = (baseHeight + amplitudeHeight).clamp(0.1, 1.0);
+
+          return Container(
+            width: 4,
+            height: 40 * totalHeight,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              color: Colors.white.withValues(alpha: 0.5 + (totalHeight * 0.5)),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _TypingDot extends StatefulWidget {
+  final int delay;
+  const _TypingDot({required this.delay});
+
+  @override
+  State<_TypingDot> createState() => _TypingDotState();
+}
+
+class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _animation,
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.grey.shade400,
+        ),
       ),
     );
   }
