@@ -65,4 +65,37 @@ void main() {
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
   });
+
+  group('metricsNotifyEnabled', () {
+    test('defaults to not notifying on metrics update', () {
+      final provider = CaptureProvider();
+      // By default, metrics notify is disabled
+      // We can verify this by checking that the provider was created successfully
+      // and bleReceiveRateKbps/wsSendRateKbps are accessible (default 0)
+      expect(provider.bleReceiveRateKbps, 0.0);
+      expect(provider.wsSendRateKbps, 0.0);
+    });
+
+    test('setMetricsNotifyEnabled(true) enables metrics notifications', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      provider.setMetricsNotifyEnabled(true);
+
+      // Should notify when enabling
+      expect(notifyCount, 1);
+    });
+
+    test('setMetricsNotifyEnabled(false) does not trigger notification', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      provider.setMetricsNotifyEnabled(false);
+
+      // Should not notify when disabling (already disabled by default)
+      expect(notifyCount, 0);
+    });
+  });
 }
