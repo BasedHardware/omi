@@ -145,16 +145,14 @@ void main() {
       expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
 
-    test('increments after loading in-progress conversation', () {
+    test('increments on new segment received', () {
       final provider = CaptureProvider();
+      provider.segments = [_segment('seed', 'seed')];
       final initialVersion = provider.segmentsPhotosVersion;
 
-      // Directly set segments/photos to simulate what _loadInProgressConversation does
-      provider.segments = [_segment('x', 'loaded')];
-      // Note: We can't easily test _loadInProgressConversation directly as it requires
-      // network calls, but we verify the version is bumped when segments change
-      // by checking it was incremented
-      expect(provider.segmentsPhotosVersion, equals(initialVersion));
+      provider.onSegmentReceived([_segment('x', 'new')]);
+
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
   });
 }
