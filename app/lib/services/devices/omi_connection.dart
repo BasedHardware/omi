@@ -35,17 +35,12 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<bool> performSyncTime() async {
     try {
       final epochSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-      final bytes = [
-        epochSeconds & 0xFF,
-        (epochSeconds >> 8) & 0xFF,
-        (epochSeconds >> 16) & 0xFF,
-        (epochSeconds >> 24) & 0xFF,
-      ];
+      final byteData = ByteData(4)..setUint32(0, epochSeconds, Endian.little);
 
       await transport.writeCharacteristic(
         timeSyncServiceUuid,
         timeSyncWriteCharacteristicUuid,
-        bytes,
+        byteData.buffer.asUint8List(),
       );
       Logger.debug('OmiDeviceConnection: Time synced to device: $epochSeconds');
       return true;
