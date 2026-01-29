@@ -2657,5 +2657,6 @@
   "lowestRating": "Legalacsonyabb értékelés",
   "resetFilters": "Szűrők visszaállítása",
   "applyFilters": "Szűrők alkalmazása",
-  "mostInstalls": "Legtöbb telepítés"
+  "mostInstalls": "Legtöbb telepítés",
+  "couldNotOpenUrl": "Az URL nem nyitható meg. Kérjük, próbálja újra."
 }

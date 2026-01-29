@@ -2562,5 +2562,6 @@
   "lowestRating": "न्यूनतम रेटिंग",
   "resetFilters": "फ़िल्टर रीसेट करें",
   "applyFilters": "फ़िल्टर लागू करें",
-  "mostInstalls": "सबसे अधिक इंस्टॉल"
+  "mostInstalls": "सबसे अधिक इंस्टॉल",
+  "couldNotOpenUrl": "URL खोला नहीं जा सका। कृपया पुनः प्रयास करें।"
 }

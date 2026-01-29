@@ -8010,4 +8010,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Больше всего установок';
+
+  @override
+  String get couldNotOpenUrl => 'Не удалось открыть URL. Пожалуйста, попробуйте снова.';
 }

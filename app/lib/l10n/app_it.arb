@@ -2561,5 +2561,6 @@
   "lowestRating": "Valutazione più bassa",
   "resetFilters": "Reimposta filtri",
   "applyFilters": "Applica filtri",
-  "mostInstalls": "Più installazioni"
+  "mostInstalls": "Più installazioni",
+  "couldNotOpenUrl": "Impossibile aprire l'URL. Riprova."
 }

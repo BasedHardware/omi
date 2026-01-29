@@ -2561,5 +2561,6 @@
   "lowestRating": "Lägsta betyg",
   "resetFilters": "Återställ filter",
   "applyFilters": "Tillämpa filter",
-  "mostInstalls": "Flest installationer"
+  "mostInstalls": "Flest installationer",
+  "couldNotOpenUrl": "Det gick inte att öppna URL:en. Försök igen."
 }

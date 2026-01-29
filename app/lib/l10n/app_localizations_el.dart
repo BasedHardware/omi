@@ -8042,4 +8042,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Περισσότερες εγκαταστάσεις';
+
+  @override
+  String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
 }

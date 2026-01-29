@@ -8023,4 +8023,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Cele mai multe instalări';
+
+  @override
+  String get couldNotOpenUrl => 'Nu s-a putut deschide URL-ul. Vă rugăm să încercați din nou.';
 }

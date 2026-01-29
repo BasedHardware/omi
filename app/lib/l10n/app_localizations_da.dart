@@ -7969,4 +7969,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Flest installationer';
+
+  @override
+  String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
 }

@@ -8008,4 +8008,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Paling banyak dipasang';
+
+  @override
+  String get couldNotOpenUrl => 'Tidak dapat membuka URL. Sila cuba lagi.';
 }

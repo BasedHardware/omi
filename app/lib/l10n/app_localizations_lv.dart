@@ -8002,4 +8002,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Visvairāk instalāciju';
+
+  @override
+  String get couldNotOpenUrl => 'Nevarēja atvērt URL. Lūdzu, mēģiniet vēlreiz.';
 }

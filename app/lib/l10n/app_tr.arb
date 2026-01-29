@@ -2596,5 +2596,6 @@
   "lowestRating": "En düşük puan",
   "resetFilters": "Filtreleri sıfırla",
   "applyFilters": "Filtreleri uygula",
-  "mostInstalls": "En çok yükleme"
+  "mostInstalls": "En çok yükleme",
+  "couldNotOpenUrl": "URL açılamadı. Lütfen tekrar deneyin."
 }

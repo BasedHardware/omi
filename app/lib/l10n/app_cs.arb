@@ -2530,5 +2530,6 @@
   "lowestRating": "Nejnižší hodnocení",
   "resetFilters": "Resetovat filtry",
   "applyFilters": "Použít filtry",
-  "mostInstalls": "Nejvíce instalací"
+  "mostInstalls": "Nejvíce instalací",
+  "couldNotOpenUrl": "Nepodařilo se otevřít URL. Zkuste to prosím znovu."
 }

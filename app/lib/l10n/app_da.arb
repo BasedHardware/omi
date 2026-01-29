@@ -2570,5 +2570,6 @@
   "lowestRating": "Laveste bedømmelse",
   "resetFilters": "Nulstil filtre",
   "applyFilters": "Anvend filtre",
-  "mostInstalls": "Flest installationer"
+  "mostInstalls": "Flest installationer",
+  "couldNotOpenUrl": "Kunne ikke åbne URL. Prøv venligst igen."
 }

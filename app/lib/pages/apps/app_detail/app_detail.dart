@@ -123,6 +123,30 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return '$day $month ${date.year}';
   }
 
+  /// Safely launches a URL with fallback from in-app browser to external browser.
+  /// Returns true if the URL was launched successfully, false otherwise.
+  Future<bool> _launchUrlSafely(Uri uri) async {
+    try {
+      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      return true;
+    } on PlatformException catch (e) {
+      Logger.warning('Failed to launch URL with in-app browser: $e');
+      // Fall back to external browser
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return true;
+      } on PlatformException catch (e) {
+        Logger.warning('Failed to launch URL with external browser: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
+          );
+        }
+        return false;
+      }
+    }
+  }
+
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
     if (app.externalIntegration == null) return;
     // TODO: move check to backend
@@ -923,7 +947,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   return;
                                                 }
                                                 _checkPaymentStatus(app.id);
-                                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                                await _launchUrlSafely(uri);
                                               } else {
                                                 await _toggleApp(app.id, true);
                                               }
@@ -1356,7 +1380,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                                 checkSetupCompleted(autoInstallIfCompleted: true);
                               },
                               child: Padding(
@@ -1446,7 +1470,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(
@@ -1732,7 +1756,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
         return;
       }
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      await _launchUrlSafely(uri);
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1750,7 +1774,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             }
             return;
           }
-          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+          await _launchUrlSafely(uri);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));

@@ -2561,5 +2561,6 @@
   "lowestRating": "Penilaian terendah",
   "resetFilters": "Set semula penapis",
   "applyFilters": "Guna penapis",
-  "mostInstalls": "Paling banyak dipasang"
+  "mostInstalls": "Paling banyak dipasang",
+  "couldNotOpenUrl": "Tidak dapat membuka URL. Sila cuba lagi."
 }

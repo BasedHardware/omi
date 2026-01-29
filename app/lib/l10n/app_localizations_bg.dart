@@ -8017,4 +8017,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Най-много инсталации';
+
+  @override
+  String get couldNotOpenUrl => 'Не можа да се отвори URL адресът. Моля, опитайте отново.';
 }
