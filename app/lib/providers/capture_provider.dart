@@ -130,9 +130,17 @@ class CaptureProvider extends ChangeNotifier
   double _wsSendRateKbps = 0.0;
   DateTime? _metricsLastCalculated;
   Timer? _metricsTimer;
+  // Disable metrics notify by default to reduce unnecessary UI rebuilds and battery drain
+  // Only enable when a UI element actually needs to display these metrics
+  bool _metricsNotifyEnabled = false;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
   double get wsSendRateKbps => _wsSendRateKbps;
+
+  void setMetricsNotifyEnabled(bool enabled) {
+    _metricsNotifyEnabled = enabled;
+    if (enabled) notifyListeners();
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -233,6 +241,11 @@ class CaptureProvider extends ChangeNotifier
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
+  // Version counter for segments/photos content changes. Incremented on in-place mutations
+  // (e.g., translation updates, photo description changes) to signal UI rebuilds when
+  // list length and last-text remain unchanged.
+  int _segmentsPhotosVersion = 0;
+  int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
   List<String> taggingSegmentIds = [];
 
@@ -816,7 +829,10 @@ class CaptureProvider extends ChangeNotifier
       _wsSocketBytesSent = 0;
       _metricsLastCalculated = now;
 
-      notifyListeners();
+      // Only notify listeners when UI actually needs these metrics to reduce battery drain
+      if (_metricsNotifyEnabled) {
+        notifyListeners();
+      }
     }
   }
 
@@ -1404,6 +1420,7 @@ class CaptureProvider extends ChangeNotifier
       final photoIndex = photos.indexWhere((p) => p.id == tempId);
       if (photoIndex != -1) {
         photos[photoIndex].id = permanentId;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1417,6 +1434,7 @@ class CaptureProvider extends ChangeNotifier
       if (photoIndex != -1) {
         photos[photoIndex].description = description;
         photos[photoIndex].discarded = discarded;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1485,6 +1503,7 @@ class CaptureProvider extends ChangeNotifier
         Logger.debug("Adding ${remainSegments.length} new translated segments");
       }
 
+      _segmentsPhotosVersion++;
       notifyListeners();
     } catch (e) {
       Logger.debug("Error handling translation event: $e");
@@ -1498,6 +1517,7 @@ class CaptureProvider extends ChangeNotifier
     suggestionsBySegmentId.removeWhere((key, value) => event.segmentIds.contains(key));
     taggingSegmentIds.removeWhere((id) => event.segmentIds.contains(id));
     hasTranscripts = segments.isNotEmpty;
+    _segmentsPhotosVersion++;
     notifyListeners();
   }
 
@@ -1552,6 +1572,7 @@ class CaptureProvider extends ChangeNotifier
           segment.personId = isAssigningToUser ? null : finalPersonId;
         }
       }
+      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
 
       // Persist change
       await assignBulkConversationTranscriptSegments(
