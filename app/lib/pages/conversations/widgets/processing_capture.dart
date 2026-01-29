@@ -205,7 +205,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               maxLines: 1,
             ),
           ),
-          if (isHavingTranscript || isHavingPhotos) const Expanded(child: LiteCaptureWidget()),
+          if (isHavingTranscript || isHavingPhotos) const Flexible(child: LiteCaptureWidget()),
         ],
       );
     } else {
@@ -259,15 +259,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       stateText = "Connecting";
     }
     Widget right = stateText.isNotEmpty || statusIndicator != null
-        ? Expanded(
-            child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 stateText,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 maxLines: 1,
-                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
               ),
               if (statusIndicator != null) ...[
                 const SizedBox(width: 8),
@@ -278,16 +277,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 )
               ],
             ],
-          ))
+          )
         : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          (!deviceServiceStateOk && (isHavingTranscript || isHavingPhotos)) ? Expanded(child: left!) : left!,
-          right,
+          Expanded(child: left),
+          if (right is! SizedBox) right,
         ],
       ),
     );
