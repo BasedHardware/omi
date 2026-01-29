@@ -28,6 +28,31 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+
+    await performSyncTime();
+  }
+
+  Future<bool> performSyncTime() async {
+    try {
+      final epochSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final bytes = [
+        epochSeconds & 0xFF,
+        (epochSeconds >> 8) & 0xFF,
+        (epochSeconds >> 16) & 0xFF,
+        (epochSeconds >> 24) & 0xFF,
+      ];
+
+      await transport.writeCharacteristic(
+        timeSyncServiceUuid,
+        timeSyncWriteCharacteristicUuid,
+        bytes,
+      );
+      Logger.debug('OmiDeviceConnection: Time synced to device: $epochSeconds');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error syncing time: $e');
+      return false;
+    }
   }
 
   @override
