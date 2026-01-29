@@ -51,10 +51,12 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<DeviceProvider>().getDeviceInfo();
-      // Register as a metrics listener while this widget is mounted
+    // Register as a metrics listener immediately to avoid race condition
+    // where widget unmounts before async getDeviceInfo completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       context.read<CaptureProvider>().addMetricsListener();
+      context.read<DeviceProvider>().getDeviceInfo();
     });
   }
 
