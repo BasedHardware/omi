@@ -307,12 +307,12 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    if (uri.pathSegments.length < 2) {
-      Logger.debug('Invalid recording URL: $uri');
+    if (uri.pathSegments.isEmpty) {
+      Logger.debug('Invalid recording URL: missing action: $uri');
       return;
     }
 
-    final action = uri.pathSegments[1];
+    final action = uri.pathSegments.first;
     final captureProvider = context.read<CaptureProvider>();
     final currentState = captureProvider.recordingState;
 
@@ -344,7 +344,7 @@ class _AppShellState extends State<AppShell> {
           Logger.debug('Toggling recording OFF via URL scheme');
           await captureProvider.stopSystemAudioRecording();
           PlatformManager.instance.mixpanel.track('Recording Toggled Off From URL Scheme');
-        } else {
+        } else if (currentState == RecordingState.stop || currentState == RecordingState.pause) {
           Logger.debug('Toggling recording ON via URL scheme');
           await captureProvider.streamSystemAudioRecording();
           PlatformManager.instance.mixpanel.track('Recording Toggled On From URL Scheme');
