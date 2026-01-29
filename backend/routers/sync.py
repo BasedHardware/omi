@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import re
@@ -34,6 +35,7 @@ AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
+from utils.webhooks import send_audio_bytes_developer_webhook
 
 router = APIRouter()
 
@@ -500,6 +502,43 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
+def read_wav_as_pcm(wav_path: str) -> tuple[bytes, int]:
+    """Read WAV file and return raw PCM data and sample rate.
+
+    Raises:
+        FileNotFoundError: If the WAV file does not exist.
+        wave.Error: If the file is not a valid WAV file.
+    """
+    with wave.open(wav_path, 'rb') as wav_file:
+        sample_rate = wav_file.getframerate()
+        pcm_data = wav_file.readframes(wav_file.getnframes())
+        return pcm_data, sample_rate
+
+
+async def _process_wav_for_webhook(uid: str, wav_path: str):
+    """Process a single WAV file and send to webhook."""
+    try:
+        pcm_data, sample_rate = await asyncio.to_thread(read_wav_as_pcm, wav_path)
+        if pcm_data:
+            timestamp = get_timestamp_from_path(wav_path)
+            await send_audio_bytes_developer_webhook(uid, sample_rate, pcm_data, timestamp=timestamp)
+            print(f"Sent audio bytes webhook for synced file: {wav_path}")
+    except FileNotFoundError:
+        print(f"WAV file not found for webhook: {wav_path}")
+    except wave.Error as e:
+        print(f"Error reading WAV for webhook {wav_path}: {e}")
+
+
+async def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
+    """Send audio bytes to developer webhook during offline sync.
+
+    Processes all WAV files concurrently for better performance.
+    """
+    if not wav_paths:
+        return
+    await asyncio.gather(*[_process_wav_for_webhook(uid, wav_path) for wav_path in wav_paths])
+
+
 def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
@@ -715,6 +754,11 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
     try:
         paths = retrieve_file_paths(files, uid)
         wav_paths = decode_files_to_wav(paths)
+
+        # Send audio bytes to developer webhook for offline sync
+        # This ensures webhooks are triggered even for offline-recorded audio
+        if wav_paths:
+            asyncio.create_task(trigger_audio_bytes_webhook_for_sync(uid, wav_paths))
 
         def chunk_threads(threads):
             chunk_size = 5
