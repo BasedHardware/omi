@@ -6,6 +6,7 @@ import struct
 import time
 import uuid
 import wave
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Callable
@@ -221,9 +222,17 @@ async def _stream_handler(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
+    # Buffer size limits to prevent memory leaks during outages/lag
+    MAX_SEGMENT_BUFFER_SIZE = 1000  # Max segments to buffer
+    MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
+    MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
+    MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
+    IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
+
     # Initialize segment buffers early (before onboarding handler needs them)
-    realtime_segment_buffers = []
-    realtime_photo_buffers: list[ConversationPhoto] = []
+    realtime_segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
+    realtime_photo_buffers: deque[ConversationPhoto] = deque(maxlen=MAX_PHOTO_BUFFER_SIZE)
 
     # === Speaker Identification State ===
     RING_BUFFER_DURATION = 60.0  # seconds
@@ -858,13 +867,13 @@ async def _stream_handler(
         pusher_connect_lock = asyncio.Lock()
         pusher_connected = False
 
-        # Transcript
-        segment_buffers = []
+        # Transcript (bounded to prevent memory growth when pusher is down)
+        segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
 
         last_synced_conversation_id = None
 
         # Conversation processing
-        pending_conversation_requests = set()
+        pending_conversation_requests: Set[str] = set()
         pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
@@ -877,6 +886,10 @@ async def _stream_handler(
             if not pusher_connected or not pusher_ws:
                 print(f"Pusher not connected, falling back to local processing for {conversation_id}", uid, session_id)
                 return False
+            # Prevent unbounded growth of pending requests
+            if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
+                print(f"Too many pending requests, dropping oldest for {conversation_id}", uid, session_id)
+                pending_conversation_requests.pop()  # Remove arbitrary element
             try:
                 pending_conversation_requests.add(conversation_id)
                 pending_request_event.set()  # Signal the receiver
@@ -892,7 +905,6 @@ async def _stream_handler(
                 return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
-            nonlocal segment_buffers
             nonlocal pusher_ws
             nonlocal pusher_connected
             if pusher_connected and pusher_ws and len(segment_buffers) > 0:
@@ -902,11 +914,11 @@ async def _stream_handler(
                     data.extend(struct.pack("I", 102))
                     data.extend(
                         bytes(
-                            json.dumps({"segments": segment_buffers, "memory_id": current_conversation_id}),
+                            json.dumps({"segments": list(segment_buffers), "memory_id": current_conversation_id}),
                             "utf-8",
                         )
                     )
-                    segment_buffers = []  # reset
+                    segment_buffers.clear()  # reset
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher transcripts Connection closed: {e}", uid, session_id)
@@ -918,13 +930,12 @@ async def _stream_handler(
 
         async def transcript_consume():
             nonlocal websocket_active
-            nonlocal segment_buffers
             while websocket_active:
                 await asyncio.sleep(1)
                 if len(segment_buffers) > 0:
                     await _transcript_flush(auto_reconnect=True)
 
-        # Audio bytes
+        # Audio bytes (bounded to prevent memory growth when pusher is down)
         audio_buffers = bytearray()
         audio_buffer_last_received: float = None  # Track when last audio was received
         audio_bytes_enabled = (
@@ -933,6 +944,11 @@ async def _stream_handler(
 
         def audio_bytes_send(audio_bytes: bytes, received_at: float):
             nonlocal audio_buffers, audio_buffer_last_received
+            # Cap buffer size to prevent unbounded growth when pusher is disconnected
+            if len(audio_buffers) + len(audio_bytes) > MAX_AUDIO_BUFFER_SIZE:
+                # Drop oldest data to make room (keep most recent audio)
+                excess = len(audio_buffers) + len(audio_bytes) - MAX_AUDIO_BUFFER_SIZE
+                audio_buffers = audio_buffers[excess:]
             audio_buffers.extend(audio_bytes)
             audio_buffer_last_received = received_at
 
@@ -1611,10 +1627,19 @@ async def _stream_handler(
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
-    image_chunks = {str: any}  # A temporary in-memory cache for image chunks
+    # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
+    image_chunks: Dict[str, dict] = {}
+
+    def _cleanup_expired_image_chunks():
+        """Remove image chunks that have exceeded TTL."""
+        now = time.time()
+        expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
+        for tid in expired:
+            del image_chunks[tid]
+            print(f"Expired incomplete image upload: {tid}", uid, session_id)
 
     async def process_photo(
-        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list[ConversationPhoto]
+        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer
     ):
         from utils.llm.openglass import describe_image
 
@@ -1634,7 +1659,7 @@ async def _stream_handler(
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
     async def handle_image_chunk(
-        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list[ConversationPhoto]
+        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer
     ):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
@@ -1645,16 +1670,26 @@ async def _stream_handler(
             print(f"Invalid image chunk received: {chunk_data}", uid, session_id)
             return
 
+        # Cleanup expired chunks periodically
+        _cleanup_expired_image_chunks()
+
         if temp_id not in image_chunks_cache:
             if total <= 0:
                 return
-            image_chunks_cache[temp_id] = [None] * total
+            # Enforce max concurrent uploads
+            if len(image_chunks_cache) >= MAX_IMAGE_CHUNKS:
+                # Remove oldest entry
+                oldest_id = min(image_chunks_cache.keys(), key=lambda k: image_chunks_cache[k]['created_at'])
+                del image_chunks_cache[oldest_id]
+                print(f"Dropped oldest image upload to make room: {oldest_id}", uid, session_id)
+            image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
-        if index < total and image_chunks_cache[temp_id][index] is None:
-            image_chunks_cache[temp_id][index] = data
+        chunks_data = image_chunks_cache[temp_id]['chunks']
+        if index < total and chunks_data[index] is None:
+            chunks_data[index] = data
 
-        if all(chunk is not None for chunk in image_chunks_cache[temp_id]):
-            b64_image_data = "".join(image_chunks_cache[temp_id])
+        if all(chunk is not None for chunk in chunks_data):
+            b64_image_data = "".join(chunks_data)
             del image_chunks_cache[temp_id]
             spawn(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
