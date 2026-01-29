@@ -1572,6 +1572,7 @@ class CaptureProvider extends ChangeNotifier
           segment.personId = isAssigningToUser ? null : finalPersonId;
         }
       }
+      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
 
       // Persist change
       await assignBulkConversationTranscriptSegments(
