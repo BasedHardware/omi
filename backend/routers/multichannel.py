@@ -65,7 +65,7 @@ class ChannelConfig:
     speaker_label: str  # STT speaker label
 
 
-def build_channel_config(source: str, num_channels: int) -> List[ChannelConfig]:
+def build_channel_config(source: str) -> List[ChannelConfig]:
     """Build channel configuration based on source type."""
     if source == 'phone_call':
         return [
@@ -77,18 +77,11 @@ def build_channel_config(source: str, num_channels: int) -> List[ChannelConfig]:
             ChannelConfig(channel_id=0x01, label='mic', is_user=True, speaker_label='SPEAKER_00'),
             ChannelConfig(channel_id=0x02, label='system_audio', is_user=False, speaker_label='SPEAKER_01'),
         ]
-    # Generic N-channel
-    configs = []
-    for i in range(num_channels):
-        configs.append(
-            ChannelConfig(
-                channel_id=i + 1,
-                label=f'channel_{i}',
-                is_user=(i == 0),
-                speaker_label=f'SPEAKER_{i:02d}',
-            )
-        )
-    return configs
+    # Default to 2-channel config for unknown sources
+    return [
+        ChannelConfig(channel_id=0x01, label='mic', is_user=True, speaker_label='SPEAKER_00'),
+        ChannelConfig(channel_id=0x02, label='remote', is_user=False, speaker_label='SPEAKER_01'),
+    ]
 
 
 # ---- Audio Helpers ----
@@ -168,7 +161,7 @@ async def _multi_channel_stream_handler(
     main_event_loop = asyncio.get_running_loop()
 
     # ---- Channel config ----
-    channel_configs = build_channel_config(source, num_channels)
+    channel_configs = build_channel_config(source)
     channel_id_to_index = {ch.channel_id: i for i, ch in enumerate(channel_configs)}
 
     # ---- Conversation source ----

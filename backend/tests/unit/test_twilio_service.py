@@ -52,11 +52,11 @@ def test_validate_twilio_signature_invalid():
 
 
 def test_validate_twilio_signature_no_auth_token():
-    """When auth_token is not set, validation is skipped (returns True for local dev)."""
+    """When auth_token is not set, validation fails (auth_token is required)."""
     with patch('utils.twilio_service.auth_token', None):
         result = validate_twilio_signature(
             'https://example.com/twiml',
             {'To': '+15551234567'},
             '',
         )
-        assert result is True
+        assert result is False

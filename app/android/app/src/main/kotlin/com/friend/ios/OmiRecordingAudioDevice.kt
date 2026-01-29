@@ -137,21 +137,25 @@ class OmiRecordingAudioDevice : AudioDevice {
             val buffer = captureBuffer ?: return
             val ctx = capturingContext ?: return
 
-            buffer.clear()
-            val bytesRead = record.read(buffer, BUFFER_SIZE_BYTES)
+            try {
+                buffer.clear()
+                val bytesRead = record.read(buffer, BUFFER_SIZE_BYTES)
 
-            if (bytesRead > 0) {
-                // Send captured mic audio to Twilio's media engine
-                buffer.limit(bytesRead)
-                AudioDevice.audioDeviceWriteCaptureData(ctx, buffer)
+                if (bytesRead > 0) {
+                    // Send captured mic audio to Twilio's media engine
+                    buffer.limit(bytesRead)
+                    AudioDevice.audioDeviceWriteCaptureData(ctx, buffer)
 
-                // Stream mic audio to Flutter (channel 1) — skip when muted
-                if (!isMicStreamMuted) {
-                    val audioData = ByteArray(bytesRead)
-                    buffer.rewind()
-                    buffer.get(audioData)
-                    onAudioData?.invoke(audioData, 1)
+                    // Stream mic audio to Flutter (channel 1) — skip when muted
+                    if (!isMicStreamMuted) {
+                        val audioData = ByteArray(bytesRead)
+                        buffer.rewind()
+                        buffer.get(audioData)
+                        onAudioData?.invoke(audioData, 1)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "captureRunnable: read failed: ${e.message}")
             }
 
             // Schedule next capture
@@ -259,21 +263,25 @@ class OmiRecordingAudioDevice : AudioDevice {
             val buffer = renderBuffer ?: return
             val ctx = renderingContext ?: return
 
-            buffer.clear()
-            // Pull remote audio from Twilio's media engine
-            AudioDevice.audioDeviceReadRenderData(ctx, buffer)
+            try {
+                buffer.clear()
+                // Pull remote audio from Twilio's media engine
+                AudioDevice.audioDeviceReadRenderData(ctx, buffer)
 
-            val bytesToWrite = buffer.limit()
-            if (bytesToWrite > 0) {
-                // Stream remote audio to Flutter (channel 2)
-                val audioData = ByteArray(bytesToWrite)
-                buffer.rewind()
-                buffer.get(audioData)
-                onAudioData?.invoke(audioData, 2)
+                val bytesToWrite = buffer.limit()
+                if (bytesToWrite > 0) {
+                    // Stream remote audio to Flutter (channel 2)
+                    val audioData = ByteArray(bytesToWrite)
+                    buffer.rewind()
+                    buffer.get(audioData)
+                    onAudioData?.invoke(audioData, 2)
 
-                // Play to speaker
-                buffer.rewind()
-                track.write(buffer, bytesToWrite, AudioTrack.WRITE_BLOCKING)
+                    // Play to speaker
+                    buffer.rewind()
+                    track.write(buffer, bytesToWrite, AudioTrack.WRITE_BLOCKING)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "renderRunnable: render failed: ${e.message}")
             }
 
             // Schedule next render

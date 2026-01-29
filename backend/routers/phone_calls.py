@@ -79,7 +79,11 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/v1/phone/numbers/verify", response_model=VerifyPhoneNumberResponse, tags=['phone-calls'])
-def verify_phone_number(request: VerifyPhoneNumberRequest, uid: str = Depends(auth.get_current_user_uid)):
+def verify_phone_number(
+    request: VerifyPhoneNumberRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    _: None = Depends(rate_limit_dependency(endpoint="phone_verify", requests_per_window=5, window_seconds=3600)),
+):
     """Initiate phone number verification via Twilio caller ID validation."""
     phone_number = request.phone_number.strip()
     if not phone_number.startswith('+'):

@@ -172,6 +172,6 @@ def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
         True if the signature is valid
     """
     if not auth_token:
-        return True
+        return False
     validator = RequestValidator(auth_token)
     return validator.validate(url, params, signature)
