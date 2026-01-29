@@ -130,17 +130,31 @@ class CaptureProvider extends ChangeNotifier
   double _wsSendRateKbps = 0.0;
   DateTime? _metricsLastCalculated;
   Timer? _metricsTimer;
-  // Disable metrics notify by default to reduce unnecessary UI rebuilds and battery drain
-  // Only enable when a UI element actually needs to display these metrics
-  bool _metricsNotifyEnabled = false;
+  // Reference count for metrics listeners to handle multiple consumers safely.
+  // Each widget that needs metrics calls addMetricsListener() in initState
+  // and removeMetricsListener() in dispose. This prevents one widget's dispose
+  // from disabling metrics for other widgets that still need them.
+  int _metricsListenersCount = 0;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
   double get wsSendRateKbps => _wsSendRateKbps;
 
-  void setMetricsNotifyEnabled(bool enabled) {
-    _metricsNotifyEnabled = enabled;
-    if (enabled) notifyListeners();
+  /// Call this in initState of a widget that needs BLE/WS metrics
+  void addMetricsListener() {
+    _metricsListenersCount++;
+    if (_metricsListenersCount == 1) {
+      notifyListeners(); // Initial update for the first listener
+    }
   }
+
+  /// Call this in dispose of a widget that uses BLE/WS metrics
+  void removeMetricsListener() {
+    if (_metricsListenersCount > 0) {
+      _metricsListenersCount--;
+    }
+  }
+
+  bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {

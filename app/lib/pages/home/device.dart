@@ -53,15 +53,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<DeviceProvider>().getDeviceInfo();
-      // Enable metrics notifications while this widget is mounted
-      context.read<CaptureProvider>().setMetricsNotifyEnabled(true);
+      // Register as a metrics listener while this widget is mounted
+      context.read<CaptureProvider>().addMetricsListener();
     });
   }
 
   @override
   void dispose() {
-    // Disable metrics notifications when widget is unmounted
-    context.read<CaptureProvider>().setMetricsNotifyEnabled(false);
+    // Unregister as a metrics listener when widget is unmounted
+    context.read<CaptureProvider>().removeMetricsListener();
     super.dispose();
   }
 

@@ -76,26 +76,36 @@ void main() {
       expect(provider.wsSendRateKbps, 0.0);
     });
 
-    test('setMetricsNotifyEnabled(true) enables metrics notifications', () {
+    test('addMetricsListener() enables metrics notifications on first listener', () {
       final provider = CaptureProvider();
       var notifyCount = 0;
       provider.addListener(() => notifyCount++);
 
-      provider.setMetricsNotifyEnabled(true);
+      provider.addMetricsListener();
 
-      // Should notify when enabling
+      // Should notify when first listener is added
       expect(notifyCount, 1);
     });
 
-    test('setMetricsNotifyEnabled(false) does not trigger notification', () {
+    test('removeMetricsListener() handles multiple listeners correctly', () {
       final provider = CaptureProvider();
       var notifyCount = 0;
       provider.addListener(() => notifyCount++);
 
-      provider.setMetricsNotifyEnabled(false);
+      // Add two listeners
+      provider.addMetricsListener();
+      provider.addMetricsListener();
+      expect(notifyCount, 1); // Only first add triggers notification
 
-      // Should not notify when disabling (already disabled by default)
-      expect(notifyCount, 0);
+      // Remove one listener - metrics should still be enabled
+      provider.removeMetricsListener();
+      // Provider still has one listener, so metrics are still enabled
+
+      // Remove second listener - metrics now disabled
+      provider.removeMetricsListener();
+
+      // Verify count doesn't go negative
+      provider.removeMetricsListener();
     });
   });
 }
