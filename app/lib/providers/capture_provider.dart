@@ -130,9 +130,17 @@ class CaptureProvider extends ChangeNotifier
   double _wsSendRateKbps = 0.0;
   DateTime? _metricsLastCalculated;
   Timer? _metricsTimer;
+  // Disable metrics notify by default to reduce unnecessary UI rebuilds and battery drain
+  // Only enable when a UI element actually needs to display these metrics
+  bool _metricsNotifyEnabled = false;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
   double get wsSendRateKbps => _wsSendRateKbps;
+
+  void setMetricsNotifyEnabled(bool enabled) {
+    _metricsNotifyEnabled = enabled;
+    if (enabled) notifyListeners();
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -816,7 +824,10 @@ class CaptureProvider extends ChangeNotifier
       _wsSocketBytesSent = 0;
       _metricsLastCalculated = now;
 
-      notifyListeners();
+      // Only notify listeners when UI actually needs these metrics to reduce battery drain
+      if (_metricsNotifyEnabled) {
+        notifyListeners();
+      }
     }
   }
 
