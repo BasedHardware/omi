@@ -36,14 +36,16 @@ class LiteCaptureWidgetState extends State<LiteCaptureWidget> with AutomaticKeep
     super.build(context);
     // Use Selector to only rebuild when segments/photos change, not on metrics, recording state, etc.
     // This reduces battery drain by avoiding unnecessary rebuilds during transcription.
-    return Selector<CaptureProvider, (List<TranscriptSegment>, List<ConversationPhoto>)>(
-      selector: (_, provider) => (provider.segments, provider.photos),
+    // Include segmentsPhotosVersion to detect in-place mutations (translations, photo descriptions).
+    return Selector<CaptureProvider, (List<TranscriptSegment>, List<ConversationPhoto>, int)>(
+      selector: (_, provider) => (provider.segments, provider.photos, provider.segmentsPhotosVersion),
       shouldRebuild: (prev, next) =>
           prev.$1.length != next.$1.length ||
           prev.$2.length != next.$2.length ||
+          prev.$3 != next.$3 ||
           (prev.$1.isNotEmpty && next.$1.isNotEmpty && prev.$1.last.text != next.$1.last.text),
       builder: (context, data, child) {
-        final (segments, photos) = data;
+        final (segments, photos, _) = data;
         return Selector<DeviceProvider, BtDevice?>(
           selector: (_, provider) => provider.connectedDevice,
           builder: (context, connectedDevice, child) {

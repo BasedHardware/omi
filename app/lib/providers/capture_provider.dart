@@ -241,6 +241,11 @@ class CaptureProvider extends ChangeNotifier
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
+  // Version counter for segments/photos content changes. Incremented on in-place mutations
+  // (e.g., translation updates, photo description changes) to signal UI rebuilds when
+  // list length and last-text remain unchanged.
+  int _segmentsPhotosVersion = 0;
+  int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
   List<String> taggingSegmentIds = [];
 
@@ -1415,6 +1420,7 @@ class CaptureProvider extends ChangeNotifier
       final photoIndex = photos.indexWhere((p) => p.id == tempId);
       if (photoIndex != -1) {
         photos[photoIndex].id = permanentId;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1428,6 +1434,7 @@ class CaptureProvider extends ChangeNotifier
       if (photoIndex != -1) {
         photos[photoIndex].description = description;
         photos[photoIndex].discarded = discarded;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1496,6 +1503,7 @@ class CaptureProvider extends ChangeNotifier
         Logger.debug("Adding ${remainSegments.length} new translated segments");
       }
 
+      _segmentsPhotosVersion++;
       notifyListeners();
     } catch (e) {
       Logger.debug("Error handling translation event: $e");
@@ -1509,6 +1517,7 @@ class CaptureProvider extends ChangeNotifier
     suggestionsBySegmentId.removeWhere((key, value) => event.segmentIds.contains(key));
     taggingSegmentIds.removeWhere((id) => event.segmentIds.contains(id));
     hasTranscripts = segments.isNotEmpty;
+    _segmentsPhotosVersion++;
     notifyListeners();
   }
 
