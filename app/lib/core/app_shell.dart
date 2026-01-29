@@ -15,6 +15,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -31,6 +32,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -158,6 +160,10 @@ class _AppShellState extends State<AppShell> {
       }
     } else if (uri.host == 'google_calendar' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       await _handleOAuthCallback(uri, 'Google', 'Google Calendar', _handleGoogleCalendarCallback);
+    } else if (uri.pathSegments.first == 'record') {
+      // Handle recording control URL scheme (macOS only)
+      // omi://record/start, omi://record/stop, omi://record/toggle, omi://record/status
+      await _handleRecordingUrlScheme(uri);
     } else {
       Logger.debug('Unknown link: $uri');
     }
@@ -286,6 +292,72 @@ class _AppShellState extends State<AppShell> {
       if (mounted) {
         AppSnackbar.showSnackbarError(context.l10n.failedToRefreshGoogleStatus);
       }
+    }
+  }
+
+  /// Handle recording control URL schemes (macOS desktop only)
+  /// Supported URLs:
+  /// - omi://record/start - Start recording
+  /// - omi://record/stop - Stop recording
+  /// - omi://record/toggle - Toggle recording state
+  /// - omi://record/status - Log current recording status
+  Future<void> _handleRecordingUrlScheme(Uri uri) async {
+    if (!PlatformService.isDesktop) {
+      Logger.debug('Recording URL scheme only supported on desktop');
+      return;
+    }
+
+    if (uri.pathSegments.length < 2) {
+      Logger.debug('Invalid recording URL: $uri');
+      return;
+    }
+
+    final action = uri.pathSegments[1];
+    final captureProvider = context.read<CaptureProvider>();
+    final currentState = captureProvider.recordingState;
+
+    Logger.debug('Recording URL scheme: action=$action, currentState=$currentState');
+
+    switch (action) {
+      case 'start':
+        if (currentState == RecordingState.stop || currentState == RecordingState.pause) {
+          Logger.debug('Starting recording via URL scheme');
+          await captureProvider.streamSystemAudioRecording();
+          PlatformManager.instance.mixpanel.track('Recording Started From URL Scheme');
+        } else {
+          Logger.debug('Already recording, ignoring start command');
+        }
+        break;
+
+      case 'stop':
+        if (currentState == RecordingState.systemAudioRecord) {
+          Logger.debug('Stopping recording via URL scheme');
+          await captureProvider.stopSystemAudioRecording();
+          PlatformManager.instance.mixpanel.track('Recording Stopped From URL Scheme');
+        } else {
+          Logger.debug('Not recording, ignoring stop command');
+        }
+        break;
+
+      case 'toggle':
+        if (currentState == RecordingState.systemAudioRecord) {
+          Logger.debug('Toggling recording OFF via URL scheme');
+          await captureProvider.stopSystemAudioRecording();
+          PlatformManager.instance.mixpanel.track('Recording Toggled Off From URL Scheme');
+        } else {
+          Logger.debug('Toggling recording ON via URL scheme');
+          await captureProvider.streamSystemAudioRecording();
+          PlatformManager.instance.mixpanel.track('Recording Toggled On From URL Scheme');
+        }
+        break;
+
+      case 'status':
+        Logger.debug('Recording status: $currentState');
+        // Could potentially return status via a callback URL in the future
+        break;
+
+      default:
+        Logger.debug('Unknown recording action: $action');
     }
   }
 
