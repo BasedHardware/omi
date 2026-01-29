@@ -242,7 +242,16 @@ async def _stream_handler(
         """Create a tracked background task that will be cancelled on cleanup."""
         task = asyncio.create_task(coro)
         bg_tasks.add(task)
-        task.add_done_callback(bg_tasks.discard)
+
+        def on_done(t):
+            bg_tasks.discard(t)
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                print(f"Unhandled exception in background task: {exc}", uid, session_id)
+
+        task.add_done_callback(on_done)
         return task
 
     # Onboarding handler
