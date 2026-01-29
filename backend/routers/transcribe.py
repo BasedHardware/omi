@@ -1456,11 +1456,11 @@ async def _stream_handler(
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = realtime_segment_buffers.copy()
-            realtime_segment_buffers = []
+            segments_to_process = list(realtime_segment_buffers)
+            realtime_segment_buffers.clear()
 
-            photos_to_process = realtime_photo_buffers.copy()
-            realtime_photo_buffers = []
+            photos_to_process = list(realtime_photo_buffers)
+            realtime_photo_buffers.clear()
 
             finished_at = datetime.now(timezone.utc)
 
