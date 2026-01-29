@@ -155,7 +155,14 @@ void updateLED()
 
     case LED_NORMAL_OPERATION:
     default:
-        digitalWrite(STATUS_LED_PIN, HIGH); // OFF
+        if (connected) {
+            // Connected - LED solid ON
+            digitalWrite(STATUS_LED_PIN, LOW);
+        } else {
+            // Disconnected - LED slow blink (1 sec on, 1 sec off)
+            int blinkPhase = (now / 1000) % 2;
+            digitalWrite(STATUS_LED_PIN, blinkPhase ? HIGH : LOW);
+        }
         break;
     }
 }
@@ -175,43 +182,50 @@ void blinkLED(int count, int delayMs)
 // -------------------------------------------------------------------------
 void handleButton()
 {
-    if (!buttonPressed)
-        return;
-
     unsigned long now = millis();
-    static unsigned long lastButtonTime = 0;
+    static unsigned long lastDebounceTime = 0;
     static bool buttonDown = false;
+    static bool longPressTriggered = false;
 
     bool currentButtonState = !digitalRead(POWER_BUTTON_PIN); // Active low (pressed = true)
 
-    // Simple debouncing
-    if (now - lastButtonTime < 50) {
-        buttonPressed = false;
-        return;
-    }
-
     if (currentButtonState && !buttonDown) {
-        // Button just pressed
+        // Button just pressed - debounce
+        if (now - lastDebounceTime < 50) {
+            return;
+        }
         buttonPressTime = now;
         buttonDown = true;
-        lastButtonTime = now;
+        longPressTriggered = false;
+        lastDebounceTime = now;
+
+    } else if (currentButtonState && buttonDown && !longPressTriggered) {
+        // Button still held - check for long press
+        unsigned long pressDuration = now - buttonPressTime;
+        if (pressDuration >= 2000) {
+            // Long press threshold reached - trigger power off immediately
+            longPressTriggered = true;
+            ledMode = LED_POWER_OFF_SEQUENCE;
+        }
 
     } else if (!currentButtonState && buttonDown) {
-        // Button just released
+        // Button just released - debounce
+        if (now - lastDebounceTime < 50) {
+            return;
+        }
         buttonDown = false;
         unsigned long pressDuration = now - buttonPressTime;
-        lastButtonTime = now;
+        lastDebounceTime = now;
 
-        if (pressDuration >= 2000) {
-            // Long press - power off
-            ledMode = LED_POWER_OFF_SEQUENCE;
-        } else if (pressDuration >= 50) {
+        // Only handle short press if long press wasn't already triggered
+        if (!longPressTriggered && pressDuration >= 50) {
             // Short press - register activity
             lastActivity = now;
             if (powerSaveMode) {
                 exitPowerSave();
             }
         }
+        longPressTriggered = false;
     }
 
     buttonPressed = false;
@@ -614,11 +628,10 @@ void configure_ble()
     batteryService->start();
     deviceInfoService->start();
 
-    // Start advertising
+    // Start advertising - only advertise main service UUID to fit in 31-byte limit
+    // iPhone is strict about advertisement packet size
     BLEAdvertising *advertising = BLEDevice::getAdvertising();
-    advertising->addServiceUUID(deviceInfoService->getUUID());
-    advertising->addServiceUUID(service->getUUID());
-    advertising->addServiceUUID(batteryService->getUUID());
+    advertising->addServiceUUID(service->getUUID());  // Main OMI service UUID only
     advertising->setScanResponse(true);
     advertising->setMinPreferred(BLE_ADV_MIN_INTERVAL);
     advertising->setMaxPreferred(BLE_ADV_MAX_INTERVAL);

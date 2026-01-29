@@ -127,11 +127,14 @@ if [ -n "$OUTPUT" ]; then
     PYTHON_ARGS="$PYTHON_ARGS --output $OUTPUT"
 fi
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Run the Python UF2 builder
 print_info "Running UF2 builder with arguments: $PYTHON_ARGS"
 echo ""
 
-if python3 build_uf2.py $PYTHON_ARGS; then
+if python3 "$SCRIPT_DIR/build_uf2.py" $PYTHON_ARGS; then
     echo ""
     print_success "UF2 build completed successfully!"
     
