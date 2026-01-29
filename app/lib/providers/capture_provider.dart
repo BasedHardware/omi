@@ -1353,6 +1353,7 @@ class CaptureProvider extends ChangeNotifier
       segments = [];
       photos = [];
     }
+    _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     setHasTranscripts(segments.isNotEmpty);
     notifyListeners();
   }
@@ -1624,6 +1625,7 @@ class CaptureProvider extends ChangeNotifier
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
+    _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
     notifyListeners();
   }
