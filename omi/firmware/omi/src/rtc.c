@@ -9,24 +9,14 @@
 
 LOG_MODULE_REGISTER(rtc, CONFIG_LOG_DEFAULT_LEVEL);
 
-/*
- * This project previously derived UTC time by reading an nRF RTC counter and
- * dividing by 32768. That counter is 24-bit and wraps ~every 512 seconds,
- * producing non-monotonic timestamps.
- *
- * New approach:
- * - Persist a UTC epoch base (seconds)
- * - At runtime, compute current UTC = base + (k_uptime_get() - base_uptime)
- *
- * This gives a stable monotonic UTC while the device is running.
- */
-
 static uint64_t base_epoch_ms;
 static int64_t base_uptime_ms;
 static bool utc_valid;
 
 static struct k_mutex rtc_lock;
 
+// Debug functions to format UTC datetime strings
+#ifdef CONFIG_LOG
 static void civil_from_days(int64_t z_days, int32_t *year, uint8_t *month, uint8_t *day)
 {
     /*
@@ -49,6 +39,53 @@ static void civil_from_days(int64_t z_days, int32_t *year, uint8_t *month, uint8
     *day = (uint8_t)d;
 }
 
+static int rtc_format_utc_datetime(int64_t utc_epoch_s, char *out, size_t out_len)
+{
+    if (out == NULL) {
+        return -EINVAL;
+    }
+    if (out_len < RTC_UTC_DATETIME_STRLEN) {
+        out[0] = '\0';
+        return -ENOSPC;
+    }
+    if (utc_epoch_s < 0) {
+        out[0] = '\0';
+        return -EINVAL;
+    }
+
+    int64_t days = utc_epoch_s / 86400;
+    int64_t sod = utc_epoch_s % 86400;
+    if (sod < 0) {
+        sod += 86400;
+        days -= 1;
+    }
+
+    int32_t year;
+    uint8_t month;
+    uint8_t day;
+    civil_from_days(days, &year, &month, &day);
+
+    uint8_t hour = (uint8_t)(sod / 3600);
+    uint8_t minute = (uint8_t)((sod % 3600) / 60);
+    uint8_t second = (uint8_t)(sod % 60);
+
+    (void)snprintf(out, out_len, "%04d-%02u-%02u %02u:%02u:%02u",
+                   year, month, day, hour, minute, second);
+    return 0;
+}
+
+int rtc_format_now_utc_datetime(char *out, size_t out_len)
+{
+    uint64_t now_s = get_utc_time();
+    if (now_s == 0) {
+        if (out && out_len) {
+            out[0] = '\0';
+        }
+        return -ENODATA;
+    }
+    return rtc_format_utc_datetime((int64_t)now_s, out, out_len);
+}
+#endif
 
 bool rtc_is_valid(void)
 {
@@ -144,51 +181,4 @@ void init_rtc(void)
     utc_valid = true;
     k_mutex_unlock(&rtc_lock);
     LOG_INF("RTC restored from persisted epoch");
-}
-
-int rtc_format_utc_datetime(int64_t utc_epoch_s, char *out, size_t out_len)
-{
-    if (out == NULL) {
-        return -EINVAL;
-    }
-    if (out_len < RTC_UTC_DATETIME_STRLEN) {
-        out[0] = '\0';
-        return -ENOSPC;
-    }
-    if (utc_epoch_s < 0) {
-        out[0] = '\0';
-        return -EINVAL;
-    }
-
-    int64_t days = utc_epoch_s / 86400;
-    int64_t sod = utc_epoch_s % 86400;
-    if (sod < 0) {
-        sod += 86400;
-        days -= 1;
-    }
-
-    int32_t year;
-    uint8_t month;
-    uint8_t day;
-    civil_from_days(days, &year, &month, &day);
-
-    uint8_t hour = (uint8_t)(sod / 3600);
-    uint8_t minute = (uint8_t)((sod % 3600) / 60);
-    uint8_t second = (uint8_t)(sod % 60);
-
-    (void)snprintf(out, out_len, "%04d-%02u-%02u %02u:%02u:%02u",
-                   year, month, day, hour, minute, second);
-    return 0;
-}
-
-int rtc_format_now_utc_datetime(char *out, size_t out_len)
-{
-    uint64_t now_s = get_utc_time();
-    if (now_s == 0) {
-        if (out && out_len) {
-            out[0] = '\0';
-        }
-        return -ENODATA;
-    }
-    return rtc_format_utc_datetime((int64_t)now_s, out, out_len);
 }

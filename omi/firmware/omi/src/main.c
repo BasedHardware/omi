@@ -326,6 +326,8 @@ int main(void)
 
         set_led_state();
         k_msleep(1000);
+// Print current UTC time every second for debugging
+#ifdef CONFIG_LOG
         char utc_str[RTC_UTC_DATETIME_STRLEN];
         int fmt_err = rtc_format_now_utc_datetime(utc_str, sizeof(utc_str));
         if (fmt_err) {
@@ -333,6 +335,7 @@ int main(void)
         } else {
             LOG_INF("Current UTC time: %s", utc_str);
         }
+#endif
     }
 
     printk("Exiting omi...");

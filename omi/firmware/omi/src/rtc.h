@@ -54,20 +54,6 @@ int rtc_set_utc_time_ms(uint64_t utc_epoch_ms);
 uint64_t rtc_get_utc_time_ms(void);
 
 /**
- * @brief Format a UTC epoch timestamp into a human-readable datetime.
- *
- * This is a UTC conversion (no timezone/DST). It does not rely on libc
- * gmtime()/strftime(), so it works in minimal Zephyr configurations.
- *
- * @param utc_epoch_s UTC epoch seconds since 1970-01-01.
- * @param out Output buffer.
- * @param out_len Output buffer length. Must be >= RTC_UTC_DATETIME_STRLEN.
- *
- * @return 0 on success, -EINVAL for invalid args, -ENOSPC if buffer too small.
- */
-int rtc_format_utc_datetime(int64_t utc_epoch_s, char *out, size_t out_len);
-
-/**
  * @brief Convenience helper to format the current UTC time.
  *
  * @return 0 on success, -ENODATA if unsynchronized, otherwise negative errno.
