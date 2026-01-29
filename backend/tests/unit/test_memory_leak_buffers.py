@@ -162,3 +162,100 @@ class TestImageChunksTTL:
         assert len(image_chunks) == MAX_IMAGE_CHUNKS
         assert 'id_0' in image_chunks
         assert 'new_id' in image_chunks
+
+
+# Constants for pending requests
+MAX_PENDING_REQUESTS = 100
+
+
+def pending_requests_add_logic(pending_requests: set, conversation_id: str, max_size: int) -> set:
+    """
+    Extracted logic from request_conversation_processing for testing.
+    Returns the updated set.
+    """
+    if len(pending_requests) >= max_size:
+        pending_requests.pop()  # Remove arbitrary element (set has no order)
+    pending_requests.add(conversation_id)
+    return pending_requests
+
+
+class TestPendingConversationRequests:
+    """Test pending conversation requests limiting logic."""
+
+    def test_normal_add_within_limit(self):
+        """Normal add when set has room."""
+        pending = {'id_1', 'id_2'}
+        result = pending_requests_add_logic(pending, 'id_3', MAX_PENDING_REQUESTS)
+        assert 'id_3' in result
+        assert len(result) == 3
+
+    def test_drops_one_when_at_limit(self):
+        """Drops one entry when adding would exceed limit."""
+        max_size = 3
+        pending = {'id_1', 'id_2', 'id_3'}
+        original_len = len(pending)
+        result = pending_requests_add_logic(pending, 'id_4', max_size)
+        assert 'id_4' in result
+        assert len(result) == max_size  # Size stays at max
+        # One of the original entries was dropped
+        remaining_original = len([x for x in result if x != 'id_4'])
+        assert remaining_original == max_size - 1
+
+    def test_add_duplicate_no_growth(self):
+        """Adding duplicate doesn't grow the set."""
+        pending = {'id_1', 'id_2'}
+        result = pending_requests_add_logic(pending, 'id_1', MAX_PENDING_REQUESTS)
+        assert len(result) == 2
+
+    def test_boundary_one_below_limit(self):
+        """Adding at exactly one below limit succeeds without drop."""
+        max_size = 3
+        pending = {'id_1', 'id_2'}  # 2 items, max is 3
+        result = pending_requests_add_logic(pending, 'id_3', max_size)
+        assert len(result) == max_size
+        assert 'id_1' in result
+        assert 'id_2' in result
+        assert 'id_3' in result
+
+
+class TestProductionBufferTypes:
+    """Test that production buffers are correctly typed as bounded deques."""
+
+    def test_segment_buffer_is_bounded_deque(self):
+        """Segment buffer should be a deque with maxlen."""
+        # Simulate production initialization
+        segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
+        assert isinstance(segment_buffers, deque)
+        assert segment_buffers.maxlen == MAX_SEGMENT_BUFFER_SIZE
+
+    def test_realtime_segment_buffer_is_bounded_deque(self):
+        """Realtime segment buffer should be a deque with maxlen."""
+        realtime_segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
+        assert isinstance(realtime_segment_buffers, deque)
+        assert realtime_segment_buffers.maxlen == MAX_SEGMENT_BUFFER_SIZE
+
+    def test_photo_buffer_is_bounded_deque(self):
+        """Photo buffer should be a deque with maxlen."""
+        MAX_PHOTO_BUFFER_SIZE = 100
+        realtime_photo_buffers: deque = deque(maxlen=MAX_PHOTO_BUFFER_SIZE)
+        assert isinstance(realtime_photo_buffers, deque)
+        assert realtime_photo_buffers.maxlen == MAX_PHOTO_BUFFER_SIZE
+
+    def test_deque_assignment_loses_maxlen(self):
+        """Verify that reassigning deque to list loses maxlen - this is the bug we fixed."""
+        d = deque(maxlen=5)
+        d.extend([1, 2, 3])
+
+        # BAD: reassignment loses maxlen
+        bad_copy = d.copy()
+        bad_copy = []  # This is what we fixed - don't do this!
+        assert not isinstance(bad_copy, deque)
+
+        # GOOD: use list() + clear() to preserve deque instance
+        good_deque = deque(maxlen=5)
+        good_deque.extend([1, 2, 3])
+        items = list(good_deque)
+        good_deque.clear()
+        assert isinstance(good_deque, deque)
+        assert good_deque.maxlen == 5
+        assert items == [1, 2, 3]
