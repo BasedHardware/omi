@@ -11,6 +11,7 @@
 #include "esp_sleep.h"
 #include "mic.h"
 #include "opus_encoder.h"
+#include "ota.h"
 
 // Battery state
 float batteryVoltage = 0.0f;
@@ -43,6 +44,7 @@ bool lightSleepEnabled = true;
 #define MODEL_NUMBER_STRING_CHAR_UUID (uint16_t) 0x2A24
 #define FIRMWARE_REVISION_STRING_CHAR_UUID (uint16_t) 0x2A26
 #define HARDWARE_REVISION_STRING_CHAR_UUID (uint16_t) 0x2A27
+#define SERIAL_NUMBER_STRING_CHAR_UUID (uint16_t) 0x2A25
 
 // Main Friend Service - using config.h UUIDs
 static BLEUUID serviceUUID(OMI_SERVICE_UUID);
@@ -51,12 +53,19 @@ static BLEUUID photoControlUUID(PHOTO_CONTROL_UUID);
 static BLEUUID audioDataUUID(AUDIO_DATA_UUID);
 static BLEUUID audioCodecUUID(AUDIO_CODEC_UUID);
 
+// OTA Service UUIDs
+static BLEUUID otaServiceUUID(OTA_SERVICE_UUID);
+static BLEUUID otaControlUUID(OTA_CONTROL_UUID);
+static BLEUUID otaDataUUID(OTA_DATA_UUID);
+
 // Characteristics
 BLECharacteristic *photoDataCharacteristic;
 BLECharacteristic *photoControlCharacteristic;
 BLECharacteristic *batteryLevelCharacteristic;
 BLECharacteristic *audioDataCharacteristic;
 BLECharacteristic *audioCodecCharacteristic;
+BLECharacteristic *otaControlCharacteristic;
+BLECharacteristic *otaDataCharacteristic;
 
 // Audio state
 bool audioEnabled = true;
@@ -331,7 +340,8 @@ void onOpusEncoded(uint8_t *data, size_t len)
 
     // Check for buffer overflow
     if ((audio_tx_write_pos < audio_tx_read_pos && next_write >= audio_tx_read_pos) ||
-        (audio_tx_write_pos >= audio_tx_read_pos && next_write < audio_tx_write_pos && next_write >= audio_tx_read_pos)) {
+        (audio_tx_write_pos >= audio_tx_read_pos && next_write < audio_tx_write_pos &&
+         next_write >= audio_tx_read_pos)) {
         // Buffer full, skip this packet
         return;
     }
@@ -372,7 +382,7 @@ void processAudioTx()
     if (!connected || !audioSubscribed) {
         return;
     }
-    
+
     if (audioDataCharacteristic == nullptr) {
         return;
     }
@@ -380,7 +390,8 @@ void processAudioTx()
     // Check if we have data in the ring buffer
     while (audio_tx_read_pos != audio_tx_write_pos) {
         // Read length
-        uint16_t len = audio_tx_buffer[audio_tx_read_pos] | (audio_tx_buffer[(audio_tx_read_pos + 1) % AUDIO_TX_BUFFER_SIZE] << 8);
+        uint16_t len =
+            audio_tx_buffer[audio_tx_read_pos] | (audio_tx_buffer[(audio_tx_read_pos + 1) % AUDIO_TX_BUFFER_SIZE] << 8);
 
         if (len == 0 || len > OPUS_OUTPUT_MAX_BYTES) {
             // Invalid packet, skip
@@ -455,7 +466,7 @@ class AudioDataCallback : public BLECharacteristicCallbacks
             // Notification sent successfully
         }
     }
-    
+
     void onRead(BLECharacteristic *pCharacteristic)
     {
         // Client read the characteristic
@@ -473,6 +484,23 @@ class PhotoControlCallback : public BLECharacteristicCallbacks
             lastActivity = millis(); // Register activity - prevents sleep
             handlePhotoControl(received);
         }
+    }
+};
+
+class OTAControlCallback : public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *pChar) override
+    {
+        std::string value = pChar->getValue();
+        if (value.length() > 0) {
+            ota_handle_command((uint8_t *) value.data(), value.length());
+        }
+    }
+
+    void onRead(BLECharacteristic *pChar) override
+    {
+        uint8_t status[2] = {ota_get_status(), 0};
+        pChar->setValue(status, 2);
     }
 };
 
@@ -576,8 +604,7 @@ void configure_ble()
     audioDataCharacteristic->setCallbacks(new AudioDataCallback());
 
     // Audio Codec characteristic (tells app which codec we're using)
-    audioCodecCharacteristic =
-        service->createCharacteristic(audioCodecUUID, BLECharacteristic::PROPERTY_READ);
+    audioCodecCharacteristic = service->createCharacteristic(audioCodecUUID, BLECharacteristic::PROPERTY_READ);
     uint8_t codecId = opus_get_codec_id();
     audioCodecCharacteristic->setValue(&codecId, 1);
 
@@ -617,22 +644,47 @@ void configure_ble()
         deviceInfoService->createCharacteristic(FIRMWARE_REVISION_STRING_CHAR_UUID, BLECharacteristic::PROPERTY_READ);
     BLECharacteristic *hardwareRevisionCharacteristic =
         deviceInfoService->createCharacteristic(HARDWARE_REVISION_STRING_CHAR_UUID, BLECharacteristic::PROPERTY_READ);
+    BLECharacteristic *serialNumberCharacteristic =
+        deviceInfoService->createCharacteristic(SERIAL_NUMBER_STRING_CHAR_UUID, BLECharacteristic::PROPERTY_READ);
 
     manufacturerNameCharacteristic->setValue(MANUFACTURER_NAME);
     modelNumberCharacteristic->setValue(BLE_DEVICE_NAME);
     firmwareRevisionCharacteristic->setValue(FIRMWARE_VERSION_STRING);
     hardwareRevisionCharacteristic->setValue(HARDWARE_REVISION);
 
+    // Generate serial number from ESP32 chip ID
+    uint64_t chipId = ESP.getEfuseMac();
+    char serialNumber[17];
+    snprintf(serialNumber, sizeof(serialNumber), "%04X%08X", (uint16_t) (chipId >> 32), (uint32_t) chipId);
+    serialNumberCharacteristic->setValue(serialNumber);
+
+    // OTA Service
+    BLEService *otaService = server->createService(otaServiceUUID);
+
+    // OTA Control characteristic (for receiving commands and reading status)
+    otaControlCharacteristic = otaService->createCharacteristic(
+        otaControlUUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+    otaControlCharacteristic->setCallbacks(new OTAControlCallback());
+
+    // OTA Data characteristic (for progress notifications)
+    otaDataCharacteristic = otaService->createCharacteristic(
+        otaDataUUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    BLE2902 *otaCcc = new BLE2902();
+    otaCcc->setNotifications(true);
+    otaDataCharacteristic->addDescriptor(otaCcc);
+
+    // Set OTA characteristics for the OTA module
+    ota_set_characteristics(otaControlCharacteristic, otaDataCharacteristic);
+
     // Start services
     service->start();
     batteryService->start();
     deviceInfoService->start();
+    otaService->start();
 
     // Start advertising
     BLEAdvertising *advertising = BLEDevice::getAdvertising();
-    advertising->addServiceUUID(deviceInfoService->getUUID());
-    advertising->addServiceUUID(service->getUUID());
-    advertising->addServiceUUID(batteryService->getUUID());
+    advertising->addServiceUUID(service->getUUID()); // Main service (fits in 31 bytes)
     advertising->setScanResponse(true);
     advertising->setMinPreferred(BLE_ADV_MIN_INTERVAL);
     advertising->setMaxPreferred(BLE_ADV_MAX_INTERVAL);
@@ -823,6 +875,9 @@ void loop_app()
 
     // Update LED
     updateLED();
+
+    // Process OTA updates
+    ota_loop();
 
     // Process microphone data - always run to keep audio realtime
     if (audioEnabled && mic_is_running()) {
