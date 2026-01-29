@@ -190,6 +190,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
+          const SizedBox(width: 14),
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
@@ -204,6 +205,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               maxLines: 1,
             ),
           ),
+          if (isHavingTranscript || isHavingPhotos) const Expanded(child: LiteCaptureWidget()),
         ],
       );
     } else {
@@ -284,7 +286,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          left,
+          (!deviceServiceStateOk && (isHavingTranscript || isHavingPhotos)) ? Expanded(child: left!) : left!,
           right,
         ],
       ),
@@ -436,7 +438,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         children: [
           if (header != null) header,
           // Show content when there are segments/photos
-          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ...[
+          if ((provider.segments.isNotEmpty || provider.photos.isNotEmpty) && provider.recordingDeviceServiceReady) ...[
             const SizedBox(height: 24),
             const LiteCaptureWidget(),
           ],
