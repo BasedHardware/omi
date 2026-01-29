@@ -144,14 +144,12 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 timeoutText = context.l10n.conversationEndsManually;
               } else {
                 final minutes = timeoutDuration ~/ 60;
-                timeoutText =
-                    context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's');
+                timeoutText = context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's');
               }
 
               return ConfirmationDialog(
                 title: context.l10n.finishedConversation,
-                description:
-                    "${context.l10n.stopRecordingConfirmation}\n\n${context.l10n.hints(timeoutText)}",
+                description: "${context.l10n.stopRecordingConfirmation}\n\n${context.l10n.hints(timeoutText)}",
                 checkboxValue: !showSummarizeConfirmation,
                 checkboxText: context.l10n.dontAskAgain,
                 onCheckboxChanged: (value) {
@@ -203,7 +201,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                   const SizedBox(width: 4),
                   Text(provider.photos.isNotEmpty ? "📸" : (_isMuted ? "🔇" : "🎙️")),
                   const SizedBox(width: 4),
-                  Expanded(child: Text(_isMuted ? context.l10n.muted : context.l10n.listening)),
+                  Expanded(
+                      child: Text(provider.photos.isNotEmpty
+                          ? 'Capturing'
+                          : (_isMuted ? context.l10n.muted : context.l10n.listening))),
                 ],
               ),
             ),

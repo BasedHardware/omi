@@ -169,16 +169,18 @@ class PhotosPreviewWidget extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: displayPhotos.reversed.map((photo) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0),
-            child: AspectRatio(
-              aspectRatio: 800 / 600,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.0),
-                child: Image.memory(
-                  base64Decode(photo.base64),
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true, // Avoids flicker when image updates
+          return Flexible(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+              child: AspectRatio(
+                aspectRatio: 800 / 600,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: Image.memory(
+                    base64Decode(photo.base64),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true, // Avoids flicker when image updates
+                  ),
                 ),
               ),
             ),
