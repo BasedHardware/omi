@@ -11,13 +11,7 @@
 LOG_MODULE_REGISTER(IMU, CONFIG_SENSOR_LOG_LEVEL);
 
 static const struct device *const i2c_lsm6dso = DEVICE_DT_GET(DT_NODELABEL(lsm6dso));
-#if DT_NODE_HAS_PROP(DT_NODELABEL(lsm6dso_en_pin), gpios)
-static const struct gpio_dt_spec lsm6dso_en = GPIO_DT_SPEC_GET(DT_NODELABEL(lsm6dso_en_pin), gpios);
-#elif DT_NODE_HAS_PROP(DT_NODELABEL(lsm6dso_en_pin), enable_gpios)
-static const struct gpio_dt_spec lsm6dso_en = GPIO_DT_SPEC_GET(DT_NODELABEL(lsm6dso_en_pin), enable_gpios);
-#else
-static const struct gpio_dt_spec lsm6dso_en = {0};
-#endif
+static const struct gpio_dt_spec lsm6dso_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(lsm6dso_en_pin), gpios, {0});
 
 // need change sdk\modules\hal\st\sensor\stmemsc\lsm6dso_STdC\driver\lsm6dso_reg.h line 195 #define LSM6DSO_ID to 0x6A
 static int cmd_imu_get(const struct shell *sh, size_t argc, char **argv)
