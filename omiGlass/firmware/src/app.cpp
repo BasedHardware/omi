@@ -628,10 +628,11 @@ void configure_ble()
     batteryService->start();
     deviceInfoService->start();
 
-    // Start advertising - only advertise main service UUID to fit in 31-byte limit
-    // iPhone is strict about advertisement packet size
+    // Start advertising
     BLEAdvertising *advertising = BLEDevice::getAdvertising();
-    advertising->addServiceUUID(service->getUUID());  // Main OMI service UUID only
+    advertising->addServiceUUID(deviceInfoService->getUUID());
+    advertising->addServiceUUID(service->getUUID());
+    advertising->addServiceUUID(batteryService->getUUID());
     advertising->setScanResponse(true);
     advertising->setMinPreferred(BLE_ADV_MIN_INTERVAL);
     advertising->setMaxPreferred(BLE_ADV_MAX_INTERVAL);
