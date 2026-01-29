@@ -1,13 +1,21 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useCallback } from 'react';
-import { useRecordingContext, TranscriptSegment, type AudioMode } from '@/components/recording/RecordingContext';
+import { useEffect, useRef, useCallback } from "react";
+import {
+  useRecordingContext,
+  TranscriptSegment,
+  type AudioMode,
+} from "@/components/recording/RecordingContext";
 import {
   createAudioCapture,
   isAudioCaptureSupported,
-} from '@/lib/audioCapture';
-import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation, getTranscriptionPreferences } from '@/lib/api';
+} from "@/lib/audioCapture";
+import { createTranscriptionSocket } from "@/lib/transcriptionSocket";
+import {
+  processInProgressConversation,
+  getTranscriptionPreferences,
+  getUserLanguage,
+} from "@/lib/api";
 
 /**
  * Hook to manage recording lifecycle.
@@ -49,144 +57,169 @@ export function useRecording() {
   const isMountedRef = useRef<boolean>(true);
 
   // Start recording
-  const startRecording = useCallback(async (overrideMode?: AudioMode) => {
-    if (!isAudioCaptureSupported()) {
-      setError('Audio recording is not supported in this browser');
-      return;
-    }
+  const startRecording = useCallback(
+    async (overrideMode?: AudioMode) => {
+      if (!isAudioCaptureSupported()) {
+        setError("Audio recording is not supported in this browser");
+        return;
+      }
 
-    // Use override mode if provided, otherwise use context audioMode
-    const effectiveMode = overrideMode ?? audioMode;
+      // Use override mode if provided, otherwise use context audioMode
+      const effectiveMode = overrideMode ?? audioMode;
 
-    setState('initializing');
-    setSegments([]);
-    setDuration(0);
-    setError(null);
-    startTimeRef.current = Date.now();
-    pausedDurationRef.current = 0;
+      setState("initializing");
+      setSegments([]);
+      setDuration(0);
+      setError(null);
+      startTimeRef.current = Date.now();
+      pausedDurationRef.current = 0;
 
-    try {
-      // Fetch user's transcription preferences to get language and single_language_mode
-      // If single_language_mode is true, we must send the specific language (not 'multi')
-      // to avoid the backend falling back to English
-      let language = 'multi';
       try {
-        const prefs = await getTranscriptionPreferences();
-        // Use user's language if set, or 'multi' for multi-language detection
-        // When single_language_mode is true, the backend needs the specific language
-        language = prefs.language || 'multi';
-      } catch (langErr) {
-        console.warn('Failed to fetch transcription preferences, using multi:', langErr);
+        // Fetch user's language preference so the backend uses it for both STT and
+        // summary generation. Without a concrete language code the conversation is
+        // stored with language='multi' and the LLM prompt receives "multi" as the
+        // language, causing summaries to appear in the wrong language.
+        let language = "en";
+        try {
+          const [prefs, userLang] = await Promise.all([
+            getTranscriptionPreferences(),
+            getUserLanguage().catch(() => ""),
+          ]);
+          if (userLang) {
+            language = userLang;
+          } else if (prefs.language) {
+            language = prefs.language;
+          }
+        } catch (langErr) {
+          console.warn(
+            "Failed to fetch language preferences, using en:",
+            langErr,
+          );
+        }
+
+        // Create transcription socket
+        const socket = createTranscriptionSocket({
+          language,
+          onSegment: (segment: TranscriptSegment) => {
+            if (!isMountedRef.current) return;
+            setSegments((prev) => {
+              // Update existing segment or add new one
+              const existingIndex = prev.findIndex((s) => s.id === segment.id);
+              if (existingIndex >= 0) {
+                const updated = [...prev];
+                updated[existingIndex] = segment;
+                return updated;
+              }
+              return [...prev, segment];
+            });
+          },
+          onError: (err) => {
+            console.error("Transcription socket error:", err);
+            // Don't set error state for socket issues - just log them
+          },
+          onConnected: () => {
+            // Socket connected
+          },
+          onDisconnected: () => {
+            // Socket disconnected
+          },
+        });
+
+        transcriptionSocketRef.current = socket;
+
+        // Connect WebSocket
+        await socket.connect();
+
+        // Create audio capture
+        const audioCapture = createAudioCapture({
+          mode: effectiveMode,
+          onAudioData: (pcmData) => {
+            socket.sendAudio(pcmData);
+          },
+          onMicLevel: setMicLevel,
+          onSystemLevel: setSystemLevel,
+          onError: (err) => {
+            setError(err);
+          },
+        });
+
+        audioCaptureRef.current = audioCapture;
+
+        // Start audio capture
+        await audioCapture.start();
+
+        // Start duration timer
+        durationIntervalRef.current = setInterval(() => {
+          const elapsed = Math.floor(
+            (Date.now() - startTimeRef.current) / 1000,
+          );
+          setDuration(elapsed - pausedDurationRef.current);
+        }, 1000);
+
+        setState("recording");
+
+        // Expand widget when recording starts
+        setWidgetExpanded(true);
+      } catch (err) {
+        console.error("Failed to start recording:", err);
+        const message =
+          err instanceof Error ? err.message : "Failed to start recording";
+        setError(message);
+        setState("idle");
+
+        // Cleanup on error
+        if (transcriptionSocketRef.current) {
+          transcriptionSocketRef.current.disconnect();
+          transcriptionSocketRef.current = null;
+        }
       }
-
-      // Create transcription socket
-      const socket = createTranscriptionSocket({
-        language,
-        onSegment: (segment: TranscriptSegment) => {
-          if (!isMountedRef.current) return;
-          setSegments((prev) => {
-            // Update existing segment or add new one
-            const existingIndex = prev.findIndex((s) => s.id === segment.id);
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = segment;
-              return updated;
-            }
-            return [...prev, segment];
-          });
-        },
-        onError: (err) => {
-          console.error('Transcription socket error:', err);
-          // Don't set error state for socket issues - just log them
-        },
-        onConnected: () => {
-          // Socket connected
-        },
-        onDisconnected: () => {
-          // Socket disconnected
-        },
-      });
-
-      transcriptionSocketRef.current = socket;
-
-      // Connect WebSocket
-      await socket.connect();
-
-      // Create audio capture
-      const audioCapture = createAudioCapture({
-        mode: effectiveMode,
-        onAudioData: (pcmData) => {
-          socket.sendAudio(pcmData);
-        },
-        onMicLevel: setMicLevel,
-        onSystemLevel: setSystemLevel,
-        onError: (err) => {
-          setError(err);
-        },
-      });
-
-      audioCaptureRef.current = audioCapture;
-
-      // Start audio capture
-      await audioCapture.start();
-
-      // Start duration timer
-      durationIntervalRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        setDuration(elapsed - pausedDurationRef.current);
-      }, 1000);
-
-      setState('recording');
-
-      // Expand widget when recording starts
-      setWidgetExpanded(true);
-    } catch (err) {
-      console.error('Failed to start recording:', err);
-      const message = err instanceof Error ? err.message : 'Failed to start recording';
-      setError(message);
-      setState('idle');
-
-      // Cleanup on error
-      if (transcriptionSocketRef.current) {
-        transcriptionSocketRef.current.disconnect();
-        transcriptionSocketRef.current = null;
-      }
-    }
-  }, [audioMode, setState, setSegments, setDuration, setError, setMicLevel, setSystemLevel, setWidgetExpanded]);
+    },
+    [
+      audioMode,
+      setState,
+      setSegments,
+      setDuration,
+      setError,
+      setMicLevel,
+      setSystemLevel,
+      setWidgetExpanded,
+    ],
+  );
 
   // Pause recording
   const pauseRecording = useCallback(() => {
-    if (state !== 'recording') return;
+    if (state !== "recording") return;
 
     if (audioCaptureRef.current) {
       audioCaptureRef.current.pause();
     }
 
     // Track paused duration
-    pausedDurationRef.current = Math.floor((Date.now() - startTimeRef.current) / 1000) - duration;
+    pausedDurationRef.current =
+      Math.floor((Date.now() - startTimeRef.current) / 1000) - duration;
 
-    setState('paused');
+    setState("paused");
     setMicLevel(0);
     setSystemLevel(0);
   }, [state, duration, setState, setMicLevel, setSystemLevel]);
 
   // Resume recording
   const resumeRecording = useCallback(() => {
-    if (state !== 'paused') return;
+    if (state !== "paused") return;
 
     if (audioCaptureRef.current) {
       audioCaptureRef.current.resume();
     }
 
     // Adjust start time to account for pause
-    startTimeRef.current = Date.now() - (duration * 1000);
+    startTimeRef.current = Date.now() - duration * 1000;
 
-    setState('recording');
+    setState("recording");
   }, [state, duration, setState]);
 
   // Stop recording
   const stopRecording = useCallback(async () => {
-    if (state !== 'recording' && state !== 'paused') return;
+    if (state !== "recording" && state !== "paused") return;
 
     // Stop duration timer
     if (durationIntervalRef.current) {
@@ -209,7 +242,7 @@ export function useRecording() {
     // Reset levels and state immediately - user can start a new recording
     setMicLevel(0);
     setSystemLevel(0);
-    setState('idle');
+    setState("idle");
 
     // Process the conversation in the background - don't block the user
     processInProgressConversation()
@@ -217,7 +250,7 @@ export function useRecording() {
         // Conversation processed - could show a toast notification here
       })
       .catch((err) => {
-        console.error('Failed to process conversation:', err);
+        console.error("Failed to process conversation:", err);
         // Optionally show an error toast here
       });
   }, [state, setState, setMicLevel, setSystemLevel]);
@@ -230,7 +263,16 @@ export function useRecording() {
     pauseRecordingRef.current = pauseRecording;
     resumeRecordingRef.current = resumeRecording;
     stopRecordingRef.current = stopRecording;
-  }, [startRecording, pauseRecording, resumeRecording, stopRecording, startRecordingRef, pauseRecordingRef, resumeRecordingRef, stopRecordingRef]);
+  }, [
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    startRecordingRef,
+    pauseRecordingRef,
+    resumeRecordingRef,
+    stopRecordingRef,
+  ]);
 
   // Track mounted state for this hook instance
   // Note: We do NOT cleanup audio/WebSocket on unmount because they are shared via context
@@ -245,16 +287,17 @@ export function useRecording() {
   // Warn before closing tab during recording and cleanup on page hide
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (state === 'recording' || state === 'paused') {
+      if (state === "recording" || state === "paused") {
         e.preventDefault();
-        e.returnValue = 'Recording in progress. Are you sure you want to leave?';
+        e.returnValue =
+          "Recording in progress. Are you sure you want to leave?";
         return e.returnValue;
       }
     };
 
     // Cleanup resources when page is actually hidden/closed
     const handlePageHide = () => {
-      if (state === 'recording' || state === 'paused') {
+      if (state === "recording" || state === "paused") {
         // Synchronously disconnect to ensure cleanup happens before page unloads
         if (audioCaptureRef.current) {
           audioCaptureRef.current.stop();
@@ -268,11 +311,11 @@ export function useRecording() {
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [state, audioCaptureRef, transcriptionSocketRef, durationIntervalRef]);
 
@@ -297,10 +340,10 @@ export function useRecording() {
     clearError: context.clearError,
 
     // Computed
-    isRecording: state === 'recording',
-    isPaused: state === 'paused',
-    isIdle: state === 'idle',
-    isInitializing: state === 'initializing',
-    isProcessing: state === 'processing',
+    isRecording: state === "recording",
+    isPaused: state === "paused",
+    isIdle: state === "idle",
+    isInitializing: state === "initializing",
+    isProcessing: state === "processing",
   };
 }
