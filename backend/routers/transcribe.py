@@ -888,8 +888,8 @@ async def _stream_handler(
                 return False
             # Prevent unbounded growth of pending requests
             if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
-                print(f"Too many pending requests, dropping oldest for {conversation_id}", uid, session_id)
-                pending_conversation_requests.pop()  # Remove arbitrary element
+                print(f"Too many pending requests, dropping one to add {conversation_id}", uid, session_id)
+                pending_conversation_requests.pop()  # Remove arbitrary element (set has no order)
             try:
                 pending_conversation_requests.add(conversation_id)
                 pending_request_event.set()  # Signal the receiver
@@ -945,11 +945,16 @@ async def _stream_handler(
         def audio_bytes_send(audio_bytes: bytes, received_at: float):
             nonlocal audio_buffers, audio_buffer_last_received
             # Cap buffer size to prevent unbounded growth when pusher is disconnected
-            if len(audio_buffers) + len(audio_bytes) > MAX_AUDIO_BUFFER_SIZE:
+            # Also trim incoming chunk if it alone exceeds max size
+            chunk = audio_bytes
+            if len(chunk) > MAX_AUDIO_BUFFER_SIZE:
+                # Keep only the most recent MAX_AUDIO_BUFFER_SIZE bytes of the chunk
+                chunk = chunk[-MAX_AUDIO_BUFFER_SIZE:]
+            if len(audio_buffers) + len(chunk) > MAX_AUDIO_BUFFER_SIZE:
                 # Drop oldest data to make room (keep most recent audio)
-                excess = len(audio_buffers) + len(audio_bytes) - MAX_AUDIO_BUFFER_SIZE
+                excess = len(audio_buffers) + len(chunk) - MAX_AUDIO_BUFFER_SIZE
                 audio_buffers = audio_buffers[excess:]
-            audio_buffers.extend(audio_bytes)
+            audio_buffers.extend(chunk)
             audio_buffer_last_received = received_at
 
         async def _audio_bytes_flush(auto_reconnect: bool = True):
