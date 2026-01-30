@@ -98,6 +98,7 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+AUTO_ASSIGN_SPEAKER_LABELS = os.getenv('AUTO_ASSIGN_SPEAKER_LABELS', 'true').lower() == 'true'
 
 # Freemium: Send notification when credits threshold is reached
 FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
@@ -245,6 +246,7 @@ async def _stream_handler(
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
+    pending_auto_assignment_ids: Set[str] = set()
     current_session_segments: Dict[str, bool] = {}  # Store only speech_profile_processed status
     suggested_segments: Set[str] = set()
     first_audio_byte_timestamp: Optional[float] = None
@@ -1292,7 +1294,7 @@ async def _stream_handler(
 
     async def _match_speaker_embedding(speaker_id: int, segment: dict):
         """Extract audio from ring buffer and match against stored embeddings."""
-        nonlocal speaker_to_person_map, segment_person_assignment_map, audio_ring_buffer
+        nonlocal speaker_to_person_map, segment_person_assignment_map, pending_auto_assignment_ids, audio_ring_buffer
 
         try:
             seg_start = segment['abs_start']
@@ -1390,16 +1392,18 @@ async def _stream_handler(
 
                 # Auto-assign processed segment
                 segment_person_assignment_map[segment['id']] = person_id
+                pending_auto_assignment_ids.add(segment['id'])
 
                 # Notify client
-                _send_message_event(
-                    SpeakerLabelSuggestionEvent(
-                        speaker_id=speaker_id,
-                        person_id=person_id,
-                        person_name=person_name,
-                        segment_id=segment['id'],
+                if not AUTO_ASSIGN_SPEAKER_LABELS:
+                    _send_message_event(
+                        SpeakerLabelSuggestionEvent(
+                            speaker_id=speaker_id,
+                            person_id=person_id,
+                            person_name=person_name,
+                            segment_id=segment['id'],
+                        )
                     )
-                )
             else:
                 print(f"Speaker ID: speaker {speaker_id} no match (best={best_distance:.3f})", uid, session_id)
 
@@ -1488,8 +1492,6 @@ async def _stream_handler(
                 _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
-                await websocket.send_json([segment.dict() for segment in updated_segments])
-
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
 
@@ -1508,6 +1510,38 @@ async def _stream_handler(
                     await translate(updated_segments, conversation.id)
 
                 # Speaker detection
+                assigned_segments_by_id: Dict[str, TranscriptSegment] = {}
+                segment_by_id = {seg.id: seg for seg in conversation.transcript_segments}
+                updated_segment_ids = {seg.id for seg in updated_segments}
+
+                def _apply_auto_assignment(
+                    segment_id: str,
+                    person_id: str,
+                    segment_obj: Optional[TranscriptSegment] = None,
+                ) -> None:
+                    if segment_id in assigned_segments_by_id:
+                        return
+                    targets: List[TranscriptSegment] = []
+                    if segment_obj is not None:
+                        targets.append(segment_obj)
+                    segment_ref = segment_by_id.get(segment_id)
+                    if segment_ref is not None and segment_ref is not segment_obj:
+                        targets.append(segment_ref)
+                    if not targets:
+                        return
+                    for target in targets:
+                        if target.person_id or target.is_user:
+                            return
+                    if person_id == 'user':
+                        for target in targets:
+                            target.is_user = True
+                            target.person_id = None
+                    else:
+                        for target in targets:
+                            target.is_user = False
+                            target.person_id = person_id
+                    assigned_segments_by_id[segment_id] = targets[0]
+
                 for segment in updated_segments:
                     if segment.person_id or segment.is_user or segment.id in suggested_segments:
                         continue
@@ -1516,14 +1550,17 @@ async def _stream_handler(
                     if speech_profile_complete.is_set():
                         if segment.speaker_id in speaker_to_person_map:
                             person_id, person_name = speaker_to_person_map[segment.speaker_id]
-                            _send_message_event(
-                                SpeakerLabelSuggestionEvent(
-                                    speaker_id=segment.speaker_id,
-                                    person_id=person_id,
-                                    person_name=person_name,
-                                    segment_id=segment.id,
+                            if AUTO_ASSIGN_SPEAKER_LABELS:
+                                _apply_auto_assignment(segment.id, person_id, segment)
+                            else:
+                                _send_message_event(
+                                    SpeakerLabelSuggestionEvent(
+                                        speaker_id=segment.speaker_id,
+                                        person_id=person_id,
+                                        person_name=person_name,
+                                        segment_id=segment.id,
+                                    )
                                 )
-                            )
                             suggested_segments.add(segment.id)
                             continue
 
@@ -1557,16 +1594,50 @@ async def _stream_handler(
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
-                        _send_message_event(
-                            SpeakerLabelSuggestionEvent(
-                                speaker_id=segment.speaker_id,
-                                person_id=person_id,
-                                person_name=detected_name,
-                                segment_id=segment.id,
+                        if AUTO_ASSIGN_SPEAKER_LABELS and person_id:
+                            _apply_auto_assignment(segment.id, person_id, segment)
+                        else:
+                            _send_message_event(
+                                SpeakerLabelSuggestionEvent(
+                                    speaker_id=segment.speaker_id,
+                                    person_id=person_id,
+                                    person_name=detected_name,
+                                    segment_id=segment.id,
+                                )
                             )
-                        )
                         suggested_segments.add(segment.id)
 
+                if AUTO_ASSIGN_SPEAKER_LABELS and pending_auto_assignment_ids:
+                    for segment_id in list(pending_auto_assignment_ids):
+                        person_id = segment_person_assignment_map.get(segment_id)
+                        if not person_id:
+                            pending_auto_assignment_ids.discard(segment_id)
+                            continue
+                        segment_ref = segment_by_id.get(segment_id)
+                        if segment_ref is None:
+                            continue
+                        if segment_ref.person_id or segment_ref.is_user:
+                            pending_auto_assignment_ids.discard(segment_id)
+                            continue
+                        _apply_auto_assignment(segment_id, person_id, segment_ref)
+                        pending_auto_assignment_ids.discard(segment_id)
+
+                if assigned_segments_by_id:
+                    conversations_db.update_conversation_segments(
+                        uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
+                    )
+
+                await websocket.send_json([segment.dict() for segment in updated_segments])
+
+                if assigned_segments_by_id:
+                    assigned_segments = [
+                        seg for seg_id, seg in assigned_segments_by_id.items() if seg_id not in updated_segment_ids
+                    ]
+                    if assigned_segments:
+                        await websocket.send_json([segment.dict() for segment in assigned_segments])
+
+                assigned_segments_by_id.clear()
+                segment_by_id.clear()
     image_chunks = {str: any}  # A temporary in-memory cache for image chunks
 
     async def process_photo(
