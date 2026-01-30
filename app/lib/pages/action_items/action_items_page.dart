@@ -668,13 +668,32 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
-    // If at indent 0, use Dismissible for swipe-to-delete with animation
+    // If at indent 0, allow swipe-right to indent and swipe-left to delete.
     if (indentLevel == 0) {
       return Dismissible(
         key: Key('dismiss_${item.id}'),
-        direction: DismissDirection.endToStart,
-        dismissThresholds: const {DismissDirection.endToStart: 0.3},
+        direction: DismissDirection.horizontal,
+        dismissThresholds: const {
+          DismissDirection.startToEnd: 0.25,
+          DismissDirection.endToStart: 0.3,
+        },
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.startToEnd) {
+            _incrementIndent(item.id);
+            return false;
+          }
+          return true;
+        },
         background: Container(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.only(left: 20.0),
+          decoration: BoxDecoration(
+            color: Colors.deepPurpleAccent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.format_indent_increase, color: Colors.white),
+        ),
+        secondaryBackground: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20.0),
           decoration: BoxDecoration(
@@ -684,7 +703,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           child: const Icon(Icons.delete, color: Colors.white),
         ),
         onDismissed: (direction) {
-          _deleteTask(item);
+          if (direction == DismissDirection.endToStart) {
+            _deleteTask(item);
+          }
         },
         child: LongPressDraggable<ActionItemWithMetadata>(
           data: item,
