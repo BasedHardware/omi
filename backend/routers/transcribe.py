@@ -98,7 +98,6 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
-AUTO_ASSIGN_SPEAKER_LABELS = os.getenv('AUTO_ASSIGN_SPEAKER_LABELS', 'true').lower() == 'true'
 
 # Freemium: Send notification when credits threshold is reached
 FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
@@ -1395,15 +1394,14 @@ async def _stream_handler(
                 pending_auto_assignment_ids.add(segment['id'])
 
                 # Notify client
-                if not AUTO_ASSIGN_SPEAKER_LABELS:
-                    _send_message_event(
-                        SpeakerLabelSuggestionEvent(
-                            speaker_id=speaker_id,
-                            person_id=person_id,
-                            person_name=person_name,
-                            segment_id=segment['id'],
-                        )
+                _send_message_event(
+                    SpeakerLabelSuggestionEvent(
+                        speaker_id=speaker_id,
+                        person_id=person_id,
+                        person_name=person_name,
+                        segment_id=segment['id'],
                     )
+                )
             else:
                 print(f"Speaker ID: speaker {speaker_id} no match (best={best_distance:.3f})", uid, session_id)
 
@@ -1550,17 +1548,15 @@ async def _stream_handler(
                     if speech_profile_complete.is_set():
                         if segment.speaker_id in speaker_to_person_map:
                             person_id, person_name = speaker_to_person_map[segment.speaker_id]
-                            if AUTO_ASSIGN_SPEAKER_LABELS:
-                                _apply_auto_assignment(segment.id, person_id, segment)
-                            else:
-                                _send_message_event(
-                                    SpeakerLabelSuggestionEvent(
-                                        speaker_id=segment.speaker_id,
-                                        person_id=person_id,
-                                        person_name=person_name,
-                                        segment_id=segment.id,
-                                    )
+                            _apply_auto_assignment(segment.id, person_id, segment)
+                            _send_message_event(
+                                SpeakerLabelSuggestionEvent(
+                                    speaker_id=segment.speaker_id,
+                                    person_id=person_id,
+                                    person_name=person_name,
+                                    segment_id=segment.id,
                                 )
+                            )
                             suggested_segments.add(segment.id)
                             continue
 
@@ -1594,9 +1590,8 @@ async def _stream_handler(
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
-                        if AUTO_ASSIGN_SPEAKER_LABELS and person_id:
+                        if person_id:
                             _apply_auto_assignment(segment.id, person_id, segment)
-                        else:
                             _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
@@ -1605,9 +1600,9 @@ async def _stream_handler(
                                     segment_id=segment.id,
                                 )
                             )
-                        suggested_segments.add(segment.id)
+                            suggested_segments.add(segment.id)
 
-                if AUTO_ASSIGN_SPEAKER_LABELS and pending_auto_assignment_ids:
+                if pending_auto_assignment_ids:
                     for segment_id in list(pending_auto_assignment_ids):
                         person_id = segment_person_assignment_map.get(segment_id)
                         if not person_id:

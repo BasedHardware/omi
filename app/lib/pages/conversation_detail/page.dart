@@ -12,7 +12,6 @@ import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
@@ -1456,33 +1455,37 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                           onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
                             provider.toggleEditSegmentLoading(true);
                             String finalPersonId = personId;
-                            if (personId.isEmpty) {
-                              Person? newPerson = await peopleProvider.createPersonProvider(personName);
-                              if (newPerson != null) {
+                            try {
+                              if (finalPersonId.isEmpty) {
+                                final newPerson = await peopleProvider.createPersonProvider(personName);
+                                if (newPerson == null) {
+                                  return;
+                                }
                                 finalPersonId = newPerson.id;
-                              } else {
-                                provider.toggleEditSegmentLoading(false);
-                                return; // Failed to create person
                               }
-                            }
 
-                            MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                              final isAssigningToUser = finalPersonId == 'user';
+                              final success = await assignBulkConversationTranscriptSegments(
+                                provider.conversation.id,
+                                segmentIds,
+                                isUser: isAssigningToUser,
+                                personId: isAssigningToUser ? null : finalPersonId,
+                              );
+                              if (!success) return;
 
-                            for (final segmentId in segmentIds) {
-                              final segmentIndex =
-                                  provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-                              if (segmentIndex == -1) continue;
-                              provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
+                              MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+
+                              for (final segmentId in segmentIds) {
+                                final segmentIndex =
+                                    provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+                                if (segmentIndex == -1) continue;
+                                provider.conversation.transcriptSegments[segmentIndex].isUser = isAssigningToUser;
+                                provider.conversation.transcriptSegments[segmentIndex].personId =
+                                    isAssigningToUser ? null : finalPersonId;
+                              }
+                            } finally {
+                              provider.toggleEditSegmentLoading(false);
                             }
-                            await assignBulkConversationTranscriptSegments(
-                              provider.conversation.id,
-                              segmentIds,
-                              isUser: finalPersonId == 'user',
-                              personId: finalPersonId == 'user' ? null : finalPersonId,
-                            );
-                            provider.toggleEditSegmentLoading(false);
                           },
                         );
                       });

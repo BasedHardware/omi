@@ -167,10 +167,6 @@ class SharedPreferencesUtil {
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
 
-  set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
-
-  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
-
   // Goal tracker widget on homepage - default is true (experimental feature)
   set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
 

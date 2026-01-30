@@ -2215,12 +2215,6 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   onChanged: (v) => devProvider.onTranscriptionDiagnosticChanged(v),
                 ),
                 _buildToggleRow(
-                  title: context.l10n.autoCreateSpeakers,
-                  subtitle: context.l10n.autoCreateWhenNameDetected,
-                  value: devProvider.autoCreateSpeakersEnabled,
-                  onChanged: (v) => devProvider.onAutoCreateSpeakersChanged(v),
-                ),
-                _buildToggleRow(
                   title: context.l10n.followUpQuestions,
                   subtitle: context.l10n.suggestQuestionsAfterConversations,
                   value: devProvider.followUpQuestionEnabled,

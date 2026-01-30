@@ -40,7 +40,6 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/main.dart';
 
@@ -193,7 +192,8 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
+  void updateProviderInstances(
+      ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
     conversationProvider = cp;
     messageProvider = mp;
     peopleProvider = pp;
@@ -1509,17 +1509,13 @@ class CaptureProvider extends ChangeNotifier
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
     if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == event.speakerId);
       return;
     }
 
-    // Auto-accept if enabled for new person suggestions
-    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
-    } else {
-      // Otherwise, store suggestion to be displayed.
-      suggestionsBySegmentId[event.segmentId] = event;
-      notifyListeners();
-    }
+    // Store suggestion for manual tagging.
+    suggestionsBySegmentId[event.segmentId] = event;
+    notifyListeners();
   }
 
   Future<void> assignSpeakerToConversation(
@@ -1541,7 +1537,7 @@ class CaptureProvider extends ChangeNotifier
       }
 
       // Find conversation id
-      if (_conversation == null) return;
+      if (_conversation == null || finalPersonId.isEmpty) return;
 
       final isAssigningToUser = finalPersonId == 'user';
 

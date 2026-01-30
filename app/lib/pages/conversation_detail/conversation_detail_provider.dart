@@ -316,7 +316,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (segmentIdx == -1) return;
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
-    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
     notifyListeners();
   }
 

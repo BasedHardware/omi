@@ -1635,18 +1635,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
-                        // Auto-create Speakers
-                        _buildExperimentalItem(
-                          title: context.l10n.autoCreateSpeakers,
-                          description: context.l10n.autoCreateWhenNameDetected,
-                          icon: FontAwesomeIcons.userPlus,
-                          value: provider.autoCreateSpeakersEnabled,
-                          onChanged: provider.onAutoCreateSpeakersChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
                         // Follow-up Questions
                         _buildExperimentalItem(
                           title: context.l10n.followUpQuestions,

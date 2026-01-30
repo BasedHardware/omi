@@ -690,25 +690,6 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                             onChanged: provider.onTranscriptionDiagnosticChanged,
                                             activeColor: ResponsiveHelper.purplePrimary,
                                           ),
-                                          SizedBox(height: responsive.spacing(baseSpacing: 16)),
-                                          CheckboxListTile(
-                                            contentPadding: EdgeInsets.zero,
-                                            title: Text(
-                                              context.l10n.autoCreateAndTagNewSpeakers,
-                                              style: responsive.bodyLarge.copyWith(
-                                                color: ResponsiveHelper.textPrimary,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              context.l10n.automaticallyCreateNewPerson,
-                                              style: responsive.bodySmall.copyWith(
-                                                color: ResponsiveHelper.textSecondary,
-                                              ),
-                                            ),
-                                            value: provider.autoCreateSpeakersEnabled,
-                                            onChanged: provider.onAutoCreateSpeakersChanged,
-                                            activeColor: ResponsiveHelper.purplePrimary,
-                                          ),
                                         ],
                                       ),
                                     ),

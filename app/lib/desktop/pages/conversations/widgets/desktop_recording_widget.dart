@@ -8,20 +8,20 @@ import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'desktop_name_speaker_dialog.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'desktop_name_speaker_dialog.dart';
 
 class DesktopRecordingWidget extends StatefulWidget {
   final VoidCallback? onBack;

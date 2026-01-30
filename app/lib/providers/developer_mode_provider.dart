@@ -31,7 +31,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
-  bool autoCreateSpeakersEnabled = false;
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
@@ -103,7 +102,6 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-    autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
@@ -209,7 +207,6 @@ class DeveloperModeProvider extends BaseProvider {
     // Experimental
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
-    prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
     prefs.showGoalTrackerEnabled = showGoalTrackerEnabled;
 
     MixpanelManager().settingsSaved(
@@ -235,11 +232,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onTranscriptionDiagnosticChanged(var value) {
     transcriptionDiagnosticEnabled = value;
-    notifyListeners();
-  }
-
-  void onAutoCreateSpeakersChanged(var value) {
-    autoCreateSpeakersEnabled = value;
     notifyListeners();
   }
 
