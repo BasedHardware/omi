@@ -31,6 +31,10 @@ const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849
 const String storageReadControlCharacteristicUuid = '30295782-4301-eabd-2904-2849adfeae43';
 const String storageWifiCharacteristicUuid = '30295783-4301-eabd-2904-2849adfeae43';
 
+const String timeSyncServiceUuid = '19b10030-e8f2-537e-4f6c-d104768a1214';
+const String timeSyncWriteCharacteristicUuid = '19b10031-e8f2-537e-4f6c-d104768a1214';
+const String timeSyncReadCharacteristicUuid = '19b10032-e8f2-537e-4f6c-d104768a1214';
+
 const String accelDataStreamServiceUuid = '32403790-0000-1000-7450-bf445e5829a2';
 const String accelDataStreamCharacteristicUuid = '32403791-0000-1000-7450-bf445e5829a2';
 
