@@ -1,114 +1,151 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Android CPU Measurement Script for Omi App
 #
 # Usage:
+#   ./measure_cpu_android.sh -p <package> [-s <device>] [-n <samples>] [-d <delay>] [-o <csv>]
+#
+# Legacy usage (kept for backward compatibility):
 #   ./measure_cpu_android.sh [duration_seconds] [output_name]
 #
 # Examples:
-#   ./measure_cpu_android.sh              # 60 seconds, default name
-#   ./measure_cpu_android.sh 30           # 30 seconds
-#   ./measure_cpu_android.sh 60 "shimmer" # 60 seconds, named "shimmer"
-#
-# Prerequisites:
-#   - ADB installed and device connected
-#   - App running in profile mode: flutter run --profile --flavor dev
+#   ./measure_cpu_android.sh -p com.friend.ios.dev -n 15 -d 2 -o /tmp/omi_cpu.csv
+#   ./measure_cpu_android.sh 60 "baseline"
 
-set -e
+set -euo pipefail
 
-DURATION=${1:-60}
-OUTPUT_NAME=${2:-"measurement"}
-SAMPLES=$((DURATION / 2))
-PACKAGE="com.friend.ios.dev"
-OUTPUT_DIR="/tmp/omi_cpu_profiling"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-OUTPUT_FILE="$OUTPUT_DIR/${OUTPUT_NAME}_${TIMESTAMP}.txt"
+usage() {
+  cat <<'USAGE'
+Usage: measure_cpu_android.sh -p <package> [-s <device>] [-n <samples>] [-d <delay>] [-o <csv>]
 
-mkdir -p "$OUTPUT_DIR"
+Options:
+  -p  Android package name (default: env PACKAGE or com.friend.ios.dev)
+  -s  Device ID (default: first connected device)
+  -n  Number of samples (default: 15)
+  -d  Delay between samples in seconds (default: 2)
+  -o  Write CSV output (sample,cpu) to this file
+USAGE
+}
 
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║         OMI ANDROID CPU MEASUREMENT                          ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Duration: ${DURATION}s (${SAMPLES} samples)"
-echo "Package: $PACKAGE"
-echo "Output: $OUTPUT_FILE"
-echo ""
+PACKAGE="${PACKAGE_NAME:-${PACKAGE:-}}"
+PACKAGE_SET=false
+DEVICE="${DEVICE_ID:-}"
+SAMPLES=15
+DELAY=2
+OUTFILE=""
+LEGACY_MODE=false
 
-# Check device connection
-if ! adb devices | grep -q "device$"; then
-    echo "ERROR: No Android device connected"
-    echo "Connect device and enable USB debugging"
-    exit 1
-fi
-
-# Check if app is running
-if ! adb shell "ps -A | grep $PACKAGE" > /dev/null 2>&1; then
-    echo "ERROR: App not running"
-    echo "Start the app with: flutter run --profile --flavor dev"
-    exit 1
-fi
-
-echo "App found. Starting measurement..."
-echo ""
-echo "Timestamp: $(date)" > "$OUTPUT_FILE"
-echo "Duration: ${DURATION}s" >> "$OUTPUT_FILE"
-echo "Samples: ${SAMPLES}" >> "$OUTPUT_FILE"
-echo "" >> "$OUTPUT_FILE"
-echo "CPU_PERCENT" >> "$OUTPUT_FILE"
-
-cpu_values=()
-
-for i in $(seq 1 $SAMPLES); do
-    # Use top for accurate CPU measurement
-    CPU=$(adb shell "top -b -n 1 -d 1 | grep $PACKAGE" 2>/dev/null | head -1 | awk '{print $9}')
-
-    if [ -n "$CPU" ]; then
-        echo "$CPU" >> "$OUTPUT_FILE"
-        cpu_values+=("$CPU")
-        printf "Sample %2d/%d: %s%%\n" "$i" "$SAMPLES" "$CPU"
-    else
-        echo "0" >> "$OUTPUT_FILE"
-        cpu_values+=("0")
-        printf "Sample %2d/%d: app not in top CPU\n" "$i" "$SAMPLES"
-    fi
-
-    sleep 2
+while getopts ":p:s:n:d:o:h" opt; do
+  case "$opt" in
+    p) PACKAGE="$OPTARG"; PACKAGE_SET=true ;;
+    s) DEVICE="$OPTARG" ;;
+    n) SAMPLES="$OPTARG" ;;
+    d) DELAY="$OPTARG" ;;
+    o) OUTFILE="$OPTARG" ;;
+    h) usage; exit 0 ;;
+    \?) echo "Unknown option: -$OPTARG" >&2; usage; exit 2 ;;
+    :) echo "Missing argument for -$OPTARG" >&2; usage; exit 2 ;;
+  esac
 done
 
-echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                    RESULTS                                   ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+shift $((OPTIND - 1))
 
-# Calculate statistics
-if [ ${#cpu_values[@]} -gt 0 ]; then
-    sum=0
-    min=${cpu_values[0]}
-    max=${cpu_values[0]}
+if ! $PACKAGE_SET && [[ $# -le 2 ]]; then
+  # Legacy positional args: duration_seconds output_name
+  LEGACY_MODE=true
+  DURATION=${1:-60}
+  OUTPUT_NAME=${2:-"measurement"}
 
-    for val in "${cpu_values[@]}"; do
-        # Remove any non-numeric characters
-        val=$(echo "$val" | tr -cd '0-9.')
-        if [ -n "$val" ]; then
-            sum=$(echo "$sum + $val" | bc)
-            if (( $(echo "$val < $min" | bc -l) )); then min=$val; fi
-            if (( $(echo "$val > $max" | bc -l) )); then max=$val; fi
-        fi
-    done
+  if ! [[ "$DURATION" =~ ^[0-9]+$ ]]; then
+    echo "Error: invalid duration '$DURATION'" >&2
+    usage
+    exit 2
+  fi
 
-    avg=$(echo "scale=1; $sum / ${#cpu_values[@]}" | bc)
+  SAMPLES=$((DURATION / 2))
+  if (( SAMPLES < 1 )); then
+    SAMPLES=1
+  fi
 
-    echo ""
-    echo "Samples: ${#cpu_values[@]}"
-    echo "Average CPU: ${avg}%"
-    echo "Min CPU: ${min}%"
-    echo "Max CPU: ${max}%"
-    echo ""
-    echo "" >> "$OUTPUT_FILE"
-    echo "SUMMARY" >> "$OUTPUT_FILE"
-    echo "Average: ${avg}%" >> "$OUTPUT_FILE"
-    echo "Min: ${min}%" >> "$OUTPUT_FILE"
-    echo "Max: ${max}%" >> "$OUTPUT_FILE"
+  if [[ -z "$OUTFILE" ]]; then
+    OUTPUT_DIR="/tmp/omi_cpu_profiling"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    mkdir -p "$OUTPUT_DIR"
+    OUTFILE="$OUTPUT_DIR/${OUTPUT_NAME}_${TIMESTAMP}.csv"
+  fi
+elif [[ $# -gt 0 ]]; then
+  echo "Error: unexpected extra arguments: $*" >&2
+  usage
+  exit 2
 fi
 
-echo "Results saved to: $OUTPUT_FILE"
+if [[ -z "$PACKAGE" ]]; then
+  PACKAGE="com.friend.ios.dev"
+  echo "Warning: no package provided; defaulting to $PACKAGE" >&2
+fi
+
+if [[ -z "$DEVICE" ]]; then
+  DEVICE=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
+fi
+
+if [[ -z "$DEVICE" ]]; then
+  echo "Error: no connected Android devices found." >&2
+  exit 2
+fi
+
+if ! adb -s "$DEVICE" get-state >/dev/null 2>&1; then
+  echo "Error: device '$DEVICE' not available." >&2
+  exit 2
+fi
+
+TOP_ARGS="-b -n 1 -d 1 -o PID,CPU,NAME"
+if ! adb -s "$DEVICE" shell "top $TOP_ARGS" >/dev/null 2>&1; then
+  TOP_ARGS="-b -n 1 -d 1"
+fi
+
+values=()
+
+if [[ -n "$OUTFILE" ]]; then
+  mkdir -p "$(dirname "$OUTFILE")"
+  echo "sample,cpu" > "$OUTFILE"
+fi
+
+echo "Sampling CPU for $PACKAGE on $DEVICE ($SAMPLES samples, ${DELAY}s delay)..."
+
+for ((i=1; i<=SAMPLES; i++)); do
+  line=$(adb -s "$DEVICE" shell "top $TOP_ARGS" | grep -m 1 "$PACKAGE" | head -1 || true)
+  cpu=$(echo "$line" | awk '{for (i=1; i<=NF; i++) if ($i ~ /^[0-9.]+%$/) {gsub(/%/,"",$i); print $i; exit}}')
+
+  if [[ -z "$cpu" ]]; then
+    echo "Sample $i: missing (package not found or CPU column not parsed)" >&2
+  else
+    values+=("$cpu")
+    echo "Sample $i: $cpu%"
+    if [[ -n "$OUTFILE" ]]; then
+      echo "$i,$cpu" >> "$OUTFILE"
+    fi
+  fi
+
+  if (( i < SAMPLES )); then
+    sleep "$DELAY"
+  fi
+done
+
+count=${#values[@]}
+if (( count == 0 )); then
+  echo "Error: no CPU samples collected." >&2
+  exit 1
+fi
+
+sorted=$(printf "%s\n" "${values[@]}" | sort -n)
+
+if (( count % 2 == 1 )); then
+  median=$(printf "%s\n" "$sorted" | awk -v n="$count" 'NR==(n+1)/2 {print $1}')
+else
+  median=$(printf "%s\n" "$sorted" | awk -v n="$count" 'NR==n/2 {a=$1} NR==n/2+1 {print (a+$1)/2}')
+fi
+
+echo "Median CPU: ${median}% (n=${count})"
+
+if [[ -n "$OUTFILE" ]]; then
+  echo "Wrote CSV to $OUTFILE"
+fi

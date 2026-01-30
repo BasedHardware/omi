@@ -1,23 +1,38 @@
-#!/bin/bash
-# Compare CPU Usage Between Two APK Builds
+#!/usr/bin/env bash
+# Compare CPU usage between two APK builds.
 #
 # Usage:
-#   ./compare_cpu_builds.sh <apk1_path> <apk1_name> <apk2_path> <apk2_name>
-#
-# Example:
-#   ./compare_cpu_builds.sh \
-#     build/app/outputs/flutter-apk/app-dev-profile-WITH-SHIMMER.apk "with-shimmer" \
-#     build/app/outputs/flutter-apk/app-dev-profile-NO-SHIMMER.apk "no-shimmer"
-#
-# Prerequisites:
-#   - ADB installed and device connected
-#   - Both APKs built in profile mode
+#   ./compare_cpu_builds.sh <apk1_path> <apk1_name> <apk2_path> <apk2_name> [-p <package>] [-s <device>] [-n <samples>] [-d <delay>]
 
-set -e
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: compare_cpu_builds.sh <apk1_path> <apk1_name> <apk2_path> <apk2_name> [-p <package>] [-s <device>] [-n <samples>] [-d <delay>]
+USAGE
+}
+
+PACKAGE="${PACKAGE_NAME:-${PACKAGE:-com.friend.ios.dev}}"
+DEVICE="${DEVICE_ID:-}"
+SAMPLES=15
+DELAY=2
+
+while getopts ":p:s:n:d:h" opt; do
+  case "$opt" in
+    p) PACKAGE="$OPTARG" ;;
+    s) DEVICE="$OPTARG" ;;
+    n) SAMPLES="$OPTARG" ;;
+    d) DELAY="$OPTARG" ;;
+    h) usage; exit 0 ;;
+    \?) echo "Unknown option: -$OPTARG" >&2; usage; exit 2 ;;
+    :) echo "Missing argument for -$OPTARG" >&2; usage; exit 2 ;;
+  esac
+done
+shift $((OPTIND - 1))
 
 if [ $# -lt 4 ]; then
-    echo "Usage: $0 <apk1_path> <apk1_name> <apk2_path> <apk2_name>"
-    exit 1
+  usage
+  exit 1
 fi
 
 APK1_PATH=$1
@@ -25,78 +40,79 @@ APK1_NAME=$2
 APK2_PATH=$3
 APK2_NAME=$4
 
-DURATION=30
-SAMPLES=$((DURATION / 2))
-PACKAGE="com.friend.ios.dev"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MEASURE_SCRIPT="$SCRIPT_DIR/measure_cpu_android.sh"
 
-measure_cpu() {
-    local name=$1
-    local cpu_values=()
-
-    echo "Measuring $name for ${DURATION}s..."
-
-    for i in $(seq 1 $SAMPLES); do
-        CPU=$(adb shell "top -b -n 1 -d 1 | grep $PACKAGE" 2>/dev/null | head -1 | awk '{print $9}')
-        if [ -n "$CPU" ]; then
-            cpu_values+=("$CPU")
-            printf "  Sample %2d: %s%%\n" "$i" "$CPU"
-        fi
-        sleep 2
-    done
-
-    # Calculate average
-    if [ ${#cpu_values[@]} -gt 0 ]; then
-        sum=0
-        for val in "${cpu_values[@]}"; do
-            val=$(echo "$val" | tr -cd '0-9.')
-            [ -n "$val" ] && sum=$(echo "$sum + $val" | bc)
-        done
-        echo "scale=1; $sum / ${#cpu_values[@]}" | bc
-    else
-        echo "0"
-    fi
-}
-
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║         CPU COMPARISON BETWEEN BUILDS                        ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-
-# Check device
-if ! adb devices | grep -q "device$"; then
-    echo "ERROR: No Android device connected"
-    exit 1
+if [[ ! -x "$MEASURE_SCRIPT" ]]; then
+  echo "Error: missing $MEASURE_SCRIPT" >&2
+  exit 1
 fi
 
-# Test APK 1
-echo "═══ Installing and testing: $APK1_NAME ═══"
-adb install -r "$APK1_PATH"
-echo "Waiting for app to start (10s)..."
-sleep 10
-AVG1=$(measure_cpu "$APK1_NAME")
-echo ""
+if [[ -z "$DEVICE" ]]; then
+  DEVICE=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
+fi
 
-# Test APK 2
-echo "═══ Installing and testing: $APK2_NAME ═══"
-adb install -r "$APK2_PATH"
-echo "Waiting for app to start (10s)..."
-sleep 10
-AVG2=$(measure_cpu "$APK2_NAME")
-echo ""
+if [[ -z "$DEVICE" ]]; then
+  echo "Error: no connected Android devices found." >&2
+  exit 2
+fi
 
-# Results
+if ! adb -s "$DEVICE" get-state >/dev/null 2>&1; then
+  echo "Error: device '$DEVICE' not available." >&2
+  exit 2
+fi
+
+run_measure() {
+  local apk_path=$1
+  local label=$2
+  local out_file=$3
+
+  echo "═══ Installing and testing: $label ═══"
+  adb -s "$DEVICE" install -r -d "$apk_path" >/dev/null
+  adb -s "$DEVICE" shell pm clear "$PACKAGE" >/dev/null 2>&1 || true
+  echo "Open the app now, wait ~10s, then keep it foregrounded..."
+  sleep 10
+
+  local output
+  output=$("$MEASURE_SCRIPT" -p "$PACKAGE" -s "$DEVICE" -n "$SAMPLES" -d "$DELAY" -o "$out_file")
+  echo "$output"
+  echo "$output" | sed -n 's/Median CPU: \([0-9.]*\)%.*/\1/p'
+}
+
+OUTPUT_DIR="/tmp/omi_cpu_profiling"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p "$OUTPUT_DIR"
+
+CSV1="$OUTPUT_DIR/${APK1_NAME}_${TIMESTAMP}.csv"
+CSV2="$OUTPUT_DIR/${APK2_NAME}_${TIMESTAMP}.csv"
+
+MED1=$(run_measure "$APK1_PATH" "$APK1_NAME" "$CSV1")
+MED2=$(run_measure "$APK2_PATH" "$APK2_NAME" "$CSV2")
+
+if [[ -z "$MED1" || -z "$MED2" ]]; then
+  echo "Error: failed to capture median CPU for one or both builds." >&2
+  exit 1
+fi
+
+echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║                    COMPARISON RESULTS                        ║"
 echo "╠══════════════════════════════════════════════════════════════╣"
-printf "║ %-25s │ %10s%% CPU                  ║\n" "$APK1_NAME" "$AVG1"
-printf "║ %-25s │ %10s%% CPU                  ║\n" "$APK2_NAME" "$AVG2"
+printf "║ %-25s │ %10s%% CPU (median)         ║\n" "$APK1_NAME" "$MED1"
+printf "║ %-25s │ %10s%% CPU (median)         ║\n" "$APK2_NAME" "$MED2"
 echo "╠══════════════════════════════════════════════════════════════╣"
 
-DIFF=$(echo "$AVG1 - $AVG2" | bc)
-if (( $(echo "$DIFF > 0" | bc -l) )); then
-    printf "║ Difference: $APK1_NAME uses +%.1f%% more CPU              ║\n" "$DIFF"
+diff=$(echo "$MED1 - $MED2" | bc)
+if (( $(echo "$diff > 0" | bc -l) )); then
+  printf "║ Difference: %s uses +%.1f%% more CPU            ║\n" "$APK1_NAME" "$diff"
 else
-    DIFF=$(echo "$DIFF * -1" | bc)
-    printf "║ Difference: $APK2_NAME uses +%.1f%% more CPU              ║\n" "$DIFF"
+  diff=$(echo "$diff * -1" | bc)
+  printf "║ Difference: %s uses +%.1f%% more CPU            ║\n" "$APK2_NAME" "$diff"
 fi
+
 echo "╚══════════════════════════════════════════════════════════════╝"
+
+echo ""
+echo "CSV outputs:"
+echo "- $CSV1"
+echo "- $CSV2"

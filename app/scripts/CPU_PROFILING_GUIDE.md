@@ -8,7 +8,7 @@ This guide explains how to measure CPU usage on Android devices to identify batt
 
 1. **ADB installed**: `brew install android-platform-tools` (macOS)
 2. **Android device connected** with USB debugging enabled
-3. **App built in profile mode** (not debug, not release)
+3. **App built in profile or release mode** (avoid debug for CPU measurement)
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ flutter run --profile --flavor dev
 ### 3. Measure CPU
 
 ```bash
-./scripts/measure_cpu_android.sh 60 "baseline"
+./scripts/measure_cpu_android.sh -p com.friend.ios.dev -n 15 -d 2 -o /tmp/omi_cpu_baseline.csv
 ```
 
 ## Measurement Methods
@@ -40,12 +40,11 @@ flutter run --profile --flavor dev
 ### Method 1: Single Measurement Script (Recommended)
 
 ```bash
-./scripts/measure_cpu_android.sh [duration_seconds] [output_name]
+./scripts/measure_cpu_android.sh -p <package> [-s <device>] [-n <samples>] [-d <delay>] [-o <csv>]
 
 # Examples:
-./scripts/measure_cpu_android.sh              # 60s, default name
-./scripts/measure_cpu_android.sh 30 "idle"    # 30s, named "idle"
-./scripts/measure_cpu_android.sh 60 "shimmer" # 60s, named "shimmer"
+./scripts/measure_cpu_android.sh -p com.friend.ios.dev -n 15 -d 2
+./scripts/measure_cpu_android.sh -p com.friend.ios.dev -n 20 -d 1 -o /tmp/omi_cpu_idle.csv
 ```
 
 ### Method 2: Compare Two Builds
@@ -53,7 +52,8 @@ flutter run --profile --flavor dev
 ```bash
 ./scripts/compare_cpu_builds.sh \
   build/app/outputs/flutter-apk/app-A.apk "version-A" \
-  build/app/outputs/flutter-apk/app-B.apk "version-B"
+  build/app/outputs/flutter-apk/app-B.apk "version-B" \
+  -p com.friend.ios.dev -n 15 -d 2
 ```
 
 ### Method 3: Manual Measurement
@@ -76,7 +76,7 @@ adb shell "top -d 2 | grep --line-buffered com.friend.ios.dev"
 | 50-100% | High - potential battery drain |
 | >100% | Very high - using multiple cores, investigate! |
 
-**Note**: CPU >100% means the app is using more than one CPU core.
+**Note**: CPU >100% means the app is using more than one CPU core. Use median CPU across samples, not single spikes.
 
 ## Common Battery Drain Causes
 
@@ -111,7 +111,7 @@ flutter build apk --flavor dev --profile
 cp build/app/outputs/flutter-apk/app-dev-profile.apk /tmp/feature.apk
 
 # 3. Compare
-./scripts/compare_cpu_builds.sh /tmp/baseline.apk "baseline" /tmp/feature.apk "feature"
+./scripts/compare_cpu_builds.sh /tmp/baseline.apk "baseline" /tmp/feature.apk "feature" -p com.friend.ios.dev
 ```
 
 ## Findings Log
@@ -142,6 +142,6 @@ cp build/app/outputs/flutter-apk/app-dev-profile.apk /tmp/feature.apk
 
 ## Related Files
 
-- `scripts/measure_cpu_android.sh` - Single measurement script
-- `scripts/compare_cpu_builds.sh` - A/B comparison script
+- `scripts/measure_cpu_android.sh` - Single measurement script (median-based)
+- `scripts/compare_cpu_builds.sh` - A/B comparison script (median-based)
 - `integration_test/shimmer_cpu_test.dart` - Automated shimmer test
