@@ -999,30 +999,23 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
     if update_data:
         user_ref.update(update_data)
 
-def set_speaker_label_mapping(uid: str, speaker_id: int, person_id: str):
-    """Persistently assign a person_id to a speaker_id for a user."""
-    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
-    mapping_ref.set({
-        'speaker_id': speaker_id,
-        'person_id': person_id,
-        'updated_at': datetime.now(timezone.utc),
+def set_user_speaker_embedding(uid: str, embedding: list):
+    """Store speaker embedding on the user document itself (not a person)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({
+        'speaker_embedding': embedding,
+        'speaker_embedding_updated_at': datetime.now(timezone.utc),
     })
-    return True
 
-def get_speaker_label_mapping(uid: str, speaker_id: int) -> str:
-    """Retrieve the person_id assigned to a speaker_id for a user, or None if not set."""
-    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
-    doc = mapping_ref.get()
-    if doc.exists:
-        data = doc.to_dict()
-        return data.get('person_id')
-    return None
 
-def clear_speaker_label_mapping(uid: str, speaker_id: int):
-    """Remove a persistent speaker label mapping for a user."""
-    mapping_ref = db.collection('users').document(uid).collection('speaker_label_mappings').document(str(speaker_id))
-    mapping_ref.delete()
-    return True
+def get_user_speaker_embedding(uid: str) -> Optional[list]:
+    """Get the user's own speaker embedding from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return None
+    return user_doc.to_dict().get('speaker_embedding')
+
 
 def share_speech_profile(owner_uid: str, target_uid: str):
     """Share the owner's speech profile with another user (target_uid)."""

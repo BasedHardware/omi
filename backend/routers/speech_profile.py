@@ -10,10 +10,11 @@ from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
 from database.users import (
     get_person,
+    set_user_speaker_embedding,
     share_speech_profile,
     revoke_speech_profile_share,
     get_profiles_shared_with_user,
-    get_users_shared_with
+    get_users_shared_with,
 )
 from models.conversation import Conversation
 from models.other import UploadProfile
@@ -31,6 +32,7 @@ from utils.other.storage import (
     delete_speech_sample_for_people,
     get_user_has_speech_profile,
 )
+from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
 
 router = APIRouter()
@@ -77,6 +79,13 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
     url = upload_profile_audio(file_path, uid)
     remove_user_soniox_speech_profile(uid)
+
+    try:
+        embedding = extract_embedding(file_path)
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+    except Exception as e:
+        print(f"Failed to extract speaker embedding during profile upload: {e}", uid)
+
     return {"url": url}
 
 

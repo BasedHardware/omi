@@ -94,10 +94,7 @@ from utils.speaker_sample_migration import maybe_migrate_person_samples
 
 from database.users import (
     get_user_transcription_preferences,
-    get_speaker_label_mapping,
     get_profiles_shared_with_user,
-    get_people,
-    set_speaker_label_mapping
 )
 
 router = APIRouter()
@@ -1269,22 +1266,20 @@ async def _stream_handler(
                         'name': person['name'],
                     }
 
-            # Shared profiles
+            # Shared profiles, load each sharer's own user-level embedding
             shared_owners = get_profiles_shared_with_user(uid)
             for owner_uid in shared_owners:
                 if owner_uid == uid:
                     continue
                 try:
-                    shared_people = get_people(owner_uid)
-                    for person in shared_people:
-                        emb = person.get('speaker_embedding')
-                        if emb:
-                            # Use composite key to avoid collision
-                            key = f"{owner_uid}:{person['id']}"
-                            person_embeddings_cache[key] = {
-                                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
-                                'name': f"{person['name']} (from {owner_uid[:6]})",
-                            }
+                    emb = user_db.get_user_speaker_embedding(owner_uid)
+                    if emb:
+                        profile = user_db.get_user_profile(owner_uid)
+                        name = profile.get('name') or owner_uid[:8]
+                        person_embeddings_cache[f"shared:{owner_uid}"] = {
+                            'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                            'name': name,
+                        }
                 except Exception as e:
                     print(f"Failed to load shared profile from {owner_uid}: {e}", uid, session_id)
 
@@ -1305,24 +1300,6 @@ async def _stream_handler(
                 continue
 
             speaker_id = seg['speaker_id']
-
-            # Check persistent mapping before running similarity
-            persistent_person_id = get_speaker_label_mapping(uid, speaker_id)
-            if persistent_person_id:
-                if ':' in persistent_person_id:
-                    owner_uid, actual_person_id = persistent_person_id.split(':', 1)
-                    person = user_db.get_person(owner_uid, actual_person_id)
-                    if person:
-                        speaker_to_person_map[speaker_id] = (
-                            persistent_person_id,
-                            f"{person['name']} (from {owner_uid[:6]})"
-                        )
-                        continue
-                else:
-                    person = user_db.get_person(uid, persistent_person_id)
-                    if person:
-                        speaker_to_person_map[speaker_id] = (persistent_person_id, person.get('name', ''))
-                        continue
 
             # Skip if already resolved in session
             if speaker_id in speaker_to_person_map:
@@ -1843,9 +1820,6 @@ async def _stream_handler(
                                     print(
                                         f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
                                     )
-
-                                    # Persist mapping for future sessions (manual assignment bootstrap)
-                                    set_speaker_label_mapping(uid, speaker_id, person_id)
 
                                     # Forward to pusher for speech sample extraction (non-blocking)
                                     # Only for real people (not 'user') and when private cloud sync is enabled
