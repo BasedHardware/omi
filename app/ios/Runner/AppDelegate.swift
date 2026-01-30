@@ -13,7 +13,9 @@ extension FlutterError: Error {}
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
+  private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
+  private let appleHealthService = AppleHealthService()
   private static let iso8601DateFormatter = ISO8601DateFormatter()
 
   private var notificationTitleOnKill: String?
@@ -63,6 +65,12 @@ extension FlutterError: Error {}
       self?.handleAppleRemindersCall(call, result: result)
     }
 
+    // Create Apple Health method channel
+    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
+    appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleAppleHealthCall(call, result: result)
+    }
+
     // Create Speech Recognition method channel
     let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller!.binaryMessenger)
     let speechHandler = SpeechRecognitionHandler()
@@ -105,6 +113,10 @@ extension FlutterError: Error {}
   
   private func handleAppleRemindersCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     appleRemindersService.handleMethodCall(call, result: result)
+  }
+
+  private func handleAppleHealthCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    appleHealthService.handleMethodCall(call, result: result)
   }
 
   // MARK: - Silent Push for Apple Reminders Auto-Sync

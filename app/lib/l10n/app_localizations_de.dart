@@ -430,7 +430,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deviceSettings => 'Geräteeinstellungen';
 
   @override
-  String get chatTools => 'Chat-Tools';
+  String get integrations => 'Integrationen';
 
   @override
   String get feedbackBug => 'Feedback / Fehler';
@@ -590,7 +590,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get starOngoing => 'Laufende Unterhaltung favorisieren';
 
   @override
-  String get off => 'Off';
+  String get off => 'Aus';
 
   @override
   String get max => 'Max';
@@ -1026,7 +1026,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get comingSoon => 'Demnächst';
 
   @override
-  String get chatToolsFooter => 'Verbinden Sie Ihre Apps, um Daten und Metriken im Chat anzuzeigen.';
+  String get integrationsFooter => 'Verbinden Sie Ihre Apps, um Daten und Metriken im Chat anzuzeigen.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7854,5 +7854,204 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Gerät unterstützt keine WiFi-Synchronisierung, Wechsel zu Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health ist auf diesem Gerät nicht verfügbar';
+
+  @override
+  String get downloadAudio => 'Audio herunterladen';
+
+  @override
+  String get audioDownloadSuccess => 'Audio erfolgreich heruntergeladen';
+
+  @override
+  String get audioDownloadFailed => 'Audio-Download fehlgeschlagen';
+
+  @override
+  String get downloadingAudio => 'Lade Audio herunter...';
+
+  @override
+  String get shareAudio => 'Audio teilen';
+
+  @override
+  String get preparingAudio => 'Bereite Audio vor';
+
+  @override
+  String get gettingAudioFiles => 'Hole Audiodateien...';
+
+  @override
+  String get downloadingAudioProgress => 'Lade Audio herunter';
+
+  @override
+  String get processingAudio => 'Verarbeite Audio';
+
+  @override
+  String get combiningAudioFiles => 'Kombiniere Audiodateien...';
+
+  @override
+  String get audioReady => 'Audio bereit';
+
+  @override
+  String get openingShareSheet => 'Öffne Freigabeblatt...';
+
+  @override
+  String get audioShareFailed => 'Teilen fehlgeschlagen';
+
+  @override
+  String get dailyRecaps => 'Tägliche Zusammenfassungen';
+
+  @override
+  String get removeFilter => 'Filter Entfernen';
+
+  @override
+  String get categoryConversationAnalysis => 'Gesprächsanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Persönlichkeitsklon';
+
+  @override
+  String get categoryHealth => 'Gesundheit';
+
+  @override
+  String get categoryEducation => 'Bildung';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionale Unterstützung';
+
+  @override
+  String get categoryProductivity => 'Produktivität';
+
+  @override
+  String get categoryEntertainment => 'Unterhaltung';
+
+  @override
+  String get categoryFinancial => 'Finanzen';
+
+  @override
+  String get categoryTravel => 'Reisen';
+
+  @override
+  String get categorySafety => 'Sicherheit';
+
+  @override
+  String get categoryShopping => 'Einkaufen';
+
+  @override
+  String get categorySocial => 'Soziales';
+
+  @override
+  String get categoryNews => 'Nachrichten';
+
+  @override
+  String get categoryUtilities => 'Werkzeuge';
+
+  @override
+  String get categoryOther => 'Sonstiges';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Gespräche';
+
+  @override
+  String get capabilityExternalIntegration => 'Externe Integration';
+
+  @override
+  String get capabilityNotification => 'Benachrichtigung';
+
+  @override
+  String get triggerAudioBytes => 'Audio-Bytes';
+
+  @override
+  String get triggerConversationCreation => 'Gesprächserstellung';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkript verarbeitet';
+
+  @override
+  String get actionCreateConversations => 'Gespräche erstellen';
+
+  @override
+  String get actionCreateMemories => 'Erinnerungen erstellen';
+
+  @override
+  String get actionReadConversations => 'Gespräche lesen';
+
+  @override
+  String get actionReadMemories => 'Erinnerungen lesen';
+
+  @override
+  String get actionReadTasks => 'Aufgaben lesen';
+
+  @override
+  String get scopeUserName => 'Benutzername';
+
+  @override
+  String get scopeUserFacts => 'Benutzerfakten';
+
+  @override
+  String get scopeUserConversations => 'Benutzergespräche';
+
+  @override
+  String get scopeUserChat => 'Benutzer-Chat';
+
+  @override
+  String get capabilitySummary => 'Zusammenfassung';
+
+  @override
+  String get capabilityFeatured => 'Empfohlen';
+
+  @override
+  String get capabilityTasks => 'Aufgaben';
+
+  @override
+  String get capabilityIntegrations => 'Integrationen';
+
+  @override
+  String get categoryPersonalityClones => 'Persönlichkeitsklone';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivität & Lebensstil';
+
+  @override
+  String get categorySocialEntertainment => 'Soziales & Unterhaltung';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitätswerkzeuge';
+
+  @override
+  String get categoryPersonalWellness => 'Persönliches Wohlbefinden';
+
+  @override
+  String get rating => 'Bewertung';
+
+  @override
+  String get categories => 'Kategorien';
+
+  @override
+  String get sortBy => 'Sortieren';
+
+  @override
+  String get highestRating => 'Höchste Bewertung';
+
+  @override
+  String get lowestRating => 'Niedrigste Bewertung';
+
+  @override
+  String get resetFilters => 'Filter zurücksetzen';
+
+  @override
+  String get applyFilters => 'Filter anwenden';
+
+  @override
+  String get mostInstalls => 'Meiste Installationen';
+
+  @override
+  String get couldNotOpenUrl => 'Die URL konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.';
 }

@@ -428,7 +428,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
-  String get chatTools => 'Csevegés eszközök';
+  String get integrations => 'Integrációk';
 
   @override
   String get feedbackBug => 'Visszajelzés / hiba';
@@ -452,7 +452,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appAndDeviceCopied => 'Alkalmazás és eszköz részletei másolva';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 összefoglaló';
 
   @override
   String get yourPrivacyYourControl => 'Adatvédelem, saját ellenőrzésed alatt';
@@ -1025,7 +1025,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get comingSoon => 'Hamarosan';
 
   @override
-  String get chatToolsFooter =>
+  String get integrationsFooter =>
       'Csatlakoztasd az alkalmazásaidat az adatok és metrikák megjelenítéséhez a csevegésben.';
 
   @override
@@ -6849,7 +6849,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceIdLabel => 'Eszköz azonosító';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Állapot';
 
   @override
   String get statusProcessed => 'Processed';
@@ -7825,5 +7825,204 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
+
+  @override
+  String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';
+
+  @override
+  String get downloadAudio => 'Hang letöltése';
+
+  @override
+  String get audioDownloadSuccess => 'Hang sikeresen letöltve';
+
+  @override
+  String get audioDownloadFailed => 'Hang letöltése sikertelen';
+
+  @override
+  String get downloadingAudio => 'Hang letöltése...';
+
+  @override
+  String get shareAudio => 'Hang megosztása';
+
+  @override
+  String get preparingAudio => 'Hang előkészítése';
+
+  @override
+  String get gettingAudioFiles => 'Hangfájlok lekérése...';
+
+  @override
+  String get downloadingAudioProgress => 'Hang letöltése';
+
+  @override
+  String get processingAudio => 'Hang feldolgozása';
+
+  @override
+  String get combiningAudioFiles => 'Hangfájlok egyesítése...';
+
+  @override
+  String get audioReady => 'Hang kész';
+
+  @override
+  String get openingShareSheet => 'Megosztási lap megnyitása...';
+
+  @override
+  String get audioShareFailed => 'Megosztás sikertelen';
+
+  @override
+  String get dailyRecaps => 'Napi Összefoglalók';
+
+  @override
+  String get removeFilter => 'Szűrő Eltávolítása';
+
+  @override
+  String get categoryConversationAnalysis => 'Beszélgetéselemzés';
+
+  @override
+  String get categoryPersonalityClone => 'Személyiségklón';
+
+  @override
+  String get categoryHealth => 'Egészség';
+
+  @override
+  String get categoryEducation => 'Oktatás';
+
+  @override
+  String get categoryCommunication => 'Kommunikáció';
+
+  @override
+  String get categoryEmotionalSupport => 'Érzelmi támogatás';
+
+  @override
+  String get categoryProductivity => 'Termelékenység';
+
+  @override
+  String get categoryEntertainment => 'Szórakozás';
+
+  @override
+  String get categoryFinancial => 'Pénzügyek';
+
+  @override
+  String get categoryTravel => 'Utazás';
+
+  @override
+  String get categorySafety => 'Biztonság';
+
+  @override
+  String get categoryShopping => 'Vásárlás';
+
+  @override
+  String get categorySocial => 'Közösségi';
+
+  @override
+  String get categoryNews => 'Hírek';
+
+  @override
+  String get categoryUtilities => 'Eszközök';
+
+  @override
+  String get categoryOther => 'Egyéb';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Beszélgetések';
+
+  @override
+  String get capabilityExternalIntegration => 'Külső integráció';
+
+  @override
+  String get capabilityNotification => 'Értesítés';
+
+  @override
+  String get triggerAudioBytes => 'Hang bájtok';
+
+  @override
+  String get triggerConversationCreation => 'Beszélgetés létrehozása';
+
+  @override
+  String get triggerTranscriptProcessed => 'Átirat feldolgozva';
+
+  @override
+  String get actionCreateConversations => 'Beszélgetések létrehozása';
+
+  @override
+  String get actionCreateMemories => 'Emlékek létrehozása';
+
+  @override
+  String get actionReadConversations => 'Beszélgetések olvasása';
+
+  @override
+  String get actionReadMemories => 'Emlékek olvasása';
+
+  @override
+  String get actionReadTasks => 'Feladatok olvasása';
+
+  @override
+  String get scopeUserName => 'Felhasználónév';
+
+  @override
+  String get scopeUserFacts => 'Felhasználói adatok';
+
+  @override
+  String get scopeUserConversations => 'Felhasználói beszélgetések';
+
+  @override
+  String get scopeUserChat => 'Felhasználói chat';
+
+  @override
+  String get capabilitySummary => 'Összefoglaló';
+
+  @override
+  String get capabilityFeatured => 'Kiemelt';
+
+  @override
+  String get capabilityTasks => 'Feladatok';
+
+  @override
+  String get capabilityIntegrations => 'Integrációk';
+
+  @override
+  String get categoryPersonalityClones => 'Személyiségklónok';
+
+  @override
+  String get categoryProductivityLifestyle => 'Termelékenység és életmód';
+
+  @override
+  String get categorySocialEntertainment => 'Közösségi és szórakozás';
+
+  @override
+  String get categoryProductivityTools => 'Termelékenységi eszközök';
+
+  @override
+  String get categoryPersonalWellness => 'Személyes jólét';
+
+  @override
+  String get rating => 'Értékelés';
+
+  @override
+  String get categories => 'Kategóriák';
+
+  @override
+  String get sortBy => 'Rendezés';
+
+  @override
+  String get highestRating => 'Legmagasabb értékelés';
+
+  @override
+  String get lowestRating => 'Legalacsonyabb értékelés';
+
+  @override
+  String get resetFilters => 'Szűrők visszaállítása';
+
+  @override
+  String get applyFilters => 'Szűrők alkalmazása';
+
+  @override
+  String get mostInstalls => 'Legtöbb telepítés';
+
+  @override
+  String get couldNotOpenUrl => 'Az URL nem nyitható meg. Kérjük, próbálja újra.';
 }

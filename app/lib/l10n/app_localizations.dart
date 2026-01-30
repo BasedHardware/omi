@@ -963,11 +963,11 @@ abstract class AppLocalizations {
   /// **'Device Settings'**
   String get deviceSettings;
 
-  /// Chat tools menu item
+  /// Integrations menu item
   ///
   /// In en, this message translates to:
-  /// **'Chat Tools'**
-  String get chatTools;
+  /// **'Integrations'**
+  String get integrations;
 
   /// Feedback menu item
   ///
@@ -2079,11 +2079,11 @@ abstract class AppLocalizations {
   /// **'Coming Soon'**
   String get comingSoon;
 
-  /// No description provided for @chatToolsFooter.
+  /// No description provided for @integrationsFooter.
   ///
   /// In en, this message translates to:
   /// **'Connect your apps to view data and metrics in chat.'**
-  String get chatToolsFooter;
+  String get integrationsFooter;
 
   /// No description provided for @completeAuthInBrowser.
   ///
@@ -14522,6 +14522,402 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Device does not support WiFi sync, switching to Bluetooth'**
   String get deviceDoesNotSupportWifiSwitchingToBle;
+
+  /// No description provided for @appleHealthNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Health is not available on this device'**
+  String get appleHealthNotAvailable;
+
+  /// No description provided for @downloadAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Download Audio'**
+  String get downloadAudio;
+
+  /// No description provided for @audioDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio downloaded successfully'**
+  String get audioDownloadSuccess;
+
+  /// No description provided for @audioDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download audio'**
+  String get audioDownloadFailed;
+
+  /// No description provided for @downloadingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading audio...'**
+  String get downloadingAudio;
+
+  /// No description provided for @shareAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Audio'**
+  String get shareAudio;
+
+  /// No description provided for @preparingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing Audio'**
+  String get preparingAudio;
+
+  /// No description provided for @gettingAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Getting audio files...'**
+  String get gettingAudioFiles;
+
+  /// No description provided for @downloadingAudioProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading Audio'**
+  String get downloadingAudioProgress;
+
+  /// No description provided for @processingAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing Audio'**
+  String get processingAudio;
+
+  /// No description provided for @combiningAudioFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Combining audio files...'**
+  String get combiningAudioFiles;
+
+  /// No description provided for @audioReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Ready'**
+  String get audioReady;
+
+  /// No description provided for @openingShareSheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Opening share sheet...'**
+  String get openingShareSheet;
+
+  /// No description provided for @audioShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Share Failed'**
+  String get audioShareFailed;
+
+  /// No description provided for @dailyRecaps.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps'**
+  String get dailyRecaps;
+
+  /// No description provided for @removeFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Filter'**
+  String get removeFilter;
+
+  /// No description provided for @categoryConversationAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Analysis'**
+  String get categoryConversationAnalysis;
+
+  /// No description provided for @categoryPersonalityClone.
+  ///
+  /// In en, this message translates to:
+  /// **'Personality Clone'**
+  String get categoryPersonalityClone;
+
+  /// No description provided for @categoryHealth.
+  ///
+  /// In en, this message translates to:
+  /// **'Health'**
+  String get categoryHealth;
+
+  /// No description provided for @categoryEducation.
+  ///
+  /// In en, this message translates to:
+  /// **'Education'**
+  String get categoryEducation;
+
+  /// No description provided for @categoryCommunication.
+  ///
+  /// In en, this message translates to:
+  /// **'Communication'**
+  String get categoryCommunication;
+
+  /// No description provided for @categoryEmotionalSupport.
+  ///
+  /// In en, this message translates to:
+  /// **'Emotional Support'**
+  String get categoryEmotionalSupport;
+
+  /// No description provided for @categoryProductivity.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity'**
+  String get categoryProductivity;
+
+  /// No description provided for @categoryEntertainment.
+  ///
+  /// In en, this message translates to:
+  /// **'Entertainment'**
+  String get categoryEntertainment;
+
+  /// No description provided for @categoryFinancial.
+  ///
+  /// In en, this message translates to:
+  /// **'Financial'**
+  String get categoryFinancial;
+
+  /// No description provided for @categoryTravel.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel'**
+  String get categoryTravel;
+
+  /// No description provided for @categorySafety.
+  ///
+  /// In en, this message translates to:
+  /// **'Safety'**
+  String get categorySafety;
+
+  /// No description provided for @categoryShopping.
+  ///
+  /// In en, this message translates to:
+  /// **'Shopping'**
+  String get categoryShopping;
+
+  /// No description provided for @categorySocial.
+  ///
+  /// In en, this message translates to:
+  /// **'Social'**
+  String get categorySocial;
+
+  /// No description provided for @categoryNews.
+  ///
+  /// In en, this message translates to:
+  /// **'News'**
+  String get categoryNews;
+
+  /// No description provided for @categoryUtilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Utilities'**
+  String get categoryUtilities;
+
+  /// No description provided for @categoryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get categoryOther;
+
+  /// No description provided for @capabilityChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get capabilityChat;
+
+  /// No description provided for @capabilityConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations'**
+  String get capabilityConversations;
+
+  /// No description provided for @capabilityExternalIntegration.
+  ///
+  /// In en, this message translates to:
+  /// **'External Integration'**
+  String get capabilityExternalIntegration;
+
+  /// No description provided for @capabilityNotification.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification'**
+  String get capabilityNotification;
+
+  /// No description provided for @triggerAudioBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio Bytes'**
+  String get triggerAudioBytes;
+
+  /// No description provided for @triggerConversationCreation.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Creation'**
+  String get triggerConversationCreation;
+
+  /// No description provided for @triggerTranscriptProcessed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript Processed'**
+  String get triggerTranscriptProcessed;
+
+  /// No description provided for @actionCreateConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Create conversations'**
+  String get actionCreateConversations;
+
+  /// No description provided for @actionCreateMemories.
+  ///
+  /// In en, this message translates to:
+  /// **'Create memories'**
+  String get actionCreateMemories;
+
+  /// No description provided for @actionReadConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'Read conversations'**
+  String get actionReadConversations;
+
+  /// No description provided for @actionReadMemories.
+  ///
+  /// In en, this message translates to:
+  /// **'Read memories'**
+  String get actionReadMemories;
+
+  /// No description provided for @actionReadTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Read tasks'**
+  String get actionReadTasks;
+
+  /// No description provided for @scopeUserName.
+  ///
+  /// In en, this message translates to:
+  /// **'User Name'**
+  String get scopeUserName;
+
+  /// No description provided for @scopeUserFacts.
+  ///
+  /// In en, this message translates to:
+  /// **'User Facts'**
+  String get scopeUserFacts;
+
+  /// No description provided for @scopeUserConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'User Conversations'**
+  String get scopeUserConversations;
+
+  /// No description provided for @scopeUserChat.
+  ///
+  /// In en, this message translates to:
+  /// **'User Chat'**
+  String get scopeUserChat;
+
+  /// No description provided for @capabilitySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary'**
+  String get capabilitySummary;
+
+  /// No description provided for @capabilityFeatured.
+  ///
+  /// In en, this message translates to:
+  /// **'Featured'**
+  String get capabilityFeatured;
+
+  /// No description provided for @capabilityTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get capabilityTasks;
+
+  /// No description provided for @capabilityIntegrations.
+  ///
+  /// In en, this message translates to:
+  /// **'Integrations'**
+  String get capabilityIntegrations;
+
+  /// No description provided for @categoryPersonalityClones.
+  ///
+  /// In en, this message translates to:
+  /// **'Personality Clones'**
+  String get categoryPersonalityClones;
+
+  /// No description provided for @categoryProductivityLifestyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity & Lifestyle'**
+  String get categoryProductivityLifestyle;
+
+  /// No description provided for @categorySocialEntertainment.
+  ///
+  /// In en, this message translates to:
+  /// **'Social & Entertainment'**
+  String get categorySocialEntertainment;
+
+  /// No description provided for @categoryProductivityTools.
+  ///
+  /// In en, this message translates to:
+  /// **'Productivity & Tools'**
+  String get categoryProductivityTools;
+
+  /// No description provided for @categoryPersonalWellness.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal & Lifestyle'**
+  String get categoryPersonalWellness;
+
+  /// No description provided for @rating.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get rating;
+
+  /// No description provided for @categories.
+  ///
+  /// In en, this message translates to:
+  /// **'Categories'**
+  String get categories;
+
+  /// No description provided for @sortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get sortBy;
+
+  /// No description provided for @highestRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest Rating'**
+  String get highestRating;
+
+  /// No description provided for @lowestRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowest Rating'**
+  String get lowestRating;
+
+  /// No description provided for @resetFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset filters'**
+  String get resetFilters;
+
+  /// No description provided for @applyFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply filters'**
+  String get applyFilters;
+
+  /// No description provided for @mostInstalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Most Installs'**
+  String get mostInstalls;
+
+  /// No description provided for @couldNotOpenUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open URL. Please try again.'**
+  String get couldNotOpenUrl;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

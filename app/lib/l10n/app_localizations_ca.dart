@@ -427,7 +427,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override
-  String get chatTools => 'Eines de xat';
+  String get integrations => 'Integracions';
 
   @override
   String get feedbackBug => 'Comentaris / Error';
@@ -1024,7 +1024,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get comingSoon => 'Properament';
 
   @override
-  String get chatToolsFooter => 'Connecteu les vostres aplicacions per veure dades i estadístiques al xat.';
+  String get integrationsFooter => 'Connecteu les vostres aplicacions per veure dades i estadístiques al xat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7836,5 +7836,204 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'El dispositiu no admet sincronització WiFi, canviant a Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health no està disponible en aquest dispositiu';
+
+  @override
+  String get downloadAudio => 'Descarregar àudio';
+
+  @override
+  String get audioDownloadSuccess => 'Àudio descarregat correctament';
+
+  @override
+  String get audioDownloadFailed => 'Error en descarregar l\'àudio';
+
+  @override
+  String get downloadingAudio => 'Descarregant àudio...';
+
+  @override
+  String get shareAudio => 'Compartir àudio';
+
+  @override
+  String get preparingAudio => 'Preparant àudio';
+
+  @override
+  String get gettingAudioFiles => 'Obtenint fitxers d\'àudio...';
+
+  @override
+  String get downloadingAudioProgress => 'Descarregant àudio';
+
+  @override
+  String get processingAudio => 'Processant àudio';
+
+  @override
+  String get combiningAudioFiles => 'Combinant fitxers d\'àudio...';
+
+  @override
+  String get audioReady => 'Àudio llest';
+
+  @override
+  String get openingShareSheet => 'Obrint full de compartició...';
+
+  @override
+  String get audioShareFailed => 'Error en compartir';
+
+  @override
+  String get dailyRecaps => 'Resums Diaris';
+
+  @override
+  String get removeFilter => 'Elimina el Filtre';
+
+  @override
+  String get categoryConversationAnalysis => 'Anàlisi de converses';
+
+  @override
+  String get categoryPersonalityClone => 'Clon de personalitat';
+
+  @override
+  String get categoryHealth => 'Salut';
+
+  @override
+  String get categoryEducation => 'Educació';
+
+  @override
+  String get categoryCommunication => 'Comunicació';
+
+  @override
+  String get categoryEmotionalSupport => 'Suport emocional';
+
+  @override
+  String get categoryProductivity => 'Productivitat';
+
+  @override
+  String get categoryEntertainment => 'Entreteniment';
+
+  @override
+  String get categoryFinancial => 'Finances';
+
+  @override
+  String get categoryTravel => 'Viatges';
+
+  @override
+  String get categorySafety => 'Seguretat';
+
+  @override
+  String get categoryShopping => 'Compres';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'Notícies';
+
+  @override
+  String get categoryUtilities => 'Utilitats';
+
+  @override
+  String get categoryOther => 'Altres';
+
+  @override
+  String get capabilityChat => 'Xat';
+
+  @override
+  String get capabilityConversations => 'Converses';
+
+  @override
+  String get capabilityExternalIntegration => 'Integració externa';
+
+  @override
+  String get capabilityNotification => 'Notificació';
+
+  @override
+  String get triggerAudioBytes => 'Bytes d\'àudio';
+
+  @override
+  String get triggerConversationCreation => 'Creació de conversa';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcripció processada';
+
+  @override
+  String get actionCreateConversations => 'Crear converses';
+
+  @override
+  String get actionCreateMemories => 'Crear records';
+
+  @override
+  String get actionReadConversations => 'Llegir converses';
+
+  @override
+  String get actionReadMemories => 'Llegir records';
+
+  @override
+  String get actionReadTasks => 'Llegir tasques';
+
+  @override
+  String get scopeUserName => 'Nom d\'usuari';
+
+  @override
+  String get scopeUserFacts => 'Fets de l\'usuari';
+
+  @override
+  String get scopeUserConversations => 'Converses de l\'usuari';
+
+  @override
+  String get scopeUserChat => 'Xat de l\'usuari';
+
+  @override
+  String get capabilitySummary => 'Resum';
+
+  @override
+  String get capabilityFeatured => 'Destacats';
+
+  @override
+  String get capabilityTasks => 'Tasques';
+
+  @override
+  String get capabilityIntegrations => 'Integracions';
+
+  @override
+  String get categoryPersonalityClones => 'Clons de personalitat';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivitat i estil de vida';
+
+  @override
+  String get categorySocialEntertainment => 'Social i entreteniment';
+
+  @override
+  String get categoryProductivityTools => 'Eines de productivitat';
+
+  @override
+  String get categoryPersonalWellness => 'Benestar personal';
+
+  @override
+  String get rating => 'Valoració';
+
+  @override
+  String get categories => 'Categories';
+
+  @override
+  String get sortBy => 'Ordenar';
+
+  @override
+  String get highestRating => 'Millor valoració';
+
+  @override
+  String get lowestRating => 'Pitjor valoració';
+
+  @override
+  String get resetFilters => 'Restablir filtres';
+
+  @override
+  String get applyFilters => 'Aplicar filtres';
+
+  @override
+  String get mostInstalls => 'Més instal·lacions';
+
+  @override
+  String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
 }

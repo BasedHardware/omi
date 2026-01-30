@@ -7,10 +7,10 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import '../models/sync_state.dart';
-import '../utils/audio_player_utils.dart';
-import '../utils/conversation_sync_utils.dart';
-import '../utils/waveform_utils.dart';
+import 'package:omi/models/sync_state.dart';
+import 'package:omi/utils/audio_player_utils.dart';
+import 'package:omi/utils/conversation_sync_utils.dart';
+import 'package:omi/utils/waveform_utils.dart';
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services

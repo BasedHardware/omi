@@ -427,7 +427,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override
-  String get chatTools => 'Nástroje chatu';
+  String get integrations => 'Integrácie';
 
   @override
   String get feedbackBug => 'Spätná väzba / chyba';
@@ -451,7 +451,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikácii a zariadení boli skopírované';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Zhrnutie 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše súkromie, vaša kontrola';
@@ -1023,7 +1023,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get comingSoon => 'Čoskoro';
 
   @override
-  String get chatToolsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
+  String get integrationsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7778,5 +7778,204 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zariadenie nepodporuje WiFi synchronizáciu, prepínanie na Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health nie je na tomto zariadení k dispozícii';
+
+  @override
+  String get downloadAudio => 'Stiahnuť zvuk';
+
+  @override
+  String get audioDownloadSuccess => 'Zvuk bol úspešne stiahnutý';
+
+  @override
+  String get audioDownloadFailed => 'Sťahovanie zvuku zlyhalo';
+
+  @override
+  String get downloadingAudio => 'Sťahovanie zvuku...';
+
+  @override
+  String get shareAudio => 'Zdieľať zvuk';
+
+  @override
+  String get preparingAudio => 'Príprava zvuku';
+
+  @override
+  String get gettingAudioFiles => 'Získavanie zvukových súborov...';
+
+  @override
+  String get downloadingAudioProgress => 'Sťahovanie zvuku';
+
+  @override
+  String get processingAudio => 'Spracovanie zvuku';
+
+  @override
+  String get combiningAudioFiles => 'Kombinovanie zvukových súborov...';
+
+  @override
+  String get audioReady => 'Zvuk je pripravený';
+
+  @override
+  String get openingShareSheet => 'Otváranie listu zdieľania...';
+
+  @override
+  String get audioShareFailed => 'Zdieľanie zlyhalo';
+
+  @override
+  String get dailyRecaps => 'Denné Súhrny';
+
+  @override
+  String get removeFilter => 'Odstrániť Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Analýza konverzácií';
+
+  @override
+  String get categoryPersonalityClone => 'Klon osobnosti';
+
+  @override
+  String get categoryHealth => 'Zdravie';
+
+  @override
+  String get categoryEducation => 'Vzdelávanie';
+
+  @override
+  String get categoryCommunication => 'Komunikácia';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocionálna podpora';
+
+  @override
+  String get categoryProductivity => 'Produktivita';
+
+  @override
+  String get categoryEntertainment => 'Zábava';
+
+  @override
+  String get categoryFinancial => 'Financie';
+
+  @override
+  String get categoryTravel => 'Cestovanie';
+
+  @override
+  String get categorySafety => 'Bezpečnosť';
+
+  @override
+  String get categoryShopping => 'Nakupovanie';
+
+  @override
+  String get categorySocial => 'Sociálne';
+
+  @override
+  String get categoryNews => 'Správy';
+
+  @override
+  String get categoryUtilities => 'Nástroje';
+
+  @override
+  String get categoryOther => 'Ostatné';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Konverzácie';
+
+  @override
+  String get capabilityExternalIntegration => 'Externá integrácia';
+
+  @override
+  String get capabilityNotification => 'Oznámenie';
+
+  @override
+  String get triggerAudioBytes => 'Audio bajty';
+
+  @override
+  String get triggerConversationCreation => 'Vytvorenie konverzácie';
+
+  @override
+  String get triggerTranscriptProcessed => 'Prepis spracovaný';
+
+  @override
+  String get actionCreateConversations => 'Vytvoriť konverzácie';
+
+  @override
+  String get actionCreateMemories => 'Vytvoriť spomienky';
+
+  @override
+  String get actionReadConversations => 'Čítať konverzácie';
+
+  @override
+  String get actionReadMemories => 'Čítať spomienky';
+
+  @override
+  String get actionReadTasks => 'Čítať úlohy';
+
+  @override
+  String get scopeUserName => 'Používateľské meno';
+
+  @override
+  String get scopeUserFacts => 'Fakty o používateľovi';
+
+  @override
+  String get scopeUserConversations => 'Konverzácie používateľa';
+
+  @override
+  String get scopeUserChat => 'Chat používateľa';
+
+  @override
+  String get capabilitySummary => 'Súhrn';
+
+  @override
+  String get capabilityFeatured => 'Odporúčané';
+
+  @override
+  String get capabilityTasks => 'Úlohy';
+
+  @override
+  String get capabilityIntegrations => 'Integrácie';
+
+  @override
+  String get categoryPersonalityClones => 'Klony osobností';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivita a životný štýl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociálne a zábava';
+
+  @override
+  String get categoryProductivityTools => 'Nástroje produktivity';
+
+  @override
+  String get categoryPersonalWellness => 'Osobná pohoda';
+
+  @override
+  String get rating => 'Hodnotenie';
+
+  @override
+  String get categories => 'Kategórie';
+
+  @override
+  String get sortBy => 'Zoradiť';
+
+  @override
+  String get highestRating => 'Najvyššie hodnotenie';
+
+  @override
+  String get lowestRating => 'Najnižšie hodnotenie';
+
+  @override
+  String get resetFilters => 'Resetovať filtre';
+
+  @override
+  String get applyFilters => 'Použiť filtre';
+
+  @override
+  String get mostInstalls => 'Najviac inštalácií';
+
+  @override
+  String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
 }

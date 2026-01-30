@@ -45,21 +45,6 @@ class BatteryInfoWidget extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: deviceProvider.batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : deviceProvider.batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : deviceProvider.batteryLevel > 0
-                                        ? Colors.red
-                                        : Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6.0),
                         // Add device icon
                         SizedBox(
                           width: 16,
@@ -73,11 +58,27 @@ class BatteryInfoWidget extends StatelessWidget {
                             fit: BoxFit.contain,
                           ),
                         ),
-                        const SizedBox(width: 6.0),
-                        Text(
-                          deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
+                        // Only show battery indicator and percentage when battery level is valid (> 0)
+                        if (deviceProvider.batteryLevel > 0) ...[
+                          const SizedBox(width: 6.0),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: deviceProvider.batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : deviceProvider.batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6.0),
+                          Text(
+                            '${deviceProvider.batteryLevel}%',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ],
                     )),
               );

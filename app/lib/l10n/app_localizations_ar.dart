@@ -421,7 +421,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override
-  String get chatTools => 'أدوات الدردشة';
+  String get integrations => 'التكاملات';
 
   @override
   String get feedbackBug => 'ملاحظات / خطأ';
@@ -1012,7 +1012,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get comingSoon => 'قريباً';
 
   @override
-  String get chatToolsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
+  String get integrationsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
 
   @override
   String get completeAuthInBrowser => 'يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.';
@@ -7733,5 +7733,203 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'الجهاز لا يدعم مزامنة WiFi، التبديل إلى البلوتوث';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health غير متاح على هذا الجهاز';
+
+  @override
+  String get downloadAudio => 'تنزيل الصوت';
+
+  @override
+  String get audioDownloadSuccess => 'تم تنزيل الصوت بنجاح';
+
+  @override
+  String get audioDownloadFailed => 'فشل تنزيل الصوت';
+
+  @override
+  String get downloadingAudio => 'جاري تنزيل الصوت...';
+
+  @override
+  String get shareAudio => 'مشاركة الصوت';
+
+  @override
+  String get preparingAudio => 'جاري تحضير الصوت';
+
+  @override
+  String get gettingAudioFiles => 'جاري الحصول على ملفات الصوت...';
+
+  @override
+  String get downloadingAudioProgress => 'جاري تنزيل الصوت';
+
+  @override
+  String get processingAudio => 'جاري معالجة الصوت';
+
+  @override
+  String get combiningAudioFiles => 'جاري دمج ملفات الصوت...';
+
+  @override
+  String get audioReady => 'الصوت جاهز';
+
+  @override
+  String get openingShareSheet => 'جاري فتح صفحة المشاركة...';
+
+  @override
+  String get audioShareFailed => 'فشلت المشاركة';
+
+  @override
+  String get dailyRecaps => 'الملخصات اليومية';
+
+  @override
+  String get removeFilter => 'إزالة الفلتر';
+
+  @override
+  String get categoryConversationAnalysis => 'تحليل المحادثة';
+
+  @override
+  String get categoryPersonalityClone => 'استنساخ الشخصية';
+
+  @override
+  String get categoryHealth => 'الصحة';
+
+  @override
+  String get categoryEducation => 'التعليم';
+
+  @override
+  String get categoryCommunication => 'التواصل';
+
+  @override
+  String get categoryEmotionalSupport => 'الدعم العاطفي';
+
+  @override
+  String get categoryProductivity => 'الإنتاجية';
+
+  @override
+  String get categoryEntertainment => 'الترفيه';
+
+  @override
+  String get categoryFinancial => 'المالية';
+
+  @override
+  String get categoryTravel => 'السفر';
+
+  @override
+  String get categorySafety => 'الأمان';
+
+  @override
+  String get categoryShopping => 'التسوق';
+
+  @override
+  String get categorySocial => 'اجتماعي';
+
+  @override
+  String get categoryNews => 'الأخبار';
+
+  @override
+  String get categoryUtilities => 'الأدوات';
+
+  @override
+  String get categoryOther => 'أخرى';
+
+  @override
+  String get capabilityChat => 'الدردشة';
+
+  @override
+  String get capabilityConversations => 'المحادثات';
+
+  @override
+  String get capabilityExternalIntegration => 'التكامل الخارجي';
+
+  @override
+  String get capabilityNotification => 'الإشعارات';
+
+  @override
+  String get triggerAudioBytes => 'بايتات الصوت';
+
+  @override
+  String get triggerConversationCreation => 'إنشاء المحادثة';
+
+  @override
+  String get triggerTranscriptProcessed => 'معالجة النص';
+
+  @override
+  String get actionCreateConversations => 'إنشاء المحادثات';
+
+  @override
+  String get actionCreateMemories => 'إنشاء الذكريات';
+
+  @override
+  String get actionReadConversations => 'قراءة المحادثات';
+
+  @override
+  String get actionReadMemories => 'قراءة الذكريات';
+
+  @override
+  String get actionReadTasks => 'قراءة المهام';
+
+  @override
+  String get scopeUserName => 'اسم المستخدم';
+
+  @override
+  String get scopeUserFacts => 'معلومات المستخدم';
+
+  @override
+  String get scopeUserConversations => 'محادثات المستخدم';
+
+  @override
+  String get scopeUserChat => 'دردشة المستخدم';
+
+  @override
+  String get capabilitySummary => 'الملخص';
+
+  @override
+  String get capabilityFeatured => 'المميزة';
+
+  @override
+  String get capabilityTasks => 'المهام';
+
+  @override
+  String get capabilityIntegrations => 'التكاملات';
+
+  @override
+  String get categoryPersonalityClones => 'استنساخ الشخصيات';
+
+  @override
+  String get categoryProductivityLifestyle => 'الإنتاجية ونمط الحياة';
+
+  @override
+  String get categorySocialEntertainment => 'التواصل والترفيه';
+
+  @override
+  String get categoryProductivityTools => 'أدوات الإنتاجية';
+
+  @override
+  String get categoryPersonalWellness => 'الصحة الشخصية';
+
+  @override
+  String get rating => 'التقييم';
+
+  @override
+  String get categories => 'الفئات';
+
+  @override
+  String get sortBy => 'ترتيب';
+
+  @override
+  String get highestRating => 'الأعلى تقييماً';
+
+  @override
+  String get lowestRating => 'الأقل تقييماً';
+
+  @override
+  String get resetFilters => 'إعادة تعيين الفلاتر';
+
+  @override
+  String get applyFilters => 'تطبيق الفلاتر';
+
+  @override
+  String get mostInstalls => 'الأكثر تثبيتاً';
+
+  @override
+  String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
 }

@@ -426,7 +426,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override
-  String get chatTools => 'Sohbet Araçları';
+  String get integrations => 'Entegrasyonlar';
 
   @override
   String get feedbackBug => 'Geri Bildirim / Hata';
@@ -1020,7 +1020,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get comingSoon => 'Yakında';
 
   @override
-  String get chatToolsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
+  String get integrationsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7801,5 +7801,204 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth\'a geçiliyor';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health bu cihazda kullanılamıyor';
+
+  @override
+  String get downloadAudio => 'Ses İndir';
+
+  @override
+  String get audioDownloadSuccess => 'Ses başarıyla indirildi';
+
+  @override
+  String get audioDownloadFailed => 'Ses indirme başarısız';
+
+  @override
+  String get downloadingAudio => 'Ses indiriliyor...';
+
+  @override
+  String get shareAudio => 'Sesi Paylaş';
+
+  @override
+  String get preparingAudio => 'Ses Hazırlanıyor';
+
+  @override
+  String get gettingAudioFiles => 'Ses dosyaları alınıyor...';
+
+  @override
+  String get downloadingAudioProgress => 'Ses İndiriliyor';
+
+  @override
+  String get processingAudio => 'Ses İşleniyor';
+
+  @override
+  String get combiningAudioFiles => 'Ses dosyaları birleştiriliyor...';
+
+  @override
+  String get audioReady => 'Ses Hazır';
+
+  @override
+  String get openingShareSheet => 'Paylaşım sayfası açılıyor...';
+
+  @override
+  String get audioShareFailed => 'Paylaşım Başarısız';
+
+  @override
+  String get dailyRecaps => 'Günlük Özetler';
+
+  @override
+  String get removeFilter => 'Filtreyi Kaldır';
+
+  @override
+  String get categoryConversationAnalysis => 'Konuşma Analizi';
+
+  @override
+  String get categoryPersonalityClone => 'Kişilik Klonu';
+
+  @override
+  String get categoryHealth => 'Sağlık';
+
+  @override
+  String get categoryEducation => 'Eğitim';
+
+  @override
+  String get categoryCommunication => 'İletişim';
+
+  @override
+  String get categoryEmotionalSupport => 'Duygusal Destek';
+
+  @override
+  String get categoryProductivity => 'Verimlilik';
+
+  @override
+  String get categoryEntertainment => 'Eğlence';
+
+  @override
+  String get categoryFinancial => 'Finans';
+
+  @override
+  String get categoryTravel => 'Seyahat';
+
+  @override
+  String get categorySafety => 'Güvenlik';
+
+  @override
+  String get categoryShopping => 'Alışveriş';
+
+  @override
+  String get categorySocial => 'Sosyal';
+
+  @override
+  String get categoryNews => 'Haberler';
+
+  @override
+  String get categoryUtilities => 'Araçlar';
+
+  @override
+  String get categoryOther => 'Diğer';
+
+  @override
+  String get capabilityChat => 'Sohbet';
+
+  @override
+  String get capabilityConversations => 'Konuşmalar';
+
+  @override
+  String get capabilityExternalIntegration => 'Harici Entegrasyon';
+
+  @override
+  String get capabilityNotification => 'Bildirim';
+
+  @override
+  String get triggerAudioBytes => 'Ses Baytları';
+
+  @override
+  String get triggerConversationCreation => 'Konuşma Oluşturma';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkript İşlendi';
+
+  @override
+  String get actionCreateConversations => 'Konuşma oluştur';
+
+  @override
+  String get actionCreateMemories => 'Anı oluştur';
+
+  @override
+  String get actionReadConversations => 'Konuşmaları oku';
+
+  @override
+  String get actionReadMemories => 'Anıları oku';
+
+  @override
+  String get actionReadTasks => 'Görevleri oku';
+
+  @override
+  String get scopeUserName => 'Kullanıcı Adı';
+
+  @override
+  String get scopeUserFacts => 'Kullanıcı Bilgileri';
+
+  @override
+  String get scopeUserConversations => 'Kullanıcı Konuşmaları';
+
+  @override
+  String get scopeUserChat => 'Kullanıcı Sohbeti';
+
+  @override
+  String get capabilitySummary => 'Özet';
+
+  @override
+  String get capabilityFeatured => 'Öne Çıkanlar';
+
+  @override
+  String get capabilityTasks => 'Görevler';
+
+  @override
+  String get capabilityIntegrations => 'Entegrasyonlar';
+
+  @override
+  String get categoryPersonalityClones => 'Kişilik Klonları';
+
+  @override
+  String get categoryProductivityLifestyle => 'Verimlilik ve Yaşam Tarzı';
+
+  @override
+  String get categorySocialEntertainment => 'Sosyal ve Eğlence';
+
+  @override
+  String get categoryProductivityTools => 'Verimlilik Araçları';
+
+  @override
+  String get categoryPersonalWellness => 'Kişisel Sağlık';
+
+  @override
+  String get rating => 'Puan';
+
+  @override
+  String get categories => 'Kategoriler';
+
+  @override
+  String get sortBy => 'Sırala';
+
+  @override
+  String get highestRating => 'En yüksek puan';
+
+  @override
+  String get lowestRating => 'En düşük puan';
+
+  @override
+  String get resetFilters => 'Filtreleri sıfırla';
+
+  @override
+  String get applyFilters => 'Filtreleri uygula';
+
+  @override
+  String get mostInstalls => 'En çok yükleme';
+
+  @override
+  String get couldNotOpenUrl => 'URL açılamadı. Lütfen tekrar deneyin.';
 }

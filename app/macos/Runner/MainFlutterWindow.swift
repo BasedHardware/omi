@@ -56,6 +56,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         RegisterGeneratedPlugins(registry: flutterViewController)
 
+        // Register Focus Monitoring plugin
+        FocusPlugin.register(with: flutterViewController.registrar(forPlugin: "FocusPlugin"))
+
         screenCaptureChannel = FlutterMethodChannel(
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)

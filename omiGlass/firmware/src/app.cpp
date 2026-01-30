@@ -9,6 +9,8 @@
 #include "config.h" // Use config.h for all configurations
 #include "esp_camera.h"
 #include "esp_sleep.h"
+#include "mic.h"
+#include "opus_encoder.h"
 
 // Battery state
 float batteryVoltage = 0.0f;
@@ -46,17 +48,33 @@ bool lightSleepEnabled = true;
 static BLEUUID serviceUUID(OMI_SERVICE_UUID);
 static BLEUUID photoDataUUID(PHOTO_DATA_UUID);
 static BLEUUID photoControlUUID(PHOTO_CONTROL_UUID);
+static BLEUUID audioDataUUID(AUDIO_DATA_UUID);
+static BLEUUID audioCodecUUID(AUDIO_CODEC_UUID);
 
 // Characteristics
 BLECharacteristic *photoDataCharacteristic;
 BLECharacteristic *photoControlCharacteristic;
 BLECharacteristic *batteryLevelCharacteristic;
+BLECharacteristic *audioDataCharacteristic;
+BLECharacteristic *audioCodecCharacteristic;
+
+// Audio state
+bool audioEnabled = true;
+volatile bool audioSubscribed = false;
+uint16_t audioPacketIndex = 0;
 
 // State
 bool connected = false;
 bool isCapturingPhotos = false;
 int captureInterval = 0; // Interval in ms
 unsigned long lastCaptureTime = 0;
+
+// Audio ring buffer for encoded packets
+#define AUDIO_TX_BUFFER_SIZE (AUDIO_TX_RING_BUFFER_SIZE * (OPUS_OUTPUT_MAX_BYTES + 2))
+static uint8_t audio_tx_buffer[AUDIO_TX_BUFFER_SIZE];
+static volatile size_t audio_tx_write_pos = 0;
+static volatile size_t audio_tx_read_pos = 0;
+static uint8_t audio_packet_buffer[OPUS_OUTPUT_MAX_BYTES + AUDIO_PACKET_HEADER_SIZE];
 
 size_t sent_photo_bytes = 0;
 size_t sent_photo_frames = 0;
@@ -80,6 +98,12 @@ void enterPowerSave();
 void exitPowerSave();
 void shutdownDevice();
 void enableLightSleep();
+
+// Audio forward declarations
+void onMicData(int16_t *data, size_t samples);
+void onOpusEncoded(uint8_t *data, size_t len);
+void processAudioTx();
+void broadcastAudioPacket(uint8_t *data, size_t len);
 
 // -------------------------------------------------------------------------
 // Button ISR
@@ -250,6 +274,9 @@ void shutdownDevice()
 {
     Serial.println("Shutting down device...");
 
+    // Stop audio
+    mic_stop();
+
     // Stop photo capture
     isCapturingPhotos = false;
 
@@ -268,11 +295,111 @@ void shutdownDevice()
     esp_deep_sleep_start();
 }
 
+// -------------------------------------------------------------------------
+// Audio Functions
+// -------------------------------------------------------------------------
+void onMicData(int16_t *data, size_t samples)
+{
+    // Feed PCM data to Opus encoder
+    opus_receive_pcm(data, samples);
+}
+
+void onOpusEncoded(uint8_t *data, size_t len)
+{
+    // Store encoded data in TX ring buffer
+    if (len > OPUS_OUTPUT_MAX_BYTES) {
+        return;
+    }
+
+    // Write length (2 bytes) + data
+    size_t packet_size = len + 2;
+    size_t next_write = (audio_tx_write_pos + packet_size) % AUDIO_TX_BUFFER_SIZE;
+
+    // Check for buffer overflow
+    if ((audio_tx_write_pos < audio_tx_read_pos && next_write >= audio_tx_read_pos) ||
+        (audio_tx_write_pos >= audio_tx_read_pos && next_write < audio_tx_write_pos && next_write >= audio_tx_read_pos)) {
+        // Buffer full, skip this packet
+        return;
+    }
+
+    // Write length
+    audio_tx_buffer[audio_tx_write_pos] = len & 0xFF;
+    audio_tx_buffer[(audio_tx_write_pos + 1) % AUDIO_TX_BUFFER_SIZE] = (len >> 8) & 0xFF;
+
+    // Write data
+    for (size_t i = 0; i < len; i++) {
+        audio_tx_buffer[(audio_tx_write_pos + 2 + i) % AUDIO_TX_BUFFER_SIZE] = data[i];
+    }
+
+    audio_tx_write_pos = next_write;
+}
+
+void broadcastAudioPacket(uint8_t *data, size_t len)
+{
+    if (!connected || !audioSubscribed || audioDataCharacteristic == nullptr) {
+        return;
+    }
+
+    // Build packet: 2 bytes index + 1 byte sub-index + data
+    audio_packet_buffer[0] = audioPacketIndex & 0xFF;
+    audio_packet_buffer[1] = (audioPacketIndex >> 8) & 0xFF;
+    audio_packet_buffer[2] = 0; // Sub-index (for fragmentation if needed)
+
+    memcpy(audio_packet_buffer + AUDIO_PACKET_HEADER_SIZE, data, len);
+
+    audioDataCharacteristic->setValue(audio_packet_buffer, len + AUDIO_PACKET_HEADER_SIZE);
+    audioDataCharacteristic->notify();
+
+    audioPacketIndex++;
+}
+
+void processAudioTx()
+{
+    if (!connected || !audioSubscribed) {
+        return;
+    }
+    
+    if (audioDataCharacteristic == nullptr) {
+        return;
+    }
+
+    // Check if we have data in the ring buffer
+    while (audio_tx_read_pos != audio_tx_write_pos) {
+        // Read length
+        uint16_t len = audio_tx_buffer[audio_tx_read_pos] | (audio_tx_buffer[(audio_tx_read_pos + 1) % AUDIO_TX_BUFFER_SIZE] << 8);
+
+        if (len == 0 || len > OPUS_OUTPUT_MAX_BYTES) {
+            // Invalid packet, skip
+            audio_tx_read_pos = (audio_tx_read_pos + 2) % AUDIO_TX_BUFFER_SIZE;
+            continue;
+        }
+
+        // Read data
+        static uint8_t temp_data[OPUS_OUTPUT_MAX_BYTES];
+        for (size_t i = 0; i < len; i++) {
+            temp_data[i] = audio_tx_buffer[(audio_tx_read_pos + 2 + i) % AUDIO_TX_BUFFER_SIZE];
+        }
+
+        // Update read position
+        audio_tx_read_pos = (audio_tx_read_pos + 2 + len) % AUDIO_TX_BUFFER_SIZE;
+
+        // Send packet
+        broadcastAudioPacket(temp_data, len);
+
+        // Small delay to prevent BLE congestion
+        delay(1);
+    }
+}
+
+// -------------------------------------------------------------------------
+// BLE Callbacks
+// -------------------------------------------------------------------------
 class ServerHandler : public BLEServerCallbacks
 {
     void onConnect(BLEServer *server) override
     {
         connected = true;
+        audioSubscribed = false;
         lastActivity = millis(); // Register activity - prevents sleep
         Serial.println(">>> BLE Client connected.");
         // Send current battery level on connect
@@ -281,8 +408,43 @@ class ServerHandler : public BLEServerCallbacks
     void onDisconnect(BLEServer *server) override
     {
         connected = false;
+        audioSubscribed = false;
         Serial.println("<<< BLE Client disconnected. Restarting advertising.");
         BLEDevice::startAdvertising();
+    }
+};
+
+// Callback for Audio Data CCCD (Client Characteristic Configuration Descriptor)
+class AudioCCCDCallback : public BLEDescriptorCallbacks
+{
+    void onWrite(BLEDescriptor *pDescriptor)
+    {
+        uint8_t *value = pDescriptor->getValue();
+        if (value && pDescriptor->getLength() >= 2) {
+            // Check notification bit (bit 0)
+            if (value[0] & 0x01) {
+                audioSubscribed = true;
+                Serial.println("Audio notifications enabled");
+            } else {
+                audioSubscribed = false;
+                Serial.println("Audio notifications disabled");
+            }
+        }
+    }
+};
+
+class AudioDataCallback : public BLECharacteristicCallbacks
+{
+    void onStatus(BLECharacteristic *pCharacteristic, Status s, uint32_t code)
+    {
+        if (s == Status::SUCCESS_NOTIFY || s == Status::SUCCESS_INDICATE) {
+            // Notification sent successfully
+        }
+    }
+    
+    void onRead(BLECharacteristic *pCharacteristic)
+    {
+        // Client read the characteristic
     }
 };
 
@@ -389,6 +551,21 @@ void configure_ble()
 
     // Main service
     BLEService *service = server->createService(serviceUUID);
+
+    // Audio Data characteristic (for streaming audio to app)
+    audioDataCharacteristic = service->createCharacteristic(
+        audioDataUUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    BLE2902 *audioCcc = new BLE2902();
+    audioCcc->setNotifications(true);
+    audioCcc->setCallbacks(new AudioCCCDCallback());
+    audioDataCharacteristic->addDescriptor(audioCcc);
+    audioDataCharacteristic->setCallbacks(new AudioDataCallback());
+
+    // Audio Codec characteristic (tells app which codec we're using)
+    audioCodecCharacteristic =
+        service->createCharacteristic(audioCodecUUID, BLECharacteristic::PROPERTY_READ);
+    uint8_t codecId = opus_get_codec_id();
+    audioCodecCharacteristic->setValue(&codecId, 1);
 
     // Photo Data characteristic
     photoDataCharacteristic = service->createCharacteristic(
@@ -604,6 +781,21 @@ void setup_app()
     readBatteryLevel();
     deviceState = DEVICE_ACTIVE;
 
+    // Initialize audio subsystem
+    Serial.println("Initializing audio subsystem...");
+    if (opus_encoder_init()) {
+        opus_set_callback(onOpusEncoded);
+
+        if (mic_start()) {
+            mic_set_callback(onMicData);
+            Serial.println("Audio subsystem initialized successfully.");
+        } else {
+            Serial.println("Failed to start microphone!");
+        }
+    } else {
+        Serial.println("Failed to initialize Opus encoder!");
+    }
+
     Serial.println("Setup complete.");
     Serial.println("Light sleep optimization enabled for extended battery life.");
 }
@@ -617,6 +809,17 @@ void loop_app()
 
     // Update LED
     updateLED();
+
+    // Process microphone data - always run to keep audio realtime
+    if (audioEnabled && mic_is_running()) {
+        mic_process();
+        opus_process();
+    }
+
+    // Send audio packets over BLE - PRIORITY over photo
+    if (connected && audioSubscribed) {
+        processAudioTx();
+    }
 
     // Check for power save mode (gentle optimization)
     if (!connected && !photoDataUploading && (now - lastActivity > IDLE_THRESHOLD_MS)) {
@@ -660,8 +863,15 @@ void loop_app()
         }
     }
 
-    // If uploading, send chunks over BLE
-    if (photoDataUploading && fb) {
+    // If uploading, send chunks over BLE (interleave with audio - max 2 chunks per loop)
+    static int photo_chunks_this_loop = 0;
+    if (photoDataUploading && fb && photo_chunks_this_loop < 2) {
+        // Yield to audio if audio buffer has data
+        if (audioSubscribed && audio_tx_read_pos != audio_tx_write_pos) {
+            photo_chunks_this_loop = 0; // Reset for next loop
+        } else {
+            photo_chunks_this_loop++;
+        }
         size_t remaining = fb->len - sent_photo_bytes;
         if (remaining > 0) {
             size_t bytes_to_copy;
@@ -708,17 +918,21 @@ void loop_app()
             esp_camera_fb_return(fb);
             fb = nullptr;
             Serial.println("Camera frame buffer freed.");
+            photo_chunks_this_loop = 0; // Reset counter
         }
+    } else {
+        photo_chunks_this_loop = 0; // Reset when not uploading
     }
 
     // Light sleep optimization - major power savings while maintaining BLE
-    if (!photoDataUploading) {
+    // Disable light sleep when audio is active
+    if (!photoDataUploading && !audioSubscribed) {
         enableLightSleep();
     }
 
     // Adaptive delays for power saving (gentle optimization)
-    if (photoDataUploading) {
-        delay(20); // Fast during upload
+    if (photoDataUploading || audioSubscribed) {
+        delay(5); // Fast during upload or audio streaming
     } else if (powerSaveMode) {
         delay(50); // Reduced delay with light sleep
     } else {

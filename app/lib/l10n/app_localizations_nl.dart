@@ -427,7 +427,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override
-  String get chatTools => 'Chat-tools';
+  String get integrations => 'Integraties';
 
   @override
   String get feedbackBug => 'Feedback / Fout';
@@ -1022,7 +1022,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get comingSoon => 'Binnenkort beschikbaar';
 
   @override
-  String get chatToolsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
+  String get integrationsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
 
   @override
   String get completeAuthInBrowser => 'Voltooi de authenticatie in je browser. Keer daarna terug naar de app.';
@@ -7813,5 +7813,204 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Apparaat ondersteunt geen WiFi-synchronisatie, overschakelen naar Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health is niet beschikbaar op dit apparaat';
+
+  @override
+  String get downloadAudio => 'Audio downloaden';
+
+  @override
+  String get audioDownloadSuccess => 'Audio succesvol gedownload';
+
+  @override
+  String get audioDownloadFailed => 'Audio downloaden mislukt';
+
+  @override
+  String get downloadingAudio => 'Audio downloaden...';
+
+  @override
+  String get shareAudio => 'Audio delen';
+
+  @override
+  String get preparingAudio => 'Audio voorbereiden';
+
+  @override
+  String get gettingAudioFiles => 'Audiobestanden ophalen...';
+
+  @override
+  String get downloadingAudioProgress => 'Audio downloaden';
+
+  @override
+  String get processingAudio => 'Audio verwerken';
+
+  @override
+  String get combiningAudioFiles => 'Audiobestanden combineren...';
+
+  @override
+  String get audioReady => 'Audio klaar';
+
+  @override
+  String get openingShareSheet => 'Deelvenster openen...';
+
+  @override
+  String get audioShareFailed => 'Delen mislukt';
+
+  @override
+  String get dailyRecaps => 'Dagelijkse Samenvattingen';
+
+  @override
+  String get removeFilter => 'Filter Verwijderen';
+
+  @override
+  String get categoryConversationAnalysis => 'Gesprekanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
+
+  @override
+  String get categoryHealth => 'Gezondheid';
+
+  @override
+  String get categoryEducation => 'Onderwijs';
+
+  @override
+  String get categoryCommunication => 'Communicatie';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionele ondersteuning';
+
+  @override
+  String get categoryProductivity => 'Productiviteit';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryFinancial => 'Financiën';
+
+  @override
+  String get categoryTravel => 'Reizen';
+
+  @override
+  String get categorySafety => 'Veiligheid';
+
+  @override
+  String get categoryShopping => 'Winkelen';
+
+  @override
+  String get categorySocial => 'Sociaal';
+
+  @override
+  String get categoryNews => 'Nieuws';
+
+  @override
+  String get categoryUtilities => 'Hulpmiddelen';
+
+  @override
+  String get categoryOther => 'Overig';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Gesprekken';
+
+  @override
+  String get capabilityExternalIntegration => 'Externe integratie';
+
+  @override
+  String get capabilityNotification => 'Melding';
+
+  @override
+  String get triggerAudioBytes => 'Audiobytes';
+
+  @override
+  String get triggerConversationCreation => 'Gesprek aanmaken';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcript verwerkt';
+
+  @override
+  String get actionCreateConversations => 'Gesprekken aanmaken';
+
+  @override
+  String get actionCreateMemories => 'Herinneringen aanmaken';
+
+  @override
+  String get actionReadConversations => 'Gesprekken lezen';
+
+  @override
+  String get actionReadMemories => 'Herinneringen lezen';
+
+  @override
+  String get actionReadTasks => 'Taken lezen';
+
+  @override
+  String get scopeUserName => 'Gebruikersnaam';
+
+  @override
+  String get scopeUserFacts => 'Gebruikersgegevens';
+
+  @override
+  String get scopeUserConversations => 'Gebruikersgesprekken';
+
+  @override
+  String get scopeUserChat => 'Gebruikerschat';
+
+  @override
+  String get capabilitySummary => 'Samenvatting';
+
+  @override
+  String get capabilityFeatured => 'Uitgelicht';
+
+  @override
+  String get capabilityTasks => 'Taken';
+
+  @override
+  String get capabilityIntegrations => 'Integraties';
+
+  @override
+  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociaal & entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productiviteitstools';
+
+  @override
+  String get categoryPersonalWellness => 'Persoonlijk welzijn';
+
+  @override
+  String get rating => 'Beoordeling';
+
+  @override
+  String get categories => 'Categorieën';
+
+  @override
+  String get sortBy => 'Sorteren';
+
+  @override
+  String get highestRating => 'Hoogste beoordeling';
+
+  @override
+  String get lowestRating => 'Laagste beoordeling';
+
+  @override
+  String get resetFilters => 'Filters resetten';
+
+  @override
+  String get applyFilters => 'Filters toepassen';
+
+  @override
+  String get mostInstalls => 'Meeste installaties';
+
+  @override
+  String get couldNotOpenUrl => 'Kan de URL niet openen. Probeer het opnieuw.';
 }

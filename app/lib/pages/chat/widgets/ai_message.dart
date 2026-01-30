@@ -33,7 +33,7 @@ import 'package:omi/widgets/text_selection_controls.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
-String? _parseAppIdFromThinking(String thinkingText) {
+String? parseAppIdFromThinking(String thinkingText) {
   if (thinkingText.contains('|app_id:')) {
     var parts = thinkingText.split('|app_id:');
     if (parts.length == 2) {
@@ -44,12 +44,10 @@ String? _parseAppIdFromThinking(String thinkingText) {
 }
 
 /// Get the display text from thinking (removes app_id suffix if present)
-String _getThinkingDisplayText(String thinkingText) {
-  if (thinkingText.contains('|app_id:')) {
-    var parts = thinkingText.split('|app_id:');
-    if (parts.length == 2) {
-      return parts[0];
-    }
+String getThinkingDisplayText(String thinkingText) {
+  int index = thinkingText.indexOf('|app_id:');
+  if (index >= 0) {
+    return thinkingText.substring(0, index);
   }
   return thinkingText;
 }
@@ -468,20 +466,11 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingTextRaw = widget.message.thinkings.length > 1
-        ? widget.message.thinkings
-            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    String? previousThinkingText =
-        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
@@ -506,30 +495,6 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                previousThinkingText != null
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          previousAppId != null
-                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
-                                              : Opacity(
-                                                  opacity: 0.6,
-                                                  child: _buildThinkingIconWidget(previousThinkingText,
-                                                      size: 15, color: Colors.white),
-                                                ),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              overflow: TextOverflow.fade,
-                                              maxLines: 1,
-                                              softWrap: false,
-                                              previousThinkingText,
-                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -667,20 +632,11 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingTextRaw = widget.message.thinkings.length > 1
-        ? widget.message.thinkings
-            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    String? previousThinkingText =
-        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
@@ -712,30 +668,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                previousThinkingText != null
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          previousAppId != null
-                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
-                                              : Opacity(
-                                                  opacity: 0.6,
-                                                  child: _buildThinkingIconWidget(previousThinkingText,
-                                                      size: 15, color: Colors.white),
-                                                ),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              overflow: TextOverflow.fade,
-                                              maxLines: 1,
-                                              softWrap: false,
-                                              previousThinkingText,
-                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -1208,7 +1140,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 2, left: 4),
+      padding: const EdgeInsets.only(top: 8, left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1218,6 +1150,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
+              MixpanelManager().track('Chat Message Copied', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user copied the message (silent, no UI change)
               if (_selectedNps == null) {
@@ -1229,9 +1162,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
                   SnackBar(
                     content: Text(
                       context.l10n.messageCopied,
-                      style: TextStyle(color: Colors.white, fontSize: 12.0),
+                      style: const TextStyle(color: Colors.white, fontSize: 12.0),
                     ),
-                    duration: Duration(milliseconds: 1500),
+                    duration: const Duration(milliseconds: 1500),
                   ),
                 );
               }
@@ -1276,6 +1209,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
+              MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
 
               // Implicit positive feedback - user shared the message (silent, no UI change)
               if (_selectedNps == null) {
@@ -1302,7 +1236,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
       child: FaIcon(
         icon,
         color: isSelected ? Colors.white : Colors.grey.shade600,
-        size: 16,
+        size: 14,
       ),
     );
   }

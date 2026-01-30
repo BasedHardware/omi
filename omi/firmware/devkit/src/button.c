@@ -240,6 +240,8 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_PRINTK("long press detected\n");
         btn_last_event = event;
+
+        // Enter the low power mode
         is_off = true;
         bt_off();
         turnoff_all();

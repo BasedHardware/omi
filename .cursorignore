@@ -1,0 +1,110 @@
+﻿# Security - Secrets and credentials
+*.env
+.env*
+!.env.template
+*.key
+*.pem
+*.jks
+credentials.json
+**/secrets/**
+**/google-credentials*.json
+**/firebase_options*.dart
+**/key.properties
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Build artifacts and dependencies (performance)
+node_modules/
+**/build/
+**/dist/
+**/.dart_tool/
+**/.build/
+**/.next/
+**/.expo/
+**/Pods/
+**/.gradle/
+**/venv/
+**/__pycache__/
+**/pretrained_models/
+**/.pub-cache/
+**/.pub/
+
+# Large binary files
+*.zip
+*.wav
+*.SLDPRT
+*.SLDASM
+*.stl
+*.step
+*.f3z
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.ico
+*.svg
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swo
+*.swp
+hs_err_pid*
+**/logs/
+**/dump/
+**/_temp/
+**/_temp2/
+
+# Generated files
+**/*.gen.dart
+**/*.g.dart
+**/Generated*.dart
+**/Generated*.java
+**/Generated*.swift
+**/Generated*.m
+**/Generated*.h
+**/objectbox.g.dart
+**/objectbox-model.json
+**/env.g.dart
+**/firebase.json
+
+# Test outputs
+test/recordings
+**/recordings/
+**/results/
+**/visualizations/
+
+# Documentation builds
+docs/_site/
+docs/.docusaurus/
+
+# IDE and editor files
+.idea/
+.vscode/
+.DS_Store
+
+# Lock files (not needed for semantic search)
+*.lock
+yarn.lock
+
+# Research and data files
+**/research/
+**/scripts/data/
+**/scripts/rag/*.json
+**/scripts/stt/diarization.json
+**/syncing/*
+
+# Firmware builds
+**/firmware/v2.*/
+
+# Cache directories
+.metro-cache/
+.playwright-mcp/
+.aider*
+
+# Large agent/skill documentation (already indexed elsewhere)
+.agents/
+.agents/**/*.md
+.claude/
+.gemini/

@@ -18,14 +18,14 @@ class NotificationsSettingsPage extends StatefulWidget {
 
 class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _isLoading = true;
-  
-  // Notification frequency (0-5)
-  int _notificationFrequency = 3;
-  
+
+  // Notification frequency (0-5), default 0 (disabled)
+  int _notificationFrequency = 0;
+
   // Daily Summary settings
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22; // Default to 10 PM
-  
+
   // Daily Reflection settings
   bool _dailyReflectionEnabled = true;
 
@@ -39,27 +39,36 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _loadSettings() async {
     // Load Daily Summary settings from API
     final settings = await getDailySummarySettings();
-    
+
+    // Load Mentor Notification settings from API
+    final mentorSettings = await getMentorNotificationSettings();
+
     // Load settings from local prefs
     final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
-    final frequency = SharedPreferencesUtil().notificationFrequency;
-    
+    final localFrequency = SharedPreferencesUtil().notificationFrequency;
+
     if (mounted) {
       setState(() {
         if (settings != null) {
           _dailySummaryEnabled = settings.enabled;
           _dailySummaryHour = settings.hour;
         }
+        // Use backend value if available, otherwise use local
+        _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        // Sync local with backend
+        if (mentorSettings != null) {
+          SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
+        }
         _dailyReflectionEnabled = reflectionEnabled;
-        _notificationFrequency = frequency;
         _isLoading = false;
       });
     }
   }
 
-  void _updateNotificationFrequency(int value) {
+  Future<void> _updateNotificationFrequency(int value) async {
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
+    await setMentorNotificationSettings(value);
   }
 
   String _getFrequencyLabel(BuildContext context, int value) {
@@ -121,7 +130,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   void _updateDailyReflectionEnabled(bool value) {
     setState(() => _dailyReflectionEnabled = value);
     SharedPreferencesUtil().dailyReflectionEnabled = value;
-    
+
     // Schedule or cancel the notification based on the setting
     if (value) {
       DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
@@ -335,9 +344,9 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     ),
                   ),
                   _buildFrequencyCard(),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Daily Summary Section
                   _buildSectionHeader(context.l10n.dailySummary),
                   const SizedBox(height: 8),
@@ -353,9 +362,9 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     ),
                   ),
                   _buildDailySummaryCard(),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Daily Reflection Section
                   _buildSectionHeader(context.l10n.dailyReflection),
                   const SizedBox(height: 8),
@@ -426,18 +435,14 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: _notificationFrequency == 0 
-                      ? Colors.grey.shade800 
-                      : const Color(0xFF6366F1).withOpacity(0.2),
+                  color: _notificationFrequency == 0 ? Colors.grey.shade800 : const Color(0xFF6366F1).withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: Text(
                     '$_notificationFrequency',
                     style: TextStyle(
-                      color: _notificationFrequency == 0 
-                          ? Colors.grey.shade500 
-                          : const Color(0xFF6366F1),
+                      color: _notificationFrequency == 0 ? Colors.grey.shade500 : const Color(0xFF6366F1),
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
@@ -446,9 +451,9 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Slider
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
@@ -467,7 +472,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               onChanged: (value) => _updateNotificationFrequency(value.round()),
             ),
           ),
-          
+
           // Labels
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),

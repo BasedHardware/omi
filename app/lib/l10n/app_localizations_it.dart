@@ -427,7 +427,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceSettings => 'Impostazioni Dispositivo';
 
   @override
-  String get chatTools => 'Strumenti Chat';
+  String get integrations => 'Integrazioni';
 
   @override
   String get feedbackBug => 'Feedback / Bug';
@@ -587,7 +587,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get starOngoing => 'Aggiungi Conversazione in Corso ai Preferiti';
 
   @override
-  String get off => 'Off';
+  String get off => 'Disattivato';
 
   @override
   String get max => 'Massimo';
@@ -1023,7 +1023,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get comingSoon => 'Prossimamente';
 
   @override
-  String get chatToolsFooter => 'Connetti le tue app per visualizzare dati e metriche nella chat.';
+  String get integrationsFooter => 'Connetti le tue app per visualizzare dati e metriche nella chat.';
 
   @override
   String get completeAuthInBrowser => 'Completa l\'autenticazione nel tuo browser. Una volta fatto, torna all\'app.';
@@ -6858,7 +6858,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceIdLabel => 'Device ID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Stato';
 
   @override
   String get statusProcessed => 'Processed';
@@ -7837,5 +7837,204 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Il dispositivo non supporta la sincronizzazione WiFi, passaggio al Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health non è disponibile su questo dispositivo';
+
+  @override
+  String get downloadAudio => 'Scarica audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio scaricato con successo';
+
+  @override
+  String get audioDownloadFailed => 'Download audio fallito';
+
+  @override
+  String get downloadingAudio => 'Download audio in corso...';
+
+  @override
+  String get shareAudio => 'Condividi audio';
+
+  @override
+  String get preparingAudio => 'Preparazione audio';
+
+  @override
+  String get gettingAudioFiles => 'Recupero file audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Download audio';
+
+  @override
+  String get processingAudio => 'Elaborazione audio';
+
+  @override
+  String get combiningAudioFiles => 'Unione file audio...';
+
+  @override
+  String get audioReady => 'Audio pronto';
+
+  @override
+  String get openingShareSheet => 'Apertura foglio di condivisione...';
+
+  @override
+  String get audioShareFailed => 'Condivisione fallita';
+
+  @override
+  String get dailyRecaps => 'Riepiloghi Giornalieri';
+
+  @override
+  String get removeFilter => 'Rimuovi Filtro';
+
+  @override
+  String get categoryConversationAnalysis => 'Analisi delle conversazioni';
+
+  @override
+  String get categoryPersonalityClone => 'Clone di personalità';
+
+  @override
+  String get categoryHealth => 'Salute';
+
+  @override
+  String get categoryEducation => 'Istruzione';
+
+  @override
+  String get categoryCommunication => 'Comunicazione';
+
+  @override
+  String get categoryEmotionalSupport => 'Supporto emotivo';
+
+  @override
+  String get categoryProductivity => 'Produttività';
+
+  @override
+  String get categoryEntertainment => 'Intrattenimento';
+
+  @override
+  String get categoryFinancial => 'Finanza';
+
+  @override
+  String get categoryTravel => 'Viaggi';
+
+  @override
+  String get categorySafety => 'Sicurezza';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Sociale';
+
+  @override
+  String get categoryNews => 'Notizie';
+
+  @override
+  String get categoryUtilities => 'Utilità';
+
+  @override
+  String get categoryOther => 'Altro';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversazioni';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrazione esterna';
+
+  @override
+  String get capabilityNotification => 'Notifica';
+
+  @override
+  String get triggerAudioBytes => 'Byte audio';
+
+  @override
+  String get triggerConversationCreation => 'Creazione conversazione';
+
+  @override
+  String get triggerTranscriptProcessed => 'Trascrizione elaborata';
+
+  @override
+  String get actionCreateConversations => 'Crea conversazioni';
+
+  @override
+  String get actionCreateMemories => 'Crea ricordi';
+
+  @override
+  String get actionReadConversations => 'Leggi conversazioni';
+
+  @override
+  String get actionReadMemories => 'Leggi ricordi';
+
+  @override
+  String get actionReadTasks => 'Leggi attività';
+
+  @override
+  String get scopeUserName => 'Nome utente';
+
+  @override
+  String get scopeUserFacts => 'Informazioni utente';
+
+  @override
+  String get scopeUserConversations => 'Conversazioni utente';
+
+  @override
+  String get scopeUserChat => 'Chat utente';
+
+  @override
+  String get capabilitySummary => 'Riepilogo';
+
+  @override
+  String get capabilityFeatured => 'In evidenza';
+
+  @override
+  String get capabilityTasks => 'Attività';
+
+  @override
+  String get capabilityIntegrations => 'Integrazioni';
+
+  @override
+  String get categoryPersonalityClones => 'Cloni di personalità';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produttività e stile di vita';
+
+  @override
+  String get categorySocialEntertainment => 'Sociale e intrattenimento';
+
+  @override
+  String get categoryProductivityTools => 'Strumenti di produttività';
+
+  @override
+  String get categoryPersonalWellness => 'Benessere personale';
+
+  @override
+  String get rating => 'Valutazione';
+
+  @override
+  String get categories => 'Categorie';
+
+  @override
+  String get sortBy => 'Ordina';
+
+  @override
+  String get highestRating => 'Valutazione più alta';
+
+  @override
+  String get lowestRating => 'Valutazione più bassa';
+
+  @override
+  String get resetFilters => 'Reimposta filtri';
+
+  @override
+  String get applyFilters => 'Applica filtri';
+
+  @override
+  String get mostInstalls => 'Più installazioni';
+
+  @override
+  String get couldNotOpenUrl => 'Impossibile aprire l\'URL. Riprova.';
 }

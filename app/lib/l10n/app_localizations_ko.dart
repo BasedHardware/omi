@@ -419,7 +419,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceSettings => '기기 설정';
 
   @override
-  String get chatTools => '채팅 도구';
+  String get integrations => '연동';
 
   @override
   String get feedbackBug => '피드백 / 버그';
@@ -443,7 +443,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appAndDeviceCopied => '앱 및 기기 정보가 복사되었습니다';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 요약';
 
   @override
   String get yourPrivacyYourControl => '당신의 개인정보, 당신의 제어';
@@ -1006,7 +1006,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get comingSoon => '곧 출시';
 
   @override
-  String get chatToolsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
+  String get integrationsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
 
   @override
   String get completeAuthInBrowser => '브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.';
@@ -7657,5 +7657,203 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => '기기가 WiFi 동기화를 지원하지 않습니다. Bluetooth로 전환 중';
+
+  @override
+  String get appleHealthNotAvailable => '이 기기에서는 Apple Health를 사용할 수 없습니다';
+
+  @override
+  String get downloadAudio => '오디오 다운로드';
+
+  @override
+  String get audioDownloadSuccess => '오디오가 성공적으로 다운로드되었습니다';
+
+  @override
+  String get audioDownloadFailed => '오디오 다운로드 실패';
+
+  @override
+  String get downloadingAudio => '오디오 다운로드 중...';
+
+  @override
+  String get shareAudio => '오디오 공유';
+
+  @override
+  String get preparingAudio => '오디오 준비 중';
+
+  @override
+  String get gettingAudioFiles => '오디오 파일 가져오는 중...';
+
+  @override
+  String get downloadingAudioProgress => '오디오 다운로드 중';
+
+  @override
+  String get processingAudio => '오디오 처리 중';
+
+  @override
+  String get combiningAudioFiles => '오디오 파일 결합 중...';
+
+  @override
+  String get audioReady => '오디오 준비 완료';
+
+  @override
+  String get openingShareSheet => '공유 시트 여는 중...';
+
+  @override
+  String get audioShareFailed => '공유 실패';
+
+  @override
+  String get dailyRecaps => '일일 요약';
+
+  @override
+  String get removeFilter => '필터 제거';
+
+  @override
+  String get categoryConversationAnalysis => '대화 분석';
+
+  @override
+  String get categoryPersonalityClone => '성격 복제';
+
+  @override
+  String get categoryHealth => '건강';
+
+  @override
+  String get categoryEducation => '교육';
+
+  @override
+  String get categoryCommunication => '소통';
+
+  @override
+  String get categoryEmotionalSupport => '감정 지원';
+
+  @override
+  String get categoryProductivity => '생산성';
+
+  @override
+  String get categoryEntertainment => '엔터테인먼트';
+
+  @override
+  String get categoryFinancial => '금융';
+
+  @override
+  String get categoryTravel => '여행';
+
+  @override
+  String get categorySafety => '안전';
+
+  @override
+  String get categoryShopping => '쇼핑';
+
+  @override
+  String get categorySocial => '소셜';
+
+  @override
+  String get categoryNews => '뉴스';
+
+  @override
+  String get categoryUtilities => '유틸리티';
+
+  @override
+  String get categoryOther => '기타';
+
+  @override
+  String get capabilityChat => '채팅';
+
+  @override
+  String get capabilityConversations => '대화';
+
+  @override
+  String get capabilityExternalIntegration => '외부 연동';
+
+  @override
+  String get capabilityNotification => '알림';
+
+  @override
+  String get triggerAudioBytes => '오디오 바이트';
+
+  @override
+  String get triggerConversationCreation => '대화 생성';
+
+  @override
+  String get triggerTranscriptProcessed => '트랜스크립트 처리됨';
+
+  @override
+  String get actionCreateConversations => '대화 생성';
+
+  @override
+  String get actionCreateMemories => '메모리 생성';
+
+  @override
+  String get actionReadConversations => '대화 읽기';
+
+  @override
+  String get actionReadMemories => '메모리 읽기';
+
+  @override
+  String get actionReadTasks => '작업 읽기';
+
+  @override
+  String get scopeUserName => '사용자 이름';
+
+  @override
+  String get scopeUserFacts => '사용자 정보';
+
+  @override
+  String get scopeUserConversations => '사용자 대화';
+
+  @override
+  String get scopeUserChat => '사용자 채팅';
+
+  @override
+  String get capabilitySummary => '요약';
+
+  @override
+  String get capabilityFeatured => '추천';
+
+  @override
+  String get capabilityTasks => '작업';
+
+  @override
+  String get capabilityIntegrations => '연동';
+
+  @override
+  String get categoryPersonalityClones => '성격 복제';
+
+  @override
+  String get categoryProductivityLifestyle => '생산성 및 라이프스타일';
+
+  @override
+  String get categorySocialEntertainment => '소셜 및 엔터테인먼트';
+
+  @override
+  String get categoryProductivityTools => '생산성 도구';
+
+  @override
+  String get categoryPersonalWellness => '개인 웰빙';
+
+  @override
+  String get rating => '평점';
+
+  @override
+  String get categories => '카테고리';
+
+  @override
+  String get sortBy => '정렬';
+
+  @override
+  String get highestRating => '최고 평점';
+
+  @override
+  String get lowestRating => '최저 평점';
+
+  @override
+  String get resetFilters => '필터 초기화';
+
+  @override
+  String get applyFilters => '필터 적용';
+
+  @override
+  String get mostInstalls => '설치 수';
+
+  @override
+  String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
 }

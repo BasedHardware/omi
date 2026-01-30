@@ -4,13 +4,40 @@
 <dict>
 	<key>CFBundleLocalizations</key>
 	<array>
-		<string>zh</string>
+		<string>ar</string>
+		<string>bg</string>
+		<string>ca</string>
+		<string>cs</string>
+		<string>da</string>
 		<string>de</string>
-		<string>es</string>
-		<string>hi</string>
+		<string>el</string>
 		<string>en</string>
+		<string>es</string>
+		<string>et</string>
+		<string>fi</string>
+		<string>fr</string>
+		<string>hi</string>
+		<string>hu</string>
+		<string>id</string>
+		<string>it</string>
 		<string>ja</string>
+		<string>ko</string>
+		<string>lt</string>
+		<string>lv</string>
+		<string>ms</string>
+		<string>nl</string>
+		<string>no</string>
+		<string>pl</string>
 		<string>pt</string>
+		<string>ro</string>
+		<string>ru</string>
+		<string>sk</string>
+		<string>sv</string>
+		<string>th</string>
+		<string>tr</string>
+		<string>uk</string>
+		<string>vi</string>
+		<string>zh</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
@@ -109,6 +136,10 @@
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Omi uses your health data to answer questions about your fitness, sleep, and activity through chat.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Omi needs permission to access your health data.</string>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>NSCameraUsageDescription</key>
@@ -150,5 +181,7 @@
 	<false/>
 	<key>com.posthog.posthog.AUTO_INIT</key>
 	<false/>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 </dict>
 </plist>

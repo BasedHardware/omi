@@ -19,7 +19,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'firmware_update.dart';
 
 class ConnectedDevice extends StatefulWidget {
@@ -581,7 +581,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               const SizedBox(height: 24),
 
               // Battery Level Section
-              if (provider.connectedDevice != null) ...[
+              if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
                 _buildBatterySection(provider),
                 const SizedBox(height: 16),
               ],

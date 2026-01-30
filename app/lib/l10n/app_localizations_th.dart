@@ -423,7 +423,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
 
   @override
-  String get chatTools => 'เครื่องมือแชท';
+  String get integrations => 'การเชื่อมต่อ';
 
   @override
   String get feedbackBug => 'คำติชม / รายงานข้อผิดพลาด';
@@ -1015,7 +1015,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get comingSoon => 'เร็วๆ นี้';
 
   @override
-  String get chatToolsFooter => 'เชื่อมต่อแอปของคุณเพื่อดูข้อมูลและตัวชี้วัดในแชท';
+  String get integrationsFooter => 'เชื่อมต่อแอปของคุณเพื่อดูข้อมูลและตัวชี้วัดในแชท';
 
   @override
   String get completeAuthInBrowser => 'กรุณายืนยันตัวตนในเบราว์เซอร์ของคุณ เมื่อเสร็จแล้วกลับมาที่แอป';
@@ -7751,5 +7751,203 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'อุปกรณ์ไม่รองรับการซิงค์ WiFi กำลังเปลี่ยนไปใช้ Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health ไม่พร้อมใช้งานบนอุปกรณ์นี้';
+
+  @override
+  String get downloadAudio => 'ดาวน์โหลดเสียง';
+
+  @override
+  String get audioDownloadSuccess => 'ดาวน์โหลดเสียงสำเร็จ';
+
+  @override
+  String get audioDownloadFailed => 'ดาวน์โหลดเสียงล้มเหลว';
+
+  @override
+  String get downloadingAudio => 'กำลังดาวน์โหลดเสียง...';
+
+  @override
+  String get shareAudio => 'แชร์เสียง';
+
+  @override
+  String get preparingAudio => 'กำลังเตรียมเสียง';
+
+  @override
+  String get gettingAudioFiles => 'กำลังรับไฟล์เสียง...';
+
+  @override
+  String get downloadingAudioProgress => 'กำลังดาวน์โหลดเสียง';
+
+  @override
+  String get processingAudio => 'กำลังประมวลผลเสียง';
+
+  @override
+  String get combiningAudioFiles => 'กำลังรวมไฟล์เสียง...';
+
+  @override
+  String get audioReady => 'เสียงพร้อมแล้ว';
+
+  @override
+  String get openingShareSheet => 'กำลังเปิดแผ่นแชร์...';
+
+  @override
+  String get audioShareFailed => 'แชร์ล้มเหลว';
+
+  @override
+  String get dailyRecaps => 'สรุปรายวัน';
+
+  @override
+  String get removeFilter => 'ลบตัวกรอง';
+
+  @override
+  String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
+
+  @override
+  String get categoryPersonalityClone => 'โคลนบุคลิกภาพ';
+
+  @override
+  String get categoryHealth => 'สุขภาพ';
+
+  @override
+  String get categoryEducation => 'การศึกษา';
+
+  @override
+  String get categoryCommunication => 'การสื่อสาร';
+
+  @override
+  String get categoryEmotionalSupport => 'การสนับสนุนทางอารมณ์';
+
+  @override
+  String get categoryProductivity => 'ประสิทธิภาพ';
+
+  @override
+  String get categoryEntertainment => 'ความบันเทิง';
+
+  @override
+  String get categoryFinancial => 'การเงิน';
+
+  @override
+  String get categoryTravel => 'การเดินทาง';
+
+  @override
+  String get categorySafety => 'ความปลอดภัย';
+
+  @override
+  String get categoryShopping => 'ช้อปปิ้ง';
+
+  @override
+  String get categorySocial => 'สังคม';
+
+  @override
+  String get categoryNews => 'ข่าว';
+
+  @override
+  String get categoryUtilities => 'เครื่องมือ';
+
+  @override
+  String get categoryOther => 'อื่นๆ';
+
+  @override
+  String get capabilityChat => 'แชท';
+
+  @override
+  String get capabilityConversations => 'การสนทนา';
+
+  @override
+  String get capabilityExternalIntegration => 'การเชื่อมต่อภายนอก';
+
+  @override
+  String get capabilityNotification => 'การแจ้งเตือน';
+
+  @override
+  String get triggerAudioBytes => 'ไบต์เสียง';
+
+  @override
+  String get triggerConversationCreation => 'การสร้างการสนทนา';
+
+  @override
+  String get triggerTranscriptProcessed => 'ถอดเสียงเสร็จสิ้น';
+
+  @override
+  String get actionCreateConversations => 'สร้างการสนทนา';
+
+  @override
+  String get actionCreateMemories => 'สร้างความทรงจำ';
+
+  @override
+  String get actionReadConversations => 'อ่านการสนทนา';
+
+  @override
+  String get actionReadMemories => 'อ่านความทรงจำ';
+
+  @override
+  String get actionReadTasks => 'อ่านงาน';
+
+  @override
+  String get scopeUserName => 'ชื่อผู้ใช้';
+
+  @override
+  String get scopeUserFacts => 'ข้อมูลผู้ใช้';
+
+  @override
+  String get scopeUserConversations => 'การสนทนาของผู้ใช้';
+
+  @override
+  String get scopeUserChat => 'แชทของผู้ใช้';
+
+  @override
+  String get capabilitySummary => 'สรุป';
+
+  @override
+  String get capabilityFeatured => 'แนะนำ';
+
+  @override
+  String get capabilityTasks => 'งาน';
+
+  @override
+  String get capabilityIntegrations => 'การเชื่อมต่อ';
+
+  @override
+  String get categoryPersonalityClones => 'โคลนบุคลิกภาพ';
+
+  @override
+  String get categoryProductivityLifestyle => 'ประสิทธิภาพและไลฟ์สไตล์';
+
+  @override
+  String get categorySocialEntertainment => 'สังคมและความบันเทิง';
+
+  @override
+  String get categoryProductivityTools => 'เครื่องมือเพิ่มประสิทธิภาพ';
+
+  @override
+  String get categoryPersonalWellness => 'สุขภาพส่วนบุคคล';
+
+  @override
+  String get rating => 'คะแนน';
+
+  @override
+  String get categories => 'หมวดหมู่';
+
+  @override
+  String get sortBy => 'เรียงตาม';
+
+  @override
+  String get highestRating => 'คะแนนสูงสุด';
+
+  @override
+  String get lowestRating => 'คะแนนต่ำสุด';
+
+  @override
+  String get resetFilters => 'รีเซ็ตตัวกรอง';
+
+  @override
+  String get applyFilters => 'ใช้ตัวกรอง';
+
+  @override
+  String get mostInstalls => 'ติดตั้งมากที่สุด';
+
+  @override
+  String get couldNotOpenUrl => 'ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง';
 }

@@ -426,7 +426,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
-  String get chatTools => 'Chatværktøjer';
+  String get integrations => 'Integrationer';
 
   @override
   String get feedbackBug => 'Feedback / Fejl';
@@ -1020,7 +1020,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Forbind dine apps for at se data og målinger i chat.';
+  String get integrationsFooter => 'Forbind dine apps for at se data og målinger i chat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7772,5 +7772,204 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Enheden understøtter ikke WiFi-synkronisering, skifter til Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health er ikke tilgængelig på denne enhed';
+
+  @override
+  String get downloadAudio => 'Download lyd';
+
+  @override
+  String get audioDownloadSuccess => 'Lyd downloadet succesfuldt';
+
+  @override
+  String get audioDownloadFailed => 'Kunne ikke downloade lyd';
+
+  @override
+  String get downloadingAudio => 'Downloader lyd...';
+
+  @override
+  String get shareAudio => 'Del lyd';
+
+  @override
+  String get preparingAudio => 'Forbereder lyd';
+
+  @override
+  String get gettingAudioFiles => 'Henter lydfiler...';
+
+  @override
+  String get downloadingAudioProgress => 'Downloader lyd';
+
+  @override
+  String get processingAudio => 'Behandler lyd';
+
+  @override
+  String get combiningAudioFiles => 'Kombinerer lydfiler...';
+
+  @override
+  String get audioReady => 'Lyd klar';
+
+  @override
+  String get openingShareSheet => 'Åbner delingsark...';
+
+  @override
+  String get audioShareFailed => 'Deling mislykkedes';
+
+  @override
+  String get dailyRecaps => 'Daglige Opsummeringer';
+
+  @override
+  String get removeFilter => 'Fjern Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtaleanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighedsklon';
+
+  @override
+  String get categoryHealth => 'Sundhed';
+
+  @override
+  String get categoryEducation => 'Uddannelse';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Følelsesmæssig støtte';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underholdning';
+
+  @override
+  String get categoryFinancial => 'Økonomi';
+
+  @override
+  String get categoryTravel => 'Rejser';
+
+  @override
+  String get categorySafety => 'Sikkerhed';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Socialt';
+
+  @override
+  String get categoryNews => 'Nyheder';
+
+  @override
+  String get categoryUtilities => 'Værktøjer';
+
+  @override
+  String get categoryOther => 'Andet';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Samtaler';
+
+  @override
+  String get capabilityExternalIntegration => 'Ekstern integration';
+
+  @override
+  String get capabilityNotification => 'Notifikation';
+
+  @override
+  String get triggerAudioBytes => 'Lyd-bytes';
+
+  @override
+  String get triggerConversationCreation => 'Samtaleoprettelse';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transskription behandlet';
+
+  @override
+  String get actionCreateConversations => 'Opret samtaler';
+
+  @override
+  String get actionCreateMemories => 'Opret minder';
+
+  @override
+  String get actionReadConversations => 'Læs samtaler';
+
+  @override
+  String get actionReadMemories => 'Læs minder';
+
+  @override
+  String get actionReadTasks => 'Læs opgaver';
+
+  @override
+  String get scopeUserName => 'Brugernavn';
+
+  @override
+  String get scopeUserFacts => 'Brugerfakta';
+
+  @override
+  String get scopeUserConversations => 'Brugersamtaler';
+
+  @override
+  String get scopeUserChat => 'Brugerchat';
+
+  @override
+  String get capabilitySummary => 'Resumé';
+
+  @override
+  String get capabilityFeatured => 'Udvalgte';
+
+  @override
+  String get capabilityTasks => 'Opgaver';
+
+  @override
+  String get capabilityIntegrations => 'Integrationer';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighedskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Socialt og underholdning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsværktøjer';
+
+  @override
+  String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Bedømmelse';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Højeste bedømmelse';
+
+  @override
+  String get lowestRating => 'Laveste bedømmelse';
+
+  @override
+  String get resetFilters => 'Nulstil filtre';
+
+  @override
+  String get applyFilters => 'Anvend filtre';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
+
+  @override
+  String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
 }

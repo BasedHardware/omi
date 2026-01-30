@@ -426,7 +426,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceSettings => 'Enhetsinställningar';
 
   @override
-  String get chatTools => 'Chattverktyg';
+  String get integrations => 'Integrationer';
 
   @override
   String get feedbackBug => 'Återkoppling / Bugg';
@@ -1021,7 +1021,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Anslut dina appar för att visa data och mått i chatten.';
+  String get integrationsFooter => 'Anslut dina appar för att visa data och mått i chatten.';
 
   @override
   String get completeAuthInBrowser => 'Slutför autentiseringen i din webbläsare. När du är klar, återvänd till appen.';
@@ -7794,5 +7794,203 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Enheten stöder inte WiFi-synkronisering, byter till Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health är inte tillgängligt på denna enhet';
+
+  @override
+  String get downloadAudio => 'Ladda ner ljud';
+
+  @override
+  String get audioDownloadSuccess => 'Ljud nedladdat framgångsrikt';
+
+  @override
+  String get audioDownloadFailed => 'Misslyckades att ladda ner ljud';
+
+  @override
+  String get downloadingAudio => 'Laddar ner ljud...';
+
+  @override
+  String get shareAudio => 'Dela ljud';
+
+  @override
+  String get preparingAudio => 'Förbereder ljud';
+
+  @override
+  String get gettingAudioFiles => 'Hämtar ljudfiler...';
+
+  @override
+  String get downloadingAudioProgress => 'Laddar ner ljud';
+
+  @override
+  String get processingAudio => 'Bearbetar ljud';
+
+  @override
+  String get combiningAudioFiles => 'Kombinerar ljudfiler...';
+
+  @override
+  String get audioReady => 'Ljud klart';
+
+  @override
+  String get openingShareSheet => 'Öppnar delningsblad...';
+
+  @override
+  String get audioShareFailed => 'Delning misslyckades';
+
+  @override
+  String get dailyRecaps => 'Dagliga Sammanfattningar';
+
+  @override
+  String get removeFilter => 'Ta Bort Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtalsanalys';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighetsklon';
+
+  @override
+  String get categoryHealth => 'Hälsa';
+
+  @override
+  String get categoryEducation => 'Utbildning';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionellt stöd';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underhållning';
+
+  @override
+  String get categoryFinancial => 'Ekonomi';
+
+  @override
+  String get categoryTravel => 'Resor';
+
+  @override
+  String get categorySafety => 'Säkerhet';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Socialt';
+
+  @override
+  String get categoryNews => 'Nyheter';
+
+  @override
+  String get categoryUtilities => 'Verktyg';
+
+  @override
+  String get categoryOther => 'Övrigt';
+
+  @override
+  String get capabilityChat => 'Chatt';
+
+  @override
+  String get capabilityConversations => 'Samtal';
+
+  @override
+  String get capabilityExternalIntegration => 'Extern integration';
+
+  @override
+  String get capabilityNotification => 'Avisering';
+
+  @override
+  String get triggerAudioBytes => 'Ljudbytes';
+
+  @override
+  String get triggerConversationCreation => 'Skapande av samtal';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkription bearbetad';
+
+  @override
+  String get actionCreateConversations => 'Skapa samtal';
+
+  @override
+  String get actionCreateMemories => 'Skapa minnen';
+
+  @override
+  String get actionReadConversations => 'Läs samtal';
+
+  @override
+  String get actionReadMemories => 'Läs minnen';
+
+  @override
+  String get actionReadTasks => 'Läs uppgifter';
+
+  @override
+  String get scopeUserName => 'Användarnamn';
+
+  @override
+  String get scopeUserFacts => 'Användarfakta';
+
+  @override
+  String get scopeUserConversations => 'Användarsamtal';
+
+  @override
+  String get scopeUserChat => 'Användarchatt';
+
+  @override
+  String get capabilitySummary => 'Sammanfattning';
+
+  @override
+  String get capabilityFeatured => 'Utvalda';
+
+  @override
+  String get capabilityTasks => 'Uppgifter';
+
+  @override
+  String get capabilityIntegrations => 'Integrationer';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighetskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet & livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Socialt & underhållning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsverktyg';
+
+  @override
+  String get categoryPersonalWellness => 'Personligt välbefinnande';
+
+  @override
+  String get rating => 'Betyg';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sortera';
+
+  @override
+  String get highestRating => 'Högsta betyg';
+
+  @override
+  String get lowestRating => 'Lägsta betyg';
+
+  @override
+  String get resetFilters => 'Återställ filter';
+
+  @override
+  String get applyFilters => 'Tillämpa filter';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
+
+  @override
+  String get couldNotOpenUrl => 'Det gick inte att öppna URL:en. Försök igen.';
 }
