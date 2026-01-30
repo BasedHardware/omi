@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -667,107 +666,65 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(24.0),
           ),
-          // Use RepaintBoundary to isolate shimmer animations from parent repaints
-          child: RepaintBoundary(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              // Use Stack to apply shimmer only to placeholder elements, not to text
-              // This preserves text readability while still having synchronized shimmer
-              child: Stack(
-                children: [
-                  // Shimmer layer for placeholder elements only
-                  Shimmer.fromColors(
-                    baseColor: const Color(0xFF2A2A32),
-                    highlightColor: const Color(0xFF3D3D47),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header row placeholders
-                        Row(
-                          children: [
-                            // Icon placeholder
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A32),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // Processing label background placeholder (sized by real text, invisible)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF35343B),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              child: Opacity(
-                                opacity: 0,
-                                child: Text(
-                                  context.l10n.processing,
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            // Timestamp placeholder
-                            Container(
-                              width: 50,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A32),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // Title placeholder
-                        Container(
-                          width: double.maxFinite,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2A2A32),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Static text layer on top (not affected by shimmer)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          // Invisible spacer to match icon
-                          const SizedBox(width: 24, height: 24),
-                          const SizedBox(width: 8),
-                          // Processing text (static, not shimmered)
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            child: Text(
-                              context.l10n.processing,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
+          // Static skeleton - no animation to save CPU/battery
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row
+                Row(
+                  children: [
+                    // Icon placeholder
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A32),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    // Processing label
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF35343B),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        context.l10n.processing,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Timestamp placeholder
+                    Container(
+                      width: 50,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A32),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Title placeholder
+                Container(
+                  width: double.maxFinite,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A32),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
