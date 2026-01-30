@@ -2,11 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:version/version.dart';
 
-import 'package:omi/backend/http/api/omiglass_firmware.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
@@ -118,10 +116,10 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         return;
       }
 
-      // Check for firmware updates
+      // Check for firmware updates - use provider's data if widget didn't receive details
       Map<String, dynamic> details = widget.latestFirmwareDetails ?? {};
-      if (details.isEmpty) {
-        details = await getLatestOmiGlassFirmware();
+      if (details.isEmpty && _deviceProvider != null) {
+        details = _deviceProvider!.latestOmiGlassFirmwareDetails;
       }
 
       if (details.isNotEmpty && details['version'] != null) {
@@ -196,6 +194,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         _connection = connection;
       }
 
+      print('OmiGlassOtaUpdate: Calling performOtaUpdate...');
       final success = await _connection!.performOtaUpdate(
         ssid: ssid,
         password: password,
@@ -209,7 +208,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           setState(() {
             _isUpdating = false;
             _isFailed = true;
-            _statusMessage = 'Failed to start OTA update. Please try again.';
+            _statusMessage = 'Failed to start OTA update. Check WiFi credentials and try again.';
           });
         }
       }
@@ -319,10 +318,13 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           hintText: hint,
           hintStyle: TextStyle(color: Colors.grey.shade600),
           labelStyle: TextStyle(color: Colors.grey.shade400),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 16, right: 12),
-            child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
+          prefixIcon: SizedBox(
+            width: 48,
+            child: Center(
+              child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
+            ),
           ),
+          prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
@@ -459,16 +461,40 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             ),
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: MarkdownBody(
-                data: _changelog,
-                styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.4),
-                  h1: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                  h2: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  h3: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  listBullet: TextStyle(color: Colors.grey.shade300, fontSize: 15),
-                  a: const TextStyle(color: Color(0xFF60A5FA)),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _changelog
+                    .split('\n')
+                    .where((line) => line.trim().isNotEmpty)
+                    .map((change) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(top: 6),
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade500,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  change.trim(),
+                                  style: TextStyle(
+                                    color: Colors.grey.shade300,
+                                    fontSize: 15,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ))
+                    .toList(),
               ),
             ),
           ),

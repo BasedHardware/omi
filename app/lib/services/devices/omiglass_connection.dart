@@ -6,6 +6,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:version/version.dart';
 
 /// OTA Update Status for OmiGlass
 class OmiGlassOtaStatus {
@@ -256,7 +257,7 @@ class OmiGlassConnection extends DeviceConnection {
       );
       return true;
     } catch (e) {
-      Logger.debug('OmiGlassConnection: OTA not supported or error: $e');
+      Logger.debug('OmiGlassConnection: OTA not supported - $e');
       return false;
     }
   }
@@ -265,11 +266,11 @@ class OmiGlassConnection extends DeviceConnection {
   Future<bool> setOtaWifiCredentials(String ssid, String password) async {
     try {
       if (ssid.isEmpty || ssid.length > 32) {
-        Logger.debug('OmiGlassConnection: Invalid SSID length');
+        Logger.debug('OmiGlassConnection: Invalid SSID length: ${ssid.length}');
         return false;
       }
       if (password.isEmpty || password.length > 64) {
-        Logger.debug('OmiGlassConnection: Invalid password length');
+        Logger.debug('OmiGlassConnection: Invalid password length: ${password.length}');
         return false;
       }
 
@@ -589,6 +590,15 @@ class OmiGlassConnection extends DeviceConnection {
       var isTransferring = false;
       ImageOrientation? currentOrientation;
 
+      // Firmware version check for orientation byte support
+      Version newFirmwareVersion = Version.parse("2.1.1");
+      Version deviceFirmwareVersion;
+      try {
+        deviceFirmwareVersion = Version.parse(device.firmwareRevision);
+      } catch (e) {
+        deviceFirmwareVersion = Version(0, 0, 0);
+      }
+
       return stream.listen((value) {
         if (value.length < 2) return;
 
@@ -633,14 +643,23 @@ class OmiGlassConnection extends DeviceConnection {
 
         if (frameIndex == nextExpectedFrame) {
           if (frameIndex == 0) {
-            // First chunk: [frame_lo, frame_hi, orientation, ...jpeg_data...]
-            if (chunk.length > 2) {
-              currentOrientation = ImageOrientation.fromValue(chunk[2]);
-              if (chunk.length > 3) {
-                buffer.add(chunk.sublist(3));
+            if (deviceFirmwareVersion >= newFirmwareVersion) {
+              // New firmware: parse orientation from packet
+              // First chunk: [frame_lo, frame_hi, orientation, ...jpeg_data...]
+              if (chunk.length > 2) {
+                currentOrientation = ImageOrientation.fromValue(chunk[2]);
+                if (chunk.length > 3) {
+                  buffer.add(chunk.sublist(3));
+                }
+              } else {
+                currentOrientation = ImageOrientation.orientation0;
               }
             } else {
-              currentOrientation = ImageOrientation.orientation0;
+              // Old firmware: default to 180 degrees and treat whole chunk as data
+              currentOrientation = ImageOrientation.orientation180;
+              if (chunk.length > 2) {
+                buffer.add(chunk.sublist(2));
+              }
             }
           } else {
             // Subsequent chunks: [frame_lo, frame_hi, ...jpeg_data...]

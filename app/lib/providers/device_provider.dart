@@ -3,14 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
-import 'package:omi/backend/http/api/omiglass_firmware.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:version/version.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
@@ -320,9 +318,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future<(String, bool, String)> shouldUpdateFirmware() async {
+  Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
-      return ('No paired device is connected', false, '');
+      return ('No paired device is connected', false, '', {});
     }
 
     var device = pairedDevice!;
@@ -333,8 +331,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       manufacturerName: device.manufacturerName,
     );
 
-    return await DeviceUtils.shouldUpdateFirmware(
+    var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
         currentFirmware: device.firmwareRevision, latestFirmwareDetails: latestFirmwareDetails);
+    return (message, hasUpdate, version, latestFirmwareDetails);
   }
 
   void _onDeviceConnected(BtDevice device) async {
@@ -420,12 +419,25 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     while (retryCount < maxRetries) {
       try {
-        if (_isOmiGlassDevice) {
-          return await _checkOmiGlassFirmwareUpdates();
-        }
-        var (message, hasUpdate, version) = await shouldUpdateFirmware();
+        var (message, hasUpdate, version, firmwareDetails) = await shouldUpdateFirmware();
         _havingNewFirmware = hasUpdate;
         _latestFirmwareVersion = version.isNotEmpty ? version : message;
+
+        // For OmiGlass devices, populate the firmware details for the OTA UI
+        if (_isOmiGlassDevice && firmwareDetails.isNotEmpty) {
+          // Map backend response to OmiGlass OTA UI expected format
+          final versionStr = firmwareDetails['version']?.toString() ?? '';
+          final cleanVersion = versionStr.startsWith('v') ? versionStr.substring(1) : versionStr;
+          final changelog = firmwareDetails['changelog'];
+          final changelogStr = changelog is List ? changelog.join('\n') : (changelog?.toString() ?? '');
+
+          _latestOmiGlassFirmwareDetails = {
+            'version': cleanVersion,
+            'download_url': firmwareDetails['zip_url'] ?? '',
+            'changelog': changelogStr,
+          };
+        }
+
         notifyListeners();
         return hasUpdate;
       } catch (e) {
@@ -443,28 +455,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     return;
-  }
-
-  Future<bool> _checkOmiGlassFirmwareUpdates() async {
-    _latestOmiGlassFirmwareDetails = await getLatestOmiGlassFirmware();
-    if (_latestOmiGlassFirmwareDetails.isEmpty || _latestOmiGlassFirmwareDetails['version'] == null) {
-      _havingNewFirmware = false;
-      notifyListeners();
-      return false;
-    }
-
-    try {
-      final currentVersion = Version.parse(pairedDevice!.firmwareRevision);
-      final latestVersion = Version.parse(_latestOmiGlassFirmwareDetails['version']);
-      _havingNewFirmware = latestVersion > currentVersion;
-      _latestFirmwareVersion = _latestOmiGlassFirmwareDetails['version'];
-    } catch (e) {
-      Logger.debug('OmiGlass firmware version parse error: $e');
-      _havingNewFirmware = false;
-    }
-
-    notifyListeners();
-    return _havingNewFirmware;
   }
 
   // Track if user is currently viewing a firmware update page
