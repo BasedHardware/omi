@@ -7,11 +7,16 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: gcr.io/based-hardware-dev/models
+  repository: vllm/vllm-openai
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "latest"
+command:
+  - "/bin/sh"
+  - "-c"
+args:
+  - "vllm serve meta-llama/Llama-3.1-8B-Instruct --trust-remote-code --enable-chunked-prefill --max_num_batched_tokens 1024 --gpu-memory-utilization 0.9 --max-model-len 320 --api-key $VLLM_API_KEY"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -54,7 +59,10 @@ service:
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
-  port: 8080
+  port: 8000
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "llm-backend-config"}'  # Link to BackendConfig
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -67,9 +75,7 @@ ingress:
   hosts:
     - host: llm.omiapi.com
       paths:
-        - path: /v1/llm
-          pathType: Prefix
-        - path: /v1/speaker-identification
+        - path: /
           pathType: Prefix
   tls: []
   #  - secretName: chart-example-tls
@@ -77,16 +83,16 @@ ingress:
   #      - chart-example.local
 
 env:
-  - name: HUGGINGFACE_TOKEN
+  - name: HF_TOKEN
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: HUGGINGFACE_TOKEN
-  - name: ENCRYPTION_SECRET
+  - name: VLLM_API_KEY
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
-        key: ENCRYPTION_SECRET
+        key: VLLM_API_KEY
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -94,31 +100,31 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 1
-    memory: 4Gi
+    cpu: 2
+    memory: 24Gi
     nvidia.com/gpu: 1
   limits:
-    cpu: 2
-    memory: 6Gi
+    cpu: 8
+    memory: 32Gi
     nvidia.com/gpu: 1
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
   tcpSocket:
-    port: 8080
+    port: 8000
   failureThreshold: 30
   periodSeconds: 10
 
 readinessProbe:
   tcpSocket:
-    port: 8080
+    port: 8000
   failureThreshold: 30
   periodSeconds: 10
 
 startupProbe:
   tcpSocket:
-    port: 8080
-  failureThreshold: 30
+    port: 8000
+  failureThreshold: 60
   periodSeconds: 10
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
@@ -126,21 +132,21 @@ autoscaling:
   enabled: true
   minReplicas: 1
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes:
+# vLLM needs to access the host's shared memory for tensor parallel inference.
+- name: shm
+  emptyDir:
+    medium: Memory
+    sizeLimit: "8Gi"
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+volumeMounts:
+- name: shm
+  mountPath: /dev/shm
 
 nodeSelector: {}
 

@@ -16,9 +16,10 @@ metadata:
   name: {{ include "llm.fullname" . }}
   labels:
     {{- include "llm.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
   annotations:
-    cloud.google.com/neg: '{"ingress": true}'
-    cloud.google.com/backend-config: '{"default": "llm-backend-config"}'  # Link to BackendConfig
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
