@@ -295,13 +295,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     HapticFeedback.mediumImpact();
   }
 
-  // Delete task with swipe
-  Future<void> _deleteTask(ActionItemWithMetadata item) async {
-    HapticFeedback.mediumImpact();
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    await provider.deleteActionItem(item);
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -668,93 +661,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
-    // If at indent 0, use Dismissible for swipe-to-delete with GestureDetector for swipe-to-indent
-    if (indentLevel == 0) {
-      return GestureDetector(
-        onHorizontalDragEnd: (details) {
-          // Swipe right to indent (positive velocity = right direction)
-          if (details.primaryVelocity != null && details.primaryVelocity! > 200) {
-            _incrementIndent(item.id);
-          }
-          // Swipe left is handled by Dismissible below
-        },
-        child: Dismissible(
-          key: Key('dismiss_${item.id}'),
-          direction: DismissDirection.endToStart,
-          dismissThresholds: const {DismissDirection.endToStart: 0.3},
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20.0),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          onDismissed: (direction) {
-            _deleteTask(item);
-          },
-          child: LongPressDraggable<ActionItemWithMetadata>(
-            data: item,
-            delay: const Duration(milliseconds: 150),
-            hapticFeedbackOnStart: true,
-            onDragStarted: () {
-              HapticFeedback.mediumImpact();
-            },
-            onDragEnd: (details) {
-              setState(() {
-                _hoveredItemId = null;
-              });
-            },
-            feedback: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: MediaQuery.of(context).size.width - 64,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2E),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    _buildCheckbox(item.completed),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        item.description,
-                        style: const TextStyle(color: Colors.white, fontSize: 15),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            childWhenDragging: Opacity(
-              opacity: 0.3,
-              child: taskContent,
-            ),
-            child: taskContent,
-          ),
-        ),
-      );
-    }
-
-    // If indented, use GestureDetector for indent changes + draggable
+    // Unified swipe handling for all indent levels (matches macOS behavior)
     return GestureDetector(
       onHorizontalDragEnd: (details) {
         if (details.primaryVelocity != null) {
           if (details.primaryVelocity! > 200) {
+            // Swipe right → indent (up to level 3)
             _incrementIndent(item.id);
           } else if (details.primaryVelocity! < -200) {
+            // Swipe left → dedent (down to level 0)
             _decrementIndent(item.id);
           }
         }
@@ -841,50 +756,46 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () => _showEditSheet(item),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
-        child: Dismissible(
-          key: Key('${item.id}_dismiss'),
-          direction: DismissDirection.none, // Disable dismiss, use swipe for indent
-          child: Padding(
-            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Indent line
-                if (indentLevel > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Container(
-                      width: 1.5,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(1),
-                      ),
-                    ),
-                  ),
-                // Checkbox
-                GestureDetector(
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  },
-                  child: _buildCheckbox(item.completed),
-                ),
-                const SizedBox(width: 12),
-                // Task text
-                Expanded(
-                  child: Text(
-                    item.description,
-                    style: TextStyle(
-                      color: item.completed ? Colors.grey[600] : Colors.white,
-                      fontSize: 15,
-                      decoration: item.completed ? TextDecoration.lineThrough : null,
+        child: Padding(
+          padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Indent line
+              if (indentLevel > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Container(
+                    width: 1.5,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(1),
                     ),
                   ),
                 ),
-              ],
-            ),
+              // Checkbox
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  await provider.updateActionItemState(item, !item.completed);
+                  if (!item.completed) _onActionItemCompleted();
+                },
+                child: _buildCheckbox(item.completed),
+              ),
+              const SizedBox(width: 12),
+              // Task text
+              Expanded(
+                child: Text(
+                  item.description,
+                  style: TextStyle(
+                    color: item.completed ? Colors.grey[600] : Colors.white,
+                    fontSize: 15,
+                    decoration: item.completed ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
