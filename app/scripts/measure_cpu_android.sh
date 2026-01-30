@@ -97,10 +97,8 @@ if ! adb -s "$DEVICE" get-state >/dev/null 2>&1; then
   exit 2
 fi
 
-TOP_ARGS="-b -n 1 -d 1 -o PID,CPU,NAME"
-if ! adb -s "$DEVICE" shell "top $TOP_ARGS" >/dev/null 2>&1; then
-  TOP_ARGS="-b -n 1 -d 1"
-fi
+# Use standard top output without -o flag for consistent CPU% parsing
+TOP_ARGS="-b -n 1 -d 1"
 
 values=()
 
@@ -113,7 +111,12 @@ echo "Sampling CPU for $PACKAGE on $DEVICE ($SAMPLES samples, ${DELAY}s delay)..
 
 for ((i=1; i<=SAMPLES; i++)); do
   line=$(adb -s "$DEVICE" shell "top $TOP_ARGS" | grep -m 1 "$PACKAGE" | head -1 || true)
+  # Try format with % suffix first, then fall back to column 9 (standard top format)
   cpu=$(echo "$line" | awk '{for (i=1; i<=NF; i++) if ($i ~ /^[0-9.]+%$/) {gsub(/%/,"",$i); print $i; exit}}')
+  if [[ -z "$cpu" ]]; then
+    # Fallback: extract column 9 which is CPU% in standard Android top output
+    cpu=$(echo "$line" | awk '{print $9}' | grep -E '^[0-9.]+$' || true)
+  fi
 
   if [[ -z "$cpu" ]]; then
     echo "Sample $i: missing (package not found or CPU column not parsed)" >&2
