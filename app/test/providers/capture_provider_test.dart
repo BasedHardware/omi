@@ -109,6 +109,37 @@ void main() {
     });
   });
 
+  group('metricsNotifyEnabled gating', () {
+    test('metrics update does NOT call listeners when no metrics listeners registered', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      // Don't add any metrics listeners - should NOT notify on metrics update
+      final initialCount = notifyCount;
+      provider.calculateMetricsForTesting();
+
+      // Should not have triggered additional notifications
+      expect(notifyCount, initialCount);
+    });
+
+    test('metrics update DOES call listeners when at least one metrics listener registered', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      // Add a metrics listener - this triggers one notification
+      provider.addMetricsListener();
+      final countAfterAdd = notifyCount;
+
+      // Now metrics update should notify
+      provider.calculateMetricsForTesting();
+
+      // Should have triggered an additional notification
+      expect(notifyCount, greaterThan(countAfterAdd));
+    });
+  });
+
   group('segmentsPhotosVersion', () {
     test('increments on translation event', () {
       final provider = CaptureProvider();

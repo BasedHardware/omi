@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/device.dart';
@@ -163,10 +164,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             : DateTime.now().difference(_lastBatteryNotifyTime!);
         final crossedLowBatteryThreshold =
             (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
-        final shouldNotify = _lastNotifiedBatteryLevel == -1 ||
-            delta >= 5 ||
-            elapsed.inMinutes >= 15 ||
-            crossedLowBatteryThreshold;
+        final shouldNotify =
+            _lastNotifiedBatteryLevel == -1 || delta >= 5 || elapsed.inMinutes >= 15 || crossedLowBatteryThreshold;
         if (shouldNotify) {
           _lastNotifiedBatteryLevel = value;
           _lastBatteryNotifyTime = DateTime.now();
@@ -175,6 +174,38 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       },
     );
     notifyListeners();
+  }
+
+  /// Updates battery level with throttling logic. Returns true if notifyListeners was called.
+  /// This method is exposed for testing the throttling behavior.
+  @visibleForTesting
+  bool updateBatteryLevelForTesting(int value, {DateTime? now}) {
+    batteryLevel = value;
+    final currentTime = now ?? DateTime.now();
+
+    // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
+    // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
+    final delta = (_lastNotifiedBatteryLevel - value).abs();
+    final elapsed =
+        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final crossedLowBatteryThreshold =
+        (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
+    final shouldNotify =
+        _lastNotifiedBatteryLevel == -1 || delta >= 5 || elapsed.inMinutes >= 15 || crossedLowBatteryThreshold;
+    if (shouldNotify) {
+      _lastNotifiedBatteryLevel = value;
+      _lastBatteryNotifyTime = currentTime;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  /// Resets battery throttling state for testing.
+  @visibleForTesting
+  void resetBatteryThrottlingForTesting() {
+    _lastNotifiedBatteryLevel = -1;
+    _lastBatteryNotifyTime = null;
   }
 
   Future periodicConnect(String printer, {bool boundDeviceOnly = false}) async {

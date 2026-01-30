@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -859,6 +860,15 @@ class CaptureProvider extends ChangeNotifier
     _wsSendRateKbps = 0.0;
     _metricsLastCalculated = null;
     notifyListeners();
+  }
+
+  /// Triggers a metrics calculation for testing.
+  /// This allows verifying that notifyListeners is gated by _metricsNotifyEnabled.
+  @visibleForTesting
+  void calculateMetricsForTesting() {
+    // Initialize metrics tracking state if not already done
+    _metricsLastCalculated ??= DateTime.now().subtract(const Duration(seconds: 10));
+    _calculateMetricsRates();
   }
 
   Future _closeBleStream() async {
