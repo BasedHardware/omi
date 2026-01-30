@@ -1,7 +1,9 @@
 #include "lib/core/sd_card.h"
+#include "rtc.h"
 #include <ff.h>
 #include <zephyr/fs/fs.h>
 #include <string.h>
+#include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/fs.h>
@@ -16,9 +18,9 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define DISK_DRIVE_NAME "SD"        // Disk drive name
 #define DISK_MOUNT_PT "/SD:"        // Mount point path
-#define SD_REQ_QUEUE_MSGS  25       // Number of messages in the SD request queue
+#define SD_REQ_QUEUE_MSGS  10       // Number of messages in the SD request queue (reduced for RAM)
 #define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
-#define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
+#define WRITE_BATCH_COUNT 5         // Number of writes to batch before writing to SD card (reduced for RAM)
 #define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
 
 // batch write buffer
@@ -38,7 +40,6 @@ static struct fs_mount_t mp = {
 };
 
 #define FILE_DATA_DIR "/SD:/audio"
-#define FILE_DATA_PATH "/SD:/audio/a01.txt"
 #define FILE_INFO_PATH "/SD:/info.txt"
 
 static struct fs_file_t fil_data;
@@ -47,8 +48,18 @@ static struct fs_file_t fil_info;
 static bool is_mounted = false;
 static bool sd_enabled = false;
 static uint32_t current_file_size = 0;
-static uint32_t current_file_offset = 0;
 static size_t bytes_since_sync = 0;
+
+// Current writing file info
+static char current_filename[MAX_FILENAME_LEN] = {0};
+static char current_file_path[64] = {0};
+
+// BLE connection tracking for file rotation
+static bool ble_connected = false;
+static int64_t ble_connect_time_ms = 0;
+
+// Offset info (oldest file + offset in that file)
+static sd_offset_info_t current_offset_info = {0};
 
 // Get the device pointer for the SDHC SPI slot from the device tree
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
@@ -57,6 +68,11 @@ static const struct gpio_dt_spec sd_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(sdcard
 K_MSGQ_DEFINE(sd_msgq, sizeof(sd_req_t), SD_REQ_QUEUE_MSGS, 4);
 
 void sd_worker_thread(void);
+
+/* Forward declarations for internal functions */
+static int create_audio_file_with_timestamp(void);
+static int flush_batch_buffer(void);
+static void build_file_path(const char *filename, char *path, size_t path_size);
 
 static int sd_enable_power(bool enable)
 {
@@ -89,6 +105,11 @@ static int sd_enable_power(bool enable)
 
 static int sd_unmount()
 {
+    // Flush any remaining batch data before unmounting
+    if (write_batch_offset > 0) {
+        flush_batch_buffer();
+    }
+    
     // Ensure files are closed before unmounting
     fs_close(&fil_data);
     fs_close(&fil_info);
@@ -177,6 +198,222 @@ static int sd_mount()
     return ret;
 }
 
+/* Build full file path from filename */
+static void build_file_path(const char *filename, char *path, size_t path_size)
+{
+    snprintf(path, path_size, "%s/%s", FILE_DATA_DIR, filename);
+}
+
+/* Print all audio files with their sizes at boot */
+static void print_audio_files_at_boot(void)
+{
+    struct fs_dir_t dir;
+    struct fs_dirent entry;
+    char file_path[64];
+    uint32_t file_count = 0;
+    uint64_t total_size = 0;
+    int all_entries = 0;
+    
+    fs_dir_t_init(&dir);
+    int ret = fs_opendir(&dir, FILE_DATA_DIR);
+    if (ret < 0) {
+        LOG_INF("[SD_BOOT] No audio directory found (err=%d)", ret);
+        return;
+    }
+    
+    LOG_INF("========== AUDIO FILES ON SD CARD ==========");
+    
+    while (1) {
+        ret = fs_readdir(&dir, &entry);
+        if (ret < 0) {
+            LOG_ERR("[SD_BOOT] readdir error: %d", ret);
+            break;
+        }
+        if (entry.name[0] == '\0') {
+            break;
+        }
+        
+        all_entries++;
+        
+        if (entry.type == FS_DIR_ENTRY_FILE) {
+            // Check if it's a .txt file
+            char *dot = strrchr(entry.name, '.');
+            if (dot && strcmp(dot, ".TXT") == 0) {
+                // FAT returns uppercase extension
+                build_file_path(entry.name, file_path, sizeof(file_path));
+                struct fs_dirent file_stat;
+                if (fs_stat(file_path, &file_stat) == 0) {
+                    LOG_INF("  [%u] %s - %u bytes", file_count + 1, entry.name, (unsigned)file_stat.size);
+                    total_size += file_stat.size;
+                    file_count++;
+                }
+            } else if (dot && strcmp(dot, ".txt") == 0) {
+                // Also check lowercase
+                build_file_path(entry.name, file_path, sizeof(file_path));
+                struct fs_dirent file_stat;
+                if (fs_stat(file_path, &file_stat) == 0) {
+                    LOG_INF("  [%u] %s - %u bytes", file_count + 1, entry.name, (unsigned)file_stat.size);
+                    total_size += file_stat.size;
+                    file_count++;
+                }
+            }
+        }
+    }
+    
+    fs_closedir(&dir);
+    
+    LOG_INF("[SD_BOOT] Total entries scanned: %d", all_entries);
+    
+    if (file_count == 0) {
+        LOG_INF("  (No audio files found)");
+    } else {
+        LOG_INF("--------------------------------------------");
+        LOG_INF("  Total: %u files, %u bytes (%.2f MB)", 
+                file_count, (unsigned)total_size, (float)total_size / (1024.0f * 1024.0f));
+    }
+    LOG_INF("=============================================");
+}
+
+/* Create a new audio file with current UTC timestamp as filename */
+static int create_audio_file_with_timestamp(void)
+{
+    uint32_t timestamp = get_utc_time();
+    if (timestamp == 0) {
+        // If RTC is not valid, use uptime as fallback
+        timestamp = (uint32_t)(k_uptime_get() / 1000);
+    }
+    
+    // Close current file if open
+    if (current_filename[0] != '\0') {
+        // Flush any remaining batch data
+        if (write_batch_offset > 0) {
+            flush_batch_buffer();
+        }
+        fs_close(&fil_data);
+    }
+    
+    // Ensure audio directory exists
+    struct fs_dirent dir_stat;
+    int stat_res = fs_stat(FILE_DATA_DIR, &dir_stat);
+    if (stat_res < 0) {
+        LOG_INF("Audio directory does not exist, creating: %s", FILE_DATA_DIR);
+        int mk_res = fs_mkdir(FILE_DATA_DIR);
+        if (mk_res < 0 && mk_res != -EEXIST) {
+            LOG_ERR("Failed to create audio directory: %d", mk_res);
+            return mk_res;
+        }
+    }
+    
+    // Generate new filename based on timestamp (hex format to fit 8.3 FAT filename)
+    // Hex timestamp is max 8 chars, fits FAT 8.3 limit
+    snprintf(current_filename, sizeof(current_filename), "%08X.txt", timestamp);
+    build_file_path(current_filename, current_file_path, sizeof(current_file_path));
+    
+    LOG_INF("Creating new audio file: %s", current_file_path);
+    
+    // Create and open the new file
+    fs_file_t_init(&fil_data);
+    int ret = fs_open(&fil_data, current_file_path, FS_O_CREATE | FS_O_RDWR);
+    if (ret < 0) {
+        LOG_ERR("Failed to create audio file %s: %d", current_file_path, ret);
+        current_filename[0] = '\0';
+        current_file_path[0] = '\0';
+        return ret;
+    }
+    
+    current_file_size = 0;
+    bytes_since_sync = 0;
+    write_batch_offset = 0;
+    write_batch_counter = 0;
+    
+    LOG_INF("Audio file created: %s", current_filename);
+    return 0;
+}
+
+/* Flush the batch buffer to SD card */
+static int flush_batch_buffer(void)
+{
+    if (write_batch_offset == 0) {
+        return 0;
+    }
+    
+    int res = fs_seek(&fil_data, 0, FS_SEEK_END);
+    if (res < 0) {
+        LOG_ERR("seek end before write failed: %d", res);
+        return res;
+    }
+    
+    ssize_t bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
+    if (bw < 0 || (size_t)bw != write_batch_offset) {
+        writing_error_counter++;
+        LOG_ERR("batch write error bw=%d wanted=%u", (int)bw, (unsigned)write_batch_offset);
+        
+        if (bw > 0) {
+            LOG_INF("Attempting to truncate to correct packet position");
+            uint32_t truncate_offset = current_file_size + bw - bw % MAX_WRITE_SIZE;
+            int ret = fs_truncate(&fil_data, truncate_offset);
+            if (ret < 0) {
+                LOG_ERR("Failed to truncate to next packet position: %d", ret);
+            } else {
+                LOG_INF("Shifted file pointer to correct packet position: %u", truncate_offset);
+                current_file_size = truncate_offset;
+            }
+        }
+        
+        if (writing_error_counter >= ERROR_THRESHOLD) {
+            LOG_ERR("Too many write errors (%d). Re-opening file.", writing_error_counter);
+            fs_close(&fil_data);
+            fs_file_t_init(&fil_data);
+            int reopen_res = fs_open(&fil_data, current_file_path, FS_O_CREATE | FS_O_RDWR);
+            if (reopen_res == 0) {
+                writing_error_counter = 0;
+                fs_seek(&fil_data, 0, FS_SEEK_END);
+            } else {
+                LOG_ERR("Re-open file failed: %d", reopen_res);
+            }
+        }
+        
+        write_batch_offset = 0;
+        write_batch_counter = 0;
+        return -EIO;
+    }
+    
+    bytes_since_sync += bw;
+    current_file_size += bw;
+    write_batch_offset = 0;
+    write_batch_counter = 0;
+    
+    return 0;
+}
+
+/* Check if we need to rotate to a new file due to BLE connection time */
+static bool should_rotate_file(void)
+{
+    if (!ble_connected) {
+        return false;
+    }
+    
+    int64_t now_ms = k_uptime_get();
+    int64_t connection_duration_ms = now_ms - ble_connect_time_ms;
+    
+    return (connection_duration_ms >= FILE_ROTATION_INTERVAL_MS);
+}
+
+/* Compare function for sorting filenames (hex timestamps) */
+static int compare_filenames(const void *a, const void *b)
+{
+    const char *fa = (const char *)a;
+    const char *fb = (const char *)b;
+    
+    // Extract hex timestamps from filenames (format: XXXXXXXX.txt)
+    uint32_t ts_a = (uint32_t)strtoul(fa, NULL, 16);
+    uint32_t ts_b = (uint32_t)strtoul(fb, NULL, 16);
+    
+    if (ts_a < ts_b) return -1;
+    if (ts_a > ts_b) return 1;
+    return 0;
+}
+
 #define SD_WORKER_STACK_SIZE 4096
 #define SD_WORKER_PRIORITY 7
 K_THREAD_STACK_DEFINE(sd_worker_stack, SD_WORKER_STACK_SIZE);
@@ -194,18 +431,42 @@ int app_sd_init(void)
     return 0;
 }
 
-uint32_t get_file_size()
+uint32_t get_file_size(void)
 {
     return current_file_size;
 }
 
-int read_audio_data(uint8_t *buf, int amount, int offset)
+int get_current_filename(char *buf, size_t buf_size)
+{
+    if (buf == NULL || buf_size < MAX_FILENAME_LEN) {
+        return -EINVAL;
+    }
+    strncpy(buf, current_filename, buf_size - 1);
+    buf[buf_size - 1] = '\0';
+    return 0;
+}
+
+void sd_notify_ble_state(bool connected)
+{
+    if (connected && !ble_connected) {
+        // BLE just connected
+        ble_connect_time_ms = k_uptime_get();
+        LOG_INF("BLE connected, tracking connection time for file rotation");
+    } else if (!connected && ble_connected) {
+        // BLE just disconnected - reset tracking
+        LOG_INF("BLE disconnected");
+    }
+    ble_connected = connected;
+}
+
+int read_audio_data(const char *filename, uint8_t *buf, int amount, int offset)
 {
     struct read_resp resp;
     k_sem_init(&resp.sem, 0, 1);
 
     sd_req_t req = {0};
     req.type = REQ_READ_DATA;
+    strncpy(req.u.read.filename, filename, MAX_FILENAME_LEN - 1);
     req.u.read.out_buf = buf;
     req.u.read.length = amount;
     req.u.read.offset = offset;
@@ -270,16 +531,15 @@ int clear_audio_directory(void)
         return -1;
     }
 
-    save_offset(0);
-
     return 0;
 }
 
-int save_offset(uint32_t offset)
+int save_offset(const char *filename, uint32_t offset)
 {
     sd_req_t req = {0};
     req.type = REQ_SAVE_OFFSET;
-    req.u.info.offset_value = offset;
+    strncpy(req.u.info.offset_info.oldest_filename, filename, MAX_FILENAME_LEN - 1);
+    req.u.info.offset_info.offset_in_file = offset;
 
     int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
     if (ret) {
@@ -289,9 +549,138 @@ int save_offset(uint32_t offset)
     return 0;
 }
 
-uint32_t get_offset(void)
+int get_offset(char *filename, uint32_t *offset)
 {
-    return current_file_offset;
+    if (filename == NULL || offset == NULL) {
+        return -EINVAL;
+    }
+    strncpy(filename, current_offset_info.oldest_filename, MAX_FILENAME_LEN - 1);
+    filename[MAX_FILENAME_LEN - 1] = '\0';
+    *offset = current_offset_info.offset_in_file;
+    return 0;
+}
+
+int create_new_audio_file(void)
+{
+    struct read_resp resp;
+    k_sem_init(&resp.sem, 0, 1);
+
+    sd_req_t req = {0};
+    req.type = REQ_CREATE_NEW_FILE;
+    req.u.create_file.resp = &resp;
+
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
+    if (ret) {
+        LOG_ERR("Failed to queue create_new_audio_file request: %d", ret);
+        return -1;
+    }
+
+    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
+        LOG_ERR("Timeout waiting for create_new_audio_file response");
+        return -1;
+    }
+
+    if (resp.res) {
+        LOG_ERR("Failed to create new audio file: %d", resp.res);
+        return -1;
+    }
+
+    // Reset BLE connection timer after creating new file
+    if (ble_connected) {
+        ble_connect_time_ms = k_uptime_get();
+    }
+
+    return 0;
+}
+
+int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
+{
+    if (file_count == NULL || total_size == NULL) {
+        return -EINVAL;
+    }
+
+    struct file_stats_resp resp;
+    k_sem_init(&resp.sem, 0, 1);
+
+    sd_req_t req = {0};
+    req.type = REQ_GET_FILE_STATS;
+    req.u.file_stats.resp = &resp;
+
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
+    if (ret) {
+        LOG_ERR("Failed to queue get_audio_file_stats request: %d", ret);
+        return -1;
+    }
+
+    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
+        LOG_ERR("Timeout waiting for get_audio_file_stats response");
+        return -1;
+    }
+
+    if (resp.res) {
+        LOG_ERR("Failed to get audio file stats: %d", resp.res);
+        return -1;
+    }
+
+    *file_count = resp.file_count;
+    *total_size = resp.total_size;
+    return 0;
+}
+
+int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count)
+{
+    if (filenames == NULL || count == NULL || max_files <= 0) {
+        return -EINVAL;
+    }
+
+    if (!is_mounted) {
+        return -ENODEV;
+    }
+
+    struct fs_dir_t dir;
+    struct fs_dirent entry;
+    int file_count = 0;
+    
+    fs_dir_t_init(&dir);
+    int ret = fs_opendir(&dir, FILE_DATA_DIR);
+    if (ret < 0) {
+        LOG_ERR("Failed to open audio directory: %d", ret);
+        return ret;
+    }
+
+    while (file_count < max_files) {
+        ret = fs_readdir(&dir, &entry);
+        if (ret < 0) {
+            LOG_ERR("Failed to read directory: %d", ret);
+            fs_closedir(&dir);
+            return ret;
+        }
+        
+        if (entry.name[0] == '\0') {
+            // End of directory
+            break;
+        }
+        
+        if (entry.type == FS_DIR_ENTRY_FILE) {
+            // Check if it's a .txt file with numeric name (timestamp)
+            char *dot = strrchr(entry.name, '.');
+            if (dot && strcmp(dot, ".txt") == 0) {
+                strncpy(filenames[file_count], entry.name, MAX_FILENAME_LEN - 1);
+                filenames[file_count][MAX_FILENAME_LEN - 1] = '\0';
+                file_count++;
+            }
+        }
+    }
+
+    fs_closedir(&dir);
+    
+    // Sort files by timestamp (oldest first)
+    if (file_count > 1) {
+        qsort(filenames, file_count, MAX_FILENAME_LEN, compare_filenames);
+    }
+    
+    *count = file_count;
+    return 0;
 }
 
 int app_sd_off(void)
@@ -320,37 +709,22 @@ void sd_worker_thread(void)
     /* Attempt to mount FS - board-specific mount code may be needed */
     res = sd_mount();
     if (res != 0) {
-        LOG_ERR("[SD_WORK] mount failed: %d\n", res);
+        LOG_ERR("[SD_WORK] mount failed: %d", res);
         return;
     }
 
+    /* Create audio directory if it doesn't exist */
     struct fs_dirent dirent;
     int stat_res = fs_stat(FILE_DATA_DIR, &dirent);
     if (stat_res < 0) {
         int mk_res = fs_mkdir(FILE_DATA_DIR);
         if (mk_res < 0) {
-            LOG_ERR("[SD_WORK] mkdir %s failed: %d\n", FILE_DATA_DIR, mk_res);
+            LOG_ERR("[SD_WORK] mkdir %s failed: %d", FILE_DATA_DIR, mk_res);
         }
     }
 
-    /* Open data file (append) */
-    fs_file_t_init(&fil_data);
-    res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
-    if (res < 0) {
-        LOG_ERR("[SD_WORK] open data failed: %d\n", res);
-        return;
-    } else {
-        /* move to end for append writes by default */
-        res = fs_seek(&fil_data, 0, FS_SEEK_END);
-    }
-
-    struct fs_dirent data_stat;
-    int stat_res_data = fs_stat(FILE_DATA_PATH, &data_stat);
-    if (stat_res_data == 0) {
-        current_file_size = data_stat.size;
-    } else {
-        current_file_size = 0;
-    }
+    /* Print all existing audio files at boot */
+    print_audio_files_at_boot();
 
     /* Open info file (read/write, create if not exists) */
     struct fs_dirent info_stat;
@@ -358,37 +732,43 @@ void sd_worker_thread(void)
     fs_file_t_init(&fil_info);
     res = fs_open(&fil_info, FILE_INFO_PATH, FS_O_CREATE | FS_O_RDWR);
     if (res < 0) {
-        LOG_ERR("[SD_WORK] open info failed: %d\n", res);
+        LOG_ERR("[SD_WORK] open info failed: %d", res);
         return;
     } else {
         bool need_init_offset = false;
         if (info_exists < 0) {
             need_init_offset = true;
-        } else if (info_stat.size < sizeof(uint32_t)) {
+        } else if (info_stat.size < sizeof(sd_offset_info_t)) {
             need_init_offset = true;
         }
         if (need_init_offset) {
-            current_file_offset = 0;
-            uint32_t zero_offset = 0;
-            ssize_t bw = fs_write(&fil_info, &zero_offset, sizeof(zero_offset));
-            if (bw != sizeof(zero_offset)) {
-                LOG_ERR("[SD_WORK] init info.txt failed to write offset 0: %d\n", (int)bw);
+            memset(&current_offset_info, 0, sizeof(current_offset_info));
+            ssize_t bw = fs_write(&fil_info, &current_offset_info, sizeof(current_offset_info));
+            if (bw != sizeof(current_offset_info)) {
+                LOG_ERR("[SD_WORK] init info.txt failed: %d", (int)bw);
             } else {
                 fs_sync(&fil_info);
             }
         } else {
-            /* Read existing offset from info.txt */
+            /* Read existing offset info from info.txt */
             fs_seek(&fil_info, 0, FS_SEEK_SET);
-            ssize_t rbytes = fs_read(&fil_info, &current_file_offset, sizeof(current_file_offset));
-            if (rbytes != sizeof(current_file_offset)) {
-                LOG_ERR("[SD_WORK] Failed to read offset at boot: %d\n", (int)rbytes);
-                current_file_offset = 0;
+            ssize_t rbytes = fs_read(&fil_info, &current_offset_info, sizeof(current_offset_info));
+            if (rbytes != sizeof(current_offset_info)) {
+                LOG_ERR("[SD_WORK] Failed to read offset info at boot: %d", (int)rbytes);
+                memset(&current_offset_info, 0, sizeof(current_offset_info));
             } else {
-                LOG_INF("[SD_WORK] Loaded offset from info.txt: %u\n", current_file_offset);
+                LOG_INF("[SD_WORK] Loaded offset info: file=%s, offset=%u",
+                        current_offset_info.oldest_filename,
+                        current_offset_info.offset_in_file);
             }
         }
+    }
 
-        fs_seek(&fil_data, 0, FS_SEEK_END);
+    /* Create initial audio file with timestamp */
+    res = create_audio_file_with_timestamp();
+    if (res < 0) {
+        LOG_ERR("[SD_WORK] Failed to create initial audio file: %d", res);
+        return;
     }
 
     while (1) {
@@ -396,7 +776,19 @@ void sd_worker_thread(void)
         if (k_msgq_get(&sd_msgq, &req, K_FOREVER) == 0) {
             switch (req.type) {
             case REQ_WRITE_DATA:
-                LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned)req.u.write.len);
+                LOG_DBG("[SD_WORK] Buffering %u bytes to batch write", (unsigned)req.u.write.len);
+
+                /* Check if we need to rotate to a new file */
+                if (should_rotate_file()) {
+                    LOG_INF("[SD_WORK] BLE connected for >30min, rotating to new file");
+                    flush_batch_buffer();
+                    res = create_audio_file_with_timestamp();
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] Failed to create new file for rotation: %d", res);
+                    }
+                    // Reset BLE connection timer
+                    ble_connect_time_ms = k_uptime_get();
+                }
 
                 memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
                 write_batch_offset += req.u.write.len;
@@ -404,57 +796,14 @@ void sd_worker_thread(void)
 
                 if (write_batch_counter >= WRITE_BATCH_COUNT) {
                     LOG_INF("[SD_WORK] WRITE_BATCH_COUNT reached. Flushing batch write.");
-                    res = fs_seek(&fil_data, 0, FS_SEEK_END);
-                    if (res < 0) {
-                        LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
-                    }
-                    bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
-                    if (bw < 0 || (size_t)bw != write_batch_offset) {
-                        writing_error_counter++;
-
-                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
-                        if (bw > 0) {
-                            LOG_INF("Attempting to truncate to correct packet position");
-                            uint32_t truncate_offset = current_file_size + bw - bw % MAX_WRITE_SIZE;
-                            int ret = fs_truncate(&fil_data, truncate_offset);
-                            if (ret < 0) {
-                                LOG_ERR("Failed to truncate to next packet position: %d", ret);
-                                break;
-                            }
-                            LOG_INF("Shifted file pointer to correct packet position: %u", truncate_offset);
-                            current_file_size += bw - bw % MAX_WRITE_SIZE;
-                        }
-
-                        if (writing_error_counter >= ERROR_THRESHOLD) {
-                            LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
-                            fs_close(&fil_data);
-                            fs_file_t_init(&fil_data);
-                            LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
-                            int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
-                            if (reopen_res == 0) {
-                                writing_error_counter = 0;
-                                fs_seek(&fil_data, 0, FS_SEEK_END);
-                            } else {
-                                LOG_ERR("[SD_WORK] open new data file failed: %d. Terminating operation", reopen_res);
-                            }
-                        }
-
-                        write_batch_offset = 0;
-                        write_batch_counter = 0;
-                        break;
-                    }
-
-                    bytes_since_sync += bw > 0 ? bw : 0;
-                    current_file_size += bw > 0 ? bw : 0;
-                    write_batch_offset = 0;
-                    write_batch_counter = 0;
+                    flush_batch_buffer();
                 }
 
                 if (bytes_since_sync >= SD_FSYNC_THRESHOLD) {
-                    LOG_INF("[SD_WORK] fs_sync triggered after %u bytes\n", (unsigned)bytes_since_sync);
+                    LOG_INF("[SD_WORK] fs_sync triggered after %u bytes", (unsigned)bytes_since_sync);
                     res = fs_sync(&fil_data);
                     if (res < 0) {
-                        LOG_ERR("[SD_WORK] fs_sync data failed: %d\n", res);
+                        LOG_ERR("[SD_WORK] fs_sync data failed: %d", res);
                     }
                     bytes_since_sync = 0;
                 }
@@ -462,86 +811,186 @@ void sd_worker_thread(void)
                 break;
 
             case REQ_READ_DATA:
-                LOG_DBG("[SD_WORK] Reading %u bytes from data file at offset %u\n",
-                        (unsigned)req.u.read.length, (unsigned)req.u.read.offset);
-                if (&fil_data == NULL) {
-                    LOG_ERR("[SD_WORK] data file not open (read)\n");
-                    if (req.u.read.resp) {
-                        req.u.read.resp->res = -1;
-                        req.u.read.resp->read_bytes = 0;
-                        k_sem_give(&req.u.read.resp->sem);
+                LOG_DBG("[SD_WORK] Reading %u bytes from file %s at offset %u",
+                        (unsigned)req.u.read.length, req.u.read.filename, (unsigned)req.u.read.offset);
+                
+                {
+                    char read_path[64];
+                    build_file_path(req.u.read.filename, read_path, sizeof(read_path));
+                    
+                    struct fs_file_t read_file;
+                    fs_file_t_init(&read_file);
+                    
+                    res = fs_open(&read_file, read_path, FS_O_READ);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] Failed to open file for reading: %s, err: %d", read_path, res);
+                        if (req.u.read.resp) {
+                            req.u.read.resp->res = res;
+                            req.u.read.resp->read_bytes = 0;
+                            k_sem_give(&req.u.read.resp->sem);
+                        }
+                        break;
                     }
-                    break;
-                }
 
-                res = fs_seek(&fil_data, req.u.read.offset, FS_SEEK_SET);
-                if (res < 0) {
-                    LOG_ERR("[SD_WORK] lseek failed: %d\n", res);
+                    res = fs_seek(&read_file, req.u.read.offset, FS_SEEK_SET);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] lseek failed: %d", res);
+                        fs_close(&read_file);
+                        if (req.u.read.resp) {
+                            req.u.read.resp->res = res;
+                            req.u.read.resp->read_bytes = 0;
+                            k_sem_give(&req.u.read.resp->sem);
+                        }
+                        break;
+                    }
+                    
+                    br = fs_read(&read_file, req.u.read.out_buf, req.u.read.length);
+                    fs_close(&read_file);
+                    
                     if (req.u.read.resp) {
-                        req.u.read.resp->res = res;
-                        req.u.read.resp->read_bytes = 0;
+                        req.u.read.resp->res = (br < 0) ? br : 0;
+                        req.u.read.resp->read_bytes = (br < 0) ? 0 : br;
                         k_sem_give(&req.u.read.resp->sem);
                     }
-                    break;
-                }
-                br = fs_read(&fil_data, req.u.read.out_buf, req.u.read.length);
-                if (req.u.read.resp) {
-                    req.u.read.resp->res = (br < 0) ? br : 0;
-                    req.u.read.resp->read_bytes = (br < 0) ? 0 : br;
-                    k_sem_give(&req.u.read.resp->sem);
                 }
                 break;
 
             case REQ_SAVE_OFFSET:
-                LOG_DBG("[SD_WORK] Saving offset %u to info file\n", (unsigned)req.u.info.offset_value);
-                /* Overwrite info.txt with 4-byte offset value (binary) */
-                if (&fil_info == NULL) {
-                    LOG_ERR("[SD_WORK] info file not open\n");
-                    break;
-                }
+                LOG_DBG("[SD_WORK] Saving offset info: file=%s, offset=%u",
+                        req.u.info.offset_info.oldest_filename,
+                        req.u.info.offset_info.offset_in_file);
+                
                 res = fs_seek(&fil_info, 0, FS_SEEK_SET);
                 if (res == 0) {
-                    bw = fs_write(&fil_info, &req.u.info.offset_value, sizeof(req.u.info.offset_value));
-                    if (bw < 0 || bw != sizeof(req.u.info.offset_value)) {
-                        LOG_ERR("[SD_WORK] info write err %d\n", (int)bw);
+                    bw = fs_write(&fil_info, &req.u.info.offset_info, sizeof(sd_offset_info_t));
+                    if (bw < 0 || bw != sizeof(sd_offset_info_t)) {
+                        LOG_ERR("[SD_WORK] info write err %d", (int)bw);
                     } else {
                         res = fs_sync(&fil_info);
                         if (res < 0) {
                             LOG_ERR("[SD_WORK] fs_sync of info file failed: %d", res);
                         } else {
-                            current_file_offset = req.u.info.offset_value;
+                            memcpy(&current_offset_info, &req.u.info.offset_info, sizeof(sd_offset_info_t));
                         }
                     }
                 }
                 break;
 
             case REQ_CLEAR_AUDIO_DIR:
-                LOG_DBG("[SD_WORK] Clearing audio directory (delete files only)");
-                // Close fil_data before clearing directory
+                LOG_DBG("[SD_WORK] Clearing audio directory");
+                
+                // Flush and close current file
+                flush_batch_buffer();
                 fs_close(&fil_data);
-                int unlink_res = fs_unlink(FILE_DATA_PATH);
-                if (unlink_res != 0 && unlink_res != -2) {
-                    LOG_ERR("[SD_WORK] Cannot unlink data file: %s, err: %d", FILE_DATA_PATH, unlink_res);
+                
+                {
+                    struct fs_dir_t dir;
+                    struct fs_dirent entry;
+                    char file_path[64];
+                    
+                    fs_dir_t_init(&dir);
+                    res = fs_opendir(&dir, FILE_DATA_DIR);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] Failed to open audio dir: %d", res);
+                    } else {
+                        while (1) {
+                            res = fs_readdir(&dir, &entry);
+                            if (res < 0 || entry.name[0] == '\0') {
+                                break;
+                            }
+                            if (entry.type == FS_DIR_ENTRY_FILE) {
+                                build_file_path(entry.name, file_path, sizeof(file_path));
+                                int unlink_res = fs_unlink(file_path);
+                                if (unlink_res < 0 && unlink_res != -ENOENT) {
+                                    LOG_ERR("[SD_WORK] Failed to delete %s: %d", file_path, unlink_res);
+                                }
+                            }
+                        }
+                        fs_closedir(&dir);
+                    }
                 }
-                fs_file_t_init(&fil_data);
-                int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
-                if (reopen_res == 0) {
-                    fs_seek(&fil_data, 0, FS_SEEK_SET);
-                } else {
-                    LOG_ERR("[SD_WORK] open new data file failed: %d. Terminating operation", reopen_res);
-                    return;
-                }
-                current_file_size = 0;
-                current_file_offset = 0;
-                // Return result to resp if available
+                
+                // Reset offset info
+                memset(&current_offset_info, 0, sizeof(current_offset_info));
+                fs_seek(&fil_info, 0, FS_SEEK_SET);
+                fs_write(&fil_info, &current_offset_info, sizeof(current_offset_info));
+                fs_sync(&fil_info);
+                
+                // Create a new file
+                res = create_audio_file_with_timestamp();
+                
                 if (req.u.clear_dir.resp) {
-                    req.u.clear_dir.resp->res = 0;
+                    req.u.clear_dir.resp->res = res;
                     k_sem_give(&req.u.clear_dir.resp->sem);
                 }
                 break;
 
+            case REQ_CREATE_NEW_FILE:
+                LOG_DBG("[SD_WORK] Creating new audio file");
+                
+                flush_batch_buffer();
+                res = create_audio_file_with_timestamp();
+                
+                if (req.u.create_file.resp) {
+                    req.u.create_file.resp->res = res;
+                    k_sem_give(&req.u.create_file.resp->sem);
+                }
+                break;
+
+            case REQ_GET_FILE_STATS:
+                LOG_DBG("[SD_WORK] Getting file statistics");
+                
+                {
+                    struct fs_dir_t dir;
+                    struct fs_dirent entry;
+                    char file_path[64];
+                    uint32_t file_count = 0;
+                    uint64_t total_size = 0;
+                    
+                    fs_dir_t_init(&dir);
+                    res = fs_opendir(&dir, FILE_DATA_DIR);
+                    if (res < 0) {
+                        LOG_ERR("[SD_WORK] Failed to open audio dir for stats: %d", res);
+                        if (req.u.file_stats.resp) {
+                            req.u.file_stats.resp->res = res;
+                            req.u.file_stats.resp->file_count = 0;
+                            req.u.file_stats.resp->total_size = 0;
+                            k_sem_give(&req.u.file_stats.resp->sem);
+                        }
+                        break;
+                    }
+                    
+                    while (1) {
+                        res = fs_readdir(&dir, &entry);
+                        if (res < 0 || entry.name[0] == '\0') {
+                            break;
+                        }
+                        if (entry.type == FS_DIR_ENTRY_FILE) {
+                            // Check if it's a timestamp .txt file
+                            char *dot = strrchr(entry.name, '.');
+                            if (dot && strcmp(dot, ".txt") == 0) {
+                                file_count++;
+                                build_file_path(entry.name, file_path, sizeof(file_path));
+                                struct fs_dirent file_stat;
+                                if (fs_stat(file_path, &file_stat) == 0) {
+                                    total_size += file_stat.size;
+                                }
+                            }
+                        }
+                    }
+                    fs_closedir(&dir);
+                    
+                    if (req.u.file_stats.resp) {
+                        req.u.file_stats.resp->res = 0;
+                        req.u.file_stats.resp->file_count = file_count;
+                        req.u.file_stats.resp->total_size = total_size;
+                        k_sem_give(&req.u.file_stats.resp->sem);
+                    }
+                }
+                break;
+
             default:
-                LOG_ERR("[SD_WORK] unknown req type\n");
+                LOG_ERR("[SD_WORK] unknown req type");
             }
         }
     }

@@ -11,6 +11,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/fs/fs.h>
 
 #include "sd_card.h"
 #include "transport.h"
@@ -20,6 +21,10 @@
 #endif
 
 LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
+
+/* Current file being read for transfer */
+static char current_read_filename[MAX_FILENAME_LEN] = {0};
+static uint32_t current_read_offset = 0;
 
 #define MAX_PACKET_LENGTH 256
 #define OPUS_ENTRY_LENGTH 80
@@ -128,10 +133,24 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
                                            uint16_t offset)
 {
     k_msleep(10);
+    
+    /* Get file statistics: total file count and total size */
+    uint32_t file_count = 0;
+    uint64_t total_size = 0;
+    get_audio_file_stats(&file_count, &total_size);
+    
+    /* Get current offset info */
+    char offset_filename[MAX_FILENAME_LEN] = {0};
+    uint32_t offset_in_file = 0;
+    get_offset(offset_filename, &offset_in_file);
+    
+    /* For backward compatibility, return total size and cumulative offset */
     uint32_t amount[2] = {0};
-    amount[0] = get_file_size();
-    amount[1] = get_offset();
-    LOG_INF("Storage read requested: file size %u, offset %u", amount[0], amount[1]);
+    amount[0] = (uint32_t)total_size;  // Total size of all files
+    amount[1] = offset_in_file;         // Current offset in oldest file
+    
+    LOG_INF("Storage read requested: total size %u, offset %u, files %u", 
+            amount[0], amount[1], file_count);
     ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 2 * sizeof(uint32_t));
     return result;
 }
@@ -152,22 +171,62 @@ uint32_t remaining_length = 0;
 static int setup_storage_tx()
 {
     transport_started = (uint8_t) 0;
-    LOG_INF("about to transmit storage\n");
+    LOG_INF("about to transmit storage");
     k_msleep(1000);
 
-    uint32_t file_size = get_file_size();
-
-    // Validate offset against file size
-    if (offset >= file_size) {
-        LOG_ERR("Offset %d exceeds file size %d", offset, file_size);
-        offset = 0; // Reset to start
+    /* Get list of audio files sorted by timestamp (oldest first) */
+    static char filenames[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
+    int file_count = 0;
+    int ret = get_audio_file_list(filenames, MAX_AUDIO_FILES, &file_count);
+    if (ret < 0 || file_count == 0) {
+        LOG_ERR("No audio files available");
+        remaining_length = 0;
+        return -1;
     }
-
-    remaining_length = file_size - offset;
-
+    
+    /* Get current offset info to find where we left off */
+    char offset_filename[MAX_FILENAME_LEN] = {0};
+    uint32_t offset_in_file = 0;
+    get_offset(offset_filename, &offset_in_file);
+    
+    /* Find the file to start reading from */
+    int start_file_idx = 0;
+    if (offset_filename[0] != '\0') {
+        for (int i = 0; i < file_count; i++) {
+            if (strcmp(filenames[i], offset_filename) == 0) {
+                start_file_idx = i;
+                break;
+            }
+        }
+    }
+    
+    /* Use the oldest unread file or the specified offset file */
+    strncpy(current_read_filename, filenames[start_file_idx], MAX_FILENAME_LEN - 1);
+    current_read_offset = (start_file_idx == 0 && offset_filename[0] != '\0') ? offset_in_file : 0;
+    
+    /* If a specific offset was requested, use it */
+    if (offset > 0) {
+        current_read_offset = offset - (offset % SD_BLE_SIZE);
+    }
+    
+    /* Calculate total remaining data across all files from current position */
+    uint32_t file_count_tmp = 0;
+    uint64_t all_files_size = 0;
+    get_audio_file_stats(&file_count_tmp, &all_files_size);
+    
+    /* For simplicity, calculate remaining from current file */
+    /* In a full implementation, we'd track across multiple files */
+    struct fs_dirent file_stat;
+    char file_path[64];
+    snprintf(file_path, sizeof(file_path), "/SD:/audio/%s", current_read_filename);
+    if (fs_stat(file_path, &file_stat) == 0) {
+        remaining_length = file_stat.size - current_read_offset;
+    } else {
+        remaining_length = 0;
+    }
+    
     LOG_INF("remaining length: %d", remaining_length);
-    LOG_INF("offset: %d", offset);
-    LOG_INF("file size: %d", file_size);
+    LOG_INF("current file: %s, offset: %d", current_read_filename, current_read_offset);
 
     return 0;
 }
@@ -340,33 +399,34 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 
 static void write_to_gatt(struct bt_conn *conn)
 {
-
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
 
-    int r = read_audio_data(storage_write_buffer, packet_size, offset);
+    int r = read_audio_data(current_read_filename, storage_write_buffer, packet_size, current_read_offset);
     if (r < 0) {
         LOG_ERR("Failed to read audio data: %d", r);
         remaining_length = 0; // Stop transfer on error
         return;
     }
 
-    offset = offset + packet_size;
+    current_read_offset = current_read_offset + packet_size;
+    offset = current_read_offset; // Keep offset in sync for compatibility
+    
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
     if (err) {
         LOG_PRINTK("error writing to gatt: %d\n", err);
     } else {
-        remaining_length = remaining_length - packet_size; // FIX: Use packet_size, not SD_BLE_SIZE
+        remaining_length = remaining_length - packet_size;
     }
 }
 
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
-    
     uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * 10);
-    int ret = read_audio_data(storage_write_buffer, to_read, offset);
+    int ret = read_audio_data(current_read_filename, storage_write_buffer, to_read, current_read_offset);
     if (ret > 0) {
-        offset += to_read;
+        current_read_offset += to_read;
+        offset = current_read_offset; // Keep offset in sync for compatibility
         remaining_length -= to_read;
         size_t sent = 0;
         while ((sent < to_read) && is_wifi_on()) {
@@ -432,11 +492,11 @@ void storage_write(void)
         if (stop_started) {
             remaining_length = 0;
             stop_started = 0;
-            save_offset(offset);
+            save_offset(current_read_filename, current_read_offset);
         }
         if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
-            LOG_INF("no heartbeat sent\n");
-            save_offset(offset);
+            LOG_INF("no heartbeat sent");
+            save_offset(current_read_filename, current_read_offset);
             // ensure heartbeat count resets
             heartbeat_count = 0;
         }
@@ -449,7 +509,7 @@ void storage_write(void)
             ) {
                 LOG_ERR("invalid connection");
                 remaining_length = 0;
-                save_offset(offset);
+                save_offset(current_read_filename, current_read_offset);
                 // save offset to flash
                 continue;
                 // k_yield();

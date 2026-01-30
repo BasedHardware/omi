@@ -8,13 +8,18 @@
 
 #define MAX_STORAGE_BYTES 0x1E000000 // 480MB
 #define MAX_WRITE_SIZE 440
+#define MAX_FILENAME_LEN 32
+#define MAX_AUDIO_FILES 100
+#define FILE_ROTATION_INTERVAL_MS (30 * 60 * 1000)  // 30 minutes in milliseconds
 
 /* Request types for the SD worker */
 typedef enum {
     REQ_CLEAR_AUDIO_DIR,
     REQ_WRITE_DATA,
     REQ_READ_DATA,
-    REQ_SAVE_OFFSET
+    REQ_SAVE_OFFSET,
+    REQ_CREATE_NEW_FILE,
+    REQ_GET_FILE_STATS,
 } sd_req_type_t;
 
 /* Read request response object */
@@ -23,6 +28,20 @@ struct read_resp {
     int res;
     ssize_t read_bytes;
 };
+
+/* File statistics response */
+struct file_stats_resp {
+    struct k_sem sem;
+    int res;
+    uint32_t file_count;
+    uint64_t total_size;
+};
+
+/* Offset info structure stored in info.txt */
+typedef struct {
+    char oldest_filename[MAX_FILENAME_LEN];   // Oldest file being read
+    uint32_t offset_in_file;                  // Offset within that file
+} sd_offset_info_t;
 
 /* Generic request message passed to worker */
 typedef struct {
@@ -34,17 +53,24 @@ typedef struct {
             struct read_resp *resp;
         } write;
         struct {
+            char filename[MAX_FILENAME_LEN];  // Specific file to read from
             uint32_t offset;
             uint32_t length;
             uint8_t *out_buf;
             struct read_resp *resp;
         } read;
         struct {
-            uint32_t offset_value;
+            sd_offset_info_t offset_info;
         } info;
         struct {
             struct read_resp *resp;
         } clear_dir;
+        struct {
+            struct read_resp *resp;
+        } create_file;
+        struct {
+            struct file_stats_resp *resp;
+        } file_stats;
     } u;
 } sd_req_t;
 
@@ -65,35 +91,6 @@ int app_sd_off(void);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
-// Maximum number of audio files supported
-#define MAX_AUDIO_FILES 24
-
-/**
- * @brief Create a file
- *
- * Creates a file at the given path
- *
- * @return 0 if successful, negative errno code if error
- */
-int create_file(const char *file_path);
-
-/**
- * @brief Generate a new audio file header/path
- *
- * @param num File number (1-99)
- * @return Allocated string with path like "audio/a01.txt", must be freed by caller
- */
-char *generate_new_audio_header(uint8_t num);
-
-/**
- * @brief Initialize an audio file of number 1
- *
- * Initializes an audio file. It will be called a nn.txt, where nn is the number of the file.
- *  example: initialize_audio_file(1) will create a file called a01.txt
- * @return 0 if successful, negative errno code if error
- */
-int initialize_audio_file(uint8_t num);
-
 /**
  * @brief Write to the current audio file specified by the write pointer
  *
@@ -104,44 +101,91 @@ int initialize_audio_file(uint8_t num);
 uint32_t write_to_file(uint8_t *data, uint32_t length);
 
 /**
- * @brief Read from the current audio file specified by the read pointer
+ * @brief Read from a specific audio file
  *
+ * @param filename Name of the file to read from (e.g., "1234567890.txt")
  * @param buf Buffer to read data into
  * @param amount Number of bytes to read
  * @param offset Offset within the file to read from
- * @return number of bytes read
+ * @return number of bytes read, or negative error code
  */
-int read_audio_data(uint8_t *buf, int amount, int offset);
+int read_audio_data(const char *filename, uint8_t *buf, int amount, int offset);
 
 /**
- * @brief Get the size of the specified audio file number
+ * @brief Get the size of the current writing file
  * @return size of the file in bytes
  */
-uint32_t get_file_size();
+uint32_t get_file_size(void);
+
+/**
+ * @brief Get the name of the current writing file
+ * @param buf Buffer to store the filename
+ * @param buf_size Size of the buffer
+ * @return 0 on success, negative error code otherwise
+ */
+int get_current_filename(char *buf, size_t buf_size);
 
 /**
  * @brief Clear the audio directory.
  *
- * This deletes all audio files and leaves the audio directory with only one file left, a01.txt.
- * This automatically moves the read and write pointers to a01.txt.
+ * This deletes all audio files in the audio directory.
  * @return 0 if successful, negative errno code if error
  */
 int clear_audio_directory(void);
 
 /**
- * @brief Save the current offset to the info file
+ * @brief Save the current offset info to the info file
  *
- * @param offset Offset value to save
+ * @param filename The oldest file being read
+ * @param offset Offset within that file
  * @return 0 if successful, negative errno code if error
  */
-int save_offset(uint32_t offset);
+int save_offset(const char *filename, uint32_t offset);
 
 /**
- * @brief Get the saved offset from the info file
+ * @brief Get the saved offset info from the info file
  *
- * @return offset value, or negative errno code if error
+ * @param filename Buffer to store the oldest filename (must be at least MAX_FILENAME_LEN)
+ * @param offset Pointer to store the offset value
+ * @return 0 on success, negative errno code if error
  */
-uint32_t get_offset(void);
+int get_offset(char *filename, uint32_t *offset);
+
+/**
+ * @brief Create a new audio file with current timestamp
+ *
+ * This forces creation of a new file, useful when BLE connection
+ * has been active for a long time.
+ * @return 0 if successful, negative errno code if error
+ */
+int create_new_audio_file(void);
+
+/**
+ * @brief Notify that BLE connection state has changed
+ *
+ * Call this when BLE connects/disconnects to manage file rotation.
+ * @param connected true if BLE is now connected, false if disconnected
+ */
+void sd_notify_ble_state(bool connected);
+
+/**
+ * @brief Get file statistics
+ *
+ * @param file_count Pointer to store the number of audio files
+ * @param total_size Pointer to store the total size of all audio files
+ * @return 0 on success, negative error code otherwise
+ */
+int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size);
+
+/**
+ * @brief Get list of audio files sorted by timestamp (oldest first)
+ *
+ * @param filenames Array of filename buffers
+ * @param max_files Maximum number of files to retrieve
+ * @param count Pointer to store the actual number of files found
+ * @return 0 on success, negative error code otherwise
+ */
+int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count);
 
 /**
  * @brief Turn on SD card power
