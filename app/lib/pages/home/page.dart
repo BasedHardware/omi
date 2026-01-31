@@ -57,6 +57,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -604,236 +605,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ],
                       ),
-                      Consumer2<HomeProvider, DeviceProvider>(
-                        builder: (context, home, deviceProvider, child) {
+                      Consumer<HomeProvider>(
+                        builder: (context, home, child) {
                           if (home.isChatFieldFocused ||
                               home.isAppsSearchFieldFocused ||
                               home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
-                          } else {
-                            // Check if OMI device is connected
-                            bool isOmiDeviceConnected =
-                                deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                          }
 
-                            return Stack(
-                              children: [
-                                // Bottom Navigation Bar
-                                Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    width: double.infinity,
-                                    height: 100,
-                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        stops: [0.0, 0.30, 1.0],
-                                        colors: [
-                                          Colors.transparent,
-                                          Color.fromARGB(255, 15, 15, 15),
-                                          Color.fromARGB(255, 15, 15, 15),
+                          return Stack(
+                            children: [
+                              BottomNavBar(
+                                onTabTap: (index, isRepeat) {
+                                  if (isRepeat) {
+                                    _scrollToTop(index);
+                                  } else {
+                                    home.setIndex(index);
+                                  }
+                                },
+                              ),
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  right: 20,
+                                  bottom: 100,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.mediumImpact();
+                                      MixpanelManager().bottomNavigationTabClicked('Chat');
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const ChatPage(isPivotBottom: false),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(32),
+                                        color: Colors.deepPurple,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            FontAwesomeIcons.solidComment,
+                                            size: 22,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            context.l10n.askOmi,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        // Home tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Home');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 0) {
-                                                _scrollToTop(0);
-                                                return;
-                                              }
-                                              home.setIndex(0);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.house,
-                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Action Items tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Action Items');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 1) {
-                                                _scrollToTop(1);
-                                                return;
-                                              }
-                                              home.setIndex(1);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.listCheck,
-                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Center space for record button - only when no OMI device is connected
-                                        if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Memories tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 2) {
-                                                _scrollToTop(2);
-                                                return;
-                                              }
-                                              home.setIndex(2);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.brain,
-                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Apps tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Apps');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 3) {
-                                                _scrollToTop(3);
-                                                return;
-                                              }
-                                              home.setIndex(3);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.puzzlePiece,
-                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
-                                // Central Record Button - Only show when no OMI device is connected
-                                if (!isOmiDeviceConnected)
-                                  Positioned(
-                                    left: MediaQuery.of(context).size.width / 2 - 40,
-                                    bottom: 40, // Position it to protrude above the taller navbar (90px height)
-                                    child: Consumer<CaptureProvider>(
-                                      builder: (context, captureProvider, child) {
-                                        bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                        bool isInitializing =
-                                            captureProvider.recordingState == RecordingState.initialising;
-                                        return GestureDetector(
-                                          onTap: () async {
-                                            HapticFeedback.heavyImpact();
-                                            if (isInitializing) return;
-                                            await _handleRecordButtonPress(context, captureProvider);
-                                          },
-                                          child: Container(
-                                            width: 80,
-                                            height: 80,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isRecording ? Colors.red : Colors.deepPurple,
-                                              border: Border.all(
-                                                color: Colors.black,
-                                                width: 5,
-                                              ),
-                                            ),
-                                            child: isInitializing
-                                                ? const CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2,
-                                                  )
-                                                : Icon(
-                                                    isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                                                    color: Colors.white,
-                                                    size: 24,
-                                                  ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                // Floating Chat Button - Bottom Right (only on homepage)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 100, // Position above the bottom navigation bar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(32),
-                                          color: Colors.deepPurple,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              FontAwesomeIcons.solidComment,
-                                              size: 22,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              context.l10n.askOmi,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          }
+                            ],
+                          );
                         },
                       ),
                       // Merge action bar - floats above bottom nav when in selection mode
