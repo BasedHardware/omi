@@ -784,12 +784,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   // Update UI state only (called during drag)
   void _updateGoalProgressUI(Goal goal, double newValue) {
-    // Only update if value changed
     if (newValue == goal.currentValue) return;
 
     HapticFeedback.lightImpact();
 
-    // Update local state immediately for responsive UI
     setState(() {
       final index = _goals.indexWhere((g) => g.id == goal.id);
       if (index != -1) {
@@ -812,10 +810,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   // Save to storage and API (called when drag ends)
   Future<void> _saveGoalProgress(Goal goal, double newValue) async {
-    // Save locally
     await _saveGoalsLocally();
 
-    // Update on backend if not a local-only goal
     if (!goal.id.startsWith('local_')) {
       await updateGoalProgress(goal.id, newValue);
     }
