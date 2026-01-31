@@ -699,12 +699,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             children: [
               // Emoji icon
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: Text(emoji, style: const TextStyle(fontSize: 18)),
