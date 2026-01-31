@@ -147,13 +147,6 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (_goals.isEmpty)
-                                    Icon(
-                                      Icons.add_circle_outline,
-                                      size: 16,
-                                      color: Colors.white.withOpacity(0.7),
-                                    ),
-                                  if (_goals.isEmpty) const SizedBox(width: 6),
                                   Text(
                                     _goals.isEmpty ? 'Add Goals' : context.l10n.yourScore,
                                     style: TextStyle(
@@ -222,11 +215,11 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                       _showScoreDetails(context, score, completedTasks, totalTasks);
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(2),
                       child: Icon(
                         Icons.help_outline,
-                        size: 20,
-                        color: Colors.white.withOpacity(0.4),
+                        size: 16,
+                        color: Colors.white.withOpacity(0.3),
                       ),
                     ),
                   ),
