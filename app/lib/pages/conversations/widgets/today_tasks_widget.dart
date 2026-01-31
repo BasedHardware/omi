@@ -67,13 +67,19 @@ class TodayTasksWidget extends StatelessWidget {
                         context.read<HomeProvider>().setIndex(1);
                       },
                       child: Container(
-                        width: 32,
-                        height: 32,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.grey.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                        child: Text(
+                          context.l10n.viewAll,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     ),
                   ],

@@ -9836,5 +9836,9 @@
   "newTask": "New Task",
   "@newTask": {
     "description": "Button text for creating a new task"
+  },
+  "viewAll": "View All",
+  "@viewAll": {
+    "description": "Button text to view all items"
   }
 }
