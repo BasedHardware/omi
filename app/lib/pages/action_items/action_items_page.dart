@@ -601,8 +601,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             child: Text(
               goal?.title ?? '',
               textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 3,
               style: TextStyle(
                 color: goal == null ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.9),
                 fontSize: 12,
