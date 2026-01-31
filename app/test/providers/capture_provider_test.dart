@@ -2,6 +2,7 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -183,6 +184,43 @@ void main() {
 
       provider.onSegmentReceived([_segment('x', 'new')]);
 
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on photo processing event and updates id', () {
+      final provider = CaptureProvider();
+      provider.photos = [
+        ConversationPhoto(
+          id: 'temp-photo',
+          base64: 'img',
+          createdAt: DateTime.now(),
+        ),
+      ];
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onMessageEventReceived(PhotoProcessingEvent(tempId: 'temp-photo', photoId: 'permanent-photo'));
+
+      expect(provider.photos.first.id, 'permanent-photo');
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on photo described event and updates description', () {
+      final provider = CaptureProvider();
+      provider.photos = [
+        ConversationPhoto(
+          id: 'photo-1',
+          base64: 'img',
+          createdAt: DateTime.now(),
+        ),
+      ];
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onMessageEventReceived(
+        PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true),
+      );
+
+      expect(provider.photos.first.description, 'desc');
+      expect(provider.photos.first.discarded, true);
       expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
   });
