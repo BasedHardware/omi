@@ -1800,6 +1800,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             goalType: goal.goalType,
                             targetValue: target,
                             currentValue: current,
+                            minValue: goal.minValue,
+                            maxValue: goal.maxValue,
+                            unit: goal.unit,
+                            isActive: goal.isActive,
                             createdAt: goal.createdAt,
                             updatedAt: DateTime.now(),
                           );
