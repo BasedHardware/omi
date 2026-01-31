@@ -456,7 +456,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        const SliverPadding(padding: EdgeInsets.only(top: 24)),
         SliverToBoxAdapter(
           child: _buildGoalsRow(),
         ),
@@ -518,7 +518,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        const SliverPadding(padding: EdgeInsets.only(top: 24)),
         SliverToBoxAdapter(
           child: _buildGoalsRow(),
         ),
