@@ -167,7 +167,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    _goals.isEmpty ? 'Add Goals' : context.l10n.newTask,
+                                    _goals.isEmpty ? context.l10n.addGoal : context.l10n.newTask,
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,

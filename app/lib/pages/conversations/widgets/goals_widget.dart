@@ -755,7 +755,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 min: 0,
                                 max: goal.targetValue,
                                 divisions: goal.targetValue.toInt(),
-                                onChanged: (value) => _updateGoalProgress(goal, value),
+                                onChanged: (value) => _updateGoalProgressUI(goal, value),
+                                onChangeEnd: (value) => _saveGoalProgress(goal, value),
                               ),
                             ),
                           ),
@@ -781,7 +782,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  void _updateGoalProgress(Goal goal, double newValue) async {
+  // Update UI state only (called during drag)
+  void _updateGoalProgressUI(Goal goal, double newValue) {
     // Only update if value changed
     if (newValue == goal.currentValue) return;
 
@@ -806,7 +808,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         );
       }
     });
+  }
 
+  // Save to storage and API (called when drag ends)
+  Future<void> _saveGoalProgress(Goal goal, double newValue) async {
     // Save locally
     await _saveGoalsLocally();
 
