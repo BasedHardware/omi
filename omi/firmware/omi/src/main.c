@@ -138,7 +138,7 @@ void set_led_state()
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // If RTC not synced, blink red to warn user to connect phone app
     if (!rtc_is_valid()) {
-        set_led_green(false);
+        set_led_green(is_charging);
         set_led_blue(!blink_toggle && is_connected);
         set_led_red(blink_toggle);
         blink_toggle = !blink_toggle;

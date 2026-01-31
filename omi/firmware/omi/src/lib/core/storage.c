@@ -55,6 +55,8 @@ static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
 static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
 static int sync_file_count = 0;
 static int current_sync_file_index = -1;  /* -1 = legacy mode, >=0 = new protocol */
+static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
+static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
                                      const struct bt_gatt_attr *attr,
@@ -273,7 +275,7 @@ static int refresh_file_list_cache(void)
 
 /**
  * @brief Send file list response
- * Format: [count:1][total_size:4]
+ * Format: [count:1][ts1:4][sz1:4][ts2:4][sz2:4]...
  */
 static int send_file_list_response(struct bt_conn *conn)
 {
@@ -283,22 +285,29 @@ static int send_file_list_response(struct bt_conn *conn)
         return -1;
     }
     
-    /* Calculate total size */
-    uint32_t total_size = 0;
-    for (int i = 0; i < sync_file_count; i++) {
-        total_size += sync_file_sizes[i];
+    /* Use storage_buffer to build response (max 4440 bytes) */
+    /* Each file: ts(4) + size(4) = 8 bytes, max ~550 files */
+    int resp_len = 0;
+    
+    storage_buffer[resp_len++] = (uint8_t)sync_file_count;
+    
+    for (int i = 0; i < sync_file_count && resp_len + 8 <= STORAGE_BUFFER_SIZE; i++) {
+        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
+        uint32_t size = sync_file_sizes[i];
+        
+        storage_buffer[resp_len++] = (timestamp >> 24) & 0xFF;
+        storage_buffer[resp_len++] = (timestamp >> 16) & 0xFF;
+        storage_buffer[resp_len++] = (timestamp >> 8) & 0xFF;
+        storage_buffer[resp_len++] = timestamp & 0xFF;
+        
+        storage_buffer[resp_len++] = (size >> 24) & 0xFF;
+        storage_buffer[resp_len++] = (size >> 16) & 0xFF;
+        storage_buffer[resp_len++] = (size >> 8) & 0xFF;
+        storage_buffer[resp_len++] = size & 0xFF;
     }
     
-    /* Response: [count:1][total_size:4] = 5 bytes */
-    uint8_t resp[5];
-    resp[0] = (uint8_t)sync_file_count;
-    resp[1] = (total_size >> 24) & 0xFF;
-    resp[2] = (total_size >> 16) & 0xFF;
-    resp[3] = (total_size >> 8) & 0xFF;
-    resp[4] = total_size & 0xFF;
-    
-    LOG_INF("Sending file stats: %d files, %u bytes total", sync_file_count, total_size);
-    return bt_gatt_notify(conn, &storage_service.attrs[1], resp, sizeof(resp));
+    LOG_INF("Sending file list: %d files, %d bytes", sync_file_count, resp_len);
+    return bt_gatt_notify(conn, &storage_service.attrs[1], storage_buffer, resp_len);
 }
 
 /**
@@ -361,8 +370,8 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
     /* ===== NEW MULTI-FILE COMMANDS ===== */
     
     if (command == CMD_LIST_FILES) {
-        send_file_list_response(conn);
-        return 0xFF;  /* Response already sent */
+        list_files_requested = 1;  /* Defer to storage thread to avoid stack overflow */
+        return 0xFF;  /* Will be processed in storage thread */
     }
     
     if (command == CMD_READ_FILE) {
@@ -393,11 +402,17 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
         if (len < 2) return INVALID_COMMAND;
         
         uint8_t file_index = ((uint8_t *) buf)[1];
+        if (sync_file_count == 0) {
+            /* File list not cached, defer refresh + delete to storage thread */
+            delete_file_index = file_index;
+            return 0xFF;
+        }
         if (file_index >= sync_file_count) {
             return FILE_INDEX_OUT_OF_RANGE;
         }
         
-        return (delete_file_by_index(file_index) < 0) ? FILE_NOT_FOUND : 0;
+        delete_file_index = file_index;  /* Defer to storage thread */
+        return 0xFF;
     }
     
     /* ===== LEGACY COMMANDS ===== */
@@ -715,6 +730,33 @@ void storage_write(void)
             clear_audio_directory();
             offset = 0;
             nuke_started = 0;
+        }
+        if (list_files_requested) {
+            list_files_requested = 0;
+            if (conn) {
+                send_file_list_response(conn);
+            }
+        }
+        if (delete_file_index >= 0) {
+            int8_t idx = delete_file_index;
+            delete_file_index = -1;
+            
+            /* Ensure file list is cached */
+            if (sync_file_count == 0) {
+                refresh_file_list_cache();
+            }
+            
+            uint8_t result = 0;
+            if (idx >= sync_file_count) {
+                result = FILE_INDEX_OUT_OF_RANGE;
+            } else if (delete_file_by_index(idx) < 0) {
+                result = FILE_NOT_FOUND;
+            }
+            
+            if (conn) {
+                bt_gatt_notify(conn, &storage_service.attrs[1], &result, 1);
+            }
+            LOG_INF("Delete file[%d] result: %d", idx, result);
         }
         if (stop_started) {
             remaining_length = 0;

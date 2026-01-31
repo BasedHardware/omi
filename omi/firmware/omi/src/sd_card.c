@@ -863,9 +863,9 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
         }
         
         if (entry.type == FS_DIR_ENTRY_FILE) {
-            // Check if it's a .txt file with numeric name (timestamp)
+            // Check if it's a .txt/.TXT file with numeric name (timestamp)
             char *dot = strrchr(entry.name, '.');
-            if (dot && strcmp(dot, ".txt") == 0) {
+            if (dot && (strcmp(dot, ".txt") == 0 || strcmp(dot, ".TXT") == 0)) {
                 strncpy(filenames[file_count], entry.name, MAX_FILENAME_LEN - 1);
                 filenames[file_count][MAX_FILENAME_LEN - 1] = '\0';
                 file_count++;
