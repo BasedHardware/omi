@@ -211,8 +211,8 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                   ),
                 ],
               ),
-              // Question mark icon in top right (only when goals exist)
-              if (!_isLoadingGoals && _goals.isNotEmpty)
+              // Question mark icon in top right (always visible)
+              if (!_isLoadingGoals)
                 Positioned(
                   top: 0,
                   right: 0,
