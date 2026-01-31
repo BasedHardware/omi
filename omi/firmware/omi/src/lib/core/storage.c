@@ -30,17 +30,31 @@ static uint32_t current_read_offset = 0;
 #define OPUS_ENTRY_LENGTH 80
 #define FRAME_PREFIX_LENGTH 3
 
+/* Legacy commands (backward compatible) */
 #define READ_COMMAND 0
 #define DELETE_COMMAND 1
 #define NUKE 2
 #define STOP_COMMAND 3
 
+/* New multi-file sync commands */
+#define CMD_LIST_FILES      0x10   // Get list of audio files
+#define CMD_READ_FILE       0x11   // Read specific file: [cmd][file_index][offset:4]
+#define CMD_DELETE_FILE     0x12   // Delete specific file: [cmd][file_index]
+
 #define INVALID_FILE_SIZE 3
 #define ZERO_FILE_SIZE 4
 #define INVALID_COMMAND 6
+#define FILE_NOT_FOUND 7
+#define FILE_INDEX_OUT_OF_RANGE 8
 
 #define MAX_HEARTBEAT_FRAMES 100
 #define HEARTBEAT 50
+
+/* Multi-file sync state */
+static char sync_file_list[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
+static uint32_t sync_file_sizes[MAX_AUDIO_FILES];
+static int sync_file_count = 0;
+static int current_sync_file_index = -1;  /* -1 = legacy mode, >=0 = new protocol */
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
                                      const struct bt_gatt_attr *attr,
@@ -158,7 +172,9 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 uint8_t transport_started = 0;
 static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
-static uint8_t storage_write_buffer[SD_BLE_SIZE * 10];
+#define TCP_CHUNK_COUNT 10
+#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 4 * TCP_CHUNK_COUNT)  /* 4440 bytes */
+static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];  /* Shared buffer for BLE and WiFi */
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
@@ -233,36 +249,195 @@ static int setup_storage_tx()
 uint8_t delete_num = 0;
 uint8_t nuke_started = 0;
 static uint8_t heartbeat_count = 0;
-static uint8_t parse_storage_command(void *buf, uint16_t len)
-{
 
-    if (len != 6 && len != 2) {
-        LOG_INF("invalid command");
+/**
+ * @brief Refresh file list cache for multi-file sync
+ */
+static int refresh_file_list_cache(void)
+{
+    int ret = get_audio_file_list(sync_file_list, MAX_AUDIO_FILES, &sync_file_count);
+    if (ret < 0) {
+        LOG_ERR("Failed to get file list: %d", ret);
+        sync_file_count = 0;
+        return ret;
+    }
+    
+    /* Get file sizes */
+    for (int i = 0; i < sync_file_count; i++) {
+        char file_path[64];
+        snprintf(file_path, sizeof(file_path), "/SD:/audio/%s", sync_file_list[i]);
+        struct fs_dirent file_stat;
+        if (fs_stat(file_path, &file_stat) == 0) {
+            sync_file_sizes[i] = file_stat.size;
+        } else {
+            sync_file_sizes[i] = 0;
+        }
+    }
+    
+    LOG_INF("File list refreshed: %d files", sync_file_count);
+    return sync_file_count;
+}
+
+/**
+ * @brief Send file list response
+ * Format: [count:1][ts1:4][sz1:4][ts2:4][sz2:4]...
+ */
+static int send_file_list_response(struct bt_conn *conn)
+{
+    if (refresh_file_list_cache() < 0) {
+        uint8_t error_resp[1] = {0xFF};
+        bt_gatt_notify(conn, &storage_service.attrs[1], error_resp, 1);
+        return -1;
+    }
+    
+    uint8_t resp[1 + MAX_AUDIO_FILES * 8];
+    int resp_len = 0;
+    
+    resp[resp_len++] = (uint8_t)sync_file_count;
+    
+    for (int i = 0; i < sync_file_count; i++) {
+        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
+        uint32_t size = sync_file_sizes[i];
+        
+        resp[resp_len++] = (timestamp >> 24) & 0xFF;
+        resp[resp_len++] = (timestamp >> 16) & 0xFF;
+        resp[resp_len++] = (timestamp >> 8) & 0xFF;
+        resp[resp_len++] = timestamp & 0xFF;
+        
+        resp[resp_len++] = (size >> 24) & 0xFF;
+        resp[resp_len++] = (size >> 16) & 0xFF;
+        resp[resp_len++] = (size >> 8) & 0xFF;
+        resp[resp_len++] = size & 0xFF;
+    }
+    
+    LOG_INF("Sending file list: %d files, %d bytes", sync_file_count, resp_len);
+    return bt_gatt_notify(conn, &storage_service.attrs[1], resp, resp_len);
+}
+
+/**
+ * @brief Setup transfer for specific file by index
+ */
+static int setup_file_transfer(int file_index, uint32_t start_offset)
+{
+    if (file_index < 0 || file_index >= sync_file_count) {
+        LOG_ERR("File index out of range: %d", file_index);
+        return -1;
+    }
+    
+    strncpy(current_read_filename, sync_file_list[file_index], MAX_FILENAME_LEN - 1);
+    current_read_offset = start_offset - (start_offset % SD_BLE_SIZE);
+    current_sync_file_index = file_index;
+    
+    if (current_read_offset < sync_file_sizes[file_index]) {
+        remaining_length = sync_file_sizes[file_index] - current_read_offset;
+    } else {
+        remaining_length = 0;
+    }
+    
+    LOG_INF("Setup transfer: file[%d]=%s, offset=%u, remaining=%u", 
+            file_index, current_read_filename, current_read_offset, remaining_length);
+    return 0;
+}
+
+/**
+ * @brief Delete specific file by index
+ */
+static int delete_file_by_index(int file_index)
+{
+    if (file_index < 0 || file_index >= sync_file_count) {
+        return -1;
+    }
+    
+    char file_path[64];
+    snprintf(file_path, sizeof(file_path), "/SD:/audio/%s", sync_file_list[file_index]);
+    
+    int ret = fs_unlink(file_path);
+    if (ret < 0 && ret != -ENOENT) {
+        LOG_ERR("Failed to delete file %s: %d", file_path, ret);
+        return ret;
+    }
+    
+    LOG_INF("Deleted file[%d]: %s", file_index, sync_file_list[file_index]);
+    refresh_file_list_cache();
+    return 0;
+}
+
+static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *conn)
+{
+    if (len < 1) {
         return INVALID_COMMAND;
     }
+    
     const uint8_t command = ((uint8_t *) buf)[0];
+    LOG_INF("Storage command: 0x%02X, len=%d", command, len);
+    
+    /* ===== NEW MULTI-FILE COMMANDS ===== */
+    
+    if (command == CMD_LIST_FILES) {
+        send_file_list_response(conn);
+        return 0xFF;  /* Response already sent */
+    }
+    
+    if (command == CMD_READ_FILE) {
+        if (len < 2) return INVALID_COMMAND;
+        
+        uint8_t file_index = ((uint8_t *) buf)[1];
+        uint32_t request_offset = 0;
+        if (len >= 6) {
+            request_offset = ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | 
+                            ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
+        }
+        
+        if (sync_file_count == 0) refresh_file_list_cache();
+        
+        if (file_index >= sync_file_count) {
+            return FILE_INDEX_OUT_OF_RANGE;
+        }
+        
+        if (setup_file_transfer(file_index, request_offset) < 0) {
+            return FILE_NOT_FOUND;
+        }
+        
+        transport_started = 1;
+        return 0;
+    }
+    
+    if (command == CMD_DELETE_FILE) {
+        if (len < 2) return INVALID_COMMAND;
+        
+        uint8_t file_index = ((uint8_t *) buf)[1];
+        if (file_index >= sync_file_count) {
+            return FILE_INDEX_OUT_OF_RANGE;
+        }
+        
+        return (delete_file_by_index(file_index) < 0) ? FILE_NOT_FOUND : 0;
+    }
+    
+    /* ===== LEGACY COMMANDS ===== */
+    
+    if (len != 6 && len != 2) {
+        LOG_INF("invalid legacy command");
+        return INVALID_COMMAND;
+    }
+    
     const uint8_t file_num = ((uint8_t *) buf)[1];
     uint32_t request_offset = 0;
     if (len == 6) {
-        request_offset =
-            ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
+        request_offset = ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | 
+                        ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
     }
-    LOG_INF("command successful: command: %d file: %d offset: %d \n", command, file_num, request_offset);
+    LOG_INF("Legacy cmd: %d file: %d offset: %d", command, file_num, request_offset);
 
-    // only support file 1 for now
-    if (file_num != 1) {
-        LOG_INF("invalid file count 0");
+    if (command == READ_COMMAND && file_num != 1) {
         return INVALID_FILE_SIZE;
     }
 
-    if (command == READ_COMMAND) // read
-    {
+    if (command == READ_COMMAND) {
+        current_sync_file_index = -1;  /* Legacy mode - no timestamp prefix */
         uint32_t file_size = get_file_size();
         if (request_offset >= file_size) {
-            LOG_WRN("requested offset is too large");
             return INVALID_FILE_SIZE;
         } else if (file_size == 0) {
-            LOG_WRN("file size is 0");
             return ZERO_FILE_SIZE;
         } else {
             offset = request_offset - (request_offset % SD_BLE_SIZE);
@@ -273,14 +448,12 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
         delete_started = 1;
     } else if (command == NUKE) {
         nuke_started = 1;
-    } else if (command == STOP_COMMAND) // should be no explicit stop command, send heartbeats to keep connection alive
-    {
+    } else if (command == STOP_COMMAND) {
         storage_stop_transfer();
     } else if (command == HEARTBEAT) {
         heartbeat_count = 0;
     } else {
-        LOG_INF("invalid command \n");
-        return 6;
+        return INVALID_COMMAND;
     }
     return 0;
 }
@@ -295,12 +468,15 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
     LOG_INF("about to schedule the storage");
     LOG_INF("was sent %d  ", ((uint8_t *) buf)[0]);
 
-    uint8_t result_buffer[1] = {0};
-    uint8_t result = parse_storage_command(buf, len);
-    result_buffer[0] = result;
-    LOG_INF("length of storage write: %d", len);
-    LOG_INF("result: %d ", result);
-    bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+    uint8_t result = parse_storage_command((void *)buf, len, conn);
+    
+    /* 0xFF means response was already sent */
+    if (result != 0xFF) {
+        uint8_t result_buffer[1] = {result};
+        LOG_INF("length of storage write: %d, result: %d", len, result);
+        bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+    }
+    
     k_msleep(500);
     return len;
 }
@@ -400,18 +576,42 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 static void write_to_gatt(struct bt_conn *conn)
 {
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
-
-    int r = read_audio_data(current_read_filename, storage_write_buffer, packet_size, current_read_offset);
-    if (r < 0) {
-        LOG_ERR("Failed to read audio data: %d", r);
-        remaining_length = 0; // Stop transfer on error
-        return;
-    }
-
-    current_read_offset = current_read_offset + packet_size;
-    offset = current_read_offset; // Keep offset in sync for compatibility
     
-    int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
+    int err;
+    
+    /* New protocol: add 4-byte timestamp prefix */
+    if (current_sync_file_index >= 0) {
+        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
+        
+        /* Build packet in storage_buffer: [timestamp:4][audio_data:440] = 444 bytes */
+        storage_buffer[0] = (timestamp >> 24) & 0xFF;
+        storage_buffer[1] = (timestamp >> 16) & 0xFF;
+        storage_buffer[2] = (timestamp >> 8) & 0xFF;
+        storage_buffer[3] = timestamp & 0xFF;
+        
+        int r = read_audio_data(current_read_filename, storage_buffer + 4, packet_size, current_read_offset);
+        if (r < 0) {
+            LOG_ERR("Failed to read audio data: %d", r);
+            remaining_length = 0;
+            return;
+        }
+        
+        err = bt_gatt_notify(conn, &storage_service.attrs[1], storage_buffer, 4 + packet_size);
+    } else {
+        /* Legacy: raw audio data without timestamp */
+        int r = read_audio_data(current_read_filename, storage_buffer, packet_size, current_read_offset);
+        if (r < 0) {
+            LOG_ERR("Failed to read audio data: %d", r);
+            remaining_length = 0;
+            return;
+        }
+        
+        err = bt_gatt_notify(conn, &storage_service.attrs[1], storage_buffer, packet_size);
+    }
+    
+    current_read_offset = current_read_offset + packet_size;
+    offset = current_read_offset;
+    
     if (err) {
         LOG_PRINTK("error writing to gatt: %d\n", err);
     } else {
@@ -422,26 +622,69 @@ static void write_to_gatt(struct bt_conn *conn)
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
-    uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * 10);
-    int ret = read_audio_data(current_read_filename, storage_write_buffer, to_read, current_read_offset);
-    if (ret > 0) {
-        current_read_offset += to_read;
-        offset = current_read_offset; // Keep offset in sync for compatibility
-        remaining_length -= to_read;
-        size_t sent = 0;
-        while ((sent < to_read) && is_wifi_on()) {
-            int n = wifi_send_data(storage_write_buffer + sent, to_read - sent);
-            if (n <= 0) {
-                // wait and retry
-                k_msleep(10);
-            } else {
-                sent += n;
-                k_yield();
+    uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * TCP_CHUNK_COUNT);
+    
+    /* New protocol: build packets with timestamp prefix */
+    if (current_sync_file_index >= 0) {
+        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
+        uint8_t ts_bytes[4];
+        ts_bytes[0] = (timestamp >> 24) & 0xFF;
+        ts_bytes[1] = (timestamp >> 16) & 0xFF;
+        ts_bytes[2] = (timestamp >> 8) & 0xFF;
+        ts_bytes[3] = timestamp & 0xFF;
+        
+        /* Build packets in-place: [ts:4][data:440][ts:4][data:440]... */
+        uint32_t data_offset = 0;
+        uint32_t buf_offset = 0;
+        uint32_t read_offset = current_read_offset;
+        
+        while (data_offset < to_read) {
+            uint32_t chunk_size = MIN(SD_BLE_SIZE, to_read - data_offset);
+            
+            /* Add timestamp prefix */
+            memcpy(storage_buffer + buf_offset, ts_bytes, 4);
+            buf_offset += 4;
+            
+            /* Read audio data directly into buffer */
+            int ret = read_audio_data(current_read_filename, storage_buffer + buf_offset, chunk_size, read_offset);
+            if (ret < 0) {
+                LOG_ERR("Failed to read audio data: %d", ret);
+                remaining_length = 0;
+                return;
             }
+            
+            buf_offset += chunk_size;
+            read_offset += chunk_size;
+            data_offset += chunk_size;
+        }
+        
+        current_read_offset = read_offset;
+        offset = current_read_offset;
+        remaining_length -= to_read;
+        
+        /* Send all packets at once */
+        size_t sent = 0;
+        while (sent < buf_offset && is_wifi_on()) {
+            int n = wifi_send_data(storage_buffer + sent, buf_offset - sent);
+            if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
         }
     } else {
-        LOG_ERR("Failed to read audio data: %d", ret);
-        remaining_length = 0; // Stop transfer on error
+        /* Legacy: raw audio data without timestamp */
+        int ret = read_audio_data(current_read_filename, storage_buffer, to_read, current_read_offset);
+        if (ret > 0) {
+            current_read_offset += to_read;
+            offset = current_read_offset;
+            remaining_length -= to_read;
+            
+            size_t sent = 0;
+            while ((sent < to_read) && is_wifi_on()) {
+                int n = wifi_send_data(storage_buffer + sent, to_read - sent);
+                if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
+            }
+        } else {
+            LOG_ERR("Failed to read audio data: %d", ret);
+            remaining_length = 0;
+        }
     }
 }
 #endif
@@ -455,8 +698,6 @@ void storage_stop_transfer()
 
 void storage_write(void)
 {
-    static uint8_t tmp_buffer[SD_BLE_SIZE]; // 440 bytes temporary buffer
-
     uint32_t total_sent = 0;
     uint32_t consecutive_errors = 0;
 
