@@ -1533,39 +1533,34 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         child: Container(
           color: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 6),
+          margin: const EdgeInsets.only(left: 4),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Circular progress indicator
-              SizedBox(
+              Container(
                 width: 22,
                 height: 22,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: CustomPaint(
-                    painter: _CircularProgressPainter(
-                      progress: progress.clamp(0.0, 1.0),
-                      color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
-                    ),
+                child: CustomPaint(
+                  painter: _CircularProgressPainter(
+                    progress: progress.clamp(0.0, 1.0),
+                    color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               // Goal title with progress
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    displayTitle,
-                    style: TextStyle(
-                      color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
-                      fontSize: 15,
-                      decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
-                      height: 1.4,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                child: Text(
+                  displayTitle,
+                  style: TextStyle(
+                    color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
+                    fontSize: 15,
+                    decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
+                    height: 1.4,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
