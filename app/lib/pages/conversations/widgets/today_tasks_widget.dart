@@ -98,8 +98,22 @@ class TodayTasksWidget extends StatelessWidget {
                   ),
                 )
               else
-                ...displayTasks.map(
-                  (task) => _TaskItem(task: task, provider: provider),
+                Transform.translate(
+                  offset: const Offset(-8, 0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1F1F25),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      children: displayTasks
+                          .map(
+                            (task) => _TaskItem(task: task, provider: provider),
+                          )
+                          .toList(),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -117,10 +131,8 @@ class _TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: const Offset(-8, 0),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 6),
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -160,8 +172,6 @@ class _TaskItem extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
+        ));
   }
 }
