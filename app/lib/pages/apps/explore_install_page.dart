@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -235,7 +235,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerCreateButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -295,7 +295,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerSearchBar() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -345,7 +345,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerCategorySection() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -478,7 +478,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerListItem() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(

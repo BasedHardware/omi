@@ -11,7 +11,7 @@ import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -508,7 +508,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                     ],
                                     // Shimmer only applies to text
                                     Flexible(
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.white,
                                         highlightColor: Colors.grey,
                                         child: Text(
@@ -681,7 +681,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                     ],
                                     // Shimmer only applies to text
                                     Flexible(
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.white,
                                         highlightColor: Colors.grey,
                                         child: Text(

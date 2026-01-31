@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -416,7 +416,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -434,7 +434,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       child: ListView.builder(
         itemCount: 8, // Show 8 shimmer items
         itemBuilder: (context, index) {
-          return Shimmer.fromColors(
+          return ShimmerWithTimeout(
             baseColor: AppStyles.backgroundSecondary,
             highlightColor: AppStyles.backgroundTertiary,
             child: Container(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/announcement.dart';
@@ -154,7 +154,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _isLoading
-              ? Shimmer.fromColors(
+              ? ShimmerWithTimeout(
                   baseColor: ResponsiveHelper.backgroundTertiary,
                   highlightColor: ResponsiveHelper.backgroundSecondary,
                   child: Container(
@@ -188,7 +188,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
   }
 
   Widget _buildLoadingState() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: ResponsiveHelper.backgroundTertiary,
       highlightColor: ResponsiveHelper.backgroundSecondary,
       child: Padding(

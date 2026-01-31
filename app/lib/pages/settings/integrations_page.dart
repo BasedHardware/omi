@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/providers/integration_provider.dart';
@@ -385,7 +385,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(

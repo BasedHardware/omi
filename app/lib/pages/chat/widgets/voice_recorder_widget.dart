@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -115,7 +115,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Color(0xFF35343B),
                     highlightColor: Colors.white,
                     child: Text(

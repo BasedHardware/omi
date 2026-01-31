@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -98,7 +98,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Date header shimmer
-          Shimmer.fromColors(
+          ShimmerWithTimeout(
             baseColor: AppStyles.backgroundSecondary,
             highlightColor: AppStyles.backgroundTertiary,
             child: Container(
@@ -116,7 +116,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               3,
               (index) => Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Shimmer.fromColors(
+                    child: ShimmerWithTimeout(
                       baseColor: AppStyles.backgroundSecondary,
                       highlightColor: AppStyles.backgroundTertiary,
                       child: Container(
@@ -145,7 +145,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget _buildLoadMoreShimmer() {
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
-      child: Shimmer.fromColors(
+      child: ShimmerWithTimeout(
         baseColor: AppStyles.backgroundSecondary,
         highlightColor: AppStyles.backgroundTertiary,
         child: Container(
