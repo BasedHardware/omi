@@ -244,196 +244,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   void _showCreateGoalSheet() {
-    final titleController = TextEditingController();
-    final currentController = TextEditingController(text: '0');
-    final targetController = TextEditingController(text: '100');
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Text(
-                  context.l10n.addGoal,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Title field
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.goalTitle,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: titleController,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.08),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Current & Target fields
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.current,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: currentController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.target,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: targetController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      final title = titleController.text.trim();
-                      if (title.isEmpty) {
-                        Navigator.pop(context);
-                        // Dispose after sheet is dismissed
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          titleController.dispose();
-                          currentController.dispose();
-                          targetController.dispose();
-                        });
-                        return;
-                      }
+      builder: (context) => _GoalCreateSheet(
+        onSave: (title, current, target) async {
+          // Create goal via API
+          await createGoal(
+            title: title,
+            goalType: 'numeric',
+            targetValue: target,
+            currentValue: current,
+          );
 
-                      final current = double.tryParse(currentController.text) ?? 0;
-                      final target = double.tryParse(targetController.text) ?? 100;
-
-                      if (!context.mounted) return;
-                      Navigator.pop(context);
-
-                      // Dispose after sheet is dismissed
-                      Future.delayed(const Duration(milliseconds: 300), () {
-                        titleController.dispose();
-                        currentController.dispose();
-                        targetController.dispose();
-                      });
-
-                      // Create goal via API
-                      await createGoal(
-                        title: title,
-                        goalType: 'numeric',
-                        targetValue: target,
-                        currentValue: current,
-                      );
-
-                      // Reload goals locally
-                      _loadGoals();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF22C55E),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(context.l10n.addGoal),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+          // Reload goals locally
+          _loadGoals();
+        },
       ),
     );
   }
@@ -1474,6 +1301,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  Future<void> _deleteGoal(Goal goal) async {
+    // Mark deletion timestamp to prevent API sync from resurrecting this goal
+    _lastGoalDeletion = DateTime.now();
+
+    setState(() {
+      _goals.removeWhere((g) => g.id == goal.id);
+    });
+    // Save to local storage
+    final prefs = await SharedPreferences.getInstance();
+    final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
+    await prefs.setString(_goalsStorageKey, goalsJson);
+    // Delete from API if not local-only
+    if (!goal.id.startsWith('local_')) {
+      await deleteGoal(goal.id);
+    }
+  }
+
   void _showEditSheet(ActionItemWithMetadata item) {
     showModalBottomSheet(
       context: context,
@@ -1515,20 +1359,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
-        // Mark deletion timestamp to prevent API sync from resurrecting this goal
-        _lastGoalDeletion = DateTime.now();
-
-        setState(() {
-          _goals.removeWhere((g) => g.id == goal.id);
-        });
-        // Save to local storage
-        final prefs = await SharedPreferences.getInstance();
-        final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-        await prefs.setString(_goalsStorageKey, goalsJson);
-        // Delete from API if not local-only
-        if (!goal.id.startsWith('local_')) {
-          await deleteGoal(goal.id);
-        }
+        await _deleteGoal(goal);
       },
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1584,277 +1415,492 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   void _showEditGoalSheet(Goal goal) {
     HapticFeedback.lightImpact();
-    final titleController = TextEditingController(text: goal.title);
-    final currentController = TextEditingController(text: goal.currentValue.toInt().toString());
-    final targetController = TextEditingController(text: goal.targetValue.toInt().toString());
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+      builder: (context) => _GoalEditSheet(
+        goal: goal,
+        onSave: (title, current, target) async {
+          // Update goal locally
+          final updatedGoal = Goal(
+            id: goal.id,
+            title: title,
+            goalType: goal.goalType,
+            targetValue: target,
+            currentValue: current,
+            minValue: goal.minValue,
+            maxValue: goal.maxValue,
+            unit: goal.unit,
+            isActive: goal.isActive,
+            createdAt: goal.createdAt,
+            updatedAt: DateTime.now(),
+          );
+
+          setState(() {
+            final index = _goals.indexWhere((g) => g.id == goal.id);
+            if (index != -1) {
+              _goals[index] = updatedGoal;
+            }
+          });
+
+          // Save to local storage
+          final prefs = await SharedPreferences.getInstance();
+          final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
+          await prefs.setString(_goalsStorageKey, goalsJson);
+
+          // Update on backend
+          if (!goal.id.startsWith('local_')) {
+            await updateGoal(
+              goal.id,
+              title: title,
+              currentValue: current,
+              targetValue: target,
+            );
+          }
+        },
+        onDelete: () => _deleteGoal(goal),
+      ),
+    );
+  }
+}
+
+/// Stateful widget for goal creation sheet that properly manages TextEditingController lifecycle
+class _GoalCreateSheet extends StatefulWidget {
+  final Function(String title, double current, double target) onSave;
+
+  const _GoalCreateSheet({required this.onSave});
+
+  @override
+  State<_GoalCreateSheet> createState() => _GoalCreateSheetState();
+}
+
+class _GoalCreateSheetState extends State<_GoalCreateSheet> {
+  late final TextEditingController titleController;
+  late final TextEditingController currentController;
+  late final TextEditingController targetController;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController();
+    currentController = TextEditingController(text: '0');
+    targetController = TextEditingController(text: '100');
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    currentController.dispose();
+    targetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        padding: const EdgeInsets.all(24),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                context.l10n.addGoal,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Title field
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.08),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Current & Target fields
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.current,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: currentController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: targetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final title = titleController.text.trim();
+                    if (title.isEmpty) {
+                      Navigator.pop(context);
+                      return;
+                    }
+
+                    final current = double.tryParse(currentController.text) ?? 0;
+                    final target = double.tryParse(targetController.text) ?? 100;
+
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+
+                    widget.onSave(title, current, target);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(context.l10n.addGoal),
+                ),
+              ),
+            ],
           ),
-          padding: const EdgeInsets.all(24),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Stateful widget for goal edit sheet that properly manages TextEditingController lifecycle
+class _GoalEditSheet extends StatefulWidget {
+  final Goal goal;
+  final Function(String title, double current, double target) onSave;
+  final Function() onDelete;
+
+  const _GoalEditSheet({
+    required this.goal,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  State<_GoalEditSheet> createState() => _GoalEditSheetState();
+}
+
+class _GoalEditSheetState extends State<_GoalEditSheet> {
+  late final TextEditingController titleController;
+  late final TextEditingController currentController;
+  late final TextEditingController targetController;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.goal.title);
+    currentController = TextEditingController(text: widget.goal.currentValue.toInt().toString());
+    targetController = TextEditingController(text: widget.goal.targetValue.toInt().toString());
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    currentController.dispose();
+    targetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                Text(
-                  context.l10n.editGoal,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              Text(
+                context.l10n.editGoal,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(height: 24),
-                // Title field
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.goalTitle,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 12,
+              ),
+              const SizedBox(height: 24),
+              // Title field
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.08),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: titleController,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.08),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Current & Target fields
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.current,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: currentController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: targetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  // Delete button
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        // Confirm and delete
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: const Color(0xFF1F1F25),
+                            title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                            content:
+                                Text('Delete "${widget.goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          widget.onDelete();
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(context.l10n.delete),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Save button
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final title = titleController.text.trim();
+                        if (title.isEmpty) {
+                          Navigator.pop(context);
+                          return;
+                        }
+
+                        final current = double.tryParse(currentController.text) ?? widget.goal.currentValue;
+                        final target = double.tryParse(targetController.text) ?? widget.goal.targetValue;
+
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+
+                        widget.onSave(title, current, target);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
                         ),
                       ),
+                      child: Text(context.l10n.save),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Current & Target fields
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.current,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: currentController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.target,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: targetController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    // Delete button
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          // Dispose controllers after sheet is dismissed
-                          Future.delayed(const Duration(milliseconds: 300), () {
-                            titleController.dispose();
-                            currentController.dispose();
-                            targetController.dispose();
-                          });
-                          // Confirm and delete
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              backgroundColor: const Color(0xFF1F1F25),
-                              title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
-                              content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                  child: const Text('Delete'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            // Mark deletion timestamp to prevent API sync from resurrecting this goal
-                            _lastGoalDeletion = DateTime.now();
-
-                            setState(() {
-                              _goals.removeWhere((g) => g.id == goal.id);
-                            });
-                            final prefs = await SharedPreferences.getInstance();
-                            final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-                            await prefs.setString(_goalsStorageKey, goalsJson);
-                            if (!goal.id.startsWith('local_')) {
-                              await deleteGoal(goal.id);
-                            }
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(context.l10n.delete),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Save button
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final title = titleController.text.trim();
-                          if (title.isEmpty) {
-                            Navigator.pop(context);
-                            Future.delayed(const Duration(milliseconds: 300), () {
-                              titleController.dispose();
-                              currentController.dispose();
-                              targetController.dispose();
-                            });
-                            return;
-                          }
-
-                          final current = double.tryParse(currentController.text) ?? goal.currentValue;
-                          final target = double.tryParse(targetController.text) ?? goal.targetValue;
-
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-
-                          Future.delayed(const Duration(milliseconds: 300), () {
-                            titleController.dispose();
-                            currentController.dispose();
-                            targetController.dispose();
-                          });
-
-                          // Update goal locally
-                          final updatedGoal = Goal(
-                            id: goal.id,
-                            title: title,
-                            goalType: goal.goalType,
-                            targetValue: target,
-                            currentValue: current,
-                            minValue: goal.minValue,
-                            maxValue: goal.maxValue,
-                            unit: goal.unit,
-                            isActive: goal.isActive,
-                            createdAt: goal.createdAt,
-                            updatedAt: DateTime.now(),
-                          );
-
-                          setState(() {
-                            final index = _goals.indexWhere((g) => g.id == goal.id);
-                            if (index != -1) {
-                              _goals[index] = updatedGoal;
-                            }
-                          });
-
-                          // Save to local storage
-                          final prefs = await SharedPreferences.getInstance();
-                          final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-                          await prefs.setString(_goalsStorageKey, goalsJson);
-
-                          // Update on backend
-                          if (!goal.id.startsWith('local_')) {
-                            await updateGoal(
-                              goal.id,
-                              title: title,
-                              currentValue: current,
-                              targetValue: target,
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF22C55E),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(context.l10n.save),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
