@@ -79,6 +79,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.addListener(() {
       setState(() {});
     });
+    textFieldFocusNode.addListener(() {
+      setState(() {});
+    });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
@@ -655,13 +658,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   }),
                 ),
                 const SizedBox(height: 0),
-                BottomNavBar(
-                  showCenterButton: false,
-                  onTabTap: (index, isRepeat) {
-                    context.read<HomeProvider>().setIndex(index);
-                    Navigator.of(context).pop();
-                  },
-                ),
+                if (!textFieldFocusNode.hasFocus)
+                  BottomNavBar(
+                    showCenterButton: false,
+                    onTabTap: (index, isRepeat) {
+                      context.read<HomeProvider>().setIndex(index);
+                      Navigator.of(context).pop();
+                    },
+                  ),
               ],
             ),
           ),
