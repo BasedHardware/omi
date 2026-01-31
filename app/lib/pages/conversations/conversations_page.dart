@@ -223,7 +223,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
                         child: DailyScoreWidget(goalsWidgetKey: _goalsWidgetKey),
                       ),
                       const TodayTasksWidget(),
