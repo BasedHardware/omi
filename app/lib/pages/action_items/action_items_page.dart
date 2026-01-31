@@ -877,33 +877,39 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return const SizedBox.shrink();
     }
 
-    final goalSlots = List<Goal?>.generate(
-      3,
-      (index) => index < _goals.length ? _goals[index] : null,
-    );
-
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            context.l10n.goals,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+            child: Row(
+              children: [
+                Text(
+                  context.l10n.goals,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${_goals.length}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              for (final goal in goalSlots) ...[
-                Expanded(child: _buildGoalDropTile(goal)),
-                if (goal != goalSlots.last) const SizedBox(width: 8),
-              ],
-            ],
-          ),
+          // Goal items
+          ..._goals.map((goal) => _buildGoalItem(goal)),
+          // Spacing after section
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -1464,5 +1470,91 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(actionItem: item),
     );
+  }
+
+  Widget _buildGoalItem(Goal goal) {
+    final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
+    final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
+    final displayTitle = '${goal.title} $progressText';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Circular progress indicator
+          Container(
+            width: 22,
+            height: 22,
+            margin: const EdgeInsets.only(top: 2, right: 12),
+            child: CustomPaint(
+              painter: _CircularProgressPainter(
+                progress: progress.clamp(0.0, 1.0),
+                color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+              ),
+            ),
+          ),
+          // Goal title with progress
+          Expanded(
+            child: Text(
+              displayTitle,
+              style: TextStyle(
+                color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
+                fontSize: 15,
+                decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
+                height: 1.4,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Custom painter for circular progress indicator (pie chart style)
+class _CircularProgressPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _CircularProgressPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw background circle (empty part)
+    final bgPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Draw progress arc (filled part)
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      const startAngle = -90 * 3.14159 / 180; // Start from top
+      final sweepAngle = progress * 2 * 3.14159; // Full circle is 2π
+
+      canvas.drawArc(rect, startAngle, sweepAngle, true, progressPaint);
+    }
+
+    // Draw border circle
+    final borderPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawCircle(center, radius - 1, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(_CircularProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }
