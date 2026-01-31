@@ -729,27 +729,30 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     // Progress bar with completion text
                     Row(
                       children: [
                         Expanded(
-                          child: SliderTheme(
-                            data: SliderThemeData(
-                              trackHeight: 6,
-                              activeTrackColor: color,
-                              inactiveTrackColor: Colors.white.withOpacity(0.1),
-                              thumbColor: color,
-                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
-                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                              trackShape: const RoundedRectSliderTrackShape(),
-                            ),
-                            child: Slider(
-                              value: goal.currentValue.clamp(0.0, goal.targetValue),
-                              min: 0,
-                              max: goal.targetValue,
-                              divisions: goal.targetValue.toInt(),
-                              onChanged: (value) => _updateGoalProgress(goal, value),
+                          child: Transform.translate(
+                            offset: const Offset(-12, 0),
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 6,
+                                activeTrackColor: color,
+                                inactiveTrackColor: Colors.white.withOpacity(0.1),
+                                thumbColor: color,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                trackShape: const RoundedRectSliderTrackShape(),
+                              ),
+                              child: Slider(
+                                value: goal.currentValue.clamp(0.0, goal.targetValue),
+                                min: 0,
+                                max: goal.targetValue,
+                                divisions: goal.targetValue.toInt(),
+                                onChanged: (value) => _updateGoalProgress(goal, value),
+                              ),
                             ),
                           ),
                         ),
