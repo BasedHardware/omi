@@ -46,7 +46,7 @@ class TodayTasksWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with "Today" and "Show all ->"
+              // Header with "Today" and "Show All" button
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
@@ -66,12 +66,19 @@ class TodayTasksWidget extends StatelessWidget {
                         // Navigate to tasks tab
                         context.read<HomeProvider>().setIndex(1);
                       },
-                      child: Text(
-                        context.l10n.showAll,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          context.l10n.showAll,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
@@ -111,7 +118,7 @@ class _TaskItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(left: 8, top: 6, bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

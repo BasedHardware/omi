@@ -3022,7 +3022,7 @@
   "@getInsightsInstantly": {
     "description": "Tip about instant insights feature"
   },
-  "showAll": "Show all →",
+  "showAll": "Show All",
   "@showAll": {
     "description": "Button text to show all items"
   },
