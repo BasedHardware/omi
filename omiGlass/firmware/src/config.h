@@ -12,7 +12,7 @@
 // DEVICE CONFIGURATION
 // =============================================================================
 #define BLE_DEVICE_NAME "OMI Glass"
-#define FIRMWARE_VERSION_STRING "2.3.1"
+#define FIRMWARE_VERSION_STRING "2.3.2"
 #define HARDWARE_REVISION "ESP32-S3-v1.0"
 #define MANUFACTURER_NAME "Based Hardware"
 
