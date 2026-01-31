@@ -734,40 +734,23 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     Row(
                       children: [
                         Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              return GestureDetector(
-                                onTapDown: (details) =>
-                                    _updateProgressFromPosition(goal, details.localPosition.dx, constraints.maxWidth),
-                                onHorizontalDragUpdate: (details) =>
-                                    _updateProgressFromPosition(goal, details.localPosition.dx, constraints.maxWidth),
-                                child: Container(
-                                  height: 24,
-                                  alignment: Alignment.centerLeft,
-                                  child: Stack(
-                                    children: [
-                                      Container(
-                                        height: 6,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(3),
-                                        ),
-                                      ),
-                                      FractionallySizedBox(
-                                        widthFactor: progress.clamp(0.0, 1.0),
-                                        child: Container(
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            color: color,
-                                            borderRadius: BorderRadius.circular(3),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                          child: SliderTheme(
+                            data: SliderThemeData(
+                              trackHeight: 6,
+                              activeTrackColor: color,
+                              inactiveTrackColor: Colors.white.withOpacity(0.1),
+                              thumbColor: color,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                              trackShape: const RoundedRectSliderTrackShape(),
+                            ),
+                            child: Slider(
+                              value: goal.currentValue.clamp(0.0, goal.targetValue),
+                              min: 0,
+                              max: goal.targetValue,
+                              divisions: goal.targetValue.toInt(),
+                              onChanged: (value) => _updateGoalProgress(goal, value),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -791,13 +774,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  void _updateProgressFromPosition(Goal goal, double localX, double barWidth) async {
-    // Calculate percentage based on tap/drag position
-    final percentage = (localX / barWidth).clamp(0.0, 1.0);
-
-    // Calculate new value and round to nearest integer
-    final newValue = (percentage * goal.targetValue).roundToDouble().clamp(0.0, goal.targetValue);
-
+  void _updateGoalProgress(Goal goal, double newValue) async {
     // Only update if value changed
     if (newValue == goal.currentValue) return;
 
