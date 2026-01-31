@@ -260,14 +260,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Semantics(
-                label: 'device_state_$stateText',
-                child: Text(
-                  stateText,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  maxLines: 1,
-                  textAlign: TextAlign.end,
-                ),
+              Text(
+                stateText,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                maxLines: 1,
+                textAlign: TextAlign.end,
               ),
               if (statusIndicator != null) ...[
                 const SizedBox(width: 8),
@@ -325,19 +322,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Semantics(
-                    label: isPaused
-                        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-                        : 'device_state_${context.l10n.listening}',
-                    child: Text(
-                      isPaused
-                          ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-                          : context.l10n.listening,
-                      style: const TextStyle(
-                        color: Color(0xFFC9CBCF),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  Text(
+                    isPaused ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused) : context.l10n.listening,
+                    style: const TextStyle(
+                      color: Color(0xFFC9CBCF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(width: 6),
