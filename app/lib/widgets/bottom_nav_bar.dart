@@ -167,17 +167,20 @@ class BottomNavBar extends StatelessWidget {
                           shape: BoxShape.circle,
                           color: isRecording ? Colors.red : Colors.deepPurple,
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
-                            width: 4,
+                            color: Colors.black,
+                            width: 5,
                           ),
                         ),
-                        child: Center(
-                          child: Icon(
-                            isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                            color: Colors.white,
-                            size: 26,
-                          ),
-                        ),
+                        child: isInitializing
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              )
+                            : Icon(
+                                isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                       ),
                     );
                   },
