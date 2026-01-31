@@ -204,6 +204,24 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Task -> goal mapping (local UI state)
+  // Format: { "taskId": "goalId" }
+  set taskGoalLinks(Map<String, String> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskGoalLinks', encoded);
+  }
+
+  Map<String, String> get taskGoalLinks {
+    final encoded = getString('taskGoalLinks');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
