@@ -238,7 +238,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             SliverToBoxAdapter(
               child: Builder(
                 builder: (context) => Padding(
-                  padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+                  padding: const EdgeInsets.only(left: 24, top: 16, bottom: 8),
                   child: Text(
                     convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
                     style: const TextStyle(

@@ -623,7 +623,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.only(left: 24, right: 16),
       padding: const EdgeInsets.only(top: 16, bottom: 20),
       decoration: BoxDecoration(
         border: Border(
