@@ -693,8 +693,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () => _editGoal(goal),
         child: Container(
-          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          padding: const EdgeInsets.only(left: 8),
+          margin: EdgeInsets.only(left: 8, bottom: isLast ? 0 : 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
               // Emoji icon
