@@ -8000,4 +8000,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Tidak dapat membuka URL. Silakan coba lagi.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

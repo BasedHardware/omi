@@ -7932,4 +7932,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

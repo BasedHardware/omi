@@ -8013,4 +8013,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Kan de URL niet openen. Probeer het opnieuw.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

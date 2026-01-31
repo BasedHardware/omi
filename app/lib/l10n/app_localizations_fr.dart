@@ -8061,4 +8061,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Impossible d\'ouvrir l\'URL. Veuillez réessayer.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

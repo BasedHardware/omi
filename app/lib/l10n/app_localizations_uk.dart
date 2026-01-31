@@ -8000,4 +8000,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Не вдалося відкрити URL. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

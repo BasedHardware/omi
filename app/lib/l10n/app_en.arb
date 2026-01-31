@@ -2955,7 +2955,7 @@
   },
   "addGoal": "Add Goal",
   "@addGoal": {
-    "description": "Button/title for adding a new goal"
+    "description": "Menu option to add a new goal"
   },
   "editGoal": "Edit Goal",
   "@editGoal": {
@@ -9840,5 +9840,9 @@
   "viewAll": "View All",
   "@viewAll": {
     "description": "Button text to view all items"
+  },
+  "addTask": "Add Task",
+  "@addTask": {
+    "description": "Menu option to add a new task"
   }
 }

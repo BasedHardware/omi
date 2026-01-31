@@ -7988,4 +7988,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Não foi possível abrir o URL. Por favor, tente novamente.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

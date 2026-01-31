@@ -7854,4 +7854,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URLを開けませんでした。もう一度お試しください。';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

@@ -7856,4 +7856,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

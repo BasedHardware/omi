@@ -7983,4 +7983,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Kunne ikke åpne URL. Vennligst prøv igjen.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

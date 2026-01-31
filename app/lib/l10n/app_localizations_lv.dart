@@ -8005,4 +8005,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Nevarēja atvērt URL. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

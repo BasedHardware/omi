@@ -227,6 +227,96 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  void _showAddMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _buildMenuOption(
+                icon: Icons.add_task,
+                title: context.l10n.addTask,
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreateActionItemSheet(
+                    defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildMenuOption(
+                icon: Icons.flag_outlined,
+                title: context.l10n.addGoal,
+                onTap: () {
+                  Navigator.pop(context);
+                  MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                  // Navigate to conversations page (home index 0)
+                  context.read<HomeProvider>().setIndex(0);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuOption({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: Colors.white.withOpacity(0.9),
+              size: 24,
+            ),
+            const SizedBox(width: 16),
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Categorize items by deadline
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
       List<ActionItemWithMetadata> items, bool showCompleted) {
@@ -420,9 +510,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             padding: const EdgeInsets.only(bottom: 100.0),
             child: FloatingActionButton(
               heroTag: 'action_items_fab',
-              onPressed: () => _showCreateActionItemSheet(
-                defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-              ),
+              onPressed: _showAddMenu,
               backgroundColor: Colors.deepPurpleAccent,
               child: const Icon(Icons.add, color: Colors.white),
             ),
@@ -546,51 +634,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return const SizedBox.shrink();
     }
 
-    // If no goals, show "Add Goals" button instead
+    // If no goals, don't show anything
     if (_goals.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: GestureDetector(
-          onTap: () async {
-            HapticFeedback.mediumImpact();
-            final url = Uri.parse('https://h.omi.me/goals');
-            // TODO: Add URL launcher or navigation to goals page
-            MixpanelManager().track('Add Goals Clicked');
-          },
-          child: Container(
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.add_circle_outline,
-                    color: Colors.white.withOpacity(0.7),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Add Goals',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final goalSlots = List<Goal?>.generate(

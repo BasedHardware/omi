@@ -8045,4 +8045,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

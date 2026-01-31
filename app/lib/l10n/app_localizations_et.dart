@@ -7987,4 +7987,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL-i avamine ebaõnnestus. Palun proovige uuesti.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

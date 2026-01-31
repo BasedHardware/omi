@@ -2674,7 +2674,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getInsightsInstantly => 'Get insights and summaries instantly';
 
   @override
-  String get showAll => 'Show all →';
+  String get showAll => 'Show All';
 
   @override
   String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
@@ -7985,4 +7985,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }
