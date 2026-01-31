@@ -43,14 +43,6 @@ class TodayTasksWidget extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(left: 24, right: 16),
           padding: const EdgeInsets.only(bottom: 20),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.white.withOpacity(0.08),
-                width: 1,
-              ),
-            ),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -625,14 +625,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return Container(
       margin: const EdgeInsets.only(left: 16, right: 16),
       padding: const EdgeInsets.only(top: 16, bottom: 20),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
-          ),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
