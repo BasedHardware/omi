@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -56,6 +57,19 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
 
   void _addGoal() {
     widget.goalsWidgetKey?.currentState?.addGoal();
+  }
+
+  void _showCreateTaskSheet(BuildContext context) {
+    final now = DateTime.now();
+    final defaultDueDate = DateTime(now.year, now.month, now.day, 23, 59);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ActionItemFormSheet(
+        defaultDueDate: defaultDueDate,
+      ),
+    );
   }
 
   @override
@@ -127,7 +141,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        // "Add Goals" or "Your Score" button
+                        // "Add Goals" or "New Task" button
                         if (!_isLoadingGoals)
                           GestureDetector(
                             onTap: () {
@@ -135,7 +149,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                               if (_goals.isEmpty) {
                                 _addGoal();
                               } else {
-                                _showScoreDetails(context, score, completedTasks, totalTasks);
+                                _showCreateTaskSheet(context);
                               }
                             },
                             child: Container(
@@ -148,7 +162,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    _goals.isEmpty ? 'Add Goals' : context.l10n.yourScore,
+                                    _goals.isEmpty ? 'Add Goals' : context.l10n.newTask,
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
@@ -157,7 +171,7 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                                   ),
                                   const SizedBox(width: 4),
                                   Icon(
-                                    Icons.chevron_right,
+                                    _goals.isEmpty ? Icons.chevron_right : Icons.add,
                                     size: 16,
                                     color: Colors.white.withOpacity(0.5),
                                   ),

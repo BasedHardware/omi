@@ -9832,5 +9832,9 @@
   "resetFilters": "Reset filters",
   "applyFilters": "Apply filters",
   "mostInstalls": "Most Installs",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Could not open URL. Please try again.",
+  "newTask": "New Task",
+  "@newTask": {
+    "description": "Button text for creating a new task"
+  }
 }
