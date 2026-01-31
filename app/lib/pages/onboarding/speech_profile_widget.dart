@@ -62,8 +62,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
   @override
   void dispose() {
-    _speechProvider?.forceCompletionTimer?.cancel();
-    _speechProvider?.forceCompletionTimer = null;
     _speechProvider?.close();
 
     _scrollController.dispose();
