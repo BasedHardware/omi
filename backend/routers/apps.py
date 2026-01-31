@@ -712,6 +712,61 @@ def update_app(
     return {'status': 'ok'}
 
 
+@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
+def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Refresh chat tools manifest for an app.
+
+    Forces a fresh fetch of the manifest from the external URL, bypassing cache.
+    Only the app owner can refresh their app's manifest.
+    """
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    # Check if app has external integration with manifest URL
+    external_integration = app.get('external_integration')
+    if not external_integration:
+        raise HTTPException(status_code=400, detail='App does not have external integration')
+
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        raise HTTPException(status_code=400, detail='App does not have a chat tools manifest URL')
+
+    # Fetch fresh manifest with force_refresh=True
+    print(f"🔄 Refreshing manifest for app {app_id}")
+    fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
+
+    if fetched_tools is None:
+        raise HTTPException(status_code=502, detail='Failed to fetch manifest from external URL')
+
+    # Resolve relative endpoints to absolute URLs
+    base_url = external_integration.get('app_home_url', '').rstrip('/')
+    if base_url:
+        for tool in fetched_tools:
+            endpoint = tool.get('endpoint', '')
+            if endpoint.startswith('/') and not endpoint.startswith('//'):
+                tool['endpoint'] = f"{base_url}{endpoint}"
+
+    # Update app with new chat tools
+    update_dict = {
+        'id': app_id,
+        'chat_tools': fetched_tools,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    update_app_in_db(update_dict)
+
+    # Invalidate caches
+    if app['approved'] and (app['private'] is None or app['private'] is False):
+        invalidate_approved_apps_cache()
+    delete_app_cache_by_id(app_id)
+
+    print(f"✅ Manifest refreshed for app {app_id}: {len(fetched_tools)} tools")
+    return {'status': 'ok', 'tools_count': len(fetched_tools)}
+
+
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)

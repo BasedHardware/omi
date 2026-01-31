@@ -47,6 +47,28 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
           appBar: AppBar(
             title: Text(context.l10n.manageYourApp),
             backgroundColor: Theme.of(context).colorScheme.primary,
+            actions: [
+              if (provider.selectedCapabilities.any((c) => c.id == 'external_integration') &&
+                  provider.chatToolsManifestUrlController.text.isNotEmpty)
+                IconButton(
+                  onPressed: provider.isRefreshingManifest
+                      ? null
+                      : () async {
+                          await provider.refreshManifest();
+                        },
+                  icon: provider.isRefreshingManifest
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  tooltip: 'Refresh Manifest',
+                ),
+            ],
           ),
           body: PopScope(
             onPopInvokedWithResult: (didPop, result) {
