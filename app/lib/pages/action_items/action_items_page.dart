@@ -374,23 +374,28 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     onPressed: () async {
                       final title = titleController.text.trim();
                       if (title.isEmpty) {
-                        titleController.dispose();
-                        currentController.dispose();
-                        targetController.dispose();
                         Navigator.pop(context);
+                        // Dispose after sheet is dismissed
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          titleController.dispose();
+                          currentController.dispose();
+                          targetController.dispose();
+                        });
                         return;
                       }
 
                       final current = double.tryParse(currentController.text) ?? 0;
                       final target = double.tryParse(targetController.text) ?? 100;
 
-                      // Dispose controllers before closing sheet
-                      titleController.dispose();
-                      currentController.dispose();
-                      targetController.dispose();
-
                       if (!context.mounted) return;
                       Navigator.pop(context);
+
+                      // Dispose after sheet is dismissed
+                      Future.delayed(const Duration(milliseconds: 300), () {
+                        titleController.dispose();
+                        currentController.dispose();
+                        targetController.dispose();
+                      });
 
                       // Create goal via API
                       await createGoal(
