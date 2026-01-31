@@ -623,7 +623,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     }
 
     return Container(
-      margin: const EdgeInsets.only(left: 24, right: 16),
+      margin: const EdgeInsets.only(left: 16, right: 16),
       padding: const EdgeInsets.only(top: 16, bottom: 20),
       decoration: BoxDecoration(
         border: Border(
@@ -638,7 +638,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(left: 8, bottom: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -693,7 +693,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () => _editGoal(goal),
         child: Container(
-          margin: EdgeInsets.only(left: 8, bottom: isLast ? 0 : 12),
+          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
             borderRadius: BorderRadius.circular(24),
