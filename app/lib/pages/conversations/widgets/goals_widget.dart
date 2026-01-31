@@ -144,6 +144,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       // Also save emojis
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
+
+      // Notify other widgets that goals have changed
+      widget.onRefresh?.call();
     } catch (e) {
       Logger.debug('[GOALS] Error saving goals: $e');
     }
@@ -729,7 +732,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     // Progress bar with completion text
                     Row(
                       children: [

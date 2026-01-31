@@ -20,10 +20,10 @@ class DailyScoreWidget extends StatefulWidget {
   const DailyScoreWidget({super.key, this.goalsWidgetKey});
 
   @override
-  State<DailyScoreWidget> createState() => _DailyScoreWidgetState();
+  State<DailyScoreWidget> createState() => DailyScoreWidgetState();
 }
 
-class _DailyScoreWidgetState extends State<DailyScoreWidget> {
+class DailyScoreWidgetState extends State<DailyScoreWidget> {
   List<Goal> _goals = [];
   bool _isLoadingGoals = true;
   static const String _goalsStorageKey = 'goals_tracker_local_goals';
@@ -31,6 +31,11 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
   @override
   void initState() {
     super.initState();
+    _loadGoals();
+  }
+
+  // Public method to reload goals when they change
+  void reloadGoals() {
     _loadGoals();
   }
 

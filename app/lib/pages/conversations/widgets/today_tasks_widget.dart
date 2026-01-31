@@ -117,47 +117,50 @@ class _TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, top: 6, bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Checkbox
-          GestureDetector(
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              await provider.updateActionItemState(task, !task.completed);
-            },
-            child: Container(
-              width: 22,
-              height: 22,
-              margin: const EdgeInsets.only(top: 2, right: 12),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: task.completed ? Colors.amber : Colors.grey.shade600,
-                  width: 2,
+    return Transform.translate(
+      offset: const Offset(-8, 0),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Checkbox
+            GestureDetector(
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                await provider.updateActionItemState(task, !task.completed);
+              },
+              child: Container(
+                width: 22,
+                height: 22,
+                margin: const EdgeInsets.only(top: 2, right: 12),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: task.completed ? Colors.amber : Colors.grey.shade600,
+                    width: 2,
+                  ),
+                  color: task.completed ? Colors.amber : Colors.transparent,
                 ),
-                color: task.completed ? Colors.amber : Colors.transparent,
+                child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
               ),
-              child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
             ),
-          ),
-          // Task text
-          Expanded(
-            child: Text(
-              task.description,
-              style: TextStyle(
-                color: task.completed ? Colors.grey.shade600 : Colors.white,
-                fontSize: 15,
-                decoration: task.completed ? TextDecoration.lineThrough : null,
-                height: 1.4,
+            // Task text
+            Expanded(
+              child: Text(
+                task.description,
+                style: TextStyle(
+                  color: task.completed ? Colors.grey.shade600 : Colors.white,
+                  fontSize: 15,
+                  decoration: task.completed ? TextDecoration.lineThrough : null,
+                  height: 1.4,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -39,9 +39,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  final GlobalKey<DailyScoreWidgetState> _dailyScoreWidgetKey = GlobalKey<DailyScoreWidgetState>();
 
   void _refreshGoals() {
     _goalsWidgetKey.currentState?.refresh();
+    _dailyScoreWidgetKey.currentState?.reloadGoals();
   }
 
   @override
@@ -224,10 +226,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     children: [
                       Padding(
                         padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-                        child: DailyScoreWidget(goalsWidgetKey: _goalsWidgetKey),
+                        child: DailyScoreWidget(key: _dailyScoreWidgetKey, goalsWidgetKey: _goalsWidgetKey),
                       ),
                       const TodayTasksWidget(),
-                      GoalsWidget(key: _goalsWidgetKey),
+                      GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
                     ],
                   ),
                 );
