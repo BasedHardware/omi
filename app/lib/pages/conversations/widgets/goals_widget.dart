@@ -645,10 +645,18 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 if (_goals.length < _maxGoals)
                   GestureDetector(
                     onTap: addGoal,
-                    child: Icon(
-                      Icons.add_rounded,
-                      size: 22,
-                      color: Colors.white.withOpacity(0.5),
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: 18,
+                        color: Colors.grey[400],
+                      ),
                     ),
                   ),
               ],
@@ -721,25 +729,40 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
-                    // Progress bar
-                    Stack(
+                    const SizedBox(height: 10),
+                    // Progress bar with completion text
+                    Row(
                       children: [
-                        Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(3),
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              Container(
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              FractionallySizedBox(
+                                widthFactor: progress.clamp(0.0, 1.0),
+                                child: Container(
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        FractionallySizedBox(
-                          widthFactor: progress.clamp(0.0, 1.0),
-                          child: Container(
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
