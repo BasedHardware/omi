@@ -188,6 +188,17 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size);
 int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count);
 
 /**
+ * @brief Update current audio filename after receiving time sync from BLE
+ * 
+ * When device boots without RTC time, it creates file with uptime-based name.
+ * After receiving real timestamp from BLE, this function calculates the correct
+ * timestamp and renames the file accordingly.
+ * 
+ * @param synced_utc_time The UTC timestamp received from BLE time sync
+ */
+void sd_update_filename_after_timesync(uint32_t synced_utc_time);
+
+/**
  * @brief Turn on SD card power
  */
 void sd_on(void);

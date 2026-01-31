@@ -53,6 +53,8 @@ static size_t bytes_since_sync = 0;
 // Current writing file info
 static char current_filename[MAX_FILENAME_LEN] = {0};
 static char current_file_path[64] = {0};
+static int64_t current_file_created_uptime_ms = 0;  // Uptime when file was created
+static bool current_file_needs_rename = false;      // True if file was created without valid RTC
 
 // BLE connection tracking for file rotation
 static bool ble_connected = false;
@@ -274,6 +276,113 @@ static void print_audio_files_at_boot(void)
     LOG_INF("=============================================");
 }
 
+/* Time threshold for continuing to write to existing file (30 minutes in seconds) */
+#define FILE_CONTINUE_THRESHOLD_SEC (30 * 60)
+
+/**
+ * @brief Find the latest audio file and check if we can continue writing to it
+ * 
+ * On boot, check if the latest file's timestamp is within 30 minutes of current time.
+ * If yes, open that file for appending instead of creating a new one.
+ * 
+ * @return 0 if successfully opened existing file, -1 if should create new file
+ */
+static int try_continue_latest_file(void)
+{
+    struct fs_dir_t dir;
+    struct fs_dirent entry;
+    char latest_filename[MAX_FILENAME_LEN] = {0};
+    uint32_t latest_timestamp = 0;
+    
+    uint32_t current_time = get_utc_time();
+    if (current_time == 0 || current_time < 1700000000) {
+        LOG_INF("[SD_BOOT] RTC not valid, cannot check file age - will create new file");
+        return -1;
+    }
+    
+    fs_dir_t_init(&dir);
+    int ret = fs_opendir(&dir, FILE_DATA_DIR);
+    if (ret < 0) {
+        LOG_INF("[SD_BOOT] No audio directory, will create new file");
+        return -1;
+    }
+    
+    // Find the latest file (highest timestamp)
+    while (1) {
+        ret = fs_readdir(&dir, &entry);
+        if (ret < 0 || entry.name[0] == '\0') {
+            break;
+        }
+        
+        if (entry.type == FS_DIR_ENTRY_FILE) {
+            char *dot = strrchr(entry.name, '.');
+            if (dot && (strcmp(dot, ".TXT") == 0 || strcmp(dot, ".txt") == 0)) {
+                // Parse hex timestamp from filename
+                uint32_t file_timestamp = (uint32_t)strtoul(entry.name, NULL, 16);
+                if (file_timestamp > latest_timestamp) {
+                    latest_timestamp = file_timestamp;
+                    strncpy(latest_filename, entry.name, sizeof(latest_filename) - 1);
+                }
+            }
+        }
+    }
+    fs_closedir(&dir);
+    
+    if (latest_filename[0] == '\0') {
+        LOG_INF("[SD_BOOT] No audio files found, will create new file");
+        return -1;
+    }
+    
+    // Check if the latest file is within 30 minutes of current time
+    int32_t time_diff = (int32_t)(current_time - latest_timestamp);
+    LOG_INF("[SD_BOOT] Latest file: %s (timestamp=%u, current=%u, diff=%d sec)", 
+            latest_filename, latest_timestamp, current_time, time_diff);
+    
+    if (time_diff < 0) {
+        // File is in the future? Shouldn't happen, but handle it
+        LOG_WRN("[SD_BOOT] Latest file timestamp is in the future, will create new file");
+        return -1;
+    }
+    
+    if (time_diff > FILE_CONTINUE_THRESHOLD_SEC) {
+        LOG_INF("[SD_BOOT] Latest file is too old (%d sec > %d sec), will create new file",
+                time_diff, FILE_CONTINUE_THRESHOLD_SEC);
+        return -1;
+    }
+    
+    // Open the existing file for appending
+    strncpy(current_filename, latest_filename, sizeof(current_filename) - 1);
+    build_file_path(current_filename, current_file_path, sizeof(current_file_path));
+    
+    fs_file_t_init(&fil_data);
+    ret = fs_open(&fil_data, current_file_path, FS_O_RDWR | FS_O_APPEND);
+    if (ret < 0) {
+        LOG_ERR("[SD_BOOT] Failed to open existing file %s: %d", current_file_path, ret);
+        current_filename[0] = '\0';
+        current_file_path[0] = '\0';
+        return -1;
+    }
+    
+    // Get current file size
+    ret = fs_seek(&fil_data, 0, FS_SEEK_END);
+    if (ret >= 0) {
+        current_file_size = fs_tell(&fil_data);
+    } else {
+        current_file_size = 0;
+    }
+    
+    bytes_since_sync = 0;
+    write_batch_offset = 0;
+    write_batch_counter = 0;
+    current_file_created_uptime_ms = k_uptime_get();
+    current_file_needs_rename = false;  // File already has valid timestamp
+    
+    LOG_INF("[SD_BOOT] Continuing to write to existing file: %s (size=%u, age=%d sec)",
+            current_filename, current_file_size, time_diff);
+    
+    return 0;
+}
+
 /* Create a new audio file with current UTC timestamp as filename */
 static int create_audio_file_with_timestamp(void)
 {
@@ -325,8 +434,13 @@ static int create_audio_file_with_timestamp(void)
     bytes_since_sync = 0;
     write_batch_offset = 0;
     write_batch_counter = 0;
+    current_file_created_uptime_ms = k_uptime_get();
     
-    LOG_INF("Audio file created: %s", current_filename);
+    // Check if RTC was valid when creating file
+    uint32_t rtc_time = get_utc_time();
+    current_file_needs_rename = (rtc_time == 0 || rtc_time < 1700000000);  // Before ~2023
+    
+    LOG_INF("Audio file created: %s (needs_rename=%d)", current_filename, current_file_needs_rename);
     return 0;
 }
 
@@ -412,6 +526,82 @@ static int compare_filenames(const void *a, const void *b)
     if (ts_a < ts_b) return -1;
     if (ts_a > ts_b) return 1;
     return 0;
+}
+
+/**
+ * @brief Update current audio filename after receiving time sync from BLE
+ * 
+ * When device boots without RTC time, it creates file with uptime-based name.
+ * After receiving real timestamp from BLE, calculate correct timestamp:
+ * correct_timestamp = received_timestamp - (current_uptime - file_created_uptime) / 1000
+ */
+void sd_update_filename_after_timesync(uint32_t synced_utc_time)
+{
+    if (!current_file_needs_rename) {
+        LOG_DBG("File doesn't need renaming");
+        return;
+    }
+    
+    if (current_filename[0] == '\0') {
+        LOG_WRN("No current file to rename");
+        return;
+    }
+    
+    if (!is_mounted) {
+        LOG_WRN("SD card not mounted, cannot rename");
+        return;
+    }
+    
+    // Calculate the correct timestamp for when file was created
+    int64_t now_ms = k_uptime_get();
+    int64_t elapsed_since_file_created_ms = now_ms - current_file_created_uptime_ms;
+    uint32_t correct_timestamp = synced_utc_time - (uint32_t)(elapsed_since_file_created_ms / 1000);
+    
+    // Generate new filename
+    char new_filename[MAX_FILENAME_LEN];
+    char new_file_path[64];
+    snprintf(new_filename, sizeof(new_filename), "%08X.TXT", correct_timestamp);
+    build_file_path(new_filename, new_file_path, sizeof(new_file_path));
+    
+    LOG_INF("Renaming audio file: %s -> %s (synced_time=%u, elapsed=%lldms)", 
+            current_filename, new_filename, synced_utc_time, elapsed_since_file_created_ms);
+    
+    // Flush any pending data before rename
+    if (write_batch_offset > 0) {
+        flush_batch_buffer();
+    }
+    fs_sync(&fil_data);
+    
+    // Close the file before renaming
+    fs_close(&fil_data);
+    
+    // Rename the file
+    int ret = fs_rename(current_file_path, new_file_path);
+    if (ret < 0) {
+        LOG_ERR("Failed to rename file: %d", ret);
+        // Reopen the old file
+        fs_file_t_init(&fil_data);
+        fs_open(&fil_data, current_file_path, FS_O_RDWR | FS_O_APPEND);
+        return;
+    }
+    
+    // Update current filename and path
+    strncpy(current_filename, new_filename, sizeof(current_filename) - 1);
+    strncpy(current_file_path, new_file_path, sizeof(current_file_path) - 1);
+    current_file_needs_rename = false;
+    
+    // Reopen the renamed file
+    fs_file_t_init(&fil_data);
+    ret = fs_open(&fil_data, current_file_path, FS_O_RDWR | FS_O_APPEND);
+    if (ret < 0) {
+        LOG_ERR("Failed to reopen renamed file: %d", ret);
+        return;
+    }
+    
+    // Seek to end for appending
+    fs_seek(&fil_data, 0, FS_SEEK_END);
+    
+    LOG_INF("File renamed successfully to: %s", current_filename);
 }
 
 #define SD_WORKER_STACK_SIZE 4096
@@ -765,10 +955,15 @@ void sd_worker_thread(void)
     }
 
     /* Create initial audio file with timestamp */
-    res = create_audio_file_with_timestamp();
+    /* First, try to continue writing to the latest file if it's recent enough */
+    res = try_continue_latest_file();
     if (res < 0) {
-        LOG_ERR("[SD_WORK] Failed to create initial audio file: %d", res);
-        return;
+        /* Either no recent file found or RTC not valid - create new file */
+        res = create_audio_file_with_timestamp();
+        if (res < 0) {
+            LOG_ERR("[SD_WORK] Failed to create initial audio file: %d", res);
+            return;
+        }
     }
 
     while (1) {

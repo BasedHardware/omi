@@ -534,7 +534,7 @@ void storage_write(void)
                 if (stop_started) {
                     stop_started = 0;
                 } else {
-                    save_offset(offset);
+                    save_offset(current_read_filename, current_read_offset);
                     LOG_PRINTK("done. attempting to download more files\n");
                     uint8_t stop_result[1] = {100};
 
