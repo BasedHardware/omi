@@ -7972,4 +7972,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

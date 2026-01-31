@@ -7983,4 +7983,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Nepodařilo se otevřít URL. Zkuste to prosím znovu.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

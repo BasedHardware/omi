@@ -8001,4 +8001,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL açılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

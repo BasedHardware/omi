@@ -8026,4 +8026,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Nu s-a putut deschide URL-ul. Vă rugăm să încercați din nou.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

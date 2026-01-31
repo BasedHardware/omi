@@ -7950,4 +7950,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

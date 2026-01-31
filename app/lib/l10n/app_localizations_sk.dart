@@ -7978,4 +7978,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

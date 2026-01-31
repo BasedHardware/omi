@@ -7993,4 +7993,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Det gick inte att öppna URL:en. Försök igen.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

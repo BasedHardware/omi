@@ -160,6 +160,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _addGoal() {
+    // Navigate to conversations page
+    context.read<HomeProvider>().setIndex(0);
+    // Trigger goal creation
+    final conversationsState = _conversationsPageKey.currentState;
+    if (conversationsState != null) {
+      (conversationsState as dynamic).addGoal();
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -209,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
@@ -734,15 +744,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Row(
             children: [
               // Sync icon - shows when there are pending files on device or a device is paired
-              Consumer2<DeviceProvider, SyncProvider>(
-                builder: (context, deviceProvider, syncProvider, child) {
+              // Only shown on home page (index 0)
+              Consumer3<HomeProvider, DeviceProvider, SyncProvider>(
+                builder: (context, homeProvider, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
                   // Only show orange indicator for files still on device (SD card or Limitless)
                   final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  // Show sync icon if there's a paired device OR if there are pending files on device
-                  if (device != null || hasPendingOnDevice) {
+                  // Show sync icon only on home page and if there's a paired device OR if there are pending files on device
+                  if (homeProvider.selectedIndex == 0 && (device != null || hasPendingOnDevice)) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();

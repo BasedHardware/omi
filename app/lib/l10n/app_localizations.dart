@@ -5037,7 +5037,7 @@ abstract class AppLocalizations {
   /// **'{count} remaining'**
   String countRemaining(String count);
 
-  /// Button/title for adding a new goal
+  /// Menu option to add a new goal
   ///
   /// In en, this message translates to:
   /// **'Add Goal'**
@@ -5136,7 +5136,7 @@ abstract class AppLocalizations {
   /// Button text to show all items
   ///
   /// In en, this message translates to:
-  /// **'Show all →'**
+  /// **'Show All'**
   String get showAll;
 
   /// Message shown when there are no tasks due today
@@ -14918,6 +14918,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not open URL. Please try again.'**
   String get couldNotOpenUrl;
+
+  /// Button text for creating a new task
+  ///
+  /// In en, this message translates to:
+  /// **'New Task'**
+  String get newTask;
+
+  /// Button text to view all items
+  ///
+  /// In en, this message translates to:
+  /// **'View All'**
+  String get viewAll;
+
+  /// Menu option to add a new task
+  ///
+  /// In en, this message translates to:
+  /// **'Add Task'**
+  String get addTask;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

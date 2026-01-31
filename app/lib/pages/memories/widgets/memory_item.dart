@@ -43,11 +43,11 @@ class MemoryItem extends StatelessWidget {
         onTap(context, memory, provider);
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
@@ -148,10 +148,10 @@ class MemoryItem extends StatelessWidget {
         }
       },
       background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: AppStyles.error,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),

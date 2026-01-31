@@ -8025,4 +8025,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Az URL nem nyitható meg. Kérjük, próbálja újra.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

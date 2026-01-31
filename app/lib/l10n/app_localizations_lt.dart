@@ -7993,4 +7993,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

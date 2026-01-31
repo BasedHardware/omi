@@ -79,6 +79,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.addListener(() {
       setState(() {});
     });
+    textFieldFocusNode.addListener(() {
+      setState(() {});
+    });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
@@ -655,13 +658,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   }),
                 ),
                 const SizedBox(height: 0),
-                BottomNavBar(
-                  showCenterButton: false,
-                  onTabTap: (index, isRepeat) {
-                    context.read<HomeProvider>().setIndex(index);
-                    Navigator.of(context).pop();
-                  },
-                ),
+                if (!textFieldFocusNode.hasFocus)
+                  BottomNavBar(
+                    showCenterButton: false,
+                    onTabTap: (index, isRepeat) {
+                      context.read<HomeProvider>().setIndex(index);
+                      Navigator.of(context).pop();
+                    },
+                  ),
               ],
             ),
           ),
@@ -939,24 +943,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
       centerTitle: true,
       actions: [
-        Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1F1F25),
-            shape: BoxShape.circle,
-          ),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: const Icon(
-              FontAwesomeIcons.gear,
-              size: 16,
-              color: Colors.white70,
-            ),
-            onPressed: _openSettingsDrawer,
-          ),
-        ),
         Container(
           width: 36,
           height: 36,

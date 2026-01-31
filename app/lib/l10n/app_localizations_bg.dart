@@ -8020,4 +8020,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Не можа да се отвори URL адресът. Моля, опитайте отново.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

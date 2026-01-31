@@ -7968,4 +7968,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL खोला नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

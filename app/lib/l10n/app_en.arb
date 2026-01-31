@@ -2955,7 +2955,7 @@
   },
   "addGoal": "Add Goal",
   "@addGoal": {
-    "description": "Button/title for adding a new goal"
+    "description": "Menu option to add a new goal"
   },
   "editGoal": "Edit Goal",
   "@editGoal": {
@@ -3022,7 +3022,7 @@
   "@getInsightsInstantly": {
     "description": "Tip about instant insights feature"
   },
-  "showAll": "Show all →",
+  "showAll": "Show All",
   "@showAll": {
     "description": "Button text to show all items"
   },
@@ -9832,5 +9832,17 @@
   "resetFilters": "Reset filters",
   "applyFilters": "Apply filters",
   "mostInstalls": "Most Installs",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Could not open URL. Please try again.",
+  "newTask": "New Task",
+  "@newTask": {
+    "description": "Button text for creating a new task"
+  },
+  "viewAll": "View All",
+  "@viewAll": {
+    "description": "Button text to view all items"
+  },
+  "addTask": "Add Task",
+  "@addTask": {
+    "description": "Menu option to add a new task"
+  }
 }

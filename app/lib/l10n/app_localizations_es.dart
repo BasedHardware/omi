@@ -8002,4 +8002,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'No se pudo abrir la URL. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

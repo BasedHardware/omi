@@ -8036,4 +8036,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }
