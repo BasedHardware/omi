@@ -373,11 +373,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: ElevatedButton(
                     onPressed: () async {
                       final title = titleController.text.trim();
-                      if (title.isEmpty) return;
+                      if (title.isEmpty) {
+                        titleController.dispose();
+                        currentController.dispose();
+                        targetController.dispose();
+                        Navigator.pop(context);
+                        return;
+                      }
 
                       final current = double.tryParse(currentController.text) ?? 0;
                       final target = double.tryParse(targetController.text) ?? 100;
 
+                      // Dispose controllers before closing sheet
+                      titleController.dispose();
+                      currentController.dispose();
+                      targetController.dispose();
+
+                      if (!context.mounted) return;
                       Navigator.pop(context);
 
                       // Create goal via API
@@ -407,11 +419,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
         ),
       ),
-    ).then((_) {
-      titleController.dispose();
-      currentController.dispose();
-      targetController.dispose();
-    });
+    );
   }
 
   void _toggleFabMenu() {
@@ -456,7 +464,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent,
+                      color: Colors.deepPurple,
                       borderRadius: BorderRadius.circular(28),
                     ),
                     child: Row(
@@ -504,7 +512,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent,
+                      color: Colors.deepPurple,
                       borderRadius: BorderRadius.circular(28),
                     ),
                     child: Row(
@@ -535,7 +543,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           FloatingActionButton(
             heroTag: 'action_items_fab',
             onPressed: _toggleFabMenu,
-            backgroundColor: Colors.deepPurpleAccent,
+            backgroundColor: Colors.deepPurple,
             child: AnimatedRotation(
               turns: _isFabMenuOpen ? 0.125 : 0.0,
               duration: const Duration(milliseconds: 200),
@@ -744,7 +752,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 HapticFeedback.mediumImpact();
                 return provider.forceRefreshActionItems();
               },
-              color: Colors.deepPurpleAccent,
+              color: Colors.deepPurple,
               backgroundColor: Colors.white,
               child: provider.isLoading && provider.actionItems.isEmpty
                   ? _buildLoadingState()
@@ -760,7 +768,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildLoadingState() {
     return const Center(
-      child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
+      child: CircularProgressIndicator(color: Colors.deepPurple),
     );
   }
 
@@ -785,13 +793,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent.withOpacity(0.1),
+                      color: Colors.deepPurple.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Icon(
                       Icons.check_circle_outline,
                       size: 40,
-                      color: Colors.deepPurpleAccent.withOpacity(0.6),
+                      color: Colors.deepPurple.withOpacity(0.6),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -1060,7 +1068,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
+            color: showIndicator ? Colors.deepPurple : Colors.transparent,
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -1156,7 +1164,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: Colors.deepPurple,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -1167,7 +1175,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: Colors.deepPurple,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
