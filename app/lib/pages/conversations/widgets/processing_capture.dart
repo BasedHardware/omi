@@ -191,6 +191,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (!deviceServiceStateOk) {
       left = Row(
         children: [
+          const SizedBox(width: 14),
           const Icon(Icons.record_voice_over),
           const SizedBox(width: 12),
           Container(
@@ -205,6 +206,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               maxLines: 1,
             ),
           ),
+          if (isHavingTranscript || isHavingPhotos) const Flexible(child: LiteCaptureWidget()),
         ],
       );
     } else {
@@ -258,15 +260,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       stateText = "Connecting";
     }
     Widget right = stateText.isNotEmpty || statusIndicator != null
-        ? Expanded(
-            child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 stateText,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 maxLines: 1,
-                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
               ),
               if (statusIndicator != null) ...[
                 const SizedBox(width: 8),
@@ -277,16 +278,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 )
               ],
             ],
-          ))
+          )
         : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(left: 0, right: 12),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          left,
-          right,
+          Expanded(child: left),
+          if (right is! SizedBox) right,
         ],
       ),
     );
@@ -500,7 +500,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         children: [
           if (header != null) header,
           // Show content when there are segments/photos
-          if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ...[
+          if ((provider.segments.isNotEmpty || provider.photos.isNotEmpty) && provider.recordingDeviceServiceReady) ...[
             const SizedBox(height: 24),
             const LiteCaptureWidget(),
           ],
