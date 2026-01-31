@@ -170,16 +170,11 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 }
 
 uint8_t transport_started = 0;
-static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
 #define TCP_CHUNK_COUNT 10
 #define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 4 * TCP_CHUNK_COUNT)  /* 4440 bytes */
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];  /* Shared buffer for BLE and WiFi */
-
 static uint32_t offset = 0;
-static uint8_t index = 0;
-static uint8_t current_packet_size = 0;
-static uint8_t tx_buffer_size = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
 uint32_t remaining_length = 0;
@@ -190,10 +185,8 @@ static int setup_storage_tx()
     LOG_INF("about to transmit storage");
     k_msleep(1000);
 
-    /* Get list of audio files sorted by timestamp (oldest first) */
-    static char filenames[MAX_AUDIO_FILES][MAX_FILENAME_LEN];
     int file_count = 0;
-    int ret = get_audio_file_list(filenames, MAX_AUDIO_FILES, &file_count);
+    int ret = get_audio_file_list(sync_file_list, MAX_AUDIO_FILES, &file_count);
     if (ret < 0 || file_count == 0) {
         LOG_ERR("No audio files available");
         remaining_length = 0;
@@ -209,7 +202,7 @@ static int setup_storage_tx()
     int start_file_idx = 0;
     if (offset_filename[0] != '\0') {
         for (int i = 0; i < file_count; i++) {
-            if (strcmp(filenames[i], offset_filename) == 0) {
+            if (strcmp(sync_file_list[i], offset_filename) == 0) {
                 start_file_idx = i;
                 break;
             }
@@ -217,7 +210,7 @@ static int setup_storage_tx()
     }
     
     /* Use the oldest unread file or the specified offset file */
-    strncpy(current_read_filename, filenames[start_file_idx], MAX_FILENAME_LEN - 1);
+    strncpy(current_read_filename, sync_file_list[start_file_idx], MAX_FILENAME_LEN - 1);
     current_read_offset = (start_file_idx == 0 && offset_filename[0] != '\0') ? offset_in_file : 0;
     
     /* If a specific offset was requested, use it */
@@ -246,7 +239,7 @@ static int setup_storage_tx()
 
     return 0;
 }
-uint8_t delete_num = 0;
+
 uint8_t nuke_started = 0;
 static uint8_t heartbeat_count = 0;
 
@@ -280,7 +273,7 @@ static int refresh_file_list_cache(void)
 
 /**
  * @brief Send file list response
- * Format: [count:1][ts1:4][sz1:4][ts2:4][sz2:4]...
+ * Format: [count:1][total_size:4]
  */
 static int send_file_list_response(struct bt_conn *conn)
 {
@@ -290,28 +283,22 @@ static int send_file_list_response(struct bt_conn *conn)
         return -1;
     }
     
-    uint8_t resp[1 + MAX_AUDIO_FILES * 8];
-    int resp_len = 0;
-    
-    resp[resp_len++] = (uint8_t)sync_file_count;
-    
+    /* Calculate total size */
+    uint32_t total_size = 0;
     for (int i = 0; i < sync_file_count; i++) {
-        uint32_t timestamp = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
-        uint32_t size = sync_file_sizes[i];
-        
-        resp[resp_len++] = (timestamp >> 24) & 0xFF;
-        resp[resp_len++] = (timestamp >> 16) & 0xFF;
-        resp[resp_len++] = (timestamp >> 8) & 0xFF;
-        resp[resp_len++] = timestamp & 0xFF;
-        
-        resp[resp_len++] = (size >> 24) & 0xFF;
-        resp[resp_len++] = (size >> 16) & 0xFF;
-        resp[resp_len++] = (size >> 8) & 0xFF;
-        resp[resp_len++] = size & 0xFF;
+        total_size += sync_file_sizes[i];
     }
     
-    LOG_INF("Sending file list: %d files, %d bytes", sync_file_count, resp_len);
-    return bt_gatt_notify(conn, &storage_service.attrs[1], resp, resp_len);
+    /* Response: [count:1][total_size:4] = 5 bytes */
+    uint8_t resp[5];
+    resp[0] = (uint8_t)sync_file_count;
+    resp[1] = (total_size >> 24) & 0xFF;
+    resp[2] = (total_size >> 16) & 0xFF;
+    resp[3] = (total_size >> 8) & 0xFF;
+    resp[4] = total_size & 0xFF;
+    
+    LOG_INF("Sending file stats: %d files, %u bytes total", sync_file_count, total_size);
+    return bt_gatt_notify(conn, &storage_service.attrs[1], resp, sizeof(resp));
 }
 
 /**
@@ -444,7 +431,6 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, struct bt_conn *co
             transport_started = 1;
         }
     } else if (command == DELETE_COMMAND) {
-        delete_num = file_num;
         delete_started = 1;
     } else if (command == NUKE) {
         nuke_started = 1;

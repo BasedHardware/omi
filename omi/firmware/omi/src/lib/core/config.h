@@ -4,7 +4,7 @@
 #define MIC_GAIN 64
 #define MIC_IRC_PRIORITY 7
 #define MIC_BUFFER_SAMPLES 1600    // 100ms
-#define AUDIO_BUFFER_SAMPLES 16000 // 1s
+#define AUDIO_BUFFER_SAMPLES 12800 // 0.8s
 #define NETWORK_RING_BUF_SIZE 32   // number of frames * CODEC_OUTPUT_MAX_BYTES
 #define MINIMAL_PACKET_SIZE 100    // Less than that doesn't make sence to send anything at all
 
