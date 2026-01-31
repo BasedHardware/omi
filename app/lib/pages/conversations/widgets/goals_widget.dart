@@ -235,7 +235,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return _goalEmojis[goalId] ?? '🎯';
   }
 
-  void _addGoal() {
+  void addGoal() {
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -617,55 +617,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return const SizedBox.shrink();
     }
 
-    // If no goals, show "Add Goals" button similar to Daily Score widget
+    // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
     if (_goals.isEmpty) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        padding: const EdgeInsets.only(top: 16, bottom: 20),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.white.withOpacity(0.08),
-              width: 1,
-            ),
-          ),
-        ),
-        child: GestureDetector(
-          onTap: _addGoal,
-          child: Container(
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.add_circle_outline,
-                    color: Colors.white.withOpacity(0.7),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Add Goals',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return Container(
@@ -698,7 +652,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 ),
                 if (_goals.length < _maxGoals)
                   GestureDetector(
-                    onTap: _addGoal,
+                    onTap: addGoal,
                     child: Icon(
                       Icons.add_rounded,
                       size: 22,

@@ -222,12 +222,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 return SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: DailyScoreWidget(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: DailyScoreWidget(goalsWidgetKey: _goalsWidgetKey),
                       ),
                       const Padding(
-                        padding: EdgeInsets.only(top: 8, bottom: 8),
+                        padding: EdgeInsets.only(bottom: 8),
                         child: TodayTasksWidget(),
                       ),
                       GoalsWidget(key: _goalsWidgetKey),

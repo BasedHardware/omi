@@ -1,22 +1,63 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Daily Score Widget - Shows task completion rate as a 0-5 score
 class DailyScoreWidget extends StatefulWidget {
-  const DailyScoreWidget({super.key});
+  final GlobalKey<GoalsWidgetState>? goalsWidgetKey;
+
+  const DailyScoreWidget({super.key, this.goalsWidgetKey});
 
   @override
   State<DailyScoreWidget> createState() => _DailyScoreWidgetState();
 }
 
 class _DailyScoreWidgetState extends State<DailyScoreWidget> {
+  List<Goal> _goals = [];
+  bool _isLoadingGoals = true;
+  static const String _goalsStorageKey = 'goals_tracker_local_goals';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGoals();
+  }
+
+  Future<void> _loadGoals() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final goalsJson = prefs.getString(_goalsStorageKey);
+      if (goalsJson != null) {
+        final List<dynamic> decoded = json.decode(goalsJson);
+        final goals = decoded.map((json) => Goal.fromJson(json)).toList();
+        if (mounted) {
+          setState(() {
+            _goals = goals;
+            _isLoadingGoals = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoadingGoals = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingGoals = false);
+    }
+  }
+
+  void _addGoal() {
+    widget.goalsWidgetKey?.currentState?.addGoal();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ActionItemsProvider>(
@@ -50,111 +91,147 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
 
         final statusColor = _getStatusColor(score);
 
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            _showScoreDetails(context, score, completedTasks, totalTasks);
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1C),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Left side: Text content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.dailyScore,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
-                          color: Colors.white.withOpacity(0.5),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1C),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Stack(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Left side: Text content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.dailyScore,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: Colors.white.withOpacity(0.5),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        context.l10n.dailyScoreDescription,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withOpacity(0.5),
-                          height: 1.4,
+                        const SizedBox(height: 6),
+                        Text(
+                          context.l10n.dailyScoreDescription,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.5),
+                            height: 1.4,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      // "your score >" link
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              context.l10n.yourScore,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.8),
+                        const SizedBox(height: 14),
+                        // "Add Goals" or "Your Score" button
+                        if (!_isLoadingGoals)
+                          GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              if (_goals.isEmpty) {
+                                _addGoal();
+                              } else {
+                                _showScoreDetails(context, score, completedTasks, totalTasks);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_goals.isEmpty)
+                                    Icon(
+                                      Icons.add_circle_outline,
+                                      size: 16,
+                                      color: Colors.white.withOpacity(0.7),
+                                    ),
+                                  if (_goals.isEmpty) const SizedBox(width: 6),
+                                  Text(
+                                    _goals.isEmpty ? 'Add Goals' : context.l10n.yourScore,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white.withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: 16,
+                                    color: Colors.white.withOpacity(0.5),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right,
-                              size: 16,
-                              color: Colors.white.withOpacity(0.5),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Right side: Semicircular gauge
+                  SizedBox(
+                    width: 130,
+                    height: 85,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Gauge arc
+                        Positioned(
+                          top: 0,
+                          child: CustomPaint(
+                            size: const Size(130, 75),
+                            painter: _SemicircleGaugePainter(
+                              score: score,
+                              color: statusColor,
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Right side: Semicircular gauge
-                SizedBox(
-                  width: 130,
-                  height: 85,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Gauge arc
-                      Positioned(
-                        top: 0,
-                        child: CustomPaint(
-                          size: const Size(130, 75),
-                          painter: _SemicircleGaugePainter(
-                            score: score,
-                            color: statusColor,
                           ),
                         ),
-                      ),
-                      // Score text positioned inside the arc - aligned with arch start
-                      Positioned(
-                        top: 38,
-                        child: Text(
-                          _formatScore(score),
-                          style: TextStyle(
-                            fontSize: 44,
-                            fontWeight: FontWeight.w500,
-                            color: statusColor,
-                            height: 1,
+                        // Score text positioned inside the arc - aligned with arch start
+                        Positioned(
+                          top: 38,
+                          child: Text(
+                            _formatScore(score),
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                              height: 1,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // Question mark icon in top right (only when goals exist)
+              if (!_isLoadingGoals && _goals.isNotEmpty)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _showScoreDetails(context, score, completedTasks, totalTasks);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 20,
+                        color: Colors.white.withOpacity(0.4),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         );
       },
