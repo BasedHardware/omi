@@ -405,8 +405,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         currentValue: current,
                       );
 
-                      // Reload goals on all widgets
-                      widget.onAddGoal?.call();
+                      // Reload goals locally
+                      _loadGoals();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF22C55E),
