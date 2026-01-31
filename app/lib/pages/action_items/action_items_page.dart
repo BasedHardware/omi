@@ -19,7 +19,9 @@ import 'widgets/action_item_form_sheet.dart';
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class ActionItemsPage extends StatefulWidget {
-  const ActionItemsPage({super.key});
+  final VoidCallback? onAddGoal;
+
+  const ActionItemsPage({super.key, this.onAddGoal});
 
   @override
   State<ActionItemsPage> createState() => _ActionItemsPageState();
@@ -267,7 +269,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     HapticFeedback.lightImpact();
                     _closeFabMenu();
                     MixpanelManager().track('Add Goal Clicked from Tasks Page');
-                    context.read<HomeProvider>().setIndex(0);
+                    widget.onAddGoal?.call();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

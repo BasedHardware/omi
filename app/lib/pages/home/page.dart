@@ -160,6 +160,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _addGoal() {
+    // Navigate to conversations page
+    context.read<HomeProvider>().setIndex(0);
+    // Trigger goal creation
+    final conversationsState = _conversationsPageKey.currentState;
+    if (conversationsState != null) {
+      (conversationsState as dynamic).addGoal();
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -209,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];

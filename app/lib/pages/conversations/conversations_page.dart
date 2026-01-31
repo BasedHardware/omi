@@ -46,6 +46,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     _dailyScoreWidgetKey.currentState?.reloadGoals();
   }
 
+  // Public method to trigger goal creation from outside
+  void addGoal() {
+    _goalsWidgetKey.currentState?.addGoal();
+  }
+
   @override
   bool get wantKeepAlive => true;
 
