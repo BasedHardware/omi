@@ -64,7 +64,7 @@ class TodayTasksWidget extends StatelessWidget {
                       context.l10n.today,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

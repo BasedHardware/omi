@@ -646,7 +646,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   context.l10n.goals,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -678,76 +678,81 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     final color = _getColor(progress);
     final emoji = _getGoalEmoji(goal.id);
 
-    return GestureDetector(
-      onTap: () => _editGoal(goal),
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-        child: Row(
-          children: [
-            // Emoji icon
-            Container(
-              width: 36,
-              height: 36,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Dismissible(
+      key: Key(goal.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (direction) async {
+        await _deleteGoal(goal);
+      },
+      child: GestureDetector(
+        onTap: () => _editGoal(goal),
+        child: Container(
+          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+          padding: const EdgeInsets.only(left: 16),
+          child: Row(
+            children: [
+              // Emoji icon
+              Container(
+                width: 36,
+                height: 36,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 18)),
+                ),
               ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 18)),
-              ),
-            ),
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    goal.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  // Progress bar
-                  Stack(
-                    children: [
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      goal.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                      FractionallySizedBox(
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        child: Container(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    // Progress bar
+                    Stack(
+                      children: [
+                        Container(
                           height: 6,
                           decoration: BoxDecoration(
-                            color: color,
+                            color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        FractionallySizedBox(
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // Expand icon
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Icon(
-                _isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                size: 20,
-                color: Colors.white.withOpacity(0.3),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
