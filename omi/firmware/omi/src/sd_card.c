@@ -55,7 +55,6 @@ static char current_filename[MAX_FILENAME_LEN] = {0};
 static char current_file_path[64] = {0};
 static int64_t current_file_created_uptime_ms = 0;  // Uptime when file was created
 static bool current_file_needs_rename = false;      // True if file was created without valid RTC
-
 // BLE connection tracking for file rotation
 static bool ble_connected = false;
 static int64_t ble_connect_time_ms = 0;
@@ -386,10 +385,16 @@ static int try_continue_latest_file(void)
 /* Create a new audio file with current UTC timestamp as filename */
 static int create_audio_file_with_timestamp(void)
 {
+    /* Check if RTC time is valid/synced */
+    if (!rtc_is_valid()) {
+        LOG_DBG("RTC not synced yet, waiting for time sync");
+        return -EAGAIN;  /* Return error to indicate time not synced */
+    }
+    
     uint32_t timestamp = get_utc_time();
-    if (timestamp == 0) {
-        // If RTC is not valid, use uptime as fallback
-        timestamp = (uint32_t)(k_uptime_get() / 1000);
+    if (timestamp == 0 || timestamp < 1700000000) {  /* Before ~2023 */
+        LOG_DBG("Invalid timestamp %u, waiting for time sync", timestamp);
+        return -EAGAIN;
     }
     
     // Close current file if open
@@ -682,6 +687,12 @@ int read_audio_data(const char *filename, uint8_t *buf, int amount, int offset)
 
 uint32_t write_to_file(uint8_t *data, uint32_t length)
 {
+    // If RTC is not synced, silently ignore the data
+    // We can't create proper timestamped files without valid time
+    if (!rtc_is_valid()) {
+        return length;  // Pretend success, data is discarded
+    }
+
     sd_req_t req = {0};
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
@@ -958,9 +969,12 @@ void sd_worker_thread(void)
     /* First, try to continue writing to the latest file if it's recent enough */
     res = try_continue_latest_file();
     if (res < 0) {
-        /* Either no recent file found or RTC not valid - create new file */
+        /* Either no recent file found or RTC not valid - try create new file */
         res = create_audio_file_with_timestamp();
-        if (res < 0) {
+        if (res == -EAGAIN) {
+            /* RTC not synced - this is OK, we'll create file when first valid data comes */
+            LOG_INF("[SD_WORK] RTC not synced yet, waiting for time sync before recording");
+        } else if (res < 0) {
             LOG_ERR("[SD_WORK] Failed to create initial audio file: %d", res);
             return;
         }
@@ -972,6 +986,16 @@ void sd_worker_thread(void)
             switch (req.type) {
             case REQ_WRITE_DATA:
                 LOG_DBG("[SD_WORK] Buffering %u bytes to batch write", (unsigned)req.u.write.len);
+
+                /* If no file is open yet, try to create one now */
+                if (current_filename[0] == '\0') {
+                    res = create_audio_file_with_timestamp();
+                    if (res < 0) {
+                        /* Still can't create file, discard data */
+                        LOG_DBG("[SD_WORK] No file open, discarding data");
+                        break;
+                    }
+                }
 
                 /* Check if we need to rotate to a new file */
                 if (should_rotate_file()) {
