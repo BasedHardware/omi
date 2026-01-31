@@ -1332,7 +1332,19 @@ class CaptureProvider extends ChangeNotifier
     _conversation = convos.isNotEmpty ? convos.first : null;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
-      photos = _conversation!.photos;
+      // Merge server photos with locally-captured temp photos to avoid losing
+      // photos that haven't been processed server-side yet.
+      final serverPhotos = _conversation!.photos;
+      final localTempPhotos = photos.where((p) => p.id.startsWith('temp_img_')).toList();
+      final serverPhotoIds = serverPhotos.map((p) => p.id).toSet();
+      // Keep local temp photos that aren't already on the server
+      final mergedPhotos = List<ConversationPhoto>.from(serverPhotos);
+      for (final local in localTempPhotos) {
+        if (!serverPhotoIds.contains(local.id)) {
+          mergedPhotos.add(local);
+        }
+      }
+      photos = mergedPhotos;
     } else {
       segments = [];
       photos = [];

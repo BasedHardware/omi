@@ -259,6 +259,12 @@ class SharedPreferencesUtil {
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
 
+  String get otaWifiSsid => getString('otaWifiSsid', defaultValue: '');
+  set otaWifiSsid(String value) => saveString('otaWifiSsid', value);
+
+  String get otaWifiPassword => getString('otaWifiPassword', defaultValue: '');
+  set otaWifiPassword(String value) => saveString('otaWifiPassword', value);
+
   int get conversationSilenceDuration => getInt('conversationSilenceDuration', defaultValue: 120);
 
   set conversationSilenceDuration(int value) => saveInt('conversationSilenceDuration', value);

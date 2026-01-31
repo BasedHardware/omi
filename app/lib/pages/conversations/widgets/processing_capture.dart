@@ -10,6 +10,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -307,15 +308,81 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       isPaused = _isPhoneMicPaused || provider.isPaused;
     }
 
+    // Determine if this is an OmiGlass-type device (captures photos)
+    bool hasPhotos = provider.photos.isNotEmpty;
+    String statusText = isPaused
+        ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
+        : (hasPhotos ? 'Capturing' : context.l10n.listening);
+
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 8, right: 6),
-        child: Row(
-          children: [
-            // Left: Status tag
+      Widget statusRow = Row(
+        children: [
+          // Left: Status tag
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF35343B),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  statusText,
+                  style: const TextStyle(
+                    color: Color(0xFFC9CBCF),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Star indicator when conversation is marked for starring
+          if (provider.isConversationMarkedForStarring) ...[
+            const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const FaIcon(
+                    FontAwesomeIcons.solidStar,
+                    size: 12,
+                    color: Colors.amber,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.starred,
+                    style: const TextStyle(
+                      color: Colors.amber,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Photo count badge when photos exist
+          if (hasPhotos) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFF35343B),
                 borderRadius: BorderRadius.circular(20),
@@ -323,62 +390,41 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    isPaused ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused) : context.l10n.listening,
-                    style: const TextStyle(
-                      color: Color(0xFFC9CBCF),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  const FaIcon(
+                    FontAwesomeIcons.camera,
+                    size: 12,
+                    color: Color(0xFFC9CBCF),
                   ),
                   const SizedBox(width: 6),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                      shape: BoxShape.circle,
+                  Text(
+                    '${provider.photos.length}',
+                    style: const TextStyle(
+                      color: Color(0xFFC9CBCF),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            // Star indicator when conversation is marked for starring
-            if (provider.isConversationMarkedForStarring) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const FaIcon(
-                      FontAwesomeIcons.solidStar,
-                      size: 12,
-                      color: Colors.amber,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      context.l10n.starred,
-                      style: const TextStyle(
-                        color: Colors.amber,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+          ],
+          // Middle: Transcript text (takes remaining space)
+          if (provider.segments.isNotEmpty)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                child: Text(
+                  '... ${provider.segments.last.text} ...',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ],
-            // Middle: Transcript text (takes remaining space)
-            if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-              const Expanded(child: LiteCaptureWidget())
-            else
-              const Spacer(),
-            // Right: Pause/Resume button
+            )
+          else
+            const Spacer(),
+          // Right: Pause/Resume button (hidden for OmiGlass photo-capture devices)
+          if (!hasPhotos)
             GestureDetector(
               onTap: () async {
                 if (!isPaused) {
@@ -426,8 +472,26 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 ),
               ),
             ),
-          ],
-        ),
+        ],
+      );
+
+      if (hasPhotos) {
+        return Padding(
+          padding: const EdgeInsets.only(left: 8, right: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              statusRow,
+              const SizedBox(height: 12),
+              PhotosPreviewWidget(photos: provider.photos),
+            ],
+          ),
+        );
+      }
+
+      return Padding(
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        child: statusRow,
       );
     } else {
       // For non-recording states, show the original header-based UI
