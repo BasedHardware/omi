@@ -544,6 +544,53 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return const SizedBox.shrink();
     }
 
+    // If no goals, show "Add Goals" button instead
+    if (_goals.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: GestureDetector(
+          onTap: () async {
+            HapticFeedback.mediumImpact();
+            final url = Uri.parse('https://h.omi.me/goals');
+            // TODO: Add URL launcher or navigation to goals page
+            MixpanelManager().track('Add Goals Clicked');
+          },
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_circle_outline,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add Goals',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final goalSlots = List<Goal?>.generate(
       3,
       (index) => index < _goals.length ? _goals[index] : null,
