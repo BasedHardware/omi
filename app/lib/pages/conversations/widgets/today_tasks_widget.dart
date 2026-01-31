@@ -70,7 +70,7 @@ class TodayTasksWidget extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.grey.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(18),
                         ),
                         child: Text(
                           context.l10n.viewAll,
