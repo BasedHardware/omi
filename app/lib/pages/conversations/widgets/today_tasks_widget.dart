@@ -35,7 +35,8 @@ class TodayTasksWidget extends StatelessWidget {
         // Take top 3
         final displayTasks = todayTasks.take(3).toList();
 
-        if (displayTasks.isEmpty && provider.actionItems.isEmpty) {
+        // Hide if no today tasks
+        if (displayTasks.isEmpty) {
           return const SizedBox.shrink();
         }
 

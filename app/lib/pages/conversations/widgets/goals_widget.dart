@@ -617,6 +617,57 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return const SizedBox.shrink();
     }
 
+    // If no goals, show "Add Goals" button similar to Daily Score widget
+    if (_goals.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.only(top: 16, bottom: 20),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Colors.white.withOpacity(0.08),
+              width: 1,
+            ),
+          ),
+        ),
+        child: GestureDetector(
+          onTap: _addGoal,
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.add_circle_outline,
+                    color: Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add Goals',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.only(top: 16, bottom: 20),
@@ -658,35 +709,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             ),
           ),
           // Goals list
-          if (_goals.isEmpty)
-            GestureDetector(
-              onTap: _addGoal,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
-                      const SizedBox(width: 8),
-                      Text(
-                        context.l10n.tapToAddGoal,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            ..._goals.asMap().entries.map((entry) {
-              final goal = entry.value;
-              final isLast = entry.key == _goals.length - 1;
-              return _buildGoalItem(goal, isLast);
-            }),
+          ..._goals.asMap().entries.map((entry) {
+            final goal = entry.value;
+            final isLast = entry.key == _goals.length - 1;
+            return _buildGoalItem(goal, isLast);
+          }),
         ],
       ),
     );
