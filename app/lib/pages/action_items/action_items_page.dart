@@ -46,6 +46,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
 
+  // FAB menu state
+  bool _isFabMenuOpen = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -227,92 +230,135 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  void _showAddMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              _buildMenuOption(
-                icon: Icons.add_task,
-                title: context.l10n.addTask,
-                onTap: () {
-                  Navigator.pop(context);
-                  _showCreateActionItemSheet(
-                    defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildMenuOption(
-                icon: Icons.flag_outlined,
-                title: context.l10n.addGoal,
-                onTap: () {
-                  Navigator.pop(context);
-                  MixpanelManager().track('Add Goal Clicked from Tasks Page');
-                  // Navigate to conversations page (home index 0)
-                  context.read<HomeProvider>().setIndex(0);
-                },
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _toggleFabMenu() {
+    setState(() {
+      _isFabMenuOpen = !_isFabMenuOpen;
+    });
+    HapticFeedback.lightImpact();
   }
 
-  Widget _buildMenuOption({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: Colors.white.withOpacity(0.9),
-              size: 24,
-            ),
-            const SizedBox(width: 16),
-            Text(
-              title,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+  void _closeFabMenu() {
+    if (_isFabMenuOpen) {
+      setState(() {
+        _isFabMenuOpen = false;
+      });
+    }
+  }
+
+  Widget _buildFabMenu() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Mini FAB for Add Goal
+          AnimatedScale(
+            scale: _isFabMenuOpen ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isFabMenuOpen ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Label
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C2C2E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        context.l10n.addGoal,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Mini FAB
+                    FloatingActionButton(
+                      heroTag: 'add_goal_fab',
+                      mini: true,
+                      onPressed: () {
+                        _closeFabMenu();
+                        MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                        context.read<HomeProvider>().setIndex(0);
+                      },
+                      backgroundColor: Colors.deepPurpleAccent,
+                      child: const Icon(Icons.flag_outlined, color: Colors.white, size: 20),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          // Mini FAB for Add Task
+          AnimatedScale(
+            scale: _isFabMenuOpen ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isFabMenuOpen ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 150),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Label
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C2C2E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        context.l10n.addTask,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Mini FAB
+                    FloatingActionButton(
+                      heroTag: 'add_task_fab',
+                      mini: true,
+                      onPressed: () {
+                        _closeFabMenu();
+                        _showCreateActionItemSheet(
+                          defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+                        );
+                      },
+                      backgroundColor: Colors.deepPurpleAccent,
+                      child: const Icon(Icons.add_task, color: Colors.white, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Main FAB
+          FloatingActionButton(
+            heroTag: 'action_items_fab',
+            onPressed: _toggleFabMenu,
+            backgroundColor: Colors.deepPurpleAccent,
+            child: AnimatedRotation(
+              turns: _isFabMenuOpen ? 0.125 : 0.0,
+              duration: const Duration(milliseconds: 200),
+              child: const Icon(Icons.add, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -506,27 +552,22 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: Padding(
-            padding: const EdgeInsets.only(bottom: 100.0),
-            child: FloatingActionButton(
-              heroTag: 'action_items_fab',
-              onPressed: _showAddMenu,
-              backgroundColor: Colors.deepPurpleAccent,
-              child: const Icon(Icons.add, color: Colors.white),
+          floatingActionButton: _buildFabMenu(),
+          body: GestureDetector(
+            onTap: _closeFabMenu,
+            child: RefreshIndicator(
+              onRefresh: () async {
+                HapticFeedback.mediumImpact();
+                return provider.forceRefreshActionItems();
+              },
+              color: Colors.deepPurpleAccent,
+              backgroundColor: Colors.white,
+              child: provider.isLoading && provider.actionItems.isEmpty
+                  ? _buildLoadingState()
+                  : categorizedItems.values.every((l) => l.isEmpty)
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
             ),
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              HapticFeedback.mediumImpact();
-              return provider.forceRefreshActionItems();
-            },
-            color: Colors.deepPurpleAccent,
-            backgroundColor: Colors.white,
-            child: provider.isLoading && provider.actionItems.isEmpty
-                ? _buildLoadingState()
-                : categorizedItems.values.every((l) => l.isEmpty)
-                    ? _buildEmptyTasksList()
-                    : _buildTasksList(categorizedItems, provider),
           ),
         );
       },
