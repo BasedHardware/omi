@@ -694,7 +694,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         onTap: () => _editGoal(goal),
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          padding: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.only(left: 8),
           child: Row(
             children: [
               // Emoji icon
