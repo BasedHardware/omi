@@ -109,20 +109,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Future<void> _loadGoals() async {
-    try {
-      final goals = await getAllGoals();
-      if (!mounted) return;
-      if (goals.isNotEmpty) {
-        setState(() {
-          _goals = goals;
-          _isLoadingGoals = false;
-        });
-        _pruneTaskGoalLinks();
-        return;
-      }
-    } catch (_) {}
-
-    // Fallback to locally cached goals from the goals widget
+    // Load from local storage first (most up-to-date with recent deletions/changes)
     try {
       final prefs = await SharedPreferences.getInstance();
       final goalsJson = prefs.getString(_goalsStorageKey);
@@ -135,8 +122,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             _isLoadingGoals = false;
           });
           _pruneTaskGoalLinks();
-          return;
         }
+      }
+    } catch (_) {}
+
+    // Then sync with API in the background to get server updates
+    try {
+      final goals = await getAllGoals();
+      if (!mounted) return;
+      if (goals.isNotEmpty) {
+        setState(() {
+          _goals = goals;
+        });
+        _pruneTaskGoalLinks();
+        // Save API result to local storage for next time
+        final prefs = await SharedPreferences.getInstance();
+        final goalsJson = jsonEncode(goals.map((g) => g.toJson()).toList());
+        await prefs.setString(_goalsStorageKey, goalsJson);
       }
     } catch (_) {}
 
