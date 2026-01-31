@@ -95,8 +95,8 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
           margin: const EdgeInsets.only(bottom: 20),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1C),
-            borderRadius: BorderRadius.circular(20),
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Stack(
             children: [
