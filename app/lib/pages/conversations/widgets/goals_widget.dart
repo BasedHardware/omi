@@ -734,26 +734,40 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     Row(
                       children: [
                         Expanded(
-                          child: Stack(
-                            children: [
-                              Container(
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                              FractionallySizedBox(
-                                widthFactor: progress.clamp(0.0, 1.0),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              return GestureDetector(
+                                onTapDown: (details) =>
+                                    _updateProgressFromPosition(goal, details.localPosition.dx, constraints.maxWidth),
+                                onHorizontalDragUpdate: (details) =>
+                                    _updateProgressFromPosition(goal, details.localPosition.dx, constraints.maxWidth),
                                 child: Container(
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    borderRadius: BorderRadius.circular(3),
+                                  height: 24,
+                                  alignment: Alignment.centerLeft,
+                                  child: Stack(
+                                    children: [
+                                      Container(
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                      ),
+                                      FractionallySizedBox(
+                                        widthFactor: progress.clamp(0.0, 1.0),
+                                        child: Container(
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            borderRadius: BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -775,5 +789,46 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  void _updateProgressFromPosition(Goal goal, double localX, double barWidth) async {
+    // Calculate percentage based on tap/drag position
+    final percentage = (localX / barWidth).clamp(0.0, 1.0);
+
+    // Calculate new value and round to nearest integer
+    final newValue = (percentage * goal.targetValue).roundToDouble().clamp(0.0, goal.targetValue);
+
+    // Only update if value changed
+    if (newValue == goal.currentValue) return;
+
+    HapticFeedback.lightImpact();
+
+    // Update local state immediately for responsive UI
+    setState(() {
+      final index = _goals.indexWhere((g) => g.id == goal.id);
+      if (index != -1) {
+        _goals[index] = Goal(
+          id: goal.id,
+          title: goal.title,
+          goalType: goal.goalType,
+          targetValue: goal.targetValue,
+          currentValue: newValue,
+          minValue: goal.minValue,
+          maxValue: goal.maxValue,
+          unit: goal.unit,
+          isActive: goal.isActive,
+          createdAt: goal.createdAt,
+          updatedAt: DateTime.now(),
+        );
+      }
+    });
+
+    // Save locally
+    await _saveGoalsLocally();
+
+    // Update on backend if not a local-only goal
+    if (!goal.id.startsWith('local_')) {
+      await updateGoalProgress(goal.id, newValue);
+    }
   }
 }
