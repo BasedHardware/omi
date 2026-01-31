@@ -1479,38 +1479,370 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
     final displayTitle = '${goal.title} $progressText';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Circular progress indicator
-          Container(
-            width: 22,
-            height: 22,
-            margin: const EdgeInsets.only(top: 2, right: 12),
-            child: CustomPaint(
-              painter: _CircularProgressPainter(
-                progress: progress.clamp(0.0, 1.0),
-                color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+    return Dismissible(
+      key: Key('goal_${goal.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        HapticFeedback.mediumImpact();
+        return await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1F1F25),
+                title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: const Text('Delete'),
+                  ),
+                ],
               ),
+            ) ??
+            false;
+      },
+      onDismissed: (direction) async {
+        setState(() {
+          _goals.removeWhere((g) => g.id == goal.id);
+        });
+        // Save to local storage
+        final prefs = await SharedPreferences.getInstance();
+        final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
+        await prefs.setString(_goalsStorageKey, goalsJson);
+        // Delete from API if not local-only
+        if (!goal.id.startsWith('local_')) {
+          await deleteGoal(goal.id);
+        }
+      },
+      background: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      child: GestureDetector(
+        onTap: () => _showEditGoalSheet(goal),
+        child: Container(
+          color: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Circular progress indicator
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: CustomPaint(
+                    painter: _CircularProgressPainter(
+                      progress: progress.clamp(0.0, 1.0),
+                      color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Goal title with progress
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    displayTitle,
+                    style: TextStyle(
+                      color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
+                      fontSize: 15,
+                      decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditGoalSheet(Goal goal) {
+    HapticFeedback.lightImpact();
+    final titleController = TextEditingController(text: goal.title);
+    final currentController = TextEditingController(text: goal.currentValue.toInt().toString());
+    final targetController = TextEditingController(text: goal.targetValue.toInt().toString());
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade700,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Text(
+                  context.l10n.editGoal,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Title field
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.goalTitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.08),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Current & Target fields
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.current,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: currentController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.target,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: targetController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: InputDecoration(
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.08),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    // Delete button
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          // Dispose controllers after sheet is dismissed
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            titleController.dispose();
+                            currentController.dispose();
+                            targetController.dispose();
+                          });
+                          // Confirm and delete
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: const Color(0xFF1F1F25),
+                              title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                              content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            setState(() {
+                              _goals.removeWhere((g) => g.id == goal.id);
+                            });
+                            final prefs = await SharedPreferences.getInstance();
+                            final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
+                            await prefs.setString(_goalsStorageKey, goalsJson);
+                            if (!goal.id.startsWith('local_')) {
+                              await deleteGoal(goal.id);
+                            }
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Text(context.l10n.delete),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Save button
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final title = titleController.text.trim();
+                          if (title.isEmpty) {
+                            Navigator.pop(context);
+                            Future.delayed(const Duration(milliseconds: 300), () {
+                              titleController.dispose();
+                              currentController.dispose();
+                              targetController.dispose();
+                            });
+                            return;
+                          }
+
+                          final current = double.tryParse(currentController.text) ?? goal.currentValue;
+                          final target = double.tryParse(targetController.text) ?? goal.targetValue;
+
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            titleController.dispose();
+                            currentController.dispose();
+                            targetController.dispose();
+                          });
+
+                          // Update goal locally
+                          final updatedGoal = Goal(
+                            id: goal.id,
+                            title: title,
+                            goalType: goal.goalType,
+                            targetValue: target,
+                            currentValue: current,
+                            createdAt: goal.createdAt,
+                            updatedAt: DateTime.now(),
+                          );
+
+                          setState(() {
+                            final index = _goals.indexWhere((g) => g.id == goal.id);
+                            if (index != -1) {
+                              _goals[index] = updatedGoal;
+                            }
+                          });
+
+                          // Save to local storage
+                          final prefs = await SharedPreferences.getInstance();
+                          final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
+                          await prefs.setString(_goalsStorageKey, goalsJson);
+
+                          // Update on backend
+                          if (!goal.id.startsWith('local_')) {
+                            await updateGoal(
+                              goal.id,
+                              title: title,
+                              currentValue: current,
+                              targetValue: target,
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF22C55E),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(context.l10n.save),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          // Goal title with progress
-          Expanded(
-            child: Text(
-              displayTitle,
-              style: TextStyle(
-                color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
-                fontSize: 15,
-                decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
-                height: 1.4,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
