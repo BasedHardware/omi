@@ -947,24 +947,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
           width: 36,
           height: 36,
           margin: const EdgeInsets.only(right: 8),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1F1F25),
-            shape: BoxShape.circle,
-          ),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: const Icon(
-              FontAwesomeIcons.gear,
-              size: 16,
-              color: Colors.white70,
-            ),
-            onPressed: _openSettingsDrawer,
-          ),
-        ),
-        Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(
             color: Colors.grey.withOpacity(0.3),
             shape: BoxShape.circle,
