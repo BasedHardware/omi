@@ -51,6 +51,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // FAB menu state
   bool _isFabMenuOpen = false;
 
+  // Track last goal deletion to prevent API sync from resurrecting deleted goals
+  DateTime? _lastGoalDeletion;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -127,20 +130,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     } catch (_) {}
 
     // Then sync with API in the background to get server updates
-    try {
-      final goals = await getAllGoals();
-      if (!mounted) return;
-      if (goals.isNotEmpty) {
-        setState(() {
-          _goals = goals;
-        });
-        _pruneTaskGoalLinks();
-        // Save API result to local storage for next time
-        final prefs = await SharedPreferences.getInstance();
-        final goalsJson = jsonEncode(goals.map((g) => g.toJson()).toList());
-        await prefs.setString(_goalsStorageKey, goalsJson);
-      }
-    } catch (_) {}
+    // But skip if we just deleted a goal to prevent resurrecting it
+    final now = DateTime.now();
+    final skipApiSync = _lastGoalDeletion != null && now.difference(_lastGoalDeletion!) < const Duration(seconds: 3);
+
+    if (!skipApiSync) {
+      try {
+        final goals = await getAllGoals();
+        if (!mounted) return;
+        if (goals.isNotEmpty) {
+          setState(() {
+            _goals = goals;
+          });
+          _pruneTaskGoalLinks();
+          // Save API result to local storage for next time
+          final prefs = await SharedPreferences.getInstance();
+          final goalsJson = jsonEncode(goals.map((g) => g.toJson()).toList());
+          await prefs.setString(_goalsStorageKey, goalsJson);
+        }
+      } catch (_) {}
+    }
 
     if (!mounted) return;
     setState(() {
@@ -1506,6 +1515,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
+        // Mark deletion timestamp to prevent API sync from resurrecting this goal
+        _lastGoalDeletion = DateTime.now();
+
         setState(() {
           _goals.removeWhere((g) => g.id == goal.id);
         });
@@ -1741,6 +1753,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             ),
                           );
                           if (confirm == true) {
+                            // Mark deletion timestamp to prevent API sync from resurrecting this goal
+                            _lastGoalDeletion = DateTime.now();
+
                             setState(() {
                               _goals.removeWhere((g) => g.id == goal.id);
                             });
