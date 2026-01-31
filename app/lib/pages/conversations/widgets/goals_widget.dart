@@ -376,6 +376,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
+                      autofocus: true,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         filled: true,
