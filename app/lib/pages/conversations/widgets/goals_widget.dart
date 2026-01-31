@@ -754,7 +754,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 value: goal.currentValue.clamp(0.0, goal.targetValue),
                                 min: 0,
                                 max: goal.targetValue,
-                                divisions: goal.targetValue.toInt(),
+                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
                                 onChanged: (value) => _updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) => _saveGoalProgress(goal, value),
                               ),
