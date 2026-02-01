@@ -67,7 +67,10 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
                   } else {
                     href += '?uid=${SharedPreferencesUtil().uid}';
                   }
-                  launchUrl(Uri.parse(href));
+                  final uri = Uri.tryParse(href);
+                  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+                    launchUrl(uri);
+                  }
                 }
               },
             ),
