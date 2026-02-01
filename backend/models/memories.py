@@ -24,6 +24,7 @@ class MemoryCategory(str, Enum):
     skills = "skills"
     learnings = "learnings"
     other = "other"
+    auto = "auto"
 
 
 # Only define boosts for the primary categories
@@ -41,6 +42,7 @@ CATEGORY_BOOSTS = {
     MemoryCategory.learnings.value: 1,
     MemoryCategory.habits.value: 0,
     MemoryCategory.other.value: 0,
+    MemoryCategory.auto.value: 0,
 }
 
 
@@ -67,6 +69,7 @@ class Memory(BaseModel):
             'learnings': 'system',
             'habits': 'system',
             'other': 'system',
+            'auto': 'system',
         }
 
         if isinstance(v, str):
