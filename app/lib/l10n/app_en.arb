@@ -9844,5 +9844,32 @@
   "addTask": "Add Task",
   "@addTask": {
     "description": "Menu option to add a new task"
-  }
+  },
+  "addMcpServer": "Add MCP Server",
+  "connectExternalAiTools": "Connect external AI tools",
+  "mcpServerUrl": "MCP Server URL",
+  "mcpServerConnected": "{count} tools connected successfully",
+  "@mcpServerConnected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mcpConnectionFailed": "Failed to connect to MCP server",
+  "authorizingMcpServer": "Authorizing...",
+  "whereDidYouHearAboutOmi": "How did you find us?",
+  "tiktok": "TikTok",
+  "youtube": "YouTube",
+  "instagram": "Instagram",
+  "xTwitter": "X (Twitter)",
+  "reddit": "Reddit",
+  "friendWordOfMouth": "Friend",
+  "otherSource": "Other",
+  "pleaseSpecify": "Please specify",
+  "event": "Event",
+  "coworker": "Coworker",
+  "linkedIn": "LinkedIn",
+  "appStore": "App Store",
+  "googleSearch": "Google Search"
 }

@@ -584,6 +584,10 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
+  String get foundOmiSource => getString('foundOmiSource');
+
+  set foundOmiSource(String value) => saveString('foundOmiSource', value);
+
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
