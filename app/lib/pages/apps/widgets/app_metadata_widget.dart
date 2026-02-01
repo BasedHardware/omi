@@ -12,6 +12,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AppMetadataWidget extends StatelessWidget {
@@ -263,7 +264,7 @@ class AppMetadataWidget extends StatelessWidget {
                                                         children: [
                                                           const SizedBox(width: 6),
                                                           Text(
-                                                            categories[index].title,
+                                                            categories[index].getLocalizedTitle(context),
                                                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                                           ),
                                                           const Spacer(),

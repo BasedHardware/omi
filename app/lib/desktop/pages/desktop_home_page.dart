@@ -22,6 +22,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/focus_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -37,7 +38,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import '../../pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'apps/desktop_apps_page.dart';
@@ -512,6 +513,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             onTap: () => _navigateToIndex(4, homeProvider),
                           ),
 
+                          const SizedBox(height: 16),
+
+                          // Proactive Assistant (Focus Monitoring)
+                          _buildProactiveAssistantItem(),
+
                           const Spacer(),
 
                           // Subscription upgrade banner
@@ -791,8 +797,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            MixpanelManager()
-                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
+            MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
             onTap();
           },
           borderRadius: BorderRadius.circular(10),
@@ -837,6 +842,108 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       index,
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
+    );
+  }
+
+  Widget _buildProactiveAssistantItem() {
+    return Consumer<FocusProvider>(
+      builder: (context, focusProvider, child) {
+        final isMonitoring = focusProvider.isMonitoring;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Open the native settings window
+                focusProvider.openSettings();
+              },
+              borderRadius: BorderRadius.circular(10),
+              hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                decoration: BoxDecoration(
+                  color: isMonitoring
+                      ? const Color(0xFF1a472a).withValues(alpha: 0.6)
+                      : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: isMonitoring
+                      ? Border.all(
+                          color: const Color(0xFF28CA42).withValues(alpha: 0.4),
+                          width: 1,
+                        )
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    // Status indicator
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isMonitoring ? const Color(0xFF28CA42) : ResponsiveHelper.textTertiary,
+                        shape: BoxShape.circle,
+                        boxShadow: isMonitoring
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF28CA42).withValues(alpha: 0.5),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Proactive Assistant',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: isMonitoring ? FontWeight.w500 : FontWeight.w400,
+                              color: isMonitoring ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                            ),
+                          ),
+                          if (isMonitoring && focusProvider.currentApp != null)
+                            Text(
+                              focusProvider.isFocused
+                                  ? 'Focused on ${focusProvider.currentApp}'
+                                  : 'Watching ${focusProvider.currentApp}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if (!isMonitoring)
+                            Text(
+                              'Click to configure',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Arrow indicator
+                    Icon(
+                      Icons.chevron_right,
+                      color: ResponsiveHelper.textTertiary,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

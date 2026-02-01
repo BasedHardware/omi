@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -634,7 +634,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                     ),
                   ),
                   child: provider.isUploadingThumbnail
-                      ? Shimmer.fromColors(
+                      ? ShimmerWithTimeout(
                           baseColor: ResponsiveHelper.backgroundTertiary,
                           highlightColor: ResponsiveHelper.backgroundSecondary,
                           child: Container(
@@ -686,7 +686,7 @@ class _DesktopAddAppPageState extends State<DesktopAddAppPage> with TickerProvid
                         ),
                       ),
                     ),
-                    placeholder: (context, url) => Shimmer.fromColors(
+                    placeholder: (context, url) => ShimmerWithTimeout(
                       baseColor: ResponsiveHelper.backgroundTertiary,
                       highlightColor: ResponsiveHelper.backgroundSecondary,
                       child: Container(

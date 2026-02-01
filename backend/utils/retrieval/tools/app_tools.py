@@ -167,7 +167,8 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
 
     try:
         # Call the app's endpoint asynchronously
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Increased timeout to 120s for AI-powered tools that need more time (code generation, etc.)
+        async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
             request_kwargs = {
                 'headers': headers,
@@ -207,7 +208,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                 return error_msg
 
     except httpx.TimeoutException:
-        return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 30 seconds."
+        return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 120 seconds."
     except httpx.ConnectError:
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:

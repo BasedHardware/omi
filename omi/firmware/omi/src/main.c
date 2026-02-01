@@ -20,8 +20,11 @@
 #include "lib/core/storage.h"
 #endif
 #include <hal/nrf_reset.h>
+#include "rtc.h"
+#include "imu.h"
 
 #include "lib/core/sd_card.h"
+#include "spi_flash.h"
 #include "wdog_facade.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
@@ -159,6 +162,16 @@ void set_led_state()
     set_led_red(red);
 }
 
+static int suspend_unused_modules(void)
+{
+    int err = flash_off();
+    if (err) {
+        LOG_ERR("Can not suspend the spi flash module: %d", err);
+    }
+
+    return 0;
+}
+
 int main(void)
 {
     int ret;
@@ -197,12 +210,29 @@ int main(void)
         return ret;
     }
 
+    // Suspend unused modules
+    LOG_PRINTK("\n");
+    LOG_INF("Suspending unused modules...\n");
+    ret = suspend_unused_modules();
+    if (ret) {
+        LOG_ERR("Failed to suspend unused modules (err %d)", ret);
+        ret = 0;
+    }
+
     // Initialize settings
     LOG_INF("Initializing settings...\n");
     int setting_ret = app_settings_init();
     if (setting_ret) {
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
+
+    // Initialize RTC from saved epoch
+    init_rtc();
+    if (!rtc_is_valid()) {
+        LOG_WRN("UTC time not synchronized yet");
+    }
+
+    (void)lsm6dsl_time_boot_adjust_rtc();
 
 #ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
@@ -316,6 +346,16 @@ int main(void)
 
         set_led_state();
         k_msleep(1000);
+// Print current UTC time every second for debugging
+#ifdef CONFIG_LOG
+        char utc_str[RTC_UTC_DATETIME_STRLEN];
+        int fmt_err = rtc_format_now_utc_datetime(utc_str, sizeof(utc_str));
+        if (fmt_err) {
+            LOG_INF("Current UTC time: <unsynced>");
+        } else {
+            LOG_INF("Current UTC time: %s", utc_str);
+        }
+#endif
     }
 
     printk("Exiting omi...");

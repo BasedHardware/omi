@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -64,7 +64,7 @@ class AppListItem extends StatelessWidget {
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                       },
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Shimmer.fromColors(
+                      placeholder: (context, url) => ShimmerWithTimeout(
                         baseColor: const Color(0xFF1F1F25),
                         highlightColor: const Color(0xFF35343B),
                         child: Container(

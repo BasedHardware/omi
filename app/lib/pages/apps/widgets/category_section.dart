@@ -11,6 +11,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
 
 class CategorySection extends StatelessWidget {
@@ -222,7 +223,7 @@ class SectionAppItemCard extends StatelessWidget {
                               orElse: () => Category(id: app.category, title: app.getCategoryName()),
                             );
                             return Text(
-                              category.title,
+                              category.getLocalizedTitle(context),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(color: Colors.grey, fontSize: 13),

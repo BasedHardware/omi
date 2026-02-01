@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/utils/platform/platform_service.dart';
-
 Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
   return MarkdownBody(
     data: message.trimRight(),
-    selectable: PlatformService.isMacOS,
+    selectable: false,
     styleSheet: MarkdownStyleSheet(
       p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
       a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),

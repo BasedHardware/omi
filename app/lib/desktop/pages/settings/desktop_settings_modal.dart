@@ -123,7 +123,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22;
   bool _dailyReflectionEnabled = true;
-  int _notificationFrequency = 3;
+  int _notificationFrequency = 0; // Default 0 (disabled)
 
   @override
   void initState() {
@@ -164,20 +164,31 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
   Future<void> _loadDailySummarySettings() async {
     final settings = await getDailySummarySettings();
+    final mentorSettings = await getMentorNotificationSettings();
     final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
-    final frequency = SharedPreferencesUtil().notificationFrequency;
+    final localFrequency = SharedPreferencesUtil().notificationFrequency;
     if (settings != null && mounted) {
       setState(() {
         _dailySummaryEnabled = settings.enabled;
         _dailySummaryHour = settings.hour;
         _dailyReflectionEnabled = reflectionEnabled;
-        _notificationFrequency = frequency;
+        // Use backend value if available, otherwise use local
+        _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        // Sync local with backend
+        if (mentorSettings != null) {
+          SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
+        }
         _dailySummaryLoading = false;
       });
     } else if (mounted) {
       setState(() {
         _dailyReflectionEnabled = reflectionEnabled;
-        _notificationFrequency = frequency;
+        // Use backend value if available, otherwise use local
+        _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        // Sync local with backend
+        if (mentorSettings != null) {
+          SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
+        }
         _dailySummaryLoading = false;
       });
     }
@@ -213,9 +224,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     }
   }
 
-  void _updateNotificationFrequency(int value) {
+  Future<void> _updateNotificationFrequency(int value) async {
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
+    await setMentorNotificationSettings(value);
   }
 
   String _getFrequencyLabel(int value) {

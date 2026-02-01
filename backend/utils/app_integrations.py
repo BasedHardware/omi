@@ -298,9 +298,38 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
 
 
 def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+    # Process mentor notification first (built-in feature)
+    from utils.mentor_notifications import process_mentor_notification
+
+    mentor_results = {}
+    mentor_notification = process_mentor_notification(uid, segments)
+    if mentor_notification:
+        # Create a virtual "Omi" app for processing
+        mentor_app = App(
+            id='mentor',
+            name='Omi',
+            category='productivity',
+            author='Omi',
+            description='AI providing real-time guidance during conversations',
+            image='https://raw.githubusercontent.com/BasedHardware/Omi/main/assets/images/app_logo.png',
+            capabilities={'proactive_notification'},
+            enabled=True,
+            proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat']
+        )
+        mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
+        if mentor_message:
+            mentor_results['mentor'] = mentor_message
+            print(f"Sent mentor notification to user {uid}")
+
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
+        # Return mentor results if any, even if no external apps
+        if mentor_results:
+            messages = []
+            for key, message in mentor_results.items():
+                messages.append(add_app_message(message, key, uid))
+            return messages
         return {}
 
     threads = []
@@ -365,8 +394,12 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
 
     [t.start() for t in threads]
     [t.join() for t in threads]
+
+    # Merge mentor results with app results
+    all_results = {**mentor_results, **results}
+
     messages = []
-    for key, message in results.items():
+    for key, message in all_results.items():
         if not message:
             continue
         messages.append(add_app_message(message, key, uid))

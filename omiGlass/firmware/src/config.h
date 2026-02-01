@@ -12,7 +12,7 @@
 // DEVICE CONFIGURATION
 // =============================================================================
 #define BLE_DEVICE_NAME "OMI Glass"
-#define FIRMWARE_VERSION_STRING "2.1.1"
+#define FIRMWARE_VERSION_STRING "2.3.2"
 #define HARDWARE_REVISION "ESP32-S3-v1.0"
 #define MANUFACTURER_NAME "Based Hardware"
 
@@ -120,17 +120,75 @@ typedef enum {
 #define STATUS_REPORT_INTERVAL_MS 120000 // 2 minutes (was 30 seconds)
 
 // =============================================================================
+// MICROPHONE CONFIGURATION - I2S PDM (XIAO ESP32S3 Sense built-in mic)
+// =============================================================================
+// XIAO ESP32S3 Sense has built-in PDM microphone
+#define MIC_CLK_PIN 42  // PDM Clock pin (GPIO42)
+#define MIC_DATA_PIN 41 // PDM Data pin (GPIO41)
+
+#define MIC_SAMPLE_RATE 16000          // 16kHz sample rate
+#define MIC_BUFFER_SAMPLES 1600        // 100ms buffer (16000 * 0.1)
+#define MIC_GAIN 2                     // Microphone gain multiplier
+#define AUDIO_RING_BUFFER_SAMPLES 8000 // 500ms of audio data
+
+// =============================================================================
+// OPUS CODEC CONFIGURATION
+// =============================================================================
+#define AUDIO_CODEC_ID 21              // Opus codec ID (matches Omi protocol)
+#define OPUS_FRAME_SAMPLES 320         // 20ms frame @ 16kHz
+#define OPUS_OUTPUT_MAX_BYTES 160      // Max encoded frame size
+#define OPUS_BITRATE 32000             // 32kbps
+#define OPUS_COMPLEXITY 3              // Encoding complexity (1-10)
+#define OPUS_VBR 1                     // Variable bitrate enabled
+
+// Audio BLE packet configuration
+#define AUDIO_PACKET_HEADER_SIZE 3     // 2 bytes index + 1 byte sub-index
+#define AUDIO_TX_RING_BUFFER_SIZE 16   // Number of encoded frames to buffer
+
+// =============================================================================
 // BLE UUID DEFINITIONS - OMI Protocol
 // =============================================================================
 #define OMI_SERVICE_UUID "19B10000-E8F2-537E-4F6C-D104768A1214"
 #define AUDIO_DATA_UUID "19B10001-E8F2-537E-4F6C-D104768A1214"
-#define AUDIO_CONTROL_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
+#define AUDIO_CODEC_UUID "19B10002-E8F2-537E-4F6C-D104768A1214"
 #define PHOTO_DATA_UUID "19B10005-E8F2-537E-4F6C-D104768A1214"
 #define PHOTO_CONTROL_UUID "19B10006-E8F2-537E-4F6C-D104768A1214"
 
 // Battery Service UUID - Cast to uint16_t for BLE compatibility
 #define BATTERY_SERVICE_UUID (uint16_t) 0x180F
 #define BATTERY_LEVEL_UUID (uint16_t) 0x2A19
+
+// OTA Service UUIDs
+#define OTA_SERVICE_UUID "19B10010-E8F2-537E-4F6C-D104768A1214"
+#define OTA_CONTROL_UUID "19B10011-E8F2-537E-4F6C-D104768A1214"  // Write commands, read status
+#define OTA_DATA_UUID "19B10012-E8F2-537E-4F6C-D104768A1214"     // Notifications for progress
+
+// OTA Commands (written to OTA_CONTROL_UUID)
+#define OTA_CMD_SET_WIFI 0x01       // Set WiFi credentials: [cmd, ssid_len, ssid..., pass_len, pass...]
+#define OTA_CMD_START_OTA 0x02      // Start OTA update: [cmd, url_len, url...]
+#define OTA_CMD_CANCEL_OTA 0x03     // Cancel ongoing OTA
+#define OTA_CMD_GET_STATUS 0x04     // Request current status
+#define OTA_CMD_SET_URL 0x05        // Set firmware URL: [cmd, url_len, url...]
+
+// OTA Status codes (notified via OTA_DATA_UUID)
+#define OTA_STATUS_IDLE 0x00
+#define OTA_STATUS_WIFI_CONNECTING 0x10
+#define OTA_STATUS_WIFI_CONNECTED 0x11
+#define OTA_STATUS_WIFI_FAILED 0x12
+#define OTA_STATUS_DOWNLOADING 0x20      // Followed by progress byte (0-100)
+#define OTA_STATUS_DOWNLOAD_COMPLETE 0x21
+#define OTA_STATUS_DOWNLOAD_FAILED 0x22
+#define OTA_STATUS_INSTALLING 0x30       // Followed by progress byte (0-100)
+#define OTA_STATUS_INSTALL_COMPLETE 0x31
+#define OTA_STATUS_INSTALL_FAILED 0x32
+#define OTA_STATUS_REBOOTING 0x40
+#define OTA_STATUS_ERROR 0xFF
+
+// WiFi Configuration
+#define WIFI_CONNECT_TIMEOUT_MS 15000    // 15 seconds to connect
+#define WIFI_MAX_SSID_LEN 32
+#define WIFI_MAX_PASS_LEN 64
+#define OTA_MAX_URL_LEN 256
 
 // =============================================================================
 // PIN DEFINITIONS (from camera_pins.h integration)

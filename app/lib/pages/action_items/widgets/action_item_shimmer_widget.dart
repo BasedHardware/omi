@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 class ActionItemShimmerWidget extends StatelessWidget {
   const ActionItemShimmerWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey[800]!,
       highlightColor: Colors.grey[600]!,
       child: Container(

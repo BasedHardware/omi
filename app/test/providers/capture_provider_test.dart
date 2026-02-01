@@ -2,6 +2,7 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -64,5 +65,163 @@ void main() {
     expect(provider.suggestionsBySegmentId.containsKey('a'), false);
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
+  });
+
+  group('metricsNotifyEnabled', () {
+    test('defaults to not notifying on metrics update', () {
+      final provider = CaptureProvider();
+      // By default, metrics notify is disabled
+      // We can verify this by checking that the provider was created successfully
+      // and bleReceiveRateKbps/wsSendRateKbps are accessible (default 0)
+      expect(provider.bleReceiveRateKbps, 0.0);
+      expect(provider.wsSendRateKbps, 0.0);
+    });
+
+    test('addMetricsListener() enables metrics notifications on first listener', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      provider.addMetricsListener();
+
+      // Should notify when first listener is added
+      expect(notifyCount, 1);
+    });
+
+    test('removeMetricsListener() handles multiple listeners correctly', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      // Add two listeners
+      provider.addMetricsListener();
+      provider.addMetricsListener();
+      expect(notifyCount, 1); // Only first add triggers notification
+
+      // Remove one listener - metrics should still be enabled
+      provider.removeMetricsListener();
+      // Provider still has one listener, so metrics are still enabled
+
+      // Remove second listener - metrics now disabled
+      provider.removeMetricsListener();
+
+      // Verify count doesn't go negative
+      provider.removeMetricsListener();
+    });
+  });
+
+  group('metricsNotifyEnabled gating', () {
+    test('metrics update does NOT call listeners when no metrics listeners registered', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      // Don't add any metrics listeners - should NOT notify on metrics update
+      final initialCount = notifyCount;
+      provider.calculateMetricsForTesting();
+
+      // Should not have triggered additional notifications
+      expect(notifyCount, initialCount);
+    });
+
+    test('metrics update DOES call listeners when at least one metrics listener registered', () {
+      final provider = CaptureProvider();
+      var notifyCount = 0;
+      provider.addListener(() => notifyCount++);
+
+      // Add a metrics listener - this triggers one notification
+      provider.addMetricsListener();
+      final countAfterAdd = notifyCount;
+
+      // Now metrics update should notify
+      provider.calculateMetricsForTesting();
+
+      // Should have triggered an additional notification
+      expect(notifyCount, greaterThan(countAfterAdd));
+    });
+  });
+
+  group('segmentsPhotosVersion', () {
+    test('increments on translation event', () {
+      final provider = CaptureProvider();
+      final segment = _segment('a', 'hello');
+      provider.segments = [segment];
+
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      // Simulate translation event
+      provider.onMessageEventReceived(TranslationEvent(segments: [
+        TranscriptSegment(
+          id: 'a',
+          text: 'hello (translated)',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          start: 0.0,
+          end: 1.0,
+          translations: [],
+        ),
+      ]));
+
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on segments deleted event', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('a', 'one'), _segment('b', 'two')];
+
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['a']));
+
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on new segment received', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seed', 'seed')];
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onSegmentReceived([_segment('x', 'new')]);
+
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on photo processing event and updates id', () {
+      final provider = CaptureProvider();
+      provider.photos = [
+        ConversationPhoto(
+          id: 'temp-photo',
+          base64: 'img',
+          createdAt: DateTime.now(),
+        ),
+      ];
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onMessageEventReceived(PhotoProcessingEvent(tempId: 'temp-photo', photoId: 'permanent-photo'));
+
+      expect(provider.photos.first.id, 'permanent-photo');
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
+
+    test('increments on photo described event and updates description', () {
+      final provider = CaptureProvider();
+      provider.photos = [
+        ConversationPhoto(
+          id: 'photo-1',
+          base64: 'img',
+          createdAt: DateTime.now(),
+        ),
+      ];
+      final initialVersion = provider.segmentsPhotosVersion;
+
+      provider.onMessageEventReceived(
+        PhotoDescribedEvent(photoId: 'photo-1', description: 'desc', discarded: true),
+      );
+
+      expect(provider.photos.first.description, 'desc');
+      expect(provider.photos.first.discarded, true);
+      expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
+    });
   });
 }

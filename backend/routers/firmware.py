@@ -15,6 +15,7 @@ class DeviceModel(int, Enum):
     OMI_DEVKIT_2 = 2
     OPEN_GLASS = 3
     OMI_CV1 = 4
+    OMI_GLASS = 5
 
 
 router = APIRouter()
@@ -25,6 +26,7 @@ router = APIRouter()
 # - DK1: Friend | Friend DevKit 1
 # - OpenGlass: OpenGlass
 # - Omi_CV1: Omi CV 1
+# - OMI_GLASS: OMI Glass
 def _get_device_by_model_number(device_model: str):
     if device_model in ['Omi DevKit 2']:
         return DeviceModel.OMI_DEVKIT_2
@@ -34,6 +36,8 @@ def _get_device_by_model_number(device_model: str):
         return DeviceModel.OPEN_GLASS
     if device_model in ['Omi CV 1']:
         return DeviceModel.OMI_CV1
+    if device_model in ['OMI Glass', 'OmiGlass']:
+        return DeviceModel.OMI_GLASS
     # TODO: remove
     if device_model in ['OMI_shell']:
         return DeviceModel.OMI_CV1
@@ -120,15 +124,20 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         release_prefix = "OpenGlass"
     elif device == DeviceModel.OMI_CV1:
         release_prefix = "Omi_CV1"
+    elif device == DeviceModel.OMI_GLASS:
+        release_prefix = "OmiGlass"
 
     candidate_releases = []
     for release in releases:
+        tag_name = release.get("tag_name", "")
+
         if release.get("draft") or not release.get("published_at") or not release.get("tag_name"):
             continue
 
-        tag_name = release.get("tag_name", "")
         # Regex matches prefix_vX.Y or prefix_vX.Y.Z (ensures full match with ^ and $)
-        if not bool(re.match(f"^{release_prefix}_v[0-9]+(?:\\.[0-9]+){{1,2}}$", tag_name, re.IGNORECASE)):
+        regex_pattern = f"^{release_prefix}_v[0-9]+(?:\\.[0-9]+){{1,2}}$"
+        matches = bool(re.match(regex_pattern, tag_name, re.IGNORECASE))
+        if not matches:
             continue
 
         kv = extract_key_value_pairs(release.get("body"))
@@ -171,13 +180,23 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     # KEY_VALUE_END -->
     assets = release_data.get("assets", [])
     asset = None
-    for a in assets:
-        asset_name = a.get("name")
-        if isinstance(asset_name, str) and "ota" in asset_name.lower() and asset_name.endswith(".zip"):
-            asset = a
-            break
-    if not asset:
-        raise HTTPException(status_code=500, detail="No OTA zip found in the selected release")
+    # OmiGlass uses .bin firmware files, other devices use OTA .zip files
+    if device == DeviceModel.OMI_GLASS:
+        for a in assets:
+            asset_name = a.get("name")
+            if isinstance(asset_name, str) and asset_name.endswith(".bin"):
+                asset = a
+                break
+        if not asset:
+            raise HTTPException(status_code=500, detail="No firmware .bin file found in the selected release")
+    else:
+        for a in assets:
+            asset_name = a.get("name")
+            if isinstance(asset_name, str) and "ota" in asset_name.lower() and asset_name.endswith(".zip"):
+                asset = a
+                break
+        if not asset:
+            raise HTTPException(status_code=500, detail="No OTA zip found in the selected release")
 
     # Safely get values with defaults from the chosen latest_release's kv
     version = kv.get("release_firmware_version")

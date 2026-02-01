@@ -323,7 +323,9 @@ async def _websocket_util_trigger(
                         current_conversation_id = memory_id
                     if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
                         print(f"Warning: transcript_queue size {len(transcript_queue)}", uid)
-                    transcript_queue.append({'segments': segments, 'memory_id': memory_id})
+                    # Use memory_id if available, otherwise use current_conversation_id for conversations
+                    conversation_or_memory_id = memory_id or current_conversation_id
+                    transcript_queue.append({'segments': segments, 'memory_id': conversation_or_memory_id})
                     continue
 
                 # Process conversation request

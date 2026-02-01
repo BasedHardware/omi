@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -33,6 +34,7 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
 
   const TranscriptWidget({
     super.key,
@@ -51,6 +53,7 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
   });
 
   @override
@@ -656,8 +659,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp and provider
-                                  if (widget.canDisplaySeconds || data.sttProvider != null) ...[
+                                  // Timestamp, provider, and play button
+                                  if (widget.canDisplaySeconds ||
+                                      data.sttProvider != null ||
+                                      widget.onSegmentTap != null) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -682,6 +687,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                               ),
                                             ),
                                           ],
+                                        ],
+                                        // Play button for tap-to-seek
+                                        if (widget.onSegmentTap != null) ...[
+                                          GestureDetector(
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              widget.onSegmentTap?.call(data);
+                                            },
+                                            child: Icon(
+                                              Icons.play_circle_outline,
+                                              size: 16,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
                                         ],
                                         if (widget.canDisplaySeconds)
                                           Text(

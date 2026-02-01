@@ -1121,6 +1121,18 @@ class MixpanelManager {
     });
   }
 
+  void transcriptSegmentTapped({
+    required String conversationId,
+    required double segmentStartSeconds,
+    required double seekPositionSeconds,
+  }) {
+    track('Transcript Segment Tapped', properties: {
+      'conversation_id': conversationId,
+      'segment_start_seconds': segmentStartSeconds,
+      'seek_position_seconds': seekPositionSeconds,
+    });
+  }
+
   void audioShareStarted({
     required String conversationId,
     required int audioFileCount,

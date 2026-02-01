@@ -1,0 +1,345 @@
+---
+title: "Monitoring & Testing"
+description: "Monitor serial logs and test your OmiGlass device"
+---
+
+After flashing the firmware, you can monitor your device's activity, check battery status, and test functionality using the serial monitor.
+
+## Connect to Serial Monitor
+
+Use PlatformIO's device monitor to view real-time logs from your OmiGlass:
+
+```bash
+platformio device monitor --baud 115200
+```
+
+<Info>
+The serial monitor connects to your device and displays debug logs, status messages, and allows you to send commands.
+</Info>
+
+**Alternative: Specify Port Explicitly**
+
+If you have multiple devices connected:
+
+```bash
+# macOS/Linux
+platformio device monitor -p /dev/cu.usbserial-XXXX -b 115200
+
+# Or shorter version
+pio device monitor --baud 115200
+```
+
+<Tip>
+To exit the serial monitor, press `Ctrl+C`
+</Tip>
+
+---
+
+## Available Serial Commands
+
+Once connected to the serial monitor, you can type these commands to interact with your device:
+
+### Quick Status Check
+
+```
+status
+```
+
+Shows current battery level, connection status, and device state.
+
+**Example Output:**
+```
+Battery: 85% (4.1V)
+Status: Connected
+Camera: Ready
+BLE: Active
+```
+
+---
+
+### Battery Monitoring Commands
+
+<CardGroup cols={2}>
+  <Card title="Charging Status" icon="battery-bolt">
+    Monitor charging progress in real-time
+  </Card>
+  <Card title="Runtime Calculator" icon="clock">
+    See how long your glasses will last
+  </Card>
+</CardGroup>
+
+#### Charging Status Monitor
+
+```
+charging
+```
+
+Takes 10 readings over 20 seconds and displays charging status:
+
+- **🔋 CHARGING** (>4.1V) - Actively charging
+- **⚡ CHARGED** (3.9-4.1V) - Good charge level
+- **🔴 LOW** (3.7-3.9V) - Needs charging
+- **❌ CRITICAL** (<3.7V) - Check connections
+
+**Example Output:**
+```
+Reading 1/10: 4.15V - CHARGING
+Reading 2/10: 4.18V - CHARGING
+Reading 3/10: 4.20V - CHARGING
+...
+Average: 4.18V - Battery is charging normally
+```
+
+---
+
+#### Battery Runtime Calculator
+
+```
+runtime
+```
+
+Shows estimated runtime for different usage scenarios based on current charge level.
+
+**Example Output:**
+```
+Current Battery: 85% (4.1V)
+
+Estimated Runtime:
+- Heavy Use (continuous photos): 5-6 hours
+- Normal Use (mixed usage): 7-9 hours
+- Light Use (mostly idle): 10-12 hours
+```
+
+---
+
+#### Charge Time Calculator
+
+```
+chargetime
+```
+
+Calculates estimated time to reach full charge from current level.
+
+**Example Output:**
+```
+Current Battery: 45% (3.85V)
+
+Estimated Charging Time:
+- To 80%: 25 minutes
+- To 90%: 45 minutes
+- To 100%: 60 minutes
+```
+
+---
+
+#### Continuous Monitor
+
+```
+monitor
+```
+
+Enables continuous monitoring with readings every 5 seconds. Type any command to stop.
+
+**Example Output:**
+```
+[12:30:45] Battery: 82% (4.08V) | Status: Connected
+[12:30:50] Battery: 82% (4.08V) | Status: Connected
+[12:30:55] Battery: 83% (4.09V) | Status: Connected
+...
+```
+
+<Note>
+Press any key and hit Enter to stop continuous monitoring.
+</Note>
+
+---
+
+## Battery Status Reference
+
+### Voltage Levels & Charging Times
+
+| Voltage Range | Battery % | Status | Time to Full (USB) |
+|---------------|-----------|--------|-------------------|
+| 4.2V - 4.3V | 100% | Fully charged | 0 minutes |
+| 4.0V - 4.2V | 80-100% | Good charge | 15-20 minutes |
+| 3.8V - 4.0V | 20-80% | Moderate | 30-60 minutes |
+| 3.7V - 3.8V | 0-20% | Low battery | 60-90 minutes |
+| 3.5V - 3.7V | Critical | Very low | 90+ minutes |
+| <3.5V | Critical | Unsafe | Check hardware |
+
+<Warning>
+Do not let the battery drop below 3.5V as it may damage the Li-ion cells.
+</Warning>
+
+---
+
+### Battery Life Estimates
+
+Based on dual 250mAh batteries (500mAh total):
+
+| Usage Pattern | Runtime | Description |
+|---------------|---------|-------------|
+| 🔥 **Heavy Use** | **6-7 hours** | Continuous photo capture, always active |
+| ⚡ **Normal Use** | **8-10 hours** | Mixed usage: 60% active, 30% standby, 10% sleep |
+| 💤 **Light Use** | **12-15 hours** | Mostly connected but idle, occasional photos |
+
+**Current Consumption:**
+- Active Mode: ~80mA (Camera + BLE + processing)
+- Standby Mode: ~40mA (BLE connected, camera off)
+- Sleep Mode: ~2mA (Deep sleep, button wake-up)
+
+---
+
+## Testing Your Device
+
+### Basic Functionality Test
+
+<Steps>
+  <Step title="Connect to Serial Monitor">
+    ```bash
+    platformio device monitor --baud 115200
+    ```
+  </Step>
+
+  <Step title="Check Status">
+    Type `status` in the serial monitor and verify:
+    - Battery percentage is displayed
+    - Device reports as ready
+    - BLE status shows as active
+  </Step>
+
+  <Step title="Test Battery Monitoring">
+    Type `charging` to verify battery readings are accurate and stable.
+  </Step>
+
+  <Step title="Connect to App">
+    Open the Omi app and verify:
+    - Device appears in Bluetooth scan
+    - Connection is successful
+    - Battery level displays in app
+  </Step>
+</Steps>
+
+---
+
+## Charging Your OmiGlass
+
+### Hardware Setup
+
+- **Batteries:** Dual 250mAh Li-ion batteries (500mAh total, 3.7V-4.3V range)
+- **Charging Method:** Connect USB-C cable to ESP32-S3 board
+- **Charging LED:** On-board LED indicates status
+
+### Charging Process
+
+<Steps>
+  <Step title="Connect USB-C Cable">
+    Plug the USB-C cable into the ESP32-S3 board and your computer or charger.
+  </Step>
+
+  <Step title="Check LED Status">
+    - **Red LED** = Charging in progress
+    - **Green LED** = Fully charged
+  </Step>
+
+  <Step title="Monitor Progress">
+    Use the `charging` command to verify charging is progressing normally:
+    ```
+    charging
+    ```
+  </Step>
+
+  <Step title="Charging Time">
+    - USB 2.0 port: ~1-1.5 hours full charge
+    - USB 3.0 port: ~45-60 minutes
+    - USB-C port: ~30-45 minutes
+  </Step>
+</Steps>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No Serial Output">
+    **Problem:** Serial monitor connects but shows no output.
+
+    **Solutions:**
+    - Verify baud rate is 115200
+    - Press the reset button on the ESP32 to restart
+    - Try a different USB port or cable
+    - Check the firmware flashed successfully
+  </Accordion>
+
+  <Accordion title="Battery Shows 0% or 100% Always">
+    **Problem:** Battery percentage doesn't change or shows incorrect values.
+
+    **Solutions:**
+    - Check voltage divider connections (A0 pin)
+    - Verify battery is properly connected
+    - Use `status` command to check raw voltage reading
+    - Ensure resistor values are correct (169kΩ and 110kΩ)
+  </Accordion>
+
+  <Accordion title="Device Won't Charge">
+    **Problem:** Battery voltage doesn't increase when connected to charger.
+
+    **Solutions:**
+    - Verify USB cable supports data and charging
+    - Check charging LED on ESP32-S3 board
+    - Try different USB port or charger
+    - Verify battery connections are secure
+    - Use `charging` command to monitor voltage over time
+  </Accordion>
+
+  <Accordion title="Inconsistent Readings">
+    **Problem:** Battery readings fluctuate significantly.
+
+    **Solutions:**
+    - Check for loose connections in voltage divider circuit
+    - Verify A0 pin is properly connected
+    - Use `charging` command to take multiple readings
+    - Ensure battery is properly secured
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Best Practices
+
+### Charging Best Practices
+
+- **Charge when battery drops below 20%** (3.8V)
+- **Don't let battery go below 3.5V** (damages Li-ion cells)
+- **Charge in moderate temperatures** (10°C-40°C)
+- **Use quality USB-C charger** (5V, 1A minimum)
+
+### Battery Life Optimization
+
+- **Avoid complete discharge** (stop using at 3.7V)
+- **Charge regularly** (don't leave dead for days)
+- **Store at 50% charge** if not using for weeks
+- **Optimize usage patterns:**
+  - Use light sleep mode when possible
+  - Reduce photo frequency for all-day use
+  - Disconnect when not needed to save power
+
+### Monitoring Schedule
+
+- **Before use:** Quick `status` check
+- **During long sessions:** Periodic `status` checks
+- **While charging:** Use `charging` command to verify progress
+- **For troubleshooting:** Use `monitor` for continuous tracking
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Flash Firmware" icon="microchip" href="/doc/hardware/omiglass/flash-firmware">
+    Update to the latest firmware version
+  </Card>
+  <Card title="Hardware Assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
+    Complete hardware setup guide
+  </Card>
+</CardGroup>

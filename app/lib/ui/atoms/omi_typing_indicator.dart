@@ -22,6 +22,7 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   late final Animation<Offset> _anim1;
   late final Animation<Offset> _anim2;
   late final Animation<Offset> _anim3;
+  late final Animation<double> _scale;
   late final Animation<Color?> _color;
 
   @override
@@ -35,6 +36,12 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
     _anim1 = _tween(0.2);
     _anim2 = _tween(0.1);
     _anim3 = _tween(0.15);
+
+    // Optimized scale animation: subtle bounce (0.85-1.0) instead of full 0-1 range
+    _scale = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _color = ColorTween(
       begin: Colors.grey[400],
@@ -67,18 +74,22 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
     );
   }
 
-  Widget _bubble(Animation<Offset> anim) => SlideTransition(
-        position: anim,
-        child: AnimatedBuilder(
-          animation: _color,
-          builder: (context, _) => ScaleTransition(
-            scale: _controller,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: _color.value,
-                shape: BoxShape.circle,
+  // Optimized animation: keeps scale effect with RepaintBoundary isolation
+  // Scale range reduced (0.85-1.0) for subtle bounce that's easy on battery
+  Widget _bubble(Animation<Offset> anim) => RepaintBoundary(
+        child: SlideTransition(
+          position: anim,
+          child: ScaleTransition(
+            scale: _scale,
+            child: AnimatedBuilder(
+              animation: _color,
+              builder: (context, _) => Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: _color.value,
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
           ),

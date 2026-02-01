@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
@@ -731,7 +732,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
 
                     // Category
                     Text(
-                      category.title,
+                      category.getLocalizedTitle(context),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

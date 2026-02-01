@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 
 class ActionFieldsWidget extends StatelessWidget {
   const ActionFieldsWidget({super.key});
@@ -79,7 +80,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Text(
-                                    actionType.title,
+                                    actionType.getLocalizedTitle(context),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,

@@ -1,0 +1,67 @@
+---
+description: "Backend Python import rules - no in-function imports, follow module hierarchy"
+globs:
+  - "backend/**/*.py"
+alwaysApply: false
+references:
+  - .cursor/rules/backend-architecture.mdc
+  - backend/README.md
+---
+
+# Backend Import Rules
+
+## No In-Function Imports
+
+All imports must be at the module top level. Never import inside functions.
+
+```python
+# Bad
+def my_function():
+    from database.redis_db import r  # Don't do this
+    r.get('key')
+
+# Good
+from database.redis_db import r
+
+def my_function():
+    r.get('key')
+```
+
+## Module Hierarchy
+
+Follow the module hierarchy when importing. Higher-level modules import from lower-level modules, never the reverse.
+
+**Module hierarchy (lowest to highest):**
+1. `database/` - Database connections, cache instances
+2. `utils/` - Utility functions, helpers
+3. `routers/` - API endpoints
+4. `main.py` - Application entry point
+
+```python
+# Bad - utils importing from routers or main
+# utils/apps.py
+from main import memory_cache  # Don't import from higher level
+from routers.apps import some_function  # Don't import from higher level
+
+# Good - utils importing from database
+# utils/apps.py
+from database.cache import get_memory_cache
+from database.redis_db import r
+```
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/backend-architecture.mdc` - Complete architecture including module hierarchy
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including import conventions
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Follows import rules in router development
+- `.cursor/agents/backend-llm-engineer/` - Follows import rules in LLM modules
+- `.cursor/agents/backend-database-engineer/` - Follows import rules in database modules
+
+### Commands
+- `/backend-setup` - Setup backend environment
+- `/lint-and-fix` - Check import violations

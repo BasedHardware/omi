@@ -10,7 +10,7 @@ import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import '../persona_profile.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
 
 class CloneSuccessScreen extends StatefulWidget {
   final String message;

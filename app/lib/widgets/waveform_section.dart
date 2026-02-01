@@ -46,7 +46,8 @@ class _WaveformSectionState extends State<WaveformSection> {
   }
 
   void _startProgressTimer() {
-    _progressUpdateTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+    // Use 250ms interval instead of 100ms to reduce CPU usage while maintaining smooth playback
+    _progressUpdateTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
       if (mounted && widget.isPlaying) {
         final currentProgress = widget.playbackState.playbackProgress;
         if ((currentProgress - _lastProgress).abs() > 0.01) {

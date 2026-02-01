@@ -7,7 +7,7 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
-import '../../utils/other/validators.dart';
+import 'package:omi/utils/other/validators.dart';
 
 class PaypalSetupPage extends StatefulWidget {
   const PaypalSetupPage({

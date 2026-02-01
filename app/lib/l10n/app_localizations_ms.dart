@@ -426,7 +426,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
-  String get chatTools => 'Alat Sembang';
+  String get integrations => 'Integrasi';
 
   @override
   String get feedbackBug => 'Maklum Balas / Pepijat';
@@ -1021,7 +1021,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get comingSoon => 'Akan Datang';
 
   @override
-  String get chatToolsFooter => 'Sambungkan aplikasi anda untuk melihat data dan metrik dalam sembang.';
+  String get integrationsFooter => 'Sambungkan aplikasi anda untuk melihat data dan metrik dalam sembang.';
 
   @override
   String get completeAuthInBrowser =>
@@ -7811,47 +7811,213 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Peranti tidak menyokong penyegerakan WiFi, bertukar kepada Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health tidak tersedia pada peranti ini';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Muat turun Audio';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio berjaya dimuat turun';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Gagal memuat turun audio';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Memuat turun audio...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Kongsi Audio';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Menyediakan Audio';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Mendapatkan fail audio...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Memuat turun Audio';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Memproses Audio';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Menggabungkan fail audio...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio Sedia';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Membuka helaian perkongsian...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Perkongsian Gagal';
+
+  @override
+  String get dailyRecaps => 'Ringkasan Harian';
+
+  @override
+  String get removeFilter => 'Alih Keluar Penapis';
+
+  @override
+  String get categoryConversationAnalysis => 'Analisis Perbualan';
+
+  @override
+  String get categoryPersonalityClone => 'Klon Personaliti';
+
+  @override
+  String get categoryHealth => 'Kesihatan';
+
+  @override
+  String get categoryEducation => 'Pendidikan';
+
+  @override
+  String get categoryCommunication => 'Komunikasi';
+
+  @override
+  String get categoryEmotionalSupport => 'Sokongan Emosi';
+
+  @override
+  String get categoryProductivity => 'Produktiviti';
+
+  @override
+  String get categoryEntertainment => 'Hiburan';
+
+  @override
+  String get categoryFinancial => 'Kewangan';
+
+  @override
+  String get categoryTravel => 'Perjalanan';
+
+  @override
+  String get categorySafety => 'Keselamatan';
+
+  @override
+  String get categoryShopping => 'Membeli-belah';
+
+  @override
+  String get categorySocial => 'Sosial';
+
+  @override
+  String get categoryNews => 'Berita';
+
+  @override
+  String get categoryUtilities => 'Utiliti';
+
+  @override
+  String get categoryOther => 'Lain-lain';
+
+  @override
+  String get capabilityChat => 'Sembang';
+
+  @override
+  String get capabilityConversations => 'Perbualan';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrasi Luaran';
+
+  @override
+  String get capabilityNotification => 'Pemberitahuan';
+
+  @override
+  String get triggerAudioBytes => 'Bait Audio';
+
+  @override
+  String get triggerConversationCreation => 'Penciptaan Perbualan';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkrip Diproses';
+
+  @override
+  String get actionCreateConversations => 'Cipta perbualan';
+
+  @override
+  String get actionCreateMemories => 'Cipta kenangan';
+
+  @override
+  String get actionReadConversations => 'Baca perbualan';
+
+  @override
+  String get actionReadMemories => 'Baca kenangan';
+
+  @override
+  String get actionReadTasks => 'Baca tugas';
+
+  @override
+  String get scopeUserName => 'Nama Pengguna';
+
+  @override
+  String get scopeUserFacts => 'Fakta Pengguna';
+
+  @override
+  String get scopeUserConversations => 'Perbualan Pengguna';
+
+  @override
+  String get scopeUserChat => 'Sembang Pengguna';
+
+  @override
+  String get capabilitySummary => 'Ringkasan';
+
+  @override
+  String get capabilityFeatured => 'Pilihan';
+
+  @override
+  String get capabilityTasks => 'Tugas';
+
+  @override
+  String get capabilityIntegrations => 'Integrasi';
+
+  @override
+  String get categoryPersonalityClones => 'Klon Personaliti';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktiviti & Gaya Hidup';
+
+  @override
+  String get categorySocialEntertainment => 'Sosial & Hiburan';
+
+  @override
+  String get categoryProductivityTools => 'Alat Produktiviti';
+
+  @override
+  String get categoryPersonalWellness => 'Kesejahteraan Peribadi';
+
+  @override
+  String get rating => 'Penilaian';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Isih';
+
+  @override
+  String get highestRating => 'Penilaian tertinggi';
+
+  @override
+  String get lowestRating => 'Penilaian terendah';
+
+  @override
+  String get resetFilters => 'Set semula penapis';
+
+  @override
+  String get applyFilters => 'Guna penapis';
+
+  @override
+  String get mostInstalls => 'Paling banyak dipasang';
+
+  @override
+  String get couldNotOpenUrl => 'Tidak dapat membuka URL. Sila cuba lagi.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
 }

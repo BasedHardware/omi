@@ -71,6 +71,7 @@ import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -173,6 +174,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _addGoal() {
+    // Navigate to conversations page
+    context.read<HomeProvider>().setIndex(0);
+    // Trigger goal creation
+    final conversationsState = _conversationsPageKey.currentState;
+    if (conversationsState != null) {
+      (conversationsState as dynamic).addGoal();
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -222,7 +233,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
@@ -280,10 +291,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       // Navigate
+      if (!mounted) return;
       switch (pageAlias) {
         case "apps":
           if (detailPageId != null && detailPageId.isNotEmpty) {
-            var app = await context.read<AppProvider>().getAppFromId(detailPageId);
+            final appProvider = context.read<AppProvider>();
+            var app = await appProvider.getAppFromId(detailPageId);
             if (app != null && mounted) {
               Navigator.push(
                 context,
@@ -295,7 +308,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "chat":
-          print('inside chat alias $detailPageId');
+          Logger.debug('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
@@ -481,6 +494,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
       Logger.debug('[Freemium] Error checking dialog: $e');
+      return false;
     });
   }
 
@@ -615,18 +629,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ],
                       ),
-                      Consumer2<HomeProvider, DeviceProvider>(
-                        builder: (context, home, deviceProvider, child) {
+                      Consumer<HomeProvider>(
+                        builder: (context, home, child) {
                           if (home.isChatFieldFocused ||
                               home.isAppsSearchFieldFocused ||
                               home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
-                          } else {
-                            // Check if OMI device is connected
-                            bool isOmiDeviceConnected =
-                                deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                          }
 
-                            return Stack(
+                          return Stack(
                               children: [
                                 // Bottom Navigation Bar
                                 Align(
@@ -645,112 +656,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           Color.fromARGB(255, 15, 15, 15),
                                         ],
                                       ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Home tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Home');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 0) {
-                                                _scrollToTop(0);
-                                                return;
-                                              }
-                                              home.setIndex(0);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.house,
-                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Action Items tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Action Items');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 1) {
-                                                _scrollToTop(1);
-                                                return;
-                                              }
-                                              home.setIndex(1);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.listCheck,
-                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Center space for record button - only when no OMI device is connected
-                                        if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Memories tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 2) {
-                                                _scrollToTop(2);
-                                                return;
-                                              }
-                                              home.setIndex(2);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.brain,
-                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Apps tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Apps');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 3) {
-                                                _scrollToTop(3);
-                                                return;
-                                              }
-                                              home.setIndex(3);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.puzzlePiece,
-                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
                                     ),
                                   ),
                                 ),
@@ -843,7 +748,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   ),
                               ],
                             );
-                          }
                         },
                       ),
                       // Merge action bar - floats above bottom nav when in selection mode
@@ -909,15 +813,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Row(
             children: [
               // Sync icon - shows when there are pending files on device or a device is paired
-              Consumer2<DeviceProvider, SyncProvider>(
-                builder: (context, deviceProvider, syncProvider, child) {
+              // Only shown on home page (index 0)
+              Consumer3<HomeProvider, DeviceProvider, SyncProvider>(
+                builder: (context, homeProvider, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
                   // Only show orange indicator for files still on device (SD card or Limitless)
                   final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  // Show sync icon if there's a paired device OR if there are pending files on device
-                  if (device != null || hasPendingOnDevice) {
+                  // Show sync icon only on home page and if there's a paired device OR if there are pending files on device
+                  if (homeProvider.selectedIndex == 0 && (device != null || hasPendingOnDevice)) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
@@ -991,12 +896,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ),
                       if (shouldShowSearchButton) const SizedBox(width: 8),
-                      // Calendar button
+                      // Daily Recaps toggle button
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: convoProvider.selectedDate != null
+                          color: convoProvider.showDailySummaries
                               ? Colors.deepPurple.withValues(alpha: 0.5)
                               : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -1004,20 +909,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            convoProvider.selectedDate != null
-                                ? FontAwesomeIcons.calendarDay
-                                : FontAwesomeIcons.calendarDays,
+                            FontAwesomeIcons.clockRotateLeft,
                             size: 16,
-                            color: Colors.white70,
+                            color: convoProvider.showDailySummaries ? Colors.white : Colors.white70,
                           ),
-                          onPressed: () async {
+                          onPressed: () {
                             HapticFeedback.mediumImpact();
-                            if (convoProvider.selectedDate != null) {
-                              await convoProvider.clearDateFilter();
-                              MixpanelManager().calendarFilterCleared();
-                            } else {
-                              // Open date picker
-                              DateTime selectedDate = DateTime.now();
+                            convoProvider.toggleDailySummaries();
+                          },
+                        ),
+                      ),
+                      // Calendar button - only show when date filter is active
+                      if (convoProvider.selectedDate != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              FontAwesomeIcons.calendarDay,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              // Open date picker to change date, cancel clears filter
+                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
                               await showCupertinoModalPopup<void>(
                                 context: context,
                                 builder: (BuildContext context) {
@@ -1032,7 +954,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       top: false,
                                       child: Column(
                                         children: [
-                                          // Header with Cancel and Done buttons
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                             decoration: const BoxDecoration(
@@ -1049,9 +970,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               children: [
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
-                                                  onPressed: () => Navigator.of(context).pop(),
+                                                  onPressed: () async {
+                                                    // Get provider before pop to avoid using invalid context
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
+                                                    Navigator.of(context).pop();
+                                                    await provider.clearDateFilter();
+                                                    MixpanelManager().calendarFilterCleared();
+                                                  },
                                                   child: Text(
-                                                    context.l10n.cancel,
+                                                    context.l10n.removeFilter,
                                                     style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 16,
@@ -1062,13 +990,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
                                                     Navigator.of(context).pop();
-                                                    if (context.mounted) {
-                                                      final provider =
-                                                          Provider.of<ConversationProvider>(context, listen: false);
-                                                      await provider.filterConversationsByDate(selectedDate);
-                                                      MixpanelManager().calendarFilterApplied(selectedDate);
-                                                    }
+                                                    await provider.filterConversationsByDate(selectedDate);
+                                                    MixpanelManager().calendarFilterApplied(selectedDate);
                                                   },
                                                   child: Text(
                                                     context.l10n.done,
@@ -1082,7 +1008,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               ],
                                             ),
                                           ),
-                                          // Date picker
                                           Expanded(
                                             child: Material(
                                               color: ResponsiveHelper.backgroundSecondary,
@@ -1107,10 +1032,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   );
                                 },
                               );
-                            }
-                          },
+                            },
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(width: 8),
                     ],
                   );

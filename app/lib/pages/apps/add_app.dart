@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -274,7 +274,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                       ),
                                                     ),
                                                   ),
-                                                  placeholder: (context, url) => Shimmer.fromColors(
+                                                  placeholder: (context, url) => ShimmerWithTimeout(
                                                     baseColor: Colors.grey[900]!,
                                                     highlightColor: Colors.grey[800]!,
                                                     child: Container(
@@ -561,7 +561,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              provider.isPaid ? context.l10n.usersPayToUse : context.l10n.freeForEveryone,
+                                              provider.isPaid
+                                                  ? context.l10n.usersPayToUse
+                                                  : context.l10n.freeForEveryone,
                                               style: TextStyle(
                                                 color: Colors.grey.shade500,
                                                 fontSize: 13,

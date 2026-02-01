@@ -1,0 +1,307 @@
+---
+description: "Python pytest testing patterns mocking FastAPI TestClient WebSocket async testing fixtures unit integration tests"
+globs:
+  - "backend/tests/**/*.py"
+  - "backend/**/*test*.py"
+alwaysApply: false
+references:
+  - backend/README.md
+  - backend/tests/integration/README.md
+---
+
+# Backend Testing Patterns
+
+## Test Structure
+
+### Test Organization
+
+```
+backend/
+├── tests/
+│   ├── unit/
+│   │   ├── test_speaker_sample.py
+│   │   ├── test_text_similarity.py
+│   │   └── ...
+│   ├── integration/
+│   │   ├── conftest.py
+│   │   └── ...
+│   └── ...
+```
+
+### Test File Naming
+
+- Unit tests: `test_*.py`
+- Integration tests: `test_*_integration.py` or in `tests/integration/`
+
+## Unit Testing
+
+### Basic Test Structure
+
+```python
+import pytest
+from unittest.mock import Mock, patch, AsyncMock
+
+def test_function_name():
+    """Test description."""
+    # Arrange
+    input_data = {"key": "value"}
+    
+    # Act
+    result = function_under_test(input_data)
+    
+    # Assert
+    assert result == expected_value
+```
+
+### Async Testing
+
+```python
+import pytest
+
+@pytest.mark.asyncio
+async def test_async_function():
+    """Test async function."""
+    result = await async_function()
+    assert result is not None
+```
+
+### Mocking External Services
+
+```python
+from unittest.mock import patch, AsyncMock
+
+@patch('utils.llm.clients.get_openai_client')
+async def test_llm_call(mock_client):
+    """Test LLM call with mocked client."""
+    # Setup mock
+    mock_response = AsyncMock()
+    mock_response.data = [{"embedding": [0.1, 0.2, 0.3]}]
+    mock_client.return_value.embeddings.create = AsyncMock(return_value=mock_response)
+    
+    # Test
+    result = await generate_embedding("test")
+    
+    # Assert
+    assert result == [0.1, 0.2, 0.3]
+```
+
+### Mocking Database
+
+```python
+from unittest.mock import patch, AsyncMock
+
+@patch('database.conversations.get_conversation')
+async def test_get_conversation(mock_get):
+    """Test conversation retrieval."""
+    # Setup mock
+    mock_conversation = Conversation(id="123", title="Test")
+    mock_get.return_value = mock_conversation
+    
+    # Test
+    result = await get_conversation("uid", "123")
+    
+    # Assert
+    assert result.id == "123"
+    assert result.title == "Test"
+```
+
+### Mocking Redis
+
+```python
+from unittest.mock import patch
+
+@patch('database.redis_db.r')
+def test_redis_cache(mock_redis):
+    """Test Redis caching."""
+    # Setup mock
+    mock_redis.get.return_value = "cached_value"
+    
+    # Test
+    result = get_cached_value("key")
+    
+    # Assert
+    assert result == "cached_value"
+    mock_redis.get.assert_called_once_with("key")
+```
+
+## Integration Testing
+
+### Test Configuration
+
+```python
+# tests/integration/conftest.py
+import pytest
+from fastapi.testclient import TestClient
+from main import app
+
+@pytest.fixture
+def client():
+    """Test client fixture."""
+    return TestClient(app)
+
+@pytest.fixture
+def test_uid():
+    """Test user ID."""
+    return "test_user_123"
+```
+
+### API Endpoint Testing
+
+```python
+from fastapi.testclient import TestClient
+
+def test_create_conversation(client: TestClient, test_uid: str):
+    """Test conversation creation endpoint."""
+    response = client.post(
+        "/v1/conversations",
+        json={"transcript": "Test conversation"},
+        headers={"Authorization": f"Bearer {test_token}"},
+    )
+    assert response.status_code == 200
+    assert "id" in response.json()
+```
+
+### WebSocket Testing
+
+```python
+from fastapi.testclient import TestClient
+
+def test_websocket_endpoint(client: TestClient):
+    """Test WebSocket endpoint."""
+    with client.websocket_connect("/v4/listen?uid=test_uid") as websocket:
+        # Send audio data
+        websocket.send_bytes(b"audio_data")
+        
+        # Receive response
+        data = websocket.receive_json()
+        assert "transcript" in data
+```
+
+## Test Fixtures
+
+### Common Fixtures
+
+```python
+import pytest
+from datetime import datetime
+
+@pytest.fixture
+def sample_conversation():
+    """Sample conversation fixture."""
+    return Conversation(
+        id="test_123",
+        user_id="test_uid",
+        created_at=datetime.utcnow(),
+        transcript="Test transcript",
+    )
+
+@pytest.fixture
+def sample_memory():
+    """Sample memory fixture."""
+    return Memory(
+        id="mem_123",
+        user_id="test_uid",
+        content="Test memory",
+        category="personal",
+    )
+```
+
+## Test Utilities
+
+### Helper Functions
+
+```python
+def create_test_user(uid: str = "test_uid"):
+    """Create test user in database."""
+    # Setup test user
+    pass
+
+def cleanup_test_data(uid: str):
+    """Clean up test data."""
+    # Delete test data
+    pass
+```
+
+## Running Tests
+
+### Test Command
+
+```bash
+# Run all tests
+cd backend && python -m pytest
+
+# Run specific test file
+python -m pytest tests/unit/test_speaker_sample.py
+
+# Run with coverage
+python -m pytest --cov=. --cov-report=html
+
+# Run integration tests only
+python -m pytest tests/integration/
+```
+
+### Test Script
+
+```bash
+# backend/test.sh
+#!/bin/bash
+python -m pytest tests/ -v --cov=. --cov-report=term-missing
+```
+
+## Best Practices
+
+1. **Isolation**: Each test should be independent
+2. **Cleanup**: Clean up test data after tests
+3. **Mocking**: Mock external services (OpenAI, Firestore, etc.)
+4. **Fixtures**: Use fixtures for common test data
+5. **Naming**: Use descriptive test names
+6. **Coverage**: Aim for high test coverage
+7. **Speed**: Keep unit tests fast (< 1s each)
+8. **Documentation**: Document test purpose in docstrings
+
+## Test Categories
+
+### Unit Tests
+- Test individual functions
+- Mock all external dependencies
+- Fast execution
+- High coverage
+
+### Integration Tests
+- Test component interactions
+- Use test database/Redis
+- Slower execution
+- Test critical paths
+
+### End-to-End Tests
+- Test full workflows
+- Use staging environment
+- Slowest execution
+- Test user journeys
+
+## Related Documentation
+
+**The `docs/` folder is the single source of truth for all user-facing documentation, deployed at [docs.omi.me](https://docs.omi.me/).**
+
+- **Backend Deep Dive**: `docs/doc/developer/backend/backend_deepdive.mdx` - [View online](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+- **Testing**: `.cursor/rules/testing.mdc`
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/testing.mdc` - General testing guidelines
+- `.cursor/rules/backend-architecture.mdc` - System architecture
+- `.cursor/rules/backend-api-patterns.mdc` - API endpoint patterns
+- `.cursor/rules/backend-database-patterns.mdc` - Database testing patterns
+
+### Skills
+- `.cursor/skills/omi-backend-patterns/` - Backend patterns including testing
+
+### Subagents
+- `.cursor/agents/backend-api-developer/` - Can help with API testing
+- `.cursor/agents/backend-database-engineer/` - Can help with database testing
+
+### Commands
+- `/backend-test` - Run backend tests
+- `/run-tests-and-fix` - Run tests and fix failures
+- `/test-integration` - Run integration tests

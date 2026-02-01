@@ -422,6 +422,10 @@ class $AssetsImagesGen {
 class $AssetsIntegrationAppLogosGen {
   const $AssetsIntegrationAppLogosGen();
 
+  /// File path: assets/integration_app_logos/apple-health-logo.png
+  AssetGenImage get appleHealthLogo =>
+      const AssetGenImage('assets/integration_app_logos/apple-health-logo.png');
+
   /// File path: assets/integration_app_logos/asana-logo.png
   AssetGenImage get asanaLogo =>
       const AssetGenImage('assets/integration_app_logos/asana-logo.png');
@@ -471,6 +475,7 @@ class $AssetsIntegrationAppLogosGen {
 
   /// List of all assets
   List<dynamic> get values => [
+    appleHealthLogo,
     asanaLogo,
     clickupLogo,
     githubLogo,

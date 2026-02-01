@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -20,7 +20,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import '../payment_webview_page.dart';
+import 'package:omi/pages/settings/payment_webview_page.dart';
 
 class PlansSheet extends StatefulWidget {
   final AnimationController waveController;
@@ -1703,7 +1703,8 @@ class _PlansSheetState extends State<PlansSheet> {
                           onPressed: () {
                             _handleCancelSubscription();
                           },
-                          child: Text(context.l10n.cancelSubscription, style: const TextStyle(color: Colors.red, fontSize: 16)),
+                          child: Text(context.l10n.cancelSubscription,
+                              style: const TextStyle(color: Colors.red, fontSize: 16)),
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -1966,7 +1967,7 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Shimmer.fromColors(
+                    ShimmerWithTimeout(
                       baseColor: Colors.white.withOpacity(0.1),
                       highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
@@ -1979,7 +1980,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Shimmer.fromColors(
+                    ShimmerWithTimeout(
                       baseColor: Colors.white.withOpacity(0.1),
                       highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
@@ -1997,7 +1998,7 @@ class _PlansSheetState extends State<PlansSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(
@@ -2010,7 +2011,7 @@ class _PlansSheetState extends State<PlansSheet> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(

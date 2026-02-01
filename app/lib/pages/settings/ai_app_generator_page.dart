@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -277,7 +277,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         ),
                         textAlign: TextAlign.center,
                       )
-                    : Shimmer.fromColors(
+                    : ShimmerWithTimeout(
                         baseColor: const Color(0xFF2A2A2E),
                         highlightColor: const Color(0xFF3A3A3E),
                         child: Container(
@@ -308,7 +308,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           ),
                         ),
                       )
-                    : Shimmer.fromColors(
+                    : ShimmerWithTimeout(
                         baseColor: const Color(0xFF2A2A2E),
                         highlightColor: const Color(0xFF3A3A3E),
                         child: Container(
@@ -400,7 +400,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                               ),
                               if (isActive) ...[
                                 const SizedBox(height: 2),
-                                Shimmer.fromColors(
+                                ShimmerWithTimeout(
                                   baseColor: Colors.grey.shade600,
                                   highlightColor: Colors.grey.shade400,
                                   child: Text(
@@ -559,7 +559,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
   }
 
   Widget _buildShimmerCard() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: const Color(0xFF1C1C1E),
       highlightColor: const Color(0xFF2A2A2E),
       child: Container(
@@ -633,7 +633,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
               child: isGenerating
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Shimmer.fromColors(
+                      child: ShimmerWithTimeout(
                         baseColor: Colors.grey.shade600,
                         highlightColor: Colors.grey.shade400,
                         child: Text(

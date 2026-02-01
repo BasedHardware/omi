@@ -810,7 +810,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       // Wait for device to set up its WiFi AP before phone tries to connect
       debugPrint("SDCardWalSync WiFi: Step 3 - Waiting for device AP to become available...");
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 8));
 
       debugPrint("SDCardWalSync WiFi: Step 4 - Connecting phone to device WiFi AP");
       final wifiResult = await wifiNetwork.connectToAp(ssid, password: password);

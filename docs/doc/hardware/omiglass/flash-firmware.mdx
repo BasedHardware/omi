@@ -1,0 +1,190 @@
+---
+title: "Flash Firmware"
+description: "Flash the latest OmiGlass firmware using PlatformIO"
+---
+
+This guide walks you through flashing the OmiGlass firmware to your ESP32 S3 XIAO board using PlatformIO.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+<Steps>
+  <Step title="Install PlatformIO">
+    PlatformIO is required to build and flash the firmware. Install it using one of these methods:
+
+    **Using Homebrew (macOS/Linux):**
+    ```bash
+    brew install platformio
+    ```
+
+    **Using pip (All platforms):**
+    ```bash
+    pip install platformio
+    ```
+
+    **Verify installation:**
+    ```bash
+    platformio --version
+    ```
+  </Step>
+
+  <Step title="Install Required Libraries">
+    PlatformIO will automatically install the required libraries when you build the firmware. The dependencies include:
+
+    - **NimBLE-Arduino** (v1.4.1+) - Bluetooth Low Energy stack
+    - **esp32-camera** (v2.0.0+) - Camera driver for ESP32
+    - **arduino-libopus** - Audio codec for voice encoding
+
+    These are automatically downloaded from the `platformio.ini` configuration.
+  </Step>
+
+  <Step title="Connect Your Device">
+    Connect your ESP32 S3 XIAO board to your computer via USB-C cable.
+
+    <Note>
+    Use a quality USB-C cable that supports data transfer, not just charging.
+    </Note>
+  </Step>
+</Steps>
+
+---
+
+## Flash the Firmware
+
+Navigate to the firmware directory and flash using PlatformIO:
+
+<Steps>
+  <Step title="Navigate to Firmware Directory">
+    ```bash
+    cd omiGlass/firmware
+    ```
+  </Step>
+
+  <Step title="Build and Upload Firmware">
+    Try the standard build environment first:
+
+    ```bash
+    platformio run -e seeed_xiao_esp32s3 --target upload
+    ```
+
+    **If you experience connection issues**, use the slower upload environment:
+
+    ```bash
+    platformio run -e seeed_xiao_esp32s3_slow --target upload
+    ```
+
+    <Info>
+    The `seeed_xiao_esp32s3_slow` environment uses a slower upload speed (57600 baud) which is more reliable for some USB connections.
+    </Info>
+  </Step>
+
+  <Step title="Wait for Upload">
+    PlatformIO will:
+    1. Install dependencies (first time only)
+    2. Compile the firmware
+    3. Upload to your device
+    4. Reset the device automatically
+
+    The process takes 1-3 minutes depending on your connection.
+  </Step>
+</Steps>
+
+---
+
+## Build Environments
+
+The firmware supports two build environments:
+
+| Environment | Upload Speed | Debug Level | Use Case |
+|------------|--------------|-------------|----------|
+| `seeed_xiao_esp32s3` | 115200 baud | Low (Level 1) | **Recommended** - Standard build for most users |
+| `seeed_xiao_esp32s3_slow` | 57600 baud | High (Level 5) | Connection issues or detailed debugging |
+
+<Accordion title="Advanced: Build Without Uploading">
+  If you only want to compile the firmware without uploading:
+
+  ```bash
+  platformio run -e seeed_xiao_esp32s3
+  ```
+
+  The compiled binary will be in `.pio/build/seeed_xiao_esp32s3/firmware.bin`
+</Accordion>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Upload Failed - Device Not Found">
+    **Problem:** PlatformIO cannot find your ESP32 device.
+
+    **Solutions:**
+    - Check USB cable is properly connected
+    - Try a different USB port (connect directly, not through a hub)
+    - On macOS: Check System Settings > Privacy & Security for any blocked devices
+    - Verify device appears with `ls /dev/tty.*` or `ls /dev/cu.*`
+  </Accordion>
+
+  <Accordion title="Permission Denied Error">
+    **Problem:** Cannot access the serial port.
+
+    **Solutions (macOS/Linux):**
+    ```bash
+    sudo chmod 666 /dev/tty.usbserial-*
+    ```
+
+    **Or add your user to the dialout group (Linux):**
+    ```bash
+    sudo usermod -a -G dialout $USER
+    ```
+    Then log out and back in.
+  </Accordion>
+
+  <Accordion title="Compilation Errors">
+    **Problem:** Build fails with compilation errors.
+
+    **Solutions:**
+    - Clean the build and try again:
+      ```bash
+      platformio run --target clean
+      platformio run -e seeed_xiao_esp32s3 --target upload
+      ```
+    - Update PlatformIO:
+      ```bash
+      pip install -U platformio
+      ```
+    - Delete `.pio` folder and rebuild:
+      ```bash
+      rm -rf .pio
+      platformio run -e seeed_xiao_esp32s3 --target upload
+      ```
+  </Accordion>
+
+  <Accordion title="Upload Hangs or Times Out">
+    **Problem:** Upload process starts but never completes.
+
+    **Solutions:**
+    - Use the slower environment:
+      ```bash
+      platformio run -e seeed_xiao_esp32s3_slow --target upload
+      ```
+    - Try a different USB cable
+    - Restart your computer and device
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+After successfully flashing the firmware:
+
+<CardGroup cols={2}>
+  <Card title="Monitor Device" icon="terminal" href="/doc/hardware/omiglass/monitoring">
+    Learn how to monitor logs and test your device
+  </Card>
+  <Card title="Hardware Assembly" icon="screwdriver-wrench" href="/doc/hardware/omiGlass">
+    Complete hardware setup and assembly guide
+  </Card>
+</CardGroup>

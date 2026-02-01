@@ -1,0 +1,222 @@
+---
+description: "Common mistakes to avoid based on lessons learned from rejected PRs, issues, and user feedback"
+alwaysApply: true
+---
+
+# Common Mistakes to Avoid
+
+This rule encodes lessons learned from rejected PRs, closed issues, and user feedback to prevent common mistakes.
+
+## Critical Mistakes
+
+### 1. Using Deprecated Functions
+
+**Problem**: Using functions that have been deprecated or removed.
+
+**Examples from PR #3567**:
+- ❌ Used `postprocess_conversation()` which was deprecated
+- ❌ Assumed functions exist without checking current codebase state
+
+**How to avoid**:
+- Always search codebase for function usage before using it
+- Check for `deprecated`, `TODO`, `FIXME` comments near functions
+- Verify function exists and is current in the codebase
+- Read recent PRs to see if functions were changed/removed
+
+**Before using any function**:
+```python
+# ✅ GOOD: Verify function exists and check its implementation
+grep -r "function_name" backend/
+# Read the function definition
+# Check for deprecation warnings or comments
+```
+
+### 2. Not Understanding Architecture
+
+**Problem**: Implementing changes without understanding how the system actually works.
+
+**Examples**:
+- ❌ PR #3567: Didn't understand current audio storage flow
+- ❌ Assumed system state without verifying actual implementation
+- ❌ Modified code without understanding conversation processing pipeline
+
+**How to avoid**:
+- Read architecture documentation first:
+  - `docs/doc/developer/backend/backend_deepdive.mdx` - [Backend architecture](https://docs.omi.me/doc/developer/backend/backend_deepdive)
+  - `docs/INDEX.md` - [Complete documentation index](https://docs.omi.me/llms.txt)
+  - `ISSUE_TRIAGE_GUIDE.MD` - Omi layers and priorities
+- Study relevant code paths before implementing
+- Understand the data flow (Capture → Understand → Remember → Retrieve → Act)
+- Map your change to Omi layers (Capture/Understand/Memory/Intelligence/Retrieval/UX)
+- Search codebase for similar implementations to understand patterns
+
+**Before implementing**:
+1. Read relevant architecture docs
+2. Trace through existing code that does similar things
+3. Understand the full flow, not just the part you're changing
+4. Verify how the system actually works, don't assume
+
+### 3. Missing Context Upfront
+
+**Problem**: Not providing enough information in PR descriptions, requiring reviewers to ask questions.
+
+**Example from PR #3567 feedback**:
+> "before asking for my review, show me enough info so that if you were the reviewer, you wouldn't need to ask."
+
+**How to avoid**:
+- Include all relevant information in PR description upfront
+- Explain the "why", not just the "what"
+- Show how you verified it works (tests, benchmarks, manual testing)
+- Document assumptions and how you verified them
+- Link to related code and functions
+- Include benchmarks/tests if making performance claims
+
+**PR description should include**:
+- What changed and why
+- How you verified it works (end-to-end)
+- Related files and functions
+- Testing performed
+- Breaking changes (if any)
+
+### 4. Not Testing End-to-End
+
+**Problem**: Testing only individual pieces, not the full flow.
+
+**Examples**:
+- ❌ PR #3567: Didn't verify end-to-end flow, used deprecated function
+- ❌ Features that only work in specific conditions (app open, specific screen)
+
+**How to avoid**:
+- Test the complete flow from start to finish
+- Test in realistic conditions (app closed, background, different states)
+- Verify integration points work correctly
+- Test error cases and edge cases
+- Run actual end-to-end scenarios, not just unit tests
+
+**Verification checklist**:
+- [ ] Full flow works from start to finish
+- [ ] Works in all relevant states (app open/closed, background/foreground)
+- [ ] Integration points tested
+- [ ] Error handling tested
+- [ ] Edge cases covered
+
+### 5. Assuming System State
+
+**Problem**: Making assumptions about how the system works without verifying.
+
+**Examples**:
+- ❌ Assuming audio storage flow works a certain way
+- ❌ Assuming functions are called in a certain order
+- ❌ Assuming system state without checking actual implementation
+
+**How to avoid**:
+- Always verify actual implementation, don't assume
+- Read the code that handles the flow you're modifying
+- Check how similar features work
+- Test assumptions with actual code execution
+- Ask questions if unsure rather than assuming
+
+## Omi-Specific Mistakes
+
+### Memory-First Principle Violations
+
+**Problem**: Changes that break the core memory loop.
+
+**Memory loop**: Capture → Understand → Remember → Retrieve → Act
+
+**How to avoid**:
+- Prioritize memory reliability above all else
+- Understand which layer your change affects (Capture=5, Understand=4, Memory=4, Intelligence=3, Retrieval=3, UX=1)
+- Never break the memory capture or storage flow
+- Test that memories are still created and stored correctly
+
+### Import Hierarchy Violations
+
+**Problem**: Importing from higher-level modules in lower-level modules.
+
+**Correct hierarchy** (lowest to highest):
+1. `database/` - Data access
+2. `utils/` - Business logic
+3. `routers/` - API endpoints
+4. `main.py` - Application entry
+
+**How to avoid**:
+- Never import from `routers/` or `main.py` in `database/` or `utils/`
+- Never import from `main.py` in `routers/`
+- Follow the hierarchy: higher levels import from lower levels only
+
+### Not Respecting Language Settings
+
+**Problem**: Features that only work in English or don't respect user's language preference.
+
+**Examples from issues**:
+- #4394: "Click to talk only understands English" (should follow transcription language setting)
+- #4350: Wrong language summaries
+
+**How to avoid**:
+- Always check user's language preference
+- Test with multiple languages
+- Use language settings from user profile
+- Don't hardcode English-only behavior
+
+### Features Only Work When App is Open
+
+**Problem**: Features that require the app to be in foreground.
+
+**Examples from issues**:
+- #4355: "Click to talk to omi cv1 works only with open app and in chat screen"
+
+**How to avoid**:
+- Design features to work in background
+- Test with app closed/backgrounded
+- Use background services where appropriate
+- Don't assume app is always in foreground
+
+### Not Understanding Conversation Processing Flow
+
+**Problem**: Modifying conversation processing without understanding the full flow.
+
+**How to avoid**:
+- Read `utils/conversations/process_conversation.py`
+- Understand the flow: WebSocket → Transcription → Conversation creation → Processing → LLM extraction → Storage
+- Trace through existing conversation processing code
+- Test the full conversation lifecycle
+
+## Pattern Recognition
+
+### Red Flags
+
+Watch for these patterns that often lead to mistakes:
+
+1. **"I assume..."** - If you're assuming, verify instead
+2. **"This should work..."** - Test it, don't assume
+3. **"Similar to..."** - Verify the similarity, don't assume it's the same
+4. **"I think..."** - Find out for sure, don't guess
+
+### Questions to Ask Yourself
+
+Before implementing:
+- [ ] Do I understand how this part of the system actually works?
+- [ ] Have I verified the functions/APIs I'm using exist and are current?
+- [ ] Have I tested the full flow end-to-end?
+- [ ] Am I respecting the import hierarchy?
+- [ ] Does this work in all relevant states (background, different languages, etc.)?
+- [ ] Have I provided enough context for reviewers?
+
+## Related Rules
+
+- `.cursor/rules/pre-implementation-checklist.mdc` - Checklist before implementing
+- `.cursor/rules/verification.mdc` - Self-checking guidelines
+- `.cursor/rules/context-communication.mdc` - Communication best practices
+- `.cursor/rules/omi-specific-patterns.mdc` - Omi architecture patterns
+- `.cursor/rules/backend-architecture.mdc` - Backend architecture details
+
+## Related Cursor Resources
+
+### Skills
+- `.cursor/skills/self-improvement/SKILL.md` - Learn from PRs and issues
+- `.cursor/skills/omi-backend-patterns/SKILL.md` - Backend patterns
+
+### Commands
+- `/learn-from-pr` - Analyze a PR for lessons
+- `/code-review` - Review code before PR

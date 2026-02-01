@@ -12,6 +12,7 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   late Animation<Offset> _animation1;
   late Animation<Offset> _animation2;
   late Animation<Offset> _animation3;
+  late Animation<double> _scaleAnimation;
   late Animation<Color?> _colorAnimation;
 
   @override
@@ -35,6 +36,12 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
     _animation3 = Tween<Offset>(
       begin: const Offset(0, 0.15),
       end: const Offset(0, -0.15),
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+    // Optimized scale animation: subtle bounce (0.85-1.0) instead of full 0-1 range
+    _scaleAnimation = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _colorAnimation = ColorTween(
@@ -64,23 +71,27 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   }
 
   Widget _buildBubble(Animation<Offset> animation, double size) {
-    return SlideTransition(
-      position: animation,
-      child: AnimatedBuilder(
-        animation: _colorAnimation,
-        builder: (context, child) {
-          return ScaleTransition(
-            scale: _controller,
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: _colorAnimation.value,
-                shape: BoxShape.circle,
-              ),
-            ),
-          );
-        },
+    // Optimized animation: keeps scale effect with RepaintBoundary isolation
+    // Scale range reduced (0.85-1.0) for subtle bounce that's easy on battery
+    return RepaintBoundary(
+      child: SlideTransition(
+        position: animation,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: AnimatedBuilder(
+            animation: _colorAnimation,
+            builder: (context, child) {
+              return Container(
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  color: _colorAnimation.value,
+                  shape: BoxShape.circle,
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

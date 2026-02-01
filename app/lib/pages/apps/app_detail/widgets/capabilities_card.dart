@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 
 class CapabilitiesCard extends StatelessWidget {
   final List<AppCapability> capabilities;
@@ -80,7 +81,7 @@ class CapabilitiesCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      capability.id == 'memories' ? 'Summary' : capability.title,
+                      capability.getLocalizedTitle(context),
                       style: TextStyle(
                         color: color,
                         fontSize: 13,

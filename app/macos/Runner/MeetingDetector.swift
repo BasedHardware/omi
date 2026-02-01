@@ -114,14 +114,17 @@ class MeetingDetector: NSObject {
         logProcess?.standardError = errorPipe
 
         // Handle output data
+        // Note: readabilityHandler is called on a background queue (com.apple.NSFileHandle.fd_monitoring)
+        // We must dispatch to main thread because handleLogData accesses non-thread-safe properties
+        // and calls AppKit/Accessibility APIs that require main thread
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            guard let self = self else { return }
-
             let data = handle.availableData
             guard !data.isEmpty else { return }
 
             if let output = String(data: data, encoding: .utf8) {
-                self.handleLogData(output)
+                DispatchQueue.main.async { [weak self] in
+                    self?.handleLogData(output)
+                }
             }
         }
 
