@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -67,7 +67,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   }
 
   Widget _buildShimmerCategorySection() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(

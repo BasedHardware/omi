@@ -9,7 +9,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
@@ -1544,7 +1544,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     fit: BoxFit.contain,
                                     placeholder: (context, url) => SizedBox(
                                       width: 150,
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.grey[900]!,
                                         highlightColor: Colors.grey[800]!,
                                         child: Container(

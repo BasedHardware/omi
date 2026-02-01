@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
@@ -509,7 +509,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(

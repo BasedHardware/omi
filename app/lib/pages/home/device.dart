@@ -50,10 +50,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<DeviceProvider>().getDeviceInfo();
-    });
     super.initState();
+    // Register as a metrics listener immediately to avoid race condition
+    // where widget unmounts before async getDeviceInfo completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CaptureProvider>().addMetricsListener();
+      context.read<DeviceProvider>().getDeviceInfo();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Unregister as a metrics listener when widget is unmounted
+    context.read<CaptureProvider>().removeMetricsListener();
+    super.dispose();
   }
 
   IconData _getBatteryIcon(int batteryLevel) {

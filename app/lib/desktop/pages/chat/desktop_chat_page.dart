@@ -11,7 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -102,7 +102,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         _handlePaste();
         return KeyEventResult.handled;
       }
-      
+
       return KeyEventResult.ignored;
     });
 
@@ -970,7 +970,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                Shimmer.fromColors(
+                                ShimmerWithTimeout(
                                   baseColor: Colors.white,
                                   highlightColor: Colors.grey,
                                   child: Text(
@@ -1003,8 +1003,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       ],
     );
   }
-
-
 
   Widget _buildFloatingInputArea(
     MessageProvider provider,
@@ -1585,7 +1583,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               child: Row(
                 children: [
                   Builder(
-                    builder: (context) => OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
+                    builder: (context) =>
+                        OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
                   ),
                   const Spacer(),
                   OmiIconButton(
