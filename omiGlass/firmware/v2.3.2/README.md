@@ -18,6 +18,7 @@ This directory contains the firmware binary for OmiGlass version 2.3.2.
 ### Method 1: OTA Update via App
 1. Upload the .bin file as a GitHub release asset
 2. The app will automatically detect and offer the update
+3. Requirement: device must be on firmware v2.3.1 or newer
 
 ### Method 2: Direct Flash via PlatformIO
 ```bash
@@ -42,7 +43,7 @@ To create a GitHub release for OTA updates:
 ```markdown
 <!-- KEY_VALUE_START
 release_firmware_version:v2.3.2
-minimum_firmware_required:v2.3.0
+minimum_firmware_required:v2.3.1
 minimum_app_version:1.0.50
 minimum_app_version_code:200
 changelog:Firmware improvements from omiglass-firmware-improvements branch
