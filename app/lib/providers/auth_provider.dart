@@ -180,10 +180,20 @@ class AuthenticationProvider extends BaseProvider {
       return;
     }
 
-    await launchUrl(
-      uri,
-      mode: LaunchMode.inAppBrowserView,
-    );
+    try {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.inAppBrowserView,
+      );
+    } catch (e) {
+      Logger.debug('Failed to launch URL: $e');
+      // Fallback to external browser if in-app browser fails
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        Logger.debug('Failed to launch URL externally: $e');
+      }
+    }
   }
 
   Future<void> linkWithGoogle() async {
