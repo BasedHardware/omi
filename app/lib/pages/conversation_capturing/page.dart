@@ -192,11 +192,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.surface,
-              elevation: 0,
-              centerTitle: false,
-              toolbarHeight: 60,
+              backgroundColor: Theme.of(context).colorScheme.primary,
               title: Row(
+                mainAxisSize: MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -305,115 +303,73 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(
-                            Icons.arrow_back_rounded,
-                            size: 20,
-                            color: Colors.white70,
+                      // Process Now button
+                      GestureDetector(
+                        onTap: () => _stopConversation(provider),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFB800),
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const FaIcon(
+                                FontAwesomeIcons.stop,
+                                color: Colors.black,
+                                size: 16.0,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                context.l10n.processNow,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const Text(
-                        "Live Transcription",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                      // Mute button
+                      GestureDetector(
+                        onTap: () => _toggleMute(provider),
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.mic_off,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                  if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                    GestureDetector(
-                      onTap: () => _stopConversation(provider),
-                      child: Container(
-                        height: 36,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.stop_circle, color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'Stop',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            body: provider.segments.isEmpty && provider.photos.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.only(top: 50.0),
-                      child: Text("Waiting for transcript or photos..."),
-                    ),
                   )
-                : getTranscriptWidget(
-                    false,
-                    provider.segments,
-                    provider.photos,
-                    deviceProvider.connectedDevice,
-                    bottomMargin: 150,
-                    suggestions: provider.suggestionsBySegmentId,
-                    taggingSegmentIds: provider.taggingSegmentIds,
-                    onAcceptSuggestion: (suggestion) {
-                      provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
-                          suggestion.personName, [suggestion.segmentId]);
-                    },
-                    editSegment: (segmentId, speakerId) {
-                      final connectivityProvider =
-                          Provider.of<ConnectivityProvider>(context, listen: false);
-                      if (!connectivityProvider.isConnected) {
-                        ConnectivityProvider.showNoInternetDialog(context);
-                        return;
-                      }
-                      showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.black,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                          ),
-                          builder: (context) {
-                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                (s) => s.speakerId == speakerId,
-                                orElse: () => SpeakerLabelSuggestionEvent.empty());
-                            return NameSpeakerBottomSheet(
-                              speakerId: speakerId,
-                              segmentId: segmentId,
-                              segments: provider.segments,
-                              suggestion: suggestion,
-                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-                                await provider.assignSpeakerToConversation(
-                                    speakerId, personId, personName, segmentIds);
-                              },
-                            );
-                          });
-                    },
-                  ),
+                : null,
           ),
         );
       },

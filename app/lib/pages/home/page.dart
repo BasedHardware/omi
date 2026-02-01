@@ -54,20 +54,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/theme/brand_colors.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-
-import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
@@ -638,116 +624,61 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           }
 
                           return Stack(
-                              children: [
-                                // Bottom Navigation Bar
-                                Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        stops: [0.0, 0.30, 1.0],
-                                        colors: [
-                                          Colors.transparent,
-                                          Color.fromARGB(255, 15, 15, 15),
-                                          Color.fromARGB(255, 15, 15, 15),
+                            children: [
+                              BottomNavBar(
+                                onTabTap: (index, isRepeat) {
+                                  if (isRepeat) {
+                                    _scrollToTop(index);
+                                  } else {
+                                    home.setIndex(index);
+                                  }
+                                },
+                              ),
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  right: 20,
+                                  bottom: 100,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.mediumImpact();
+                                      MixpanelManager().bottomNavigationTabClicked('Chat');
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const ChatPage(isPivotBottom: false),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(32),
+                                        color: Colors.deepPurple,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            FontAwesomeIcons.solidComment,
+                                            size: 22,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            context.l10n.askOmi,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
                                   ),
                                 ),
-                                // Central Record Button - Only show when no OMI device is connected
-                                if (!isOmiDeviceConnected)
-                                  Positioned(
-                                    left: MediaQuery.of(context).size.width / 2 - 40,
-                                    bottom: 40, // Position it to protrude above the taller navbar (90px height)
-                                    child: Consumer<CaptureProvider>(
-                                      builder: (context, captureProvider, child) {
-                                        bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                        bool isInitializing =
-                                            captureProvider.recordingState == RecordingState.initialising;
-                                        return GestureDetector(
-                                          onTap: () async {
-                                            HapticFeedback.heavyImpact();
-                                            if (isInitializing) return;
-                                            await _handleRecordButtonPress(context, captureProvider);
-                                          },
-                                          child: Container(
-                                            width: 80,
-                                            height: 80,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isRecording ? Colors.red : const Color(0xFF3B82F6),
-                                              border: Border.all(
-                                                color: Colors.black,
-                                                width: 5,
-                                              ),
-                                            ),
-                                            child: isInitializing
-                                                ? const CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2,
-                                                  )
-                                                : Icon(
-                                                    isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                                                    color: Colors.white,
-                                                    size: 24,
-                                                  ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                // Floating GPT Button - Bottom Right (only on homepage)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 100, // Position above the bottom navigation bar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        MixpanelManager().bottomNavigationTabClicked('GPT');
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(32),
-                                          color: const Color(0xFF3b82f6),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.auto_awesome,
-                                              size: 22,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              context.l10n.askOmi,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
+                            ],
+                          );
                         },
                       ),
                       // Merge action bar - floats above bottom nav when in selection mode
@@ -803,7 +734,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: const Color(0x00000000),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,

@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -19,9 +18,9 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -69,8 +68,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
+      final isSelectionMode = provider.isSelectionModeActive;
+      final isSelected = provider.isConversationSelected(widget.conversation.id);
+      final isMerging = provider.isConversationMerging(widget.conversation.id);
+      final isEligible = provider.isConversationEligibleForMerge(widget.conversation.id);
+
       return GestureDetector(
         onTap: () async {
           // If in selection mode, toggle selection only if eligible
@@ -96,7 +99,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
             return;
           }
-
           // Calculate time difference
           int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
 
@@ -238,53 +240,48 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 ),
               ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16.0),
-              child: Dismissible(
-                key: UniqueKey(),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                confirmDismiss: (direction) async {
-                  HapticFeedback.mediumImpact();
-                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-                  if (!showDeleteConfirmation) return Future.value(true);
-                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                  if (connectivityProvider.isConnected) {
-                    return await showDialog(
-                      context: context,
-                      builder: (ctx) => getDialog(
-                        context,
-                        () => Navigator.of(context).pop(false),
-                        () => Navigator.of(context).pop(true),
-                        'Delete Conversation?',
-                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                        okButtonText: 'Confirm',
-                      ),
-                    );
-                  } else {
-                    return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
-                          singleButton: true, okButtonText: 'OK'),
-                      context: context,
-                    );
-                  }
-                },
-                onDismissed: (direction) async {
-                  var conversation = widget.conversation;
-                  var conversationIdx = widget.conversationIdx;
-                  MixpanelManager().conversationSwipedToDelete(conversation);
-                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                },
+            // Merging overlay covering the full card
+            if (isMerging)
+              Positioned.fill(
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
+                  padding: EdgeInsets.only(
+                      top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
+                  child: _buildMergingOverlay(),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildMobileLayout(BuildContext context) {
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Emoji + Title row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!widget.conversation.discarded)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF35343B),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                if (!widget.conversation.discarded) const SizedBox(width: 12),
+                Expanded(
                   child: Column(
-                    mainAxisSize: MainAxisSize.max,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
@@ -350,12 +347,26 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-          ),
+          ],
         ),
-      );
-    });
+        if (widget.conversation.isLocked) _buildLockedOverlay(),
+      ],
+    );
+  }
+
+  Widget _buildMergingOverlay() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: const BorderRadius.all(Radius.circular(24)),
+      ),
+      child: const MergingIndicator(),
+    );
   }
 
   Widget _buildConversationBody(BuildContext context) {
@@ -391,67 +402,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     }
 
-    final structured = widget.conversation.structured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title
         Text(
-          structured.title.decodeString,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            height: 1.3,
-            color: Colors.white,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
+          widget.conversation.structured.title.decodeString,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
-        const SizedBox(height: 6),
-        // Overview/Description
-        Text(
-          structured.overview.decodeString,
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.3,
-            color: Colors.white.withOpacity(0.7),
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 12),
-        // Footer with time and duration as simple text
-        _buildFooter(),
-      ],
-    );
-  }
-
-  Widget _buildFooter() {
-    return Row(
-      children: [
-        // Time
-        Text(
-          dateTimeFormat(
-            'h:mm a',
-            widget.conversation.startedAt ?? widget.conversation.createdAt,
-          ),
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withOpacity(0.5),
-            height: 1.3,
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Duration
-        if (_getConversationDuration().isNotEmpty)
-          Text(
-            _getConversationDuration(),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withOpacity(0.5),
-              height: 1.3,
-            ),
-          ),
       ],
     );
   }
@@ -460,7 +417,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Positioned.fill(
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -482,7 +439,46 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   _getConversationHeader() {
-    final categoryColors = _getCategoryColors();
+    return Padding(
+      padding: const EdgeInsets.only(left: 4.0, right: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 🧠 Emoji + Tag
+          Flexible(
+            fit: FlexFit.tight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!widget.conversation.discarded)
+                  Text(
+                    widget.conversation.structured.getEmoji(),
+                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                  ),
+                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
+                  const SizedBox(width: 8),
+                if (widget.conversation.structured.category.isNotEmpty)
+                  Flexible(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: widget.conversation.getTagColor(),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Text(
+                        widget.conversation.getTag(),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium!
+                            .copyWith(color: widget.conversation.getTagTextColor()),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
 
           const SizedBox(width: 12),
 
@@ -531,174 +527,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     ],
                   ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _getCategoryIcon(),
-                size: 14,
-                color: categoryColors['color'],
-              ),
-              const SizedBox(width: 5),
-              Text(
-                widget.conversation.getTag(),
-                style: TextStyle(
-                  color: categoryColors['color'],
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Completion icon
-        if (widget.conversation.status == ConversationStatus.completed)
-          const Icon(
-            Icons.check_circle,
-            size: 10,
-            color: Color(0xFF34d399),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
-  Map<String, Color> _getCategoryColors() {
-    String category = widget.conversation.structured.category.toLowerCase();
-
-    // Dark mode colors matching the reference
-    if (category.contains('work') || category.contains('business') || category.contains('meeting') || category.contains('project')) {
-      return {'color': const Color(0xFF60a5fa), 'bgColor': const Color(0xFF1e3a5f)};
-    } else if (category.contains('personal') || category.contains('family')) {
-      return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
-    } else if (category.contains('health') || category.contains('fitness')) {
-      return {'color': const Color(0xFF34d399), 'bgColor': const Color(0xFF064e3b)};
-    } else if (category.contains('finance') || category.contains('shopping')) {
-      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
-    } else if (category.contains('entertainment') || category.contains('music') || category.contains('sports')) {
-      return {'color': const Color(0xFFf472b6), 'bgColor': const Color(0xFF4a044e)};
-    } else if (category.contains('technology') || category.contains('education')) {
-      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
-    } else if (category.contains('food') || category.contains('restaurant')) {
-      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
-    } else if (category.contains('travel')) {
-      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
-    } else {
-      // Default purple for "Personal"
-      return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
-    }
-  }
-
-  IconData _getCategoryIcon() {
-    // Map category names to icons (comprehensive mapping)
-    String category = widget.conversation.structured.category.toLowerCase();
-
-    // Work & Business
-    if (category.contains('work') || category.contains('business')) {
-      return Icons.business_center_outlined;
-    } else if (category.contains('meeting') || category.contains('conference')) {
-      return Icons.calendar_today_outlined;
-    } else if (category.contains('project')) {
-      return Icons.folder_outlined;
-    }
-
-    // Personal & Family
-    else if (category.contains('personal') || category.contains('life')) {
-      return Icons.person_outline;
-    } else if (category.contains('family')) {
-      return Icons.people_outline;
-    }
-
-    // Health & Wellness
-    else if (category.contains('health') || category.contains('medical')) {
-      return Icons.favorite_outline;
-    } else if (category.contains('fitness') || category.contains('exercise') || category.contains('workout')) {
-      return Icons.fitness_center_outlined;
-    }
-
-    // Finance & Shopping
-    else if (category.contains('finance') || category.contains('money') || category.contains('banking')) {
-      return Icons.attach_money;
-    } else if (category.contains('shopping') || category.contains('purchase')) {
-      return Icons.shopping_bag_outlined;
-    }
-
-    // Entertainment & Leisure
-    else if (category.contains('entertainment') || category.contains('fun') || category.contains('movie')) {
-      return Icons.movie_outlined;
-    } else if (category.contains('music')) {
-      return Icons.music_note_outlined;
-    } else if (category.contains('sports') || category.contains('game')) {
-      return Icons.sports_outlined;
-    }
-
-    // Education & Technology
-    else if (category.contains('education') || category.contains('learning') || category.contains('school')) {
-      return Icons.school_outlined;
-    } else if (category.contains('technology') || category.contains('tech') || category.contains('coding')) {
-      return Icons.computer_outlined;
-    }
-
-    // Travel & Food
-    else if (category.contains('travel') || category.contains('trip') || category.contains('vacation')) {
-      return Icons.flight_outlined;
-    } else if (category.contains('food') || category.contains('restaurant') || category.contains('dining')) {
-      return Icons.restaurant_outlined;
-    }
-
-    // Home & Other
-    else if (category.contains('home') || category.contains('house')) {
-      return Icons.home_outlined;
-    } else if (category.contains('task') || category.contains('todo')) {
-      return Icons.check_box_outlined;
-    } else if (category.contains('idea') || category.contains('brainstorm')) {
-      return Icons.lightbulb_outline;
-    } else if (category.contains('note')) {
-      return Icons.note_outlined;
-    } else if (category.contains('event')) {
-      return Icons.event_outlined;
-    } else if (category.contains('social') || category.contains('friends')) {
-      return Icons.people_outline;
-    } else if (category.contains('creative') || category.contains('art')) {
-      return Icons.palette_outlined;
-    } else if (category.contains('car') || category.contains('vehicle') || category.contains('transport')) {
-      return Icons.directions_car_outlined;
-    } else if (category.contains('pet') || category.contains('animal')) {
-      return Icons.pets_outlined;
-    } else if (category.contains('book') || category.contains('reading')) {
-      return Icons.menu_book_outlined;
-    } else if (category.contains('photo') || category.contains('camera')) {
-      return Icons.photo_camera_outlined;
-    } else {
-      return Icons.chat_bubble_outline; // Default icon
-    }
-  }
-
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
     return secondsToCompactDuration(durationSeconds, context);
   }
+}
 
-  String _getTimeAgo() {
-    final now = DateTime.now();
-    final conversationTime = widget.conversation.startedAt ?? widget.conversation.createdAt;
-    final difference = now.difference(conversationTime);
+class ConversationNewStatusIndicator extends StatefulWidget {
+  final String text;
 
-    if (difference.inDays > 7) {
-      final weeks = (difference.inDays / 7).floor();
-      return '${weeks}w ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
   const ConversationNewStatusIndicator({super.key, required this.text});
 
   @override

@@ -56,31 +56,6 @@ import 'package:omi/backend/schema/message_event.dart'
         TranslationEvent,
         PhotoProcessingEvent,
         PhotoDescribedEvent,
-        FreemiumThresholdReachedEvent;
-import 'package:omi/backend/schema/person.dart';
-import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/providers/calendar_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
-import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/models/custom_stt_config.dart';
-import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_service.dart';
-import 'package:omi/services/wals.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/image/image_utils.dart';
-import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
 

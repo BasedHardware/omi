@@ -62,6 +62,91 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
 cd app && flutter gen-l10n
 ```
 
+### UI Consistency
+
+Use the `/ui-review` skill to check screens for UI inconsistencies. Always follow these guidelines:
+
+#### Design System Files
+- **Theme**: `app/lib/theme/app_theme.dart` - Colors, typography
+- **Brand Colors**: `app/lib/theme/brand_colors.dart` - White-label colors
+- **UI Guidelines**: `app/lib/utils/ui_guidelines.dart` - Spacing, radius constants
+- **Documentation**: `app/lib/theme/README.md` - Full usage guide
+
+#### Apple HIG Compliance (iOS)
+
+| Standard | Value | Requirement |
+|----------|-------|-------------|
+| Touch Target | 44×44pt | Minimum for all interactive elements |
+| Navigation Bar | 44pt | Standard header height |
+| Tab Bar | 49pt | Content area (+ safe area) |
+| Home Indicator | 34pt | Bottom safe area on notched devices |
+
+```dart
+// Touch targets - ALWAYS 44×44pt minimum
+Container(
+  width: 44,  // Not 36!
+  height: 44,
+  child: IconButton(...),
+)
+
+// Safe areas - use MediaQuery, not hardcoded values
+Positioned(
+  bottom: MediaQuery.of(context).padding.bottom + 8,  // Not bottom: 40
+  child: ...,
+)
+```
+
+#### Spacing Constants (use AppStyles)
+
+| Constant | Value | Usage |
+|----------|-------|-------|
+| `AppStyles.spacingXS` | 4pt | Tiny gaps |
+| `AppStyles.spacingS` | 8pt | Small spacing |
+| `AppStyles.spacingM` | 12pt | Medium spacing |
+| `AppStyles.spacingL` | 16pt | Standard padding |
+| `AppStyles.spacingXL` | 24pt | Section spacing |
+| `AppStyles.spacingXXL` | 32pt | Large sections |
+
+```dart
+// GOOD
+padding: EdgeInsets.all(AppStyles.spacingL)
+SizedBox(height: AppStyles.spacingM)
+
+// BAD - hardcoded values
+padding: EdgeInsets.all(16)
+SizedBox(height: 12)
+```
+
+#### Border Radius Constants
+
+| Constant | Value | Usage |
+|----------|-------|-------|
+| `AppStyles.radiusSmall` | 6pt | Small elements |
+| `AppStyles.radiusMedium` | 8pt | Buttons, inputs |
+| `AppStyles.radiusLarge` | 12pt | Cards |
+| `AppStyles.radiusCircular` | 100pt | Pills, chips |
+
+```dart
+// GOOD
+BorderRadius.circular(AppStyles.radiusLarge)
+
+// BAD
+BorderRadius.circular(20)  // Non-standard value
+```
+
+#### Colors - Use Theme System
+
+```dart
+// GOOD - Use theme colors
+color: context.primaryColor              // Brand color
+color: AppColors.backgroundSecondary     // #1A1A1A
+color: AppColors.textPrimary             // White
+
+// BAD - Hardcoded colors
+color: Color(0xFF8B5CF6)
+color: Colors.grey[800]
+```
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:

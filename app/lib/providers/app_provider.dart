@@ -419,32 +419,8 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Get enabled app IDs from dedicated storage (more reliable than full app cache)
-      var enabledAppIds = SharedPreferencesUtil().enabledAppIds;
-
-      // Migration: if enabledAppIds is empty but appsList has enabled apps, migrate them
-      if (enabledAppIds.isEmpty) {
-        final cachedApps = SharedPreferencesUtil().appsList;
-        final migratedIds = cachedApps.where((a) => a.enabled).map((a) => a.id).toSet();
-        if (migratedIds.isNotEmpty) {
-          SharedPreferencesUtil().enabledAppIds = migratedIds;
-          enabledAppIds = migratedIds;
-          debugPrint('Migrated ${migratedIds.length} enabled app IDs to new storage');
-        }
-      }
-
       // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
-
-      // Merge enabled state from local cache into grouped apps
-      for (final g in groups) {
-        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
-        for (final app in data) {
-          if (enabledAppIds.contains(app.id)) {
-            app.enabled = true;
-          }
-        }
-      }
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -603,16 +579,6 @@ class AppProvider extends BaseProvider {
       Logger.debug('Refreshing apps after installation/change...');
       // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
-
-      // Merge enabled state from local cache into grouped apps
-      for (final g in groups) {
-        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
-        for (final app in data) {
-          if (enabledAppIds.contains(app.id)) {
-            app.enabled = true;
-          }
-        }
-      }
       groupedApps = groups;
 
       // Flatten for search/filter views

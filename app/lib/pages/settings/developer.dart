@@ -2,20 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:flutter/services.dart';
-import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
-import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
-import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
-import 'package:omi/providers/developer_mode_provider.dart';
-import 'package:omi/providers/mcp_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/backend/http/api/knowledge_graph_api.dart';
-import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -24,8 +10,6 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'widgets/appbar_with_banner.dart';
-import 'widgets/toggle_section_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
@@ -482,34 +466,27 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       fontWeight: FontWeight.w500,
                       fontSize: 16,
                     ),
-                  )
-                ],
-              ),
-              showAppBar: provider.savingSettingsLoading,
-              child: Container(
-                color: Colors.green,
-                child: const Center(
-                  child: Text(
-                    'Syncing Developer Settings...',
-                    style: TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
-              ),
+              ],
             ),
-            body: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ListView(
-                shrinkWrap: true,
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 24),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Debug logs'),
-                    subtitle: const Text('Helps diagnose issues. Auto-deletes after 3 days.'),
-                    value: SharedPreferencesUtil().devLogsToFileEnabled,
-                    onChanged: (v) async {
-                      await DebugLogManager.setEnabled(v);
-                      setState(() {});
+                  // Persona Section
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const PersonaProfilePage(),
+                          settings: const RouteSettings(
+                            arguments: 'from_settings',
+                          ),
+                        ),
+                      );
+                      MixpanelManager().pageOpened('Developer Persona Settings');
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -588,32 +565,40 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.upload_file, size: 16),
-                          label: const Text('Share Logs'),
-                          onPressed: () async {
-                            final files = await DebugLogManager.listLogFiles();
-                            if (files.isEmpty) {
-                              AppSnackbar.showSnackbarError('No log files found.');
-                              return;
-                            }
-                            if (files.length == 1) {
-                              final result = await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
-                              if (result.status == ShareResultStatus.success) {
-                                debugPrint('Log shared');
-                              }
-                              return;
-                            }
+                  const SizedBox(height: 12),
 
-                            if (!mounted) return;
-                            final selected = await showModalBottomSheet<File>(
-                              context: context,
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                  // Transcription Section
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const TranscriptionSettingsPage(),
+                        ),
+                      );
+                      if (mounted) {
+                        setState(() {});
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.microphone,
+                                color: Colors.grey.shade400,
+                                size: 16,
                               ),
                             ),
                           ),
@@ -844,7 +829,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 await DebugLogManager.setEnabled(v);
                                 setState(() {});
                               },
-                            );
+                              activeColor: const Color(0xFF22C55E),
+                            ),
+                          ],
+                        ),
 
                         // Action buttons when enabled
                         if (SharedPreferencesUtil().devLogsToFileEnabled) ...[
@@ -986,101 +974,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        tooltip: 'Clear log',
-                        onPressed: () async {
-                          await DebugLogManager.clear();
-                          AppSnackbar.showSnackbar('Debug log cleared');
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
+                        ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 24),
-                  //TODO: Model selection commented out because Soniox model is no longer being used
-                  // const SizedBox(height: 32),
-                  // const Padding(
-                  //   padding: EdgeInsets.symmetric(horizontal: 0),
-                  //   child: Align(
-                  //     alignment: Alignment.centerLeft,
-                  //     child: Text(
-                  //       'Transcription Model',
-                  //       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  //     ),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 14),
-                  // Center(
-                  //   child: Container(
-                  //     height: 60,
-                  //     decoration: BoxDecoration(
-                  //       border: Border.all(color: Colors.white),
-                  //       borderRadius: BorderRadius.circular(14),
-                  //     ),
-                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                  //     child: DropdownButton<String>(
-                  //       menuMaxHeight: 350,
-                  //       value: SharedPreferencesUtil().transcriptionModel,
-                  //       onChanged: (newValue) {
-                  //         if (newValue == null) return;
-                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-                  //         if (newValue == 'soniox') {
-                  //           showDialog(
-                  //             context: context,
-                  //             barrierDismissible: false,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.of(context).pop(),
-                  //               () => {},
-                  //               'Model Limitations',
-                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                  //                   'If you use a different configuration, it will fallback to deepgram.',
-                  //               singleButton: true,
-                  //             ),
-                  //           );
-                  //         }
-                  //       },
-                  //       dropdownColor: Colors.black,
-                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
-                  //       underline: Container(height: 0, color: Colors.white),
-                  //       isExpanded: true,
-                  //       itemHeight: 48,
-                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
-                  //         // 'speechmatics'
-                  //         return DropdownMenuItem<String>(
-                  //           value: value,
-                  //           child: Text(
-                  //             value == 'deepgram'
-                  //                 ? 'Deepgram (faster)'
-                  //                 : value == 'speechmatics'
-                  //                     ? 'Speechmatics (Experimental)'
-                  //                     : 'Soniox (better quality)',
-                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                  //           ),
-                  //         );
-                  //       }).toList(),
-                  //     ),
-                  //   ),
-                  // ),
-                  const SizedBox(height: 32.0),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Conversations'),
-                    subtitle: const Text('Export all your conversations to a JSON file.'),
-                    trailing: provider.loadingExportMemories
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 1,
-                            ),
-                          )
-                        : const Icon(Icons.upload),
+                  const SizedBox(height: 12),
+                  GestureDetector(
                     onTap: provider.loadingExportMemories
                         ? null
                         : () async {
@@ -1092,8 +991,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: const Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories =
-                                await getConversations(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/conversations.json');
@@ -1288,75 +1186,26 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    ],
+                        const Spacer(),
+                        _buildDocsButton('https://docs.omi.me/doc/developer/MCP', 'MCP'),
+                        const SizedBox(width: 8),
+                        _buildCreateKeyButton(() => showDialog(
+                              context: context,
+                              builder: (context) => const CreateMcpApiKeyDialog(),
+                            )),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'API Keys',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => showDialog(
-                          context: context,
-                          builder: (context) => const CreateMcpApiKeyDialog(),
-                        ),
-                        icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                        label: const Text('Create Key', style: TextStyle(color: Colors.white)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Consumer<McpProvider>(
-                    builder: (context, provider, child) {
-                      if (provider.isLoading && provider.keys.isEmpty) {
-                        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-                      }
-                      if (provider.error != null) {
-                        return Center(child: Text('Error: ${provider.error}'));
-                      }
-                      if (provider.keys.isEmpty) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('No API keys found. Create one to get started.'),
-                          ),
-                        );
-                      }
-                      return Column(
-                        children: provider.keys.map((key) => McpApiKeyListItem(apiKey: key)).toList(),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Claude Desktop Integration',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Add the following to your claude_desktop_config.json file. Remember to replace "your_api_key_here" with a valid key.',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy Config'),
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.grey.shade700,
-                      minimumSize: const Size(double.infinity, 40),
+                  _buildApiKeysList(context),
+
+                  const SizedBox(height: 24),
+
+                  // Claude Desktop Integration
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1764,25 +1613,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                          MixpanelManager().pageOpened('Advanced Mode Docs');
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Docs',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -1837,184 +1668,16 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           onChanged: provider.onShowGoalTrackerChanged,
                         ),
                       ],
-                      onSectionEnabledChanged: provider.onTranscriptsToggled),
-                  ToggleSectionWidget(
-                      isSectionEnabled: provider.audioBytesToggled,
-                      sectionTitle: 'Realtime Audio Bytes',
-                      sectionDescription: 'Triggers when audio bytes are received.',
-                      options: [
-                        TextField(
-                          controller: provider.webhookAudioBytes,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          decoration: _getTextFieldDecoration('Endpoint URL'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        TextField(
-                          controller: provider.webhookAudioBytesDelay,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.number,
-                          decoration: _getTextFieldDecoration('Every x seconds'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      onSectionEnabledChanged: provider.onAudioBytesToggled),
-                  ToggleSectionWidget(
-                    isSectionEnabled: provider.daySummaryToggled,
-                    sectionTitle: 'Day Summary',
-                    sectionDescription: 'Triggers when day summary is generated.',
-                    options: [
-                      TextField(
-                        controller: provider.webhookDaySummary,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('Endpoint URL'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    onSectionEnabledChanged: provider.onDaySummaryToggled,
+                    ),
                   ),
 
-                  // const Text(
-                  //   'Websocket Real-time audio bytes:',
-                  //   style: TextStyle(color: Colors.white, fontSize: 16),
-                  // ),
-                  // TextField(
-                  //   controller: provider.webhookAudioBytes,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enabled: true,
-                  //   enableSuggestions: false,
-                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Try the latest experimental features from Omi Team.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Transcription service diagnostic status',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Enable detailed diagnostic messages from the transcription service',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    value: provider.transcriptionDiagnosticEnabled,
-                    onChanged: provider.onTranscriptionDiagnosticChanged,
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Auto-create and tag new speakers',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    subtitle: const Text(
-                      'Automatically create a new person when a name is detected in the transcript.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    value: provider.autoCreateSpeakersEnabled,
-                    onChanged: provider.onAutoCreateSpeakersChanged,
-                  ),
-                  const SizedBox(height: 16.0),
-                  const SizedBox(height: 36),
-                  const Text(
-                    'Pilot Features',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'These features are tests and no support is guaranteed.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Suggest follow up question',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    value: provider.followUpQuestionEnabled,
-                    onChanged: provider.onFollowUpQuestionChanged,
-                  ),
+                  const SizedBox(height: 48),
                 ],
               ),
             ),
           );
         },
       ),
-    );
-  }
-
-  Widget _buildExperimentalItem({
-    required String title,
-    required String description,
-    required IconData icon,
-    required bool value,
-    required Function(bool?) onChanged,
-  }) {
-    return CheckboxListTile(
-      contentPadding: const EdgeInsets.all(0),
-      title: Row(
-        children: [
-          FaIcon(icon, size: 16, color: Colors.white70),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-          ),
-        ],
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(left: 28),
-        child: Text(
-          description,
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
-        ),
-      ),
-      value: value,
-      onChanged: onChanged,
-    );
-  }
-
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
-    return InputDecoration(
-      labelText: label,
-      enabled: true && canBeDisabled,
-      hintText: hintText,
-      // labelText: hintText,
-      labelStyle: const TextStyle(
-        fontSize: 16,
-        color: Colors.grey,
-        decoration: TextDecoration.underline,
-      ),
-      // bottom border
-      enabledBorder: InputBorder.none,
-      focusedBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.grey),
-      ),
-      suffixIcon: suffixIcon,
     );
   }
 }
