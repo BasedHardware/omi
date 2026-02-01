@@ -126,8 +126,12 @@ Future onStart(ServiceInstance service) async {
   });
 
   service.on('stop').listen((event) async {
-    if (recorder?.status != RecorderServiceStatus.stop) {
-      recorder?.stop();
+    try {
+      if (recorder?.status != RecorderServiceStatus.stop) {
+        recorder?.stop();
+      }
+    } catch (e) {
+      Logger.debug('Error stopping recorder during service stop: $e');
     }
     service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
     service.stopSelf();
@@ -141,8 +145,12 @@ Future onStart(ServiceInstance service) async {
   Timer.periodic(const Duration(seconds: 5), (timer) async {
     if (pongAt.isBefore(DateTime.now().subtract(const Duration(seconds: 15)))) {
       // retire
-      if (recorder?.status != RecorderServiceStatus.stop) {
-        recorder?.stop();
+      try {
+        if (recorder?.status != RecorderServiceStatus.stop) {
+          recorder?.stop();
+        }
+      } catch (e) {
+        Logger.debug('Error stopping recorder during watchdog retire: $e');
       }
       service.invoke("recorder.ui.stateUpdate", {"state": 'stopped'});
       service.stopSelf();
