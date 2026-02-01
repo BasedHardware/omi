@@ -175,6 +175,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
 
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        Logger.debug("SDCard: Failed to establish connection for device info");
+        return wals;
+      }
       var pd = await _device!.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
