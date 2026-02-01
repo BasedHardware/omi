@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
@@ -37,14 +38,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kAuthPage = 0;
   static const int kNamePage = 1;
   static const int kPrimaryLanguagePage = 2;
-  static const int kPermissionsPage = 3;
-  static const int kUserReviewPage = 4; // "Loving Omi?" screen
-  static const int kWelcomePage = 5;
-  static const int kFindDevicesPage = 6;
-  static const int kSpeechProfilePage = 7; // Speech profile with questions (requires device)
+  static const int kFoundOmiPage = 3;
+  static const int kPermissionsPage = 4;
+  static const int kUserReviewPage = 5; // "Loving Omi?" screen
+  static const int kWelcomePage = 6;
+  static const int kFindDevicesPage = 7;
+  static const int kSpeechProfilePage = 8; // Speech profile with questions (requires device)
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -57,7 +59,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void initState() {
     _speechProfileProvider = SpeechProfileProvider();
     _controller = TabController(
-        length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
+        length: 9, vsync: this); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -132,6 +134,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kPrimaryLanguagePage:
         newImage = Assets.images.onboardingBg4.path;
         break;
+      case kFoundOmiPage:
+        newImage = Assets.images.onboardingBg1.path;
+        break;
       case kPermissionsPage:
         newImage = Assets.images.onboardingBg3.path;
         break;
@@ -176,6 +181,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return Assets.images.onboardingBg1.path;
       case kPrimaryLanguagePage:
         return Assets.images.onboardingBg4.path;
+      case kFoundOmiPage:
+        return Assets.images.onboardingBg1.path;
       case kPermissionsPage:
         return Assets.images.onboardingBg3.path;
       case kUserReviewPage:
@@ -212,8 +219,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         MixpanelManager().onboardingStepCompleted('Name');
       }),
       PrimaryLanguageWidget(goNext: () {
-        _goNext(); // Go to Permissions page
+        _goNext(); // Go to Found Omi page
         MixpanelManager().onboardingStepCompleted('Primary Language');
+      }),
+      FoundOmiWidget(goNext: () {
+        _goNext(); // Go to Permissions page
+        MixpanelManager().onboardingStepCompleted('Acquisition Source');
       }),
       PermissionsWidget(
         goNext: () {
@@ -284,12 +295,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               )
             : _controller!.index == kNamePage ||
                     _controller!.index == kPrimaryLanguagePage ||
+                    _controller!.index == kFoundOmiPage ||
                     _controller!.index == kPermissionsPage ||
                     _controller!.index == kUserReviewPage ||
                     _controller!.index == kWelcomePage
                 ? Stack(
                     children: [
-                      // Animated background image for name, language, permissions, and user review pages (not welcome page)
+                      // Animated background image (skip for welcome page)
                       if (_controller!.index != kWelcomePage)
                         FadeTransition(
                           opacity: _backgroundFadeAnimation,
@@ -317,9 +329,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
-                            7,
+                            8,
                             (index) {
-                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
                               return Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                 width: pageIndex == _controller!.index ? 12.0 : 8.0,
@@ -445,9 +457,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: List.generate(
-                                6,
+                                7,
                                 (index) {
-                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
+                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
                                   return Container(
                                     margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                     width: pageIndex == _controller!.index ? 12.0 : 8.0,
