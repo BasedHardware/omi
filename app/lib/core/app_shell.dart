@@ -294,30 +294,34 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
-        try {
-          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
-        } catch (e) {
-          Logger.debug('Failed to login to Intercom: $e');
-        }
+      try {
+        if (context.read<AuthenticationProvider>().isSignedIn()) {
+          context.read<HomeProvider>().setupHasSpeakerProfile();
+          context.read<HomeProvider>().setupUserPrimaryLanguage();
+          context.read<UserProvider>().initialize();
+          context.read<PeopleProvider>().initialize();
+          try {
+            await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
+          } catch (e) {
+            Logger.debug('Failed to login to Intercom: $e');
+          }
 
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-        context.read<UsageProvider>().fetchSubscription();
-        context.read<TaskIntegrationProvider>().loadFromBackend();
+          context.read<MessageProvider>().setMessagesFromCache();
+          context.read<AppProvider>().setAppsFromCache();
+          context.read<MessageProvider>().refreshMessages();
+          context.read<UsageProvider>().fetchSubscription();
+          context.read<TaskIntegrationProvider>().loadFromBackend();
 
-        NotificationService.instance.saveNotificationToken();
-      } else {
-        if (!PlatformManager.instance.isAnalyticsSupported) {
-          await PlatformManager.instance.intercom.loginUnidentifiedUser();
+          NotificationService.instance.saveNotificationToken();
+        } else {
+          if (!PlatformManager.instance.isAnalyticsSupported) {
+            await PlatformManager.instance.intercom.loginUnidentifiedUser();
+          }
         }
+        PlatformManager.instance.intercom.setUserAttributes();
+      } catch (e) {
+        Logger.debug('AppShell initState postFrameCallback error: $e');
       }
-      PlatformManager.instance.intercom.setUserAttributes();
     });
     super.initState();
   }
