@@ -30,6 +30,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
+import 'chart_message_widget.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -464,6 +465,25 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     super.dispose();
   }
 
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
@@ -567,6 +587,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                   },
                 ),
               ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -628,6 +655,25 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   void dispose() {
     _dotsTimer?.cancel();
     super.dispose();
+  }
+
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -739,6 +785,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             setMessageNps: widget.setMessageNps,
             currentNps: widget.message.rating,
           ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
