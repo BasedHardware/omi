@@ -590,6 +590,43 @@ Future<String?> generateDailySummary({String? date}) async {
   }
 }
 
+// Onboarding State
+
+Future<Map<String, dynamic>?> getUserOnboardingState() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  Logger.debug('getUserOnboardingState response: ${response.body}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
+Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource}) async {
+  Map<String, dynamic> body = {};
+  if (completed != null) {
+    body['completed'] = completed;
+  }
+  if (acquisitionSource != null) {
+    body['acquisition_source'] = acquisitionSource;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  Logger.debug('updateUserOnboardingState response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 // Mentor Notification Settings
 
 class MentorNotificationSettings {
