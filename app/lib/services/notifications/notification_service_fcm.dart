@@ -93,17 +93,21 @@ class _FCMNotificationService implements NotificationInterface {
     if (!allowed) {
       return;
     }
-    _awesomeNotifications.createNotification(
-      content: NotificationContent(
-        id: id,
-        channelKey: channel.channelKey!,
-        actionType: ActionType.Default,
-        title: title,
-        body: body,
-        payload: payload,
-        notificationLayout: layout,
-      ),
-    );
+    try {
+      _awesomeNotifications.createNotification(
+        content: NotificationContent(
+          id: id,
+          channelKey: channel.channelKey!,
+          actionType: ActionType.Default,
+          title: title,
+          body: body,
+          payload: payload,
+          notificationLayout: layout,
+        ),
+      );
+    } catch (e) {
+      Logger.debug('Failed to create notification: $e');
+    }
   }
 
   @override
