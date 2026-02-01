@@ -179,6 +179,8 @@ class MixpanelManager {
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
+  void onboardingUserAcquisitionSource(String source) => track('User Acquisition Source', properties: {'source': source});
+
   void settingsSaved({
     bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
