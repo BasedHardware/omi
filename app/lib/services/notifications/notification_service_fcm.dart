@@ -271,6 +271,7 @@ class _FCMNotificationService implements NotificationInterface {
       {required RemoteNotification noti,
       NotificationLayout layout = NotificationLayout.Default,
       Map<String, String?>? payload}) async {
+    if (noti.title == null || noti.body == null) return;
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }
