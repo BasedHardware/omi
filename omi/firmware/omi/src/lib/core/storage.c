@@ -57,6 +57,9 @@ static int sync_file_count = 0;
 static int current_sync_file_index = -1;  /* -1 = legacy mode, >=0 = new protocol */
 static uint8_t list_files_requested = 0;  /* Deferred to storage thread */
 static int8_t delete_file_index = -1;     /* -1 = no delete, >=0 = file index to delete */
+#ifdef CONFIG_OMI_ENABLE_WIFI
+static uint8_t wifi_sync_all_requested = 0; /* Auto sync all files via WiFi */
+#endif
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
                                      const struct bt_gatt_attr *attr,
@@ -174,7 +177,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 uint8_t transport_started = 0;
 #define SD_BLE_SIZE 440
 #define TCP_CHUNK_COUNT 10
-#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 4 * TCP_CHUNK_COUNT)  /* 4440 bytes */
+#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)  /* 4450 bytes: idx(1)+ts(4)+data(440) x 10 */
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];  /* Shared buffer for BLE and WiFi */
 static uint32_t offset = 0;
 static uint8_t stop_started = 0;
@@ -551,6 +554,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
                 result_buffer[0] = 5; // wait for next session
                 break;
             }
+            wifi_sync_all_requested = 1;  /* Will auto sync all files */
             k_work_submit(&wifi_start_work);
             result_buffer[0] = 0;
             break;
@@ -625,16 +629,18 @@ static void write_to_tcp()
 {
     uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * TCP_CHUNK_COUNT);
     
-    /* New protocol: build packets with timestamp prefix */
+    /* New protocol: build packets with file_index + timestamp prefix */
     if (current_sync_file_index >= 0) {
         uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
-        uint8_t ts_bytes[4];
-        ts_bytes[0] = (timestamp >> 24) & 0xFF;
-        ts_bytes[1] = (timestamp >> 16) & 0xFF;
-        ts_bytes[2] = (timestamp >> 8) & 0xFF;
-        ts_bytes[3] = timestamp & 0xFF;
+        uint8_t file_idx = (uint8_t)current_sync_file_index;
+        uint8_t hdr[5];  /* [file_index:1][timestamp:4] */
+        hdr[0] = file_idx;
+        hdr[1] = (timestamp >> 24) & 0xFF;
+        hdr[2] = (timestamp >> 16) & 0xFF;
+        hdr[3] = (timestamp >> 8) & 0xFF;
+        hdr[4] = timestamp & 0xFF;
         
-        /* Build packets in-place: [ts:4][data:440][ts:4][data:440]... */
+        /* Build packets in-place: [idx:1][ts:4][data:440]... */
         uint32_t data_offset = 0;
         uint32_t buf_offset = 0;
         uint32_t read_offset = current_read_offset;
@@ -642,9 +648,9 @@ static void write_to_tcp()
         while (data_offset < to_read) {
             uint32_t chunk_size = MIN(SD_BLE_SIZE, to_read - data_offset);
             
-            /* Add timestamp prefix */
-            memcpy(storage_buffer + buf_offset, ts_bytes, 4);
-            buf_offset += 4;
+            /* Add header: file_index + timestamp */
+            memcpy(storage_buffer + buf_offset, hdr, 5);
+            buf_offset += 5;
             
             /* Read audio data directly into buffer */
             int ret = read_audio_data(current_read_filename, storage_buffer + buf_offset, chunk_size, read_offset);
@@ -737,6 +743,48 @@ void storage_write(void)
                 send_file_list_response(conn);
             }
         }
+#ifdef CONFIG_OMI_ENABLE_WIFI
+        /* WiFi sync all: setup first file when WiFi is ready */
+        if (wifi_sync_all_requested && is_wifi_on() && is_wifi_transport_ready()) {
+            wifi_sync_all_requested = 0;
+            LOG_INF("WiFi ready - starting sync all files");
+            
+            /* Refresh file list and start from first file */
+            refresh_file_list_cache();
+            if (sync_file_count > 0) {
+                /* Send header packet first: [0xFF][count:1][ts1:4][sz1:4]... */
+                int hdr_len = 0;
+                storage_buffer[hdr_len++] = 0xFF;  /* Magic byte for header */
+                storage_buffer[hdr_len++] = (uint8_t)sync_file_count;
+                
+                for (int i = 0; i < sync_file_count && hdr_len + 8 <= STORAGE_BUFFER_SIZE; i++) {
+                    uint32_t ts = (uint32_t)strtoul(sync_file_list[i], NULL, 16);
+                    uint32_t sz = sync_file_sizes[i];
+                    storage_buffer[hdr_len++] = (ts >> 24) & 0xFF;
+                    storage_buffer[hdr_len++] = (ts >> 16) & 0xFF;
+                    storage_buffer[hdr_len++] = (ts >> 8) & 0xFF;
+                    storage_buffer[hdr_len++] = ts & 0xFF;
+                    storage_buffer[hdr_len++] = (sz >> 24) & 0xFF;
+                    storage_buffer[hdr_len++] = (sz >> 16) & 0xFF;
+                    storage_buffer[hdr_len++] = (sz >> 8) & 0xFF;
+                    storage_buffer[hdr_len++] = sz & 0xFF;
+                }
+                
+                LOG_INF("Sending WiFi header: %d files, %d bytes", sync_file_count, hdr_len);
+                size_t sent = 0;
+                while (sent < hdr_len && is_wifi_on()) {
+                    int n = wifi_send_data(storage_buffer + sent, hdr_len - sent);
+                    if (n <= 0) { k_msleep(10); } else { sent += n; }
+                }
+                k_msleep(100);  /* Give app time to process header */
+                
+                current_sync_file_index = 0;
+                setup_file_transfer(0, 0);
+            } else {
+                LOG_INF("No files to sync");
+            }
+        }
+#endif
         if (delete_file_index >= 0) {
             int8_t idx = delete_file_index;
             delete_file_index = -1;
@@ -804,11 +852,29 @@ void storage_write(void)
                     stop_started = 0;
                 } else {
                     save_offset(current_read_filename, current_read_offset);
-                    LOG_PRINTK("done. attempting to download more files\n");
-                    uint8_t stop_result[1] = {100};
-
-                    int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
-                    k_msleep(10);
+                    LOG_INF("File done: %s", current_read_filename);
+                    
+#ifdef CONFIG_OMI_ENABLE_WIFI
+                    /* WiFi sync: auto continue to next file */
+                    if (is_wifi_on() && current_sync_file_index >= 0) {
+                        int next_idx = current_sync_file_index + 1;
+                        if (next_idx < sync_file_count) {
+                            LOG_INF("WiFi sync: moving to file %d/%d", next_idx + 1, sync_file_count);
+                            setup_file_transfer(next_idx, 0);
+                        } else {
+                            LOG_INF("WiFi sync complete! All %d files synced", sync_file_count);
+                            current_sync_file_index = -1;
+                            /* WiFi will auto shutdown after idle timeout */
+                        }
+                    } else
+#endif
+                    {
+                        /* BLE: notify completion */
+                        LOG_PRINTK("done. attempting to download more files\n");
+                        uint8_t stop_result[1] = {100};
+                        int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
+                        k_msleep(10);
+                    }
                 }
             }
         }
