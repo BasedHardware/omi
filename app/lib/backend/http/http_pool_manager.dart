@@ -73,6 +73,10 @@ class HttpPoolManager {
         lastError = e;
       } on http.ClientException catch (e) {
         lastError = e;
+      } on HandshakeException catch (e) {
+        lastError = e;
+      } on TlsException catch (e) {
+        lastError = e;
       } catch (e) {
         lastError = e;
         rethrow;
@@ -84,6 +88,12 @@ class HttpPoolManager {
     }
 
     if (lastResponse != null) return lastResponse;
+
+    // Return synthetic 503 for TLS/certificate errors instead of crashing
+    if (lastError is HandshakeException || lastError is TlsException) {
+      return http.Response('', 503, reasonPhrase: 'TLS error: $lastError');
+    }
+
     throw lastError ?? Exception('Request failed with unknown error');
   }
 
