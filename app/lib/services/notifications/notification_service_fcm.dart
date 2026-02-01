@@ -108,12 +108,17 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<bool> requestNotificationPermissions() async {
-    bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
-    if (!isAllowed) {
-      isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
-      register();
+    try {
+      bool isAllowed = await _awesomeNotifications.isNotificationAllowed();
+      if (!isAllowed) {
+        isAllowed = await _awesomeNotifications.requestPermissionToSendNotifications();
+        register();
+      }
+      return isAllowed;
+    } catch (e) {
+      Logger.debug('Failed to request notification permissions: $e');
+      return false;
     }
-    return isAllowed;
   }
 
   @override
