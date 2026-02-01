@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from database.announcements import (
@@ -110,7 +110,7 @@ async def get_pending_announcements_endpoint(
     trigger: str = Query(..., description="Trigger: 'app_launch', 'version_upgrade', or 'firmware_upgrade'"),
     firmware_version: Optional[str] = Query(None, description="Current firmware version (optional)"),
     device_model: Optional[str] = Query(None, description="Device model name (optional)"),
-    uid: str = auth_endpoints.Depends(auth_endpoints.get_current_user_uid),
+    uid: str = Depends(auth_endpoints.get_current_user_uid),
 ):
     """
     Get all pending announcements for a user.
@@ -160,7 +160,7 @@ class DismissAnnouncementRequest(BaseModel):
 async def dismiss_announcement_endpoint(
     announcement_id: str,
     data: DismissAnnouncementRequest,
-    uid: str = auth_endpoints.Depends(auth_endpoints.get_current_user_uid),
+    uid: str = Depends(auth_endpoints.get_current_user_uid),
 ):
     """
     Mark an announcement as dismissed for the current user.
