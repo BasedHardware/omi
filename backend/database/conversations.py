@@ -1011,7 +1011,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
-    conversations = [doc.to_dict() for doc in query.stream()]
+    conversations = [{**doc.to_dict(), 'id': doc.id} for doc in query.stream()]
     print('get_closest_conversation_to_timestamps len(conversations)', len(conversations))
     if not conversations:
         return None
