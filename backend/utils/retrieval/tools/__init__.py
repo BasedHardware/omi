@@ -63,6 +63,9 @@ from .file_tools import (
 from .notification_settings_tools import (
     manage_daily_summary_tool,
 )
+from .chart_tools import (
+    create_chart_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -95,4 +98,5 @@ __all__ = [
     'close_github_issue_tool',
     'search_files_tool',
     'manage_daily_summary_tool',
+    'create_chart_tool',
 ]
