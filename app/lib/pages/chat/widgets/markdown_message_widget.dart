@@ -33,7 +33,10 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
     ),
     onTapLink: (text, href, title) {
       if (href != null) {
-        launchUrl(Uri.parse(href));
+        final uri = Uri.tryParse(href);
+        if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+          launchUrl(uri);
+        }
       }
     },
   );
