@@ -11,6 +11,8 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.other import endpoints as auth
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -54,7 +56,10 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
         try:
             valid_memories.append(MemoryDB.model_validate(memory))
         except ValidationError as e:
-            logging.warning(f"Skipping invalid memory doc {memory.get('id', 'unknown')}: {e}")
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
+            )
             continue
     return valid_memories
 
