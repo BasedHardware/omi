@@ -6,6 +6,57 @@ part of 'announcement.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+Targeting _$TargetingFromJson(Map<String, dynamic> json) => Targeting(
+      appVersionMin: json['app_version_min'] as String?,
+      appVersionMax: json['app_version_max'] as String?,
+      firmwareVersionMin: json['firmware_version_min'] as String?,
+      firmwareVersionMax: json['firmware_version_max'] as String?,
+      deviceModels: (json['device_models'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
+      platforms: (json['platforms'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
+      trigger: $enumDecodeNullable(_$TriggerTypeEnumMap, json['trigger']) ??
+          TriggerType.versionUpgrade,
+    );
+
+Map<String, dynamic> _$TargetingToJson(Targeting instance) => <String, dynamic>{
+      'app_version_min': instance.appVersionMin,
+      'app_version_max': instance.appVersionMax,
+      'firmware_version_min': instance.firmwareVersionMin,
+      'firmware_version_max': instance.firmwareVersionMax,
+      'device_models': instance.deviceModels,
+      'platforms': instance.platforms,
+      'trigger': _$TriggerTypeEnumMap[instance.trigger]!,
+    };
+
+const _$TriggerTypeEnumMap = {
+  TriggerType.immediate: 'immediate',
+  TriggerType.versionUpgrade: 'version_upgrade',
+  TriggerType.firmwareUpgrade: 'firmware_upgrade',
+};
+
+Display _$DisplayFromJson(Map<String, dynamic> json) => Display(
+      priority: (json['priority'] as num?)?.toInt() ?? 0,
+      startAt: json['start_at'] == null
+          ? null
+          : DateTime.parse(json['start_at'] as String),
+      expiresAt: json['expires_at'] == null
+          ? null
+          : DateTime.parse(json['expires_at'] as String),
+      dismissible: json['dismissible'] as bool? ?? true,
+      showOnce: json['show_once'] as bool? ?? true,
+    );
+
+Map<String, dynamic> _$DisplayToJson(Display instance) => <String, dynamic>{
+      'priority': instance.priority,
+      'start_at': instance.startAt?.toIso8601String(),
+      'expires_at': instance.expiresAt?.toIso8601String(),
+      'dismissible': instance.dismissible,
+      'show_once': instance.showOnce,
+    };
+
 ChangelogItem _$ChangelogItemFromJson(Map<String, dynamic> json) =>
     ChangelogItem(
       title: json['title'] as String,
@@ -110,6 +161,12 @@ Announcement _$AnnouncementFromJson(Map<String, dynamic> json) => Announcement(
       expiresAt: json['expires_at'] == null
           ? null
           : DateTime.parse(json['expires_at'] as String),
+      targeting: json['targeting'] == null
+          ? null
+          : Targeting.fromJson(json['targeting'] as Map<String, dynamic>),
+      display: json['display'] == null
+          ? null
+          : Display.fromJson(json['display'] as Map<String, dynamic>),
       content: json['content'] as Map<String, dynamic>,
     );
 
@@ -123,6 +180,8 @@ Map<String, dynamic> _$AnnouncementToJson(Announcement instance) =>
       'firmware_version': instance.firmwareVersion,
       'device_models': instance.deviceModels,
       'expires_at': instance.expiresAt?.toIso8601String(),
+      'targeting': instance.targeting?.toJson(),
+      'display': instance.display?.toJson(),
       'content': instance.content,
     };
 
