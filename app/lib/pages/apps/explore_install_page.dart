@@ -22,7 +22,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'add_app.dart';
+import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -601,8 +601,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                         ? _buildShimmerCreateButton()
                         : GestureDetector(
                             onTap: () {
-                              MixpanelManager().pageOpened('Submit App');
-                              routeToPage(context, const AddAppPage());
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (context) => const CreateOptionsSheet(),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                ),
+                              );
                             },
                             child: Container(
                               padding: const EdgeInsets.all(20),
