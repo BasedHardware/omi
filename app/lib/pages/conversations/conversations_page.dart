@@ -42,7 +42,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final GlobalKey<DailyScoreWidgetState> _dailyScoreWidgetKey = GlobalKey<DailyScoreWidgetState>();
 
   void _refreshGoals() {
-    _goalsWidgetKey.currentState?.refresh();
     _dailyScoreWidgetKey.currentState?.reloadGoals();
   }
 
@@ -177,6 +176,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
           // Refresh goals widget
+          _goalsWidgetKey.currentState?.refresh();
           _refreshGoals();
           await Future.wait([
             convoProvider.getInitialConversations(),
