@@ -90,8 +90,17 @@ class HttpPoolManager {
   Future<http.StreamedResponse> sendStreaming(
     http.BaseRequest request, {
     Duration timeout = const Duration(minutes: 5),
-  }) {
-    return _client.send(request).timeout(timeout);
+  }) async {
+    try {
+      return await _client.send(request).timeout(timeout);
+    } on SocketException {
+      // Return an empty streamed response instead of crashing on closed socket
+      return http.StreamedResponse(
+        Stream.empty(),
+        503,
+        reasonPhrase: 'Socket closed',
+      );
+    }
   }
 
   void dispose() {
