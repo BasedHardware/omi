@@ -20,7 +20,7 @@ class HttpPoolManager {
       ..idleTimeout = const Duration(seconds: 15);
 
     _client = IOClient(httpClient);
-    _pool = Pool(10, timeout: const Duration(seconds: 60));
+    _pool = Pool(20, timeout: const Duration(seconds: 120));
   }
 
   Future<http.Response> send(
