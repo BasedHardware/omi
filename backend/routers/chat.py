@@ -120,6 +120,7 @@ def send_message(
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
+        chart_data = callback_data.get('chart_data')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -146,6 +147,7 @@ def send_message(
             app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
+            chart_data=chart_data,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
