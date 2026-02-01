@@ -206,6 +206,33 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 
 
 # *************************************************
+# ************* ONBOARDING STATE ******************
+# *************************************************
+
+
+@router.get('/v1/users/onboarding', tags=['v1'])
+def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's onboarding state (completed status, acquisition source, etc.)."""
+    state = get_user_onboarding_state(uid)
+    return {
+        'completed': state.get('completed', False),
+        'acquisition_source': state.get('acquisition_source', ''),
+    }
+
+
+@router.patch('/v1/users/onboarding', tags=['v1'])
+def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """Update the user's onboarding state."""
+    current_state = get_user_onboarding_state(uid)
+    if 'completed' in data:
+        current_state['completed'] = data['completed']
+    if 'acquisition_source' in data:
+        current_state['acquisition_source'] = data['acquisition_source']
+    set_user_onboarding_state(uid, current_state)
+    return {'status': 'ok'}
+
+
+# *************************************************
 # ************* PRIVATE CLOUD SYNC ****************
 # *************************************************
 
