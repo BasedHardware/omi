@@ -81,6 +81,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
     textFieldFocusNode.addListener(() {
       setState(() {});
+      if (textFieldFocusNode.hasFocus) {
+        // Scroll to bottom when keyboard opens, with delay to allow keyboard animation
+        _ensureAtBottom(delayMs: 300);
+      }
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -657,7 +661,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     ]);
                   }),
                 ),
-                const SizedBox(height: 0),
+                SizedBox(height: textFieldFocusNode.hasFocus ? 12 : 0),
                 if (!textFieldFocusNode.hasFocus)
                   BottomNavBar(
                     showCenterButton: false,
@@ -1145,7 +1149,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       ),
     );
   }
-
 
   Widget _buildDrawerAppItem({
     required Widget avatar,
