@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
 
+import 'package:omi/utils/logger.dart';
+
 class HttpPoolManager {
   static final HttpPoolManager instance = HttpPoolManager._();
 
@@ -73,6 +75,8 @@ class HttpPoolManager {
         lastError = e;
       } on http.ClientException catch (e) {
         lastError = e;
+      } on HandshakeException catch (e) {
+        lastError = e;
       } catch (e) {
         lastError = e;
         rethrow;
@@ -84,14 +88,29 @@ class HttpPoolManager {
     }
 
     if (lastResponse != null) return lastResponse;
+
+    // Return a synthetic error response for network errors instead of throwing,
+    // so callers that don't expect exceptions won't crash.
+    if (lastError is SocketException ||
+        lastError is TimeoutException ||
+        lastError is http.ClientException ||
+        lastError is HandshakeException) {
+      return http.Response('', 503, reasonPhrase: 'Network error: $lastError');
+    }
+
     throw lastError ?? Exception('Request failed with unknown error');
   }
 
   Future<http.StreamedResponse> sendStreaming(
     http.BaseRequest request, {
     Duration timeout = const Duration(minutes: 5),
-  }) {
-    return _client.send(request).timeout(timeout);
+  }) async {
+    try {
+      return await _client.send(request).timeout(timeout);
+    } on SocketException catch (e) {
+      Logger.debug('HttpPoolManager sendStreaming SocketException: $e');
+      rethrow;
+    }
   }
 
   void dispose() {
