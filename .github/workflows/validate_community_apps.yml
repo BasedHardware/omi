@@ -1,0 +1,150 @@
+name: Validate Community Apps
+
+on:
+  pull_request:
+    paths:
+      - 'community-apps/**'
+      - '.github/workflows/validate_community_apps.yml'
+
+jobs:
+  validate:
+    name: Validate App Submission
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema pyyaml requests pillow safety black flake8
+
+      - name: Detect changed apps
+        id: changes
+        run: |
+          # Get list of changed files in community-apps
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep "^community-apps/" || true)
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No community app changes detected"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo "changed=true" >> $GITHUB_OUTPUT
+
+          # Extract unique app directories (e.g., community-apps/author/app-name)
+          APP_DIRS=$(echo "$CHANGED_FILES" | grep -v "^community-apps/registry.json" | grep -v "^community-apps/app-schema.json" | grep -v "^community-apps/README.md" | grep -v "^community-apps/CONTRIBUTING.md" | grep -v "^community-apps/TEMPLATE" | cut -d'/' -f1-3 | sort -u || true)
+
+          echo "App directories:"
+          echo "$APP_DIRS"
+
+          # Convert to JSON array
+          APP_DIRS_JSON=$(echo "$APP_DIRS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "app_dirs=$APP_DIRS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Validate app structure
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py structure
+
+      - name: Validate app.json schema
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py schema
+
+      - name: Validate registry.json
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py registry
+
+      - name: Check code quality
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py quality
+
+      - name: Security scan
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py security
+
+      - name: Validate images
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          python scripts/validate_community_apps.py images
+
+      - name: Comment PR with results
+        if: always() && steps.changes.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## Community App Validation Results\n\n';
+
+            // Read validation results if they exist
+            try {
+              const results = fs.readFileSync('validation_results.json', 'utf8');
+              const data = JSON.parse(results);
+
+              comment += data.summary + '\n\n';
+
+              if (data.errors.length > 0) {
+                comment += '### ❌ Errors\n\n';
+                data.errors.forEach(error => {
+                  comment += `- ${error}\n`;
+                });
+                comment += '\n';
+              }
+
+              if (data.warnings.length > 0) {
+                comment += '### ⚠️ Warnings\n\n';
+                data.warnings.forEach(warning => {
+                  comment += `- ${warning}\n`;
+                });
+                comment += '\n';
+              }
+
+              if (data.passed.length > 0) {
+                comment += '### ✅ Passed Checks\n\n';
+                data.passed.forEach(check => {
+                  comment += `- ${check}\n`;
+                });
+                comment += '\n';
+              }
+
+              comment += '\n---\n\n';
+              comment += 'Please address any errors before your app can be approved. Warnings are suggestions for improvement.\n';
+
+            } catch (err) {
+              comment += '⚠️ Validation results not available. Please check the workflow logs.\n';
+            }
+
+            // Post comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Fail if errors found
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          if [ -f validation_results.json ]; then
+            ERRORS=$(jq -r '.errors | length' validation_results.json)
+            if [ "$ERRORS" -gt 0 ]; then
+              echo "❌ Validation failed with $ERRORS error(s)"
+              exit 1
+            fi
+          fi
+          echo "✅ All validations passed!"

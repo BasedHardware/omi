@@ -1,0 +1,6 @@
+# Add your Python dependencies here
+# Example:
+# fastapi>=0.109.0
+# pydantic>=2.5.0
+# requests>=2.31.0
+# anthropic>=0.25.0

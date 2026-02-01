@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BasedHardware/omi/community-apps/app-schema.json",
+  "title": "Omi Community App",
+  "description": "Schema for Omi community app metadata",
+  "type": "object",
+  "required": ["id", "name", "author", "email", "description", "category", "capabilities", "version"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+/[a-z0-9-]+$",
+      "description": "Unique app identifier in format: author-username/app-name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 50,
+      "description": "Display name of the app"
+    },
+    "author": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 50,
+      "description": "Author's name or organization"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Contact email for app support"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 200,
+      "description": "Clear description of app functionality"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "conversation-analysis",
+        "health-and-wellness",
+        "productivity",
+        "education",
+        "social",
+        "entertainment",
+        "business",
+        "utilities",
+        "developer-tools"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["memories", "chat", "persona", "external_integration", "proactive_notification", "tasks"]
+      }
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., 1.0.0)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["under-review", "approved", "rejected"],
+      "default": "under-review"
+    },
+    "private": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, only visible to testers"
+    },
+    "official": {
+      "type": "boolean",
+      "default": false,
+      "description": "Official Omi app (set by team only)"
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["memory_creation", "transcript_processed", "audio_bytes"]
+      }
+    },
+    "memory_prompt": {
+      "type": "string",
+      "description": "Prompt for processing conversations"
+    },
+    "chat_prompt": {
+      "type": "string",
+      "description": "Prompt for chat interactions"
+    },
+    "persona_prompt": {
+      "type": "string",
+      "description": "Prompt for persona personality"
+    },
+    "external_integration": {
+      "type": "object",
+      "properties": {
+        "triggers_on": {
+          "type": "string",
+          "enum": ["memory_creation", "transcript_processed", "audio_bytes"]
+        },
+        "webhook_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "setup_completed_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "setup_instructions_file_path": {
+          "type": "string"
+        },
+        "auth_steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "display_name", "type"],
+            "properties": {
+              "name": {"type": "string"},
+              "display_name": {"type": "string"},
+              "type": {"type": "string", "enum": ["oauth", "api_key", "basic"]},
+              "instructions": {"type": "string"}
+            }
+          }
+        },
+        "app_home_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create_conversation", "read_memories", "update_memory", "delete_memory"]
+          }
+        }
+      }
+    },
+    "proactive_notification": {
+      "type": "object",
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["user_name", "user_facts", "user_context", "user_chat"]
+          }
+        }
+      }
+    },
+    "chat_tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "endpoint", "method"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "endpoint": {"type": "string"},
+          "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE"]},
+          "parameters": {"type": "object"},
+          "auth_required": {"type": "boolean"}
+        }
+      }
+    },
+    "is_paid": {
+      "type": "boolean",
+      "default": false
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Price in cents (e.g., 999 for $9.99)"
+    },
+    "payment_plan": {
+      "type": "string"
+    },
+    "payment_link": {
+      "type": "string",
+      "format": "uri"
+    }
+  }
+}
