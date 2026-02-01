@@ -184,9 +184,15 @@ class BleTransport extends DeviceTransport {
 
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
+    if (!_bleDevice.isConnected) {
+      Logger.debug('BLE Transport: Cannot write characteristic - device not connected');
+      return;
+    }
+
     final characteristic = await _getCharacteristic(serviceUuid, characteristicUuid);
     if (characteristic == null) {
-      throw Exception('Characteristic not found: $serviceUuid:$characteristicUuid');
+      Logger.debug('BLE Transport: Characteristic not found: $serviceUuid:$characteristicUuid');
+      return;
     }
 
     try {
@@ -195,7 +201,8 @@ class BleTransport extends DeviceTransport {
       await characteristic.write(data, allowLongWrite: needsLongWrite);
     } catch (e) {
       Logger.debug('BLE Transport: Failed to write characteristic: $e');
-      rethrow;
+      // Don't rethrow - BLE write failures (e.g. GATT_WRITE_REQUEST_BUSY, device disconnected)
+      // should not crash the app
     }
   }
 
