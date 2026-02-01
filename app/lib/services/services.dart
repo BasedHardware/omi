@@ -200,6 +200,10 @@ class BackgroundService {
   }
 
   void stop() {
+    if (_status == null) {
+      Logger.debug('BackgroundService.stop: service not initialized');
+      return;
+    }
     Logger.debug("invoke stop");
     _service.invoke("stop");
   }
@@ -246,6 +250,10 @@ class BackgroundService {
   }
 
   void stopRecorder() {
+    if (_status == null) {
+      Logger.debug('BackgroundService.stopRecorder: service not initialized');
+      return;
+    }
     _service.invoke("recorder.stop");
   }
 }
