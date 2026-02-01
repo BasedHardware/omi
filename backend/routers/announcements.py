@@ -329,23 +329,9 @@ async def update_announcement_endpoint(
     if data.expires_at is not None:
         updates["expires_at"] = data.expires_at
     if data.targeting is not None:
-        updates["targeting"] = {
-            "app_version_min": data.targeting.app_version_min,
-            "app_version_max": data.targeting.app_version_max,
-            "firmware_version_min": data.targeting.firmware_version_min,
-            "firmware_version_max": data.targeting.firmware_version_max,
-            "device_models": data.targeting.device_models,
-            "platforms": data.targeting.platforms,
-            "trigger": data.targeting.trigger.value,
-        }
+        updates["targeting"] = data.targeting.to_dict()
     if data.display is not None:
-        updates["display"] = {
-            "priority": data.display.priority,
-            "start_at": data.display.start_at,
-            "expires_at": data.display.expires_at,
-            "dismissible": data.display.dismissible,
-            "show_once": data.display.show_once,
-        }
+        updates["display"] = data.display.to_dict()
     if data.content is not None:
         updates["content"] = data.content
 

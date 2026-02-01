@@ -28,6 +28,17 @@ class Targeting(BaseModel):
     platforms: Optional[List[str]] = None  # ["ios", "android"]
     trigger: TriggerType = TriggerType.VERSION_UPGRADE
 
+    def to_dict(self) -> dict:
+        return {
+            "app_version_min": self.app_version_min,
+            "app_version_max": self.app_version_max,
+            "firmware_version_min": self.firmware_version_min,
+            "firmware_version_max": self.firmware_version_max,
+            "device_models": self.device_models,
+            "platforms": self.platforms,
+            "trigger": self.trigger.value,
+        }
+
 
 class Display(BaseModel):
     """Controls how/when the announcement is displayed"""
@@ -37,6 +48,15 @@ class Display(BaseModel):
     expires_at: Optional[datetime] = None  # Don't show after this time
     dismissible: bool = True  # Can user skip?
     show_once: bool = True  # Only show once per user
+
+    def to_dict(self) -> dict:
+        return {
+            "priority": self.priority,
+            "start_at": self.start_at,
+            "expires_at": self.expires_at,
+            "dismissible": self.dismissible,
+            "show_once": self.show_once,
+        }
 
 
 # Changelog content models
@@ -164,23 +184,9 @@ class Announcement(BaseModel):
             "content": self.content,
         }
         if self.targeting:
-            result["targeting"] = {
-                "app_version_min": self.targeting.app_version_min,
-                "app_version_max": self.targeting.app_version_max,
-                "firmware_version_min": self.targeting.firmware_version_min,
-                "firmware_version_max": self.targeting.firmware_version_max,
-                "device_models": self.targeting.device_models,
-                "platforms": self.targeting.platforms,
-                "trigger": self.targeting.trigger.value,
-            }
+            result["targeting"] = self.targeting.to_dict()
         if self.display:
-            result["display"] = {
-                "priority": self.display.priority,
-                "start_at": self.display.start_at,
-                "expires_at": self.display.expires_at,
-                "dismissible": self.display.dismissible,
-                "show_once": self.display.show_once,
-            }
+            result["display"] = self.display.to_dict()
         return result
 
 
