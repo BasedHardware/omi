@@ -29,7 +29,11 @@ class PlatformService {
   /// Execute a future function only if the platform supports it
   static Future<T?> executeIfSupportedAsync<T>(bool isSupported, Future<T> Function() function, {T? fallback}) async {
     if (isSupported) {
-      return await function();
+      try {
+        return await function();
+      } on HandshakeException {
+        return fallback;
+      }
     }
     return fallback;
   }
