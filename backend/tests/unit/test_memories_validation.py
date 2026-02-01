@@ -185,3 +185,49 @@ class TestMemoryValidationFiltering:
         assert len(valid_memories) == 2
         assert valid_memories[0].id == 'first'
         assert valid_memories[1].id == 'second'
+
+    def test_missing_updated_at_fails_validation(self):
+        """Memory missing required 'updated_at' field should fail validation."""
+        now = datetime.now(timezone.utc)
+        invalid_doc = {
+            'id': 'mem-123',
+            'uid': 'user-456',
+            'content': 'Test memory content',
+            'category': 'interesting',
+            'created_at': now,
+            # 'updated_at': missing
+        }
+        with pytest.raises(ValidationError):
+            MockMemoryDB.model_validate(invalid_doc)
+
+    def test_invalid_type_datetime_fails_validation(self):
+        """Memory with invalid type for datetime field should fail validation."""
+        invalid_doc = {
+            'id': 'mem-123',
+            'uid': 'user-456',
+            'content': 'Test memory content',
+            'category': 'interesting',
+            'created_at': 'not-a-datetime',  # invalid type
+            'updated_at': 'also-not-datetime',  # invalid type
+        }
+        with pytest.raises(ValidationError):
+            MockMemoryDB.model_validate(invalid_doc)
+
+    def test_invalid_type_in_mixed_list(self):
+        """Invalid type values should be filtered out in mixed list."""
+        now = datetime.now(timezone.utc)
+        memories = [
+            {'id': 'valid', 'uid': 'u1', 'content': 'Valid', 'created_at': now, 'updated_at': now},
+            {'id': 'bad-date', 'uid': 'u2', 'content': 'Bad', 'created_at': 'invalid', 'updated_at': now},
+            {'id': 'missing-updated', 'uid': 'u3', 'content': 'Missing', 'created_at': now},
+        ]
+
+        valid_memories = []
+        for memory in memories:
+            try:
+                valid_memories.append(MockMemoryDB.model_validate(memory))
+            except ValidationError:
+                continue
+
+        assert len(valid_memories) == 1
+        assert valid_memories[0].id == 'valid'
