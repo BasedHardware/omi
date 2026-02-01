@@ -25,6 +25,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -56,7 +57,10 @@ String getThinkingDisplayText(String thinkingText) {
 /// Build app icon widget from app_id
 Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
   final appProvider = Provider.of<AppProvider>(context, listen: false);
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId);
+  final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+  // Check both public apps and user's installed chat apps (includes private MCP apps)
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+      messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
     return Opacity(
