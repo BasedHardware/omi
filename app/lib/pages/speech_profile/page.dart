@@ -379,9 +379,10 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         bool usePhoneMic = false;
 
                                         // Check if device is connected and supports opus
-                                        if (provider.device != null) {
+                                        final currentDevice = provider.device;
+                                        if (currentDevice != null) {
                                           try {
-                                            BleAudioCodec codec = await _getAudioCodec(provider.device!.id);
+                                            BleAudioCodec codec = await _getAudioCodec(currentDevice.id);
                                             if (!codec.isOpusSupported()) {
                                               // Device doesn't support opus, use phone mic
                                               usePhoneMic = true;
@@ -420,7 +421,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                                       child: Text(
-                                        SharedPreferencesUtil().hasSpeakerProfile ? context.l10n.doItAgain : context.l10n.getStarted,
+                                        SharedPreferencesUtil().hasSpeakerProfile
+                                            ? context.l10n.doItAgain
+                                            : context.l10n.getStarted,
                                         style: const TextStyle(color: Colors.black),
                                       ),
                                     ),
