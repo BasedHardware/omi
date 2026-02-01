@@ -97,7 +97,15 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     await Future.delayed(const Duration(seconds: 2));
 
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
-    final bytes = await File(firmwareFile).readAsBytes();
+    final file = File(firmwareFile);
+    if (!file.existsSync()) {
+      Logger.debug('Firmware file not found: $firmwareFile');
+      setState(() {
+        isInstalling = false;
+      });
+      return;
+    }
+    final bytes = await file.readAsBytes();
     const configuration = mcumgr.FirmwareUpgradeConfiguration(
       estimatedSwapTime: Duration(seconds: 0),
       eraseAppSettings: true,
