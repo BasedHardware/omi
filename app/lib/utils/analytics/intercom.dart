@@ -11,11 +11,15 @@ class IntercomManager {
   static IntercomManager get instance => _instance;
   static final SharedPreferencesUtil _preferences = SharedPreferencesUtil();
 
+  bool _initialized = false;
+
   IntercomManager._internal();
 
   Intercom get intercom => Intercom.instance;
   bool get _isIntercomEnabled =>
-      PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
+      _initialized &&
+      PlatformService.isIntercomSupported &&
+      (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
 
   factory IntercomManager() {
     return _instance;
@@ -23,14 +27,15 @@ class IntercomManager {
 
   Future<void> initIntercom() async {
     if (Env.intercomAppId == null) return;
-    return PlatformService.executeIfSupportedAsync(
-      _isIntercomEnabled,
+    await PlatformService.executeIfSupportedAsync(
+      PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty),
       () => intercom.initialize(
         Env.intercomAppId!,
         iosApiKey: Env.intercomIOSApiKey,
         androidApiKey: Env.intercomAndroidApiKey,
       ),
     );
+    _initialized = true;
   }
 
   Future displayChargingArticle(String device) async {
