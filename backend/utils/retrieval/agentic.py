@@ -58,6 +58,7 @@ from utils.retrieval.tools import (
     close_github_issue_tool,
     search_files_tool,
     manage_daily_summary_tool,
+    create_chart_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -112,6 +113,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_action_item_tool': 'Updating action item',
         'get_omi_product_info_tool': 'Looking up product info',
         'manage_daily_summary_tool': 'Updating notification settings',
+        'create_chart_tool': 'Creating chart',
     }
 
     # Try exact match first
@@ -266,6 +268,7 @@ def execute_agentic_chat(
         close_github_issue_tool,
         search_files_tool,
         manage_daily_summary_tool,
+        create_chart_tool,
     ]
 
     # Load tools from enabled apps
@@ -408,6 +411,7 @@ async def execute_agentic_chat_stream(
         close_github_issue_tool,
         search_files_tool,
         manage_daily_summary_tool,
+        create_chart_tool,
     ]
 
     # Load tools from enabled apps
@@ -534,6 +538,10 @@ async def execute_agentic_chat_stream(
             # Extract conversations collected by tools
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
             callback_data['ask_for_nps'] = tool_usage_count > 0
+            # Extract chart data if a chart tool was used
+            chart_data_from_config = config.get('configurable', {}).get('chart_data')
+            if chart_data_from_config:
+                callback_data['chart_data'] = chart_data_from_config
             print(f"📚 Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.CancelledError:
@@ -624,6 +632,7 @@ async def _run_agent_stream(
                     'create_github_issue_tool',
                     'close_github_issue_tool',
                     'search_files_tool',
+                    'create_chart_tool',
                 }
 
                 # If tool name is not a standard tool and contains underscore, it's likely an app tool
