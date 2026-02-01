@@ -1,7 +1,9 @@
+import logging
 import threading
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ValidationError
 
 import database.memories as memories_db
 from database.vector_db import upsert_memory_vector, delete_memory_vector
@@ -43,11 +45,18 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
     if offset == 0:
         limit = 5000
     memories = memories_db.get_memories(uid, limit, offset)
+
+    valid_memories = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(MemoryDB.model_validate(memory))
+        except ValidationError as e:
+            logging.warning(f"Skipping invalid memory doc {memory.get('id', 'unknown')}: {e}")
+            continue
+    return valid_memories
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
