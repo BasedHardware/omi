@@ -82,7 +82,7 @@ class WalFileManager {
       if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
         await _walFile!.copy(_walBackupFile!.path);
       }
-    } catch (e) {
+    } on FileSystemException catch (e) {
       Logger.debug('WalFileManager: Failed to create backup: $e');
     }
   }
