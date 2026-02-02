@@ -311,12 +311,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
-  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
+  Future<void> unassignConversationTranscriptSegment(String conversationId, String segmentId) async {
     final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
     if (segmentIdx == -1) return;
     conversation.transcriptSegments[segmentIdx].isUser = false;
     conversation.transcriptSegments[segmentIdx].personId = null;
     notifyListeners();
+    // Persist unassign to backend
+    await assignBulkConversationTranscriptSegments(conversationId, [segmentId], isUser: false, personId: null);
   }
 
   /// Returns the first app result from the conversation if available
