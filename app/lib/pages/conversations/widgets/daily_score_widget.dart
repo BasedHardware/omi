@@ -1,16 +1,14 @@
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Daily Score Widget - Shows task completion rate as a 0-5 score
@@ -24,40 +22,9 @@ class DailyScoreWidget extends StatefulWidget {
 }
 
 class DailyScoreWidgetState extends State<DailyScoreWidget> {
-  List<Goal> _goals = [];
-  bool _isLoadingGoals = true;
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadGoals();
-  }
-
-  // Public method to reload goals when they change
+  // Public method to reload goals when they change (now a no-op since provider handles it)
   void reloadGoals() {
-    _loadGoals();
-  }
-
-  Future<void> _loadGoals() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final goalsJson = prefs.getString(_goalsStorageKey);
-      if (goalsJson != null) {
-        final List<dynamic> decoded = json.decode(goalsJson);
-        final goals = decoded.map((json) => Goal.fromJson(json)).toList();
-        if (mounted) {
-          setState(() {
-            _goals = goals;
-            _isLoadingGoals = false;
-          });
-        }
-      } else {
-        if (mounted) setState(() => _isLoadingGoals = false);
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoadingGoals = false);
-    }
+    // Goals are now managed by GoalsProvider, no need to reload manually
   }
 
   void _addGoal() {
@@ -79,8 +46,11 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, child) {
+    return Consumer2<ActionItemsProvider, GoalsProvider>(
+      builder: (context, provider, goalsProvider, child) {
+        final goals = goalsProvider.goals;
+        final isLoadingGoals = goalsProvider.isLoading;
+
         // Calculate today's tasks - only tasks due today
         final now = DateTime.now();
         final todayStart = DateTime(now.year, now.month, now.day);
@@ -147,11 +117,11 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                         ),
                         const SizedBox(height: 14),
                         // "Add Goals" or "New Task" button
-                        if (!_isLoadingGoals)
+                        if (!isLoadingGoals)
                           GestureDetector(
                             onTap: () {
                               HapticFeedback.lightImpact();
-                              if (_goals.isEmpty) {
+                              if (goals.isEmpty) {
                                 _addGoal();
                               } else {
                                 _showCreateTaskSheet(context);
@@ -167,7 +137,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    _goals.isEmpty ? context.l10n.addGoal : context.l10n.newTask,
+                                    goals.isEmpty ? context.l10n.addGoal : context.l10n.newTask,
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
@@ -176,7 +146,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                                   ),
                                   const SizedBox(width: 4),
                                   Icon(
-                                    _goals.isEmpty ? Icons.chevron_right : Icons.add,
+                                    goals.isEmpty ? Icons.chevron_right : Icons.add,
                                     size: 16,
                                     color: Colors.white.withOpacity(0.5),
                                   ),
@@ -224,7 +194,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                 ],
               ),
               // Question mark icon in top right (always visible)
-              if (!_isLoadingGoals)
+              if (!isLoadingGoals)
                 Positioned(
                   top: 0,
                   right: 0,

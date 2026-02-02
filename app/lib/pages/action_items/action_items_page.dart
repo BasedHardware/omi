@@ -1,20 +1,20 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/action_item_form_sheet.dart';
+
+// Re-export Goal from goals.dart for use in this file
+export 'package:omi/backend/http/api/goals.dart' show Goal;
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
@@ -34,12 +34,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // Track indent levels for each task (task id -> indent level 0-3)
   final Map<String, int> _indentLevels = {};
 
-  // Task -> goal mapping and goals list
+  // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
-  List<Goal> _goals = [];
-  bool _isLoadingGoals = true;
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
-  Function(int)? _previousHomeIndexHandler;
 
   // Track custom order for each category (category -> list of item ids)
   final Map<TaskCategory, List<String>> _categoryOrder = {};
@@ -50,9 +46,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // FAB menu state
   bool _isFabMenuOpen = false;
-
-  // Track last goal deletion to prevent API sync from resurrecting deleted goals
-  DateTime? _lastGoalDeletion;
 
   @override
   bool get wantKeepAlive => true;
@@ -70,13 +63,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   void initState() {
     super.initState();
-    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-    _previousHomeIndexHandler = homeProvider.onSelectedIndexChanged;
-    homeProvider.onSelectedIndexChanged = _handleHomeIndexChanged;
     _scrollController.addListener(_onScroll);
     _loadCategoryOrder();
     _loadTaskGoalLinks();
-    _loadGoals();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -111,63 +100,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     });
   }
 
-  Future<void> _loadGoals() async {
-    // Load from local storage first (most up-to-date with recent deletions/changes)
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final goalsJson = prefs.getString(_goalsStorageKey);
-      if (goalsJson != null) {
-        final List<dynamic> decoded = jsonDecode(goalsJson);
-        final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-        if (mounted) {
-          setState(() {
-            _goals = localGoals;
-            _isLoadingGoals = false;
-          });
-          _pruneTaskGoalLinks();
-        }
-      }
-    } catch (_) {}
-
-    // Then sync with API in the background to get server updates
-    // But skip if we just deleted a goal to prevent resurrecting it
-    final now = DateTime.now();
-    final skipApiSync = _lastGoalDeletion != null && now.difference(_lastGoalDeletion!) < const Duration(seconds: 3);
-
-    if (!skipApiSync) {
-      try {
-        final goals = await getAllGoals();
-        if (!mounted) return;
-        if (goals.isNotEmpty) {
-          setState(() {
-            _goals = goals;
-          });
-          _pruneTaskGoalLinks();
-          // Save API result to local storage for next time
-          final prefs = await SharedPreferences.getInstance();
-          final goalsJson = jsonEncode(goals.map((g) => g.toJson()).toList());
-          await prefs.setString(_goalsStorageKey, goalsJson);
-        }
-      } catch (_) {}
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoadingGoals = false;
-    });
-  }
-
-  void _pruneTaskGoalLinks() {
-    if (_goals.isEmpty) return;
-    final goalIds = _goals.map((goal) => goal.id).toSet();
-    final removed = _taskGoalLinks.keys.where((taskId) => !goalIds.contains(_taskGoalLinks[taskId])).toList();
-    if (removed.isEmpty) return;
-    for (final taskId in removed) {
-      _taskGoalLinks.remove(taskId);
-    }
-    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
-  }
-
   void _attachTaskToGoal(String taskId, String goalId) {
     setState(() {
       _taskGoalLinks[taskId] = goalId;
@@ -179,7 +111,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   String? _getGoalTitleForTask(ActionItemWithMetadata item) {
     final goalId = _taskGoalLinks[item.id];
     if (goalId == null) return null;
-    for (final goal in _goals) {
+    final goals = Provider.of<GoalsProvider>(context, listen: false).goals;
+    for (final goal in goals) {
       if (goal.id == goalId) return goal.title;
     }
     return null;
@@ -195,20 +128,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   @override
   void dispose() {
-    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-    if (homeProvider.onSelectedIndexChanged == _handleHomeIndexChanged) {
-      homeProvider.onSelectedIndexChanged = _previousHomeIndexHandler;
-    }
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _handleHomeIndexChanged(int index) {
-    _previousHomeIndexHandler?.call(index);
-    if (index == 1) {
-      _loadGoals();
-    }
   }
 
   void _onScroll() {
@@ -248,18 +170,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => _GoalCreateSheet(
+      builder: (sheetContext) => _GoalCreateSheet(
         onSave: (title, current, target) async {
-          // Create goal via API
-          await createGoal(
+          // Create goal via provider
+          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+          await goalsProvider.createGoal(
             title: title,
             goalType: 'numeric',
             targetValue: target,
             currentValue: current,
           );
-
-          // Reload goals locally
-          _loadGoals();
         },
       ),
     );
@@ -706,50 +626,56 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildGoalsRow() {
-    if (_isLoadingGoals) {
-      return const SizedBox.shrink();
-    }
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        if (goalsProvider.isLoading) {
+          return const SizedBox.shrink();
+        }
 
-    // If no goals, don't show anything
-    if (_goals.isEmpty) {
-      return const SizedBox.shrink();
-    }
+        final goals = goalsProvider.goals;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-            child: Row(
-              children: [
-                Text(
-                  context.l10n.goals,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+        // If no goals, don't show anything
+        if (goals.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      context.l10n.goals,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${goals.length}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                Text(
-                  '${_goals.length}',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              // Goal items
+              ...goals.map((goal) => _buildGoalItem(goal)),
+              // Spacing after section
+              const SizedBox(height: 8),
+            ],
           ),
-          // Goal items
-          ..._goals.map((goal) => _buildGoalItem(goal)),
-          // Spacing after section
-          const SizedBox(height: 8),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1302,20 +1228,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Future<void> _deleteGoal(Goal goal) async {
-    // Mark deletion timestamp to prevent API sync from resurrecting this goal
-    _lastGoalDeletion = DateTime.now();
-
-    setState(() {
-      _goals.removeWhere((g) => g.id == goal.id);
-    });
-    // Save to local storage
-    final prefs = await SharedPreferences.getInstance();
-    final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-    await prefs.setString(_goalsStorageKey, goalsJson);
-    // Delete from API if not local-only
-    if (!goal.id.startsWith('local_')) {
-      await deleteGoal(goal.id);
-    }
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.deleteGoal(goal.id);
   }
 
   void _showEditSheet(ActionItemWithMetadata item) {
@@ -1419,45 +1333,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => _GoalEditSheet(
+      builder: (sheetContext) => _GoalEditSheet(
         goal: goal,
         onSave: (title, current, target) async {
-          // Update goal locally
-          final updatedGoal = Goal(
-            id: goal.id,
+          // Update goal via provider
+          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+          await goalsProvider.updateGoal(
+            goal.id,
             title: title,
-            goalType: goal.goalType,
-            targetValue: target,
             currentValue: current,
-            minValue: goal.minValue,
-            maxValue: goal.maxValue,
-            unit: goal.unit,
-            isActive: goal.isActive,
-            createdAt: goal.createdAt,
-            updatedAt: DateTime.now(),
+            targetValue: target,
           );
-
-          setState(() {
-            final index = _goals.indexWhere((g) => g.id == goal.id);
-            if (index != -1) {
-              _goals[index] = updatedGoal;
-            }
-          });
-
-          // Save to local storage
-          final prefs = await SharedPreferences.getInstance();
-          final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-          await prefs.setString(_goalsStorageKey, goalsJson);
-
-          // Update on backend
-          if (!goal.id.startsWith('local_')) {
-            await updateGoal(
-              goal.id,
-              title: title,
-              currentValue: current,
-              targetValue: target,
-            );
-          }
         },
         onDelete: () => _deleteGoal(goal),
       ),
