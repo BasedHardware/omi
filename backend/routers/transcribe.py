@@ -568,6 +568,31 @@ async def _stream_handler(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
+                # Apply all pending speaker assignments before processing
+                # This fixes race condition where segments are persisted before speaker assignment arrives
+                if segment_person_assignment_map and conversation.get('transcript_segments'):
+                    segments_updated = False
+                    for segment in conversation['transcript_segments']:
+                        segment_id = segment.get('id')
+                        if (
+                            segment_id in segment_person_assignment_map
+                            and not segment.get('is_user')
+                            and not segment.get('person_id')
+                        ):
+                            person_id = segment_person_assignment_map[segment_id]
+                            if person_id == 'user':
+                                segment['is_user'] = True
+                                segment['person_id'] = None
+                            else:
+                                segment['is_user'] = False
+                                segment['person_id'] = person_id
+                            segments_updated = True
+                    if segments_updated:
+                        conversations_db.update_conversation_segments(
+                            uid, conversation_id, conversation['transcript_segments']
+                        )
+                        print(f"Applied pending speaker assignments to conversation {conversation_id}", uid, session_id)
+
                 if PUSHER_ENABLED:
                     on_conversation_processing_started(conversation_id)
                     await request_conversation_processing(conversation_id)
