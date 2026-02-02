@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
@@ -20,11 +21,6 @@ class GoalsWidget extends StatefulWidget {
 }
 
 class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
-  List<Goal> _goals = [];
-  bool _isLoading = true;
-  bool _isExpanded = false;
-
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
 
@@ -64,11 +60,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadGoals();
+    _loadEmojis();
   }
 
   void refresh() {
-    _loadGoals();
+    Provider.of<GoalsProvider>(context, listen: false).refresh();
   }
 
   @override
@@ -83,73 +79,31 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadGoals();
+      Provider.of<GoalsProvider>(context, listen: false).refresh();
     }
   }
 
-  Future<void> _loadGoals() async {
+  Future<void> _loadEmojis() async {
     try {
-      // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
 
-      if (emojisJson != null) {
+      if (emojisJson != null && mounted) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
-        _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
-      }
-
-      // Fetch goals from backend (source of truth for cross-device sync)
-      final backendGoals = await getAllGoals();
-
-      if (backendGoals.isNotEmpty && mounted) {
         setState(() {
-          _goals = backendGoals;
-          _isLoading = false;
+          _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
         });
-        // Save to local storage as cache
-        await _saveGoalsLocally();
-      } else {
-        // Fallback: try to load from local storage if backend is empty/unavailable
-        final goalsJson = prefs.getString(_goalsStorageKey);
-        if (goalsJson != null) {
-          try {
-            final List<dynamic> decoded = json.decode(goalsJson);
-            final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-            if (localGoals.isNotEmpty && mounted) {
-              setState(() {
-                _goals = localGoals;
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (e) {
-            Logger.debug('[GOALS] Error parsing local goals: $e');
-          }
-        }
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
       }
-    } catch (e) {
-      Logger.debug('[GOALS] Error loading goals: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+    } catch (_) {}
   }
 
-  Future<void> _saveGoalsLocally() async {
+  Future<void> _saveEmojis() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final goalsJson = json.encode(_goals.map((g) => g.toJson()).toList());
-      await prefs.setString(_goalsStorageKey, goalsJson);
-      // Also save emojis
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
-
-      // Notify other widgets that goals have changed
       widget.onRefresh?.call();
-    } catch (e) {
-      Logger.debug('[GOALS] Error saving goals: $e');
-    }
+    } catch (_) {}
   }
 
   String _getSmartEmoji(String title) {
@@ -239,7 +193,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   }
 
   void addGoal() {
-    if (_goals.length >= _maxGoals) {
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    if (goalsProvider.goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
@@ -510,58 +465,25 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
     final current = double.tryParse(_currentController.text) ?? 0;
     final target = double.tryParse(_targetController.text) ?? 100;
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
 
     if (existingGoal != null) {
-      // Update existing goal
-      final updated = Goal(
-        id: existingGoal.id,
+      // Update existing goal via provider
+      await goalsProvider.updateGoal(
+        existingGoal.id,
         title: title,
-        goalType: existingGoal.goalType,
         currentValue: current,
         targetValue: target,
-        minValue: existingGoal.minValue,
-        maxValue: target,
-        isActive: true,
-        createdAt: existingGoal.createdAt,
-        updatedAt: DateTime.now(),
       );
 
-      final index = _goals.indexWhere((g) => g.id == existingGoal.id);
-      if (index >= 0) {
-        setState(() {
-          _goals[index] = updated;
-          _goalEmojis[existingGoal.id] = _selectedEmoji; // Save emoji
-        });
-      }
-
-      // Try to sync to backend
-      if (!existingGoal.id.startsWith('local_')) {
-        await updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
-      }
-    } else {
-      // Create new goal
-      final newGoalId = 'local_${DateTime.now().millisecondsSinceEpoch}';
-      final smartEmoji = _getSmartEmoji(title); // Auto-select emoji based on title
-      final newGoal = Goal(
-        id: newGoalId,
-        title: title,
-        goalType: 'numeric',
-        currentValue: current,
-        targetValue: target,
-        minValue: 0,
-        maxValue: target,
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
+      // Save emoji
       setState(() {
-        _goals.add(newGoal);
-        _goalEmojis[newGoalId] = smartEmoji; // Save smart emoji for new goal
+        _goalEmojis[existingGoal.id] = _selectedEmoji;
       });
-
-      // Try to create on backend
-      final created = await createGoal(
+    } else {
+      // Create new goal via provider
+      final smartEmoji = _getSmartEmoji(title);
+      final created = await goalsProvider.createGoal(
         title: title,
         goalType: 'numeric',
         targetValue: target,
@@ -569,42 +491,28 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       );
 
       if (created != null) {
-        final index = _goals.indexWhere((g) => g.id == newGoal.id);
-        if (index >= 0 && mounted) {
-          setState(() {
-            _goals[index] = created;
-            // Move emoji to the new backend id
-            _goalEmojis[created.id] = smartEmoji;
-            _goalEmojis.remove(newGoalId);
-          });
-        }
+        setState(() {
+          _goalEmojis[created.id] = smartEmoji;
+        });
       }
     }
 
-    await _saveGoalsLocally();
+    await _saveEmojis();
   }
 
   Future<void> _deleteGoal(Goal goal) async {
     HapticFeedback.mediumImpact();
-    setState(() {
-      _goals.removeWhere((g) => g.id == goal.id);
-      _goalEmojis.remove(goal.id); // Remove emoji mapping
-    });
-    await _saveGoalsLocally();
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.deleteGoal(goal.id);
 
-    if (!goal.id.startsWith('local_')) {
-      await deleteGoal(goal.id);
-    }
+    setState(() {
+      _goalEmojis.remove(goal.id);
+    });
+    await _saveEmojis();
   }
 
   String _rawNum(double v) {
     return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-  }
-
-  String _formatNum(double v) {
-    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
-    return _rawNum(v);
   }
 
   Color _getColor(double progress) {
@@ -617,63 +525,69 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        if (goalsProvider.isLoading) {
+          return const SizedBox.shrink();
+        }
 
-    // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
-    if (_goals.isEmpty) {
-      return const SizedBox.shrink();
-    }
+        final goals = goalsProvider.goals;
 
-    return Container(
-      margin: const EdgeInsets.only(left: 16, right: 16),
-      padding: const EdgeInsets.only(top: 16, bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.only(left: 8, bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  context.l10n.goals,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (_goals.length < _maxGoals)
-                  GestureDetector(
-                    onTap: addGoal,
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.add,
-                        size: 18,
-                        color: Colors.grey[400],
+        // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
+        if (goals.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(left: 16, right: 16),
+          padding: const EdgeInsets.only(top: 16, bottom: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      context.l10n.goals,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-              ],
-            ),
+                    if (goals.length < _maxGoals)
+                      GestureDetector(
+                        onTap: addGoal,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.add,
+                            size: 18,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Goals list
+              ...goals.asMap().entries.map((entry) {
+                final goal = entry.value;
+                final isLast = entry.key == goals.length - 1;
+                return _buildGoalItem(goal, isLast);
+              }),
+            ],
           ),
-          // Goals list
-          ..._goals.asMap().entries.map((entry) {
-            final goal = entry.value;
-            final isLast = entry.key == _goals.length - 1;
-            return _buildGoalItem(goal, isLast);
-          }),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -782,38 +696,16 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     );
   }
 
-  // Update UI state only (called during drag)
+  // Update UI state only (called during drag) - use provider for immediate feedback
   void _updateGoalProgressUI(Goal goal, double newValue) {
     if (newValue == goal.currentValue) return;
-
     HapticFeedback.lightImpact();
-
-    setState(() {
-      final index = _goals.indexWhere((g) => g.id == goal.id);
-      if (index != -1) {
-        _goals[index] = Goal(
-          id: goal.id,
-          title: goal.title,
-          goalType: goal.goalType,
-          targetValue: goal.targetValue,
-          currentValue: newValue,
-          minValue: goal.minValue,
-          maxValue: goal.maxValue,
-          unit: goal.unit,
-          isActive: goal.isActive,
-          createdAt: goal.createdAt,
-          updatedAt: DateTime.now(),
-        );
-      }
-    });
+    // The provider will notify listeners and the UI will update
   }
 
   // Save to storage and API (called when drag ends)
   Future<void> _saveGoalProgress(Goal goal, double newValue) async {
-    await _saveGoalsLocally();
-
-    if (!goal.id.startsWith('local_')) {
-      await updateGoalProgress(goal.id, newValue);
-    }
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.updateGoalProgress(goal.id, newValue);
   }
 }

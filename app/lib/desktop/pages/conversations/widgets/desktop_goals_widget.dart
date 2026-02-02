@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Desktop multi-goal widget supporting up to 3 goals with minimalistic UI
@@ -17,11 +18,7 @@ class DesktopGoalsWidget extends StatefulWidget {
   State<DesktopGoalsWidget> createState() => _DesktopGoalsWidgetState();
 }
 
-class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBindingObserver {
-  List<Goal> _goals = [];
-  bool _isLoading = true;
-
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
+class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
 
@@ -59,85 +56,37 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _loadGoals();
+    _loadEmojis();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _titleController.dispose();
     _currentController.dispose();
     _targetController.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _loadGoals();
-    }
-  }
-
-  Future<void> _loadGoals() async {
+  Future<void> _loadEmojis() async {
     try {
-      // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
 
-      if (emojisJson != null) {
+      if (emojisJson != null && mounted) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
-        _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
-      }
-
-      // Fetch goals from backend (source of truth for cross-device sync)
-      final backendGoals = await getAllGoals();
-
-      if (backendGoals.isNotEmpty && mounted) {
         setState(() {
-          _goals = backendGoals;
-          _isLoading = false;
+          _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
         });
-        // Save to local storage as cache
-        await _saveGoalsLocally();
-      } else {
-        // Fallback: try to load from local storage if backend is empty/unavailable
-        final goalsJson = prefs.getString(_goalsStorageKey);
-        if (goalsJson != null) {
-          try {
-            final List<dynamic> decoded = json.decode(goalsJson);
-            final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-            if (localGoals.isNotEmpty && mounted) {
-              setState(() {
-                _goals = localGoals;
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (e) {
-            Logger.debug('[GOALS] Error parsing local goals: $e');
-          }
-        }
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
       }
-    } catch (e) {
-      Logger.debug('[GOALS] Error loading goals: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+    } catch (_) {}
   }
 
-  Future<void> _saveGoalsLocally() async {
+  Future<void> _saveEmojis() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final goalsJson = json.encode(_goals.map((g) => g.toJson()).toList());
-      await prefs.setString(_goalsStorageKey, goalsJson);
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
-    } catch (e) {
-      Logger.debug('[GOALS] Error saving goals: $e');
-    }
+    } catch (_) {}
   }
 
   String _getSmartEmoji(String title) {
@@ -208,8 +157,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
     return _goalEmojis[goalId] ?? '🎯';
   }
 
-  void _addGoal() {
-    if (_goals.length >= _maxGoals) {
+  void _addGoal(List<Goal> goals) {
+    if (goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
@@ -441,90 +390,49 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
     final current = double.tryParse(_currentController.text) ?? 0;
     final target = double.tryParse(_targetController.text) ?? 100;
 
-    try {
-      if (existingGoal != null) {
-        final updated = Goal(
-          id: existingGoal.id,
-          title: title,
-          goalType: existingGoal.goalType,
-          currentValue: current,
-          targetValue: target,
-          minValue: existingGoal.minValue,
-          maxValue: target,
-          isActive: true,
-          createdAt: existingGoal.createdAt,
-          updatedAt: DateTime.now(),
-        );
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
 
-        final index = _goals.indexWhere((g) => g.id == existingGoal.id);
-        if (index >= 0 && mounted) {
-          setState(() {
-            _goals[index] = updated;
-            _goalEmojis[existingGoal.id] = _selectedEmoji;
-          });
-        }
+    if (existingGoal != null) {
+      // Update existing goal
+      await goalsProvider.updateGoal(
+        existingGoal.id,
+        title: title,
+        currentValue: current,
+        targetValue: target,
+      );
 
-        if (!existingGoal.id.startsWith('local_')) {
-          await updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
-        }
-      } else {
-        final newGoalId = 'local_${DateTime.now().millisecondsSinceEpoch}';
-        final smartEmoji = _getSmartEmoji(title);
-        final newGoal = Goal(
-          id: newGoalId,
-          title: title,
-          goalType: 'numeric',
-          currentValue: current,
-          targetValue: target,
-          minValue: 0,
-          maxValue: target,
-          isActive: true,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
+      // Update emoji
+      setState(() {
+        _goalEmojis[existingGoal.id] = _selectedEmoji;
+      });
+      await _saveEmojis();
+    } else {
+      // Create new goal
+      final smartEmoji = _getSmartEmoji(title);
+      final newGoal = await goalsProvider.createGoal(
+        title: title,
+        goalType: 'numeric',
+        targetValue: target,
+        currentValue: current,
+      );
 
-        if (mounted) {
-          setState(() {
-            _goals.add(newGoal);
-            _goalEmojis[newGoalId] = smartEmoji;
-          });
-        }
-
-        final created = await createGoal(
-          title: title,
-          goalType: 'numeric',
-          targetValue: target,
-          currentValue: current,
-        );
-
-        if (created != null && mounted) {
-          final index = _goals.indexWhere((g) => g.id == newGoal.id);
-          if (index >= 0) {
-            setState(() {
-              _goals[index] = created;
-              _goalEmojis[created.id] = smartEmoji;
-              _goalEmojis.remove(newGoalId);
-            });
-          }
-        }
+      if (newGoal != null) {
+        setState(() {
+          _goalEmojis[newGoal.id] = smartEmoji;
+        });
+        await _saveEmojis();
       }
-
-      await _saveGoalsLocally();
-    } catch (e) {
-      Logger.debug('[GOALS] Error saving goal: $e');
     }
   }
 
   Future<void> _deleteGoal(Goal goal) async {
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.deleteGoal(goal.id);
+
     setState(() {
-      _goals.removeWhere((g) => g.id == goal.id);
       _goalEmojis.remove(goal.id);
     });
-    await _saveGoalsLocally();
-
-    if (!goal.id.startsWith('local_')) {
-      await deleteGoal(goal.id);
-    }
+    await _saveEmojis();
   }
 
   String _rawNum(double v) {
@@ -541,86 +449,93 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        final goals = goalsProvider.goals;
+        final isLoading = goalsProvider.isLoading;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        if (isLoading) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                context.l10n.goals,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (_goals.length < _maxGoals)
-                MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: _addGoal,
-                    child: Icon(
-                      Icons.add_rounded,
-                      size: 20,
-                      color: ResponsiveHelper.textTertiary,
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    context.l10n.goals,
+                    style: const TextStyle(
+                      color: ResponsiveHelper.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Goals list - use Expanded to fill available space
-          Expanded(
-            child: _goals.isEmpty
-                ? MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: _addGoal,
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_rounded, size: 16, color: ResponsiveHelper.textTertiary),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.tapToAddGoal,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: ResponsiveHelper.textTertiary,
-                              ),
-                            ),
-                          ],
+                  if (goals.length < _maxGoals)
+                    MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () => _addGoal(goals),
+                        child: Icon(
+                          Icons.add_rounded,
+                          size: 20,
+                          color: ResponsiveHelper.textTertiary,
                         ),
                       ),
                     ),
-                  )
-                : ListView(
-                    padding: EdgeInsets.zero,
-                    children: _goals.asMap().entries.map((entry) {
-                      final goal = entry.value;
-                      final isLast = entry.key == _goals.length - 1;
-                      return _buildGoalItem(goal, isLast);
-                    }).toList(),
-                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Goals list - use Expanded to fill available space
+              Expanded(
+                child: goals.isEmpty
+                    ? MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => _addGoal(goals),
+                          child: Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_rounded, size: 16, color: ResponsiveHelper.textTertiary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  context.l10n.tapToAddGoal,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: ResponsiveHelper.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        padding: EdgeInsets.zero,
+                        children: goals.asMap().entries.map((entry) {
+                          final goal = entry.value;
+                          final isLast = entry.key == goals.length - 1;
+                          return _buildGoalItem(goal, isLast);
+                        }).toList(),
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
