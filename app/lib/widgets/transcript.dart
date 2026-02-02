@@ -529,7 +529,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               child: Text(
                                 data.speakerId == omiSpeakerId
                                     ? 'omi'
-                                    : (suggestion != null && person == null
+                                    : (suggestion != null && data.personId == null && !data.isUser
                                         ? '${suggestion.personName}?'
                                         : (person != null ? person.name : 'Speaker ${data.speakerId}')),
                                 style: TextStyle(
@@ -561,7 +561,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
                                 ),
                               )
-                            ] else if (suggestion != null && person == null) ...[
+                            ] else if (suggestion != null && data.personId == null && !data.isUser) ...[
                               const SizedBox(width: 6),
                               GestureDetector(
                                 onTap: () => widget.onAcceptSuggestion?.call(suggestion),
