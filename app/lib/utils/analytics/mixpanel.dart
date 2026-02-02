@@ -179,7 +179,8 @@ class MixpanelManager {
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
-  void onboardingUserAcquisitionSource(String source) => track('User Acquisition Source', properties: {'source': source});
+  void onboardingUserAcquisitionSource(String source) =>
+      track('User Acquisition Source', properties: {'source': source});
 
   void settingsSaved({
     bool hasWebhookConversationCreated = false,
@@ -1736,4 +1737,56 @@ class MixpanelManager {
       'section_name': sectionName,
     });
   }
+
+  // ============================================================================
+  // ANNOUNCEMENT TRACKING
+  // ============================================================================
+
+  void announcementShown({
+    required String announcementId,
+    required String type,
+    String? trigger,
+    int? priority,
+  }) {
+    track('Announcement Shown', properties: {
+      'announcement_id': announcementId,
+      'type': type,
+      if (trigger != null) 'trigger': trigger,
+      if (priority != null) 'priority': priority,
+    });
+  }
+
+  void announcementDismissed({
+    required String announcementId,
+    required String type,
+    required bool ctaClicked,
+  }) {
+    track('Announcement Dismissed', properties: {
+      'announcement_id': announcementId,
+      'type': type,
+      'cta_clicked': ctaClicked,
+    });
+  }
+
+  void changelogShown({
+    required int changelogCount,
+    required String fromVersion,
+    required String toVersion,
+  }) {
+    track('Changelog Shown', properties: {
+      'changelog_count': changelogCount,
+      'from_version': fromVersion,
+      'to_version': toVersion,
+    });
+  }
+
+  void changelogDismissed({
+    required int changelogCount,
+  }) {
+    track('Changelog Dismissed', properties: {
+      'changelog_count': changelogCount,
+    });
+  }
+
+  void whatsNewOpened() => track('Whats New Opened');
 }
