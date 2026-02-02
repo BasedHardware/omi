@@ -126,6 +126,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
+  CaptureProvider? _captureProvider;
+
   void _initiateApps() {
     context.read<AppProvider>().getApps();
     context.read<AppProvider>().getPopularApps();
@@ -465,20 +467,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
-      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-      captureProvider.addListener(_onCaptureProviderChanged);
+      _captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      _captureProvider!.addListener(_onCaptureProviderChanged);
       // Connect freemium session reset callback
-      captureProvider.onFreemiumSessionReset = () {
+      _captureProvider!.onFreemiumSessionReset = () {
         _freemiumHandler.resetDialogFlag();
       };
     });
   }
 
   void _onCaptureProviderChanged() {
-    if (!mounted) return;
+    if (!mounted || _captureProvider == null) return;
 
-    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-    _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
+    _freemiumHandler.checkAndShowDialog(context, _captureProvider!).catchError((e) {
       Logger.debug('[Freemium] Error checking dialog: $e');
       return false;
     });
@@ -1079,12 +1080,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
-    // Remove capture provider listener
-    try {
-      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-      captureProvider.removeListener(_onCaptureProviderChanged);
-      captureProvider.onFreemiumSessionReset = null;
-    } catch (_) {}
+    // Remove capture provider listener using stored reference
+    if (_captureProvider != null) {
+      _captureProvider!.removeListener(_onCaptureProviderChanged);
+      _captureProvider!.onFreemiumSessionReset = null;
+      _captureProvider = null;
+    }
     // Remove device provider callback
     try {
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
