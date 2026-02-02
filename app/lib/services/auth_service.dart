@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -436,8 +437,35 @@ class AuthService {
       Logger.debug('Given Name: ${SharedPreferencesUtil().givenName}');
       Logger.debug('Family Name: ${SharedPreferencesUtil().familyName}');
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
+
+      // Restore onboarding state from server
+      await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
+    }
+  }
+
+  Future<void> _restoreOnboardingState() async {
+    try {
+      final state = await getUserOnboardingState();
+      if (state != null) {
+        if (state['completed'] == true) {
+          SharedPreferencesUtil().onboardingCompleted = true;
+        }
+        final acquisitionSource = state['acquisition_source'] as String? ?? '';
+        if (acquisitionSource.isNotEmpty) {
+          SharedPreferencesUtil().foundOmiSource = acquisitionSource;
+        }
+        // Restore language from server if not already set locally
+        final serverLanguage = await getUserPrimaryLanguage();
+        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+          SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
+          SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        }
+        Logger.debug('Restored onboarding state from server: completed=${state['completed']}');
+      }
+    } catch (e) {
+      Logger.debug('Error restoring onboarding state: $e');
     }
   }
 

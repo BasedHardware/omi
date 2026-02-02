@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
@@ -248,6 +249,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           goNext: () {
             // Speech profile complete, finish onboarding
             SharedPreferencesUtil().onboardingCompleted = true;
+            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile');
             PaintingBinding.instance.imageCache.clear();
             routeToPage(context, const HomePageWrapper(), replace: true);
@@ -255,6 +257,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           onSkip: () {
             // Skip speech profile, finish onboarding
             SharedPreferencesUtil().onboardingCompleted = true;
+            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
             PaintingBinding.instance.imageCache.clear();
             routeToPage(context, const HomePageWrapper(), replace: true);

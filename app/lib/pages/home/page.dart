@@ -226,6 +226,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
 
     // Navigate uri
     Uri? navigateToUri;
