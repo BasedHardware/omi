@@ -1559,24 +1559,46 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
-    // Tagging
+    // Skip if currently tagging this segment
     if (taggingSegmentIds.contains(event.segmentId)) {
       return;
     }
-    // If segment already exists, check if it's assigned. If so, ignore suggestion.
+
+    // Skip if segment already has an assignment
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
     if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == event.speakerId);
       return;
     }
 
-    // Auto-accept if enabled for new person suggestions
-    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
-    } else {
-      // Otherwise, store suggestion to be displayed.
-      suggestionsBySegmentId[event.segmentId] = event;
+    // Backend owns all assignments - apply locally if person_id provided
+    if (event.personId.isNotEmpty) {
+      final isUser = event.personId == 'user';
+      if (!isUser && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: event.personId,
+            name: event.personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      }
+      for (var seg in segments) {
+        if (seg.speakerId == event.speakerId && seg.personId == null && !seg.isUser) {
+          seg.isUser = isUser;
+          seg.personId = isUser ? null : event.personId;
+        }
+      }
+      // Clear any pending suggestions for this speaker
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == event.speakerId);
+      _segmentsPhotosVersion++;
       notifyListeners();
+      return;
     }
+
+    // Empty person_id shouldn't happen with backend fix - log and ignore
+    Logger.debug('SpeakerLabelSuggestionEvent with empty person_id: ${event.segmentId}');
   }
 
   Future<void> assignSpeakerToConversation(
@@ -1595,6 +1617,18 @@ class CaptureProvider extends ChangeNotifier
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+      if (finalPersonId.isNotEmpty &&
+          finalPersonId != 'user' &&
+          SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Find conversation id
