@@ -1574,6 +1574,16 @@ class CaptureProvider extends ChangeNotifier
     // Backend owns all assignments - apply locally if person_id provided
     if (event.personId.isNotEmpty) {
       final isUser = event.personId == 'user';
+      if (!isUser && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: event.personId,
+            name: event.personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      }
       for (var seg in segments) {
         if (seg.speakerId == event.speakerId && seg.personId == null && !seg.isUser) {
           seg.isUser = isUser;
@@ -1607,6 +1617,18 @@ class CaptureProvider extends ChangeNotifier
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+      if (finalPersonId.isNotEmpty &&
+          finalPersonId != 'user' &&
+          SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Find conversation id
