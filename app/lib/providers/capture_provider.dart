@@ -192,8 +192,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  void updateProviderInstances(
-      ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
+  void updateProviderInstances(ConversationProvider? cp, MessageProvider? mp, PeopleProvider? pp, UsageProvider? up) {
     conversationProvider = cp;
     messageProvider = mp;
     peopleProvider = pp;
@@ -1502,10 +1501,11 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
-    // Tagging
+    // Tagging in progress - ignore
     if (taggingSegmentIds.contains(event.segmentId)) {
       return;
     }
+
     // If segment already exists, check if it's assigned. If so, ignore suggestion.
     var segment = segments.firstWhereOrNull((s) => s.id == event.segmentId);
     if (segment != null && segment.id.isNotEmpty && (segment.personId != null || segment.isUser)) {
@@ -1513,7 +1513,24 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Store suggestion for manual tagging.
+    // If backend already assigned (person_id present), apply locally and don't show suggestion UI.
+    // This handles the race condition where suggestion event arrives before updated segments.
+    if (event.personId.isNotEmpty) {
+      // Backend has already assigned - update local segment immediately
+      final isUser = event.personId == 'user';
+      for (var seg in segments) {
+        if (seg.speakerId == event.speakerId && seg.personId == null && !seg.isUser) {
+          seg.isUser = isUser;
+          seg.personId = isUser ? null : event.personId;
+        }
+      }
+      // Clear any existing suggestions for this speaker
+      suggestionsBySegmentId.removeWhere((key, value) => value.speakerId == event.speakerId);
+      notifyListeners();
+      return;
+    }
+
+    // No person_id - store suggestion for manual tagging
     suggestionsBySegmentId[event.segmentId] = event;
     notifyListeners();
   }

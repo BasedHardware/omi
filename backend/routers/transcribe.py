@@ -93,7 +93,6 @@ from utils.stt.speaker_embedding import (
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 
-
 router = APIRouter()
 
 
@@ -1495,8 +1494,11 @@ async def _stream_handler(
 
                 # Trigger realtime integrations (including mentor notifications)
                 from utils.app_integrations import trigger_realtime_integrations
+
                 try:
-                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
+                    await trigger_realtime_integrations(
+                        uid, [s.dict() for s in transcript_segments], current_conversation_id
+                    )
                 except Exception as e:
                     print(f"Error triggering realtime integrations: {e}", uid, session_id)
 
@@ -1590,17 +1592,32 @@ async def _stream_handler(
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
-                        if person_id:
-                            _apply_auto_assignment(segment.id, person_id, segment)
-                            _send_message_event(
-                                SpeakerLabelSuggestionEvent(
-                                    speaker_id=segment.speaker_id,
-                                    person_id=person_id,
-                                    person_name=detected_name,
-                                    segment_id=segment.id,
-                                )
+
+                        # Create person if doesn't exist (CTO feedback: backend should handle full flow)
+                        if not person_id:
+                            now = datetime.now(timezone.utc)
+                            new_person = {
+                                'id': str(uuid.uuid4()),
+                                'name': detected_name,
+                                'created_at': now,
+                                'updated_at': now,
+                                'speech_samples': [],
+                                'speech_samples_version': 3,
+                            }
+                            user_db.create_person(uid, new_person)
+                            person_id = new_person['id']
+                            print(f"Speaker ID: created person '{detected_name}' ({person_id})", uid, session_id)
+
+                        _apply_auto_assignment(segment.id, person_id, segment)
+                        _send_message_event(
+                            SpeakerLabelSuggestionEvent(
+                                speaker_id=segment.speaker_id,
+                                person_id=person_id,
+                                person_name=detected_name,
+                                segment_id=segment.id,
                             )
-                            suggested_segments.add(segment.id)
+                        )
+                        suggested_segments.add(segment.id)
 
                 if pending_auto_assignment_ids:
                     for segment_id in list(pending_auto_assignment_ids):
@@ -1633,6 +1650,7 @@ async def _stream_handler(
 
                 assigned_segments_by_id.clear()
                 segment_by_id.clear()
+
     image_chunks = {str: any}  # A temporary in-memory cache for image chunks
 
     async def process_photo(
