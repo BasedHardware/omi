@@ -9839,7 +9839,7 @@
   "profileSharedFail": "Failed to share speech profile",
   "speechProfileSharingStatus": "Speech Profile Sharing Status",
   "youHaveSharedWith": "You have shared with:",
-  "sharedWithYou": "Shared with you:"
+  "sharedWithYou": "Shared with you:",
   "newTask": "New Task",
   "@newTask": {
     "description": "Button text for creating a new task"
