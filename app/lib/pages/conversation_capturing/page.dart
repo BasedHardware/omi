@@ -244,8 +244,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     suggestions: const {},
                                     taggingSegmentIds: const [],
                                     onAcceptSuggestion: null,
-                                    // No manual tagging during live capture - backend owns assignment
-                                    editSegment: null,
+                                    editSegment: (segmentId, speakerId) {
+                                      final segment = provider.segments.cast<TranscriptSegment?>().firstWhere(
+                                            (s) => s?.id == segmentId,
+                                            orElse: () => null,
+                                          );
+                                      if (segment != null) {
+                                        _editSegmentSpeaker(segment, provider);
+                                      }
+                                    },
                                   ),
                         // Summary Tab
                         Center(
