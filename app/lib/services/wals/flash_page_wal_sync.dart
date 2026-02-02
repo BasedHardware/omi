@@ -15,7 +15,11 @@ import 'package:omi/utils/logger.dart';
 
 class FlashPageWalSyncImpl implements FlashPageWalSync {
   static const int pagesPerChunk = 25;
-  static const Duration _persistBatchDuration = Duration(seconds: 90);
+  // Increased from 90 seconds to 10 minutes - only used as safety fallback
+  // Primary split trigger is now session markers from the device
+  static const Duration _persistBatchDuration = Duration(minutes: 10);
+  // Maximum frames per batch to prevent memory issues (~10 minutes of audio)
+  static const int _maxFramesPerBatch = 30000;
 
   List<Wal> _wals = const [];
   BtDevice? _device;
@@ -277,9 +281,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
         final pageData = limitlessConnection.extractFramesWithSessionInfo();
         bool shouldSave = false;
 
-        List<List<int>>? pendingFrames;
-        int? pendingTimestamp;
-
         if (pageData != null) {
           emptyExtractions = 0;
 
@@ -314,21 +315,24 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           }
 
           if (opusFrames.isNotEmpty) {
-            const sessionGapThresholdMs = 120000;
-            if (batchMinTimestamp != null && accumulatedFrames.isNotEmpty) {
-              final gap = (timestampMs - batchMinTimestamp).abs();
-              if (gap > sessionGapThresholdMs) {
-                shouldSave = true;
-                pendingFrames = opusFrames;
-                pendingTimestamp = timestampMs;
-              }
-            }
+            // Use session markers from device to determine split points
+            // This preserves conversation continuity for offline recordings
+            final didStopSession = pageData['did_stop_session'] as bool? ?? false;
+            final didStopRecording = pageData['did_stop_recording'] as bool? ?? false;
 
-            if (!shouldSave) {
-              if (batchMinTimestamp == null || timestampMs < batchMinTimestamp) {
-                batchMinTimestamp = timestampMs;
-              }
-              accumulatedFrames.addAll(opusFrames);
+            // Add frames to current batch first
+            if (batchMinTimestamp == null || timestampMs < batchMinTimestamp) {
+              batchMinTimestamp = timestampMs;
+            }
+            accumulatedFrames.addAll(opusFrames);
+
+            // Split when device signals session/recording end, or batch is too large
+            if (didStopSession || didStopRecording) {
+              shouldSave = true;
+              Logger.debug("FlashPageSync: Session/recording end marker - saving batch");
+            } else if (accumulatedFrames.length >= _maxFramesPerBatch) {
+              shouldSave = true;
+              Logger.debug("FlashPageSync: Max batch size reached - saving batch");
             }
           }
         } else {
@@ -366,11 +370,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           accumulatedFrames.clear();
           batchMinTimestamp = null;
           lastSaveTime = DateTime.now();
-
-          if (pendingFrames != null && pendingFrames.isNotEmpty) {
-            accumulatedFrames.addAll(pendingFrames);
-            batchMinTimestamp = pendingTimestamp;
-          }
         }
 
         if (emptyExtractions >= maxEmptyExtractions) {
