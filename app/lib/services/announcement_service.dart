@@ -9,6 +9,7 @@ import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/pages/announcements/feature_screen.dart';
 import 'package:omi/providers/announcement_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 /// Service that handles announcement detection and display.
 /// Call this on app startup and after firmware updates.
@@ -56,7 +57,13 @@ class AnnouncementService {
         if (changelogs.isNotEmpty && context.mounted) {
           _isShowingAnnouncement = true;
           try {
+            MixpanelManager().changelogShown(
+              changelogCount: changelogs.length,
+              fromVersion: lastKnownVersion,
+              toVersion: currentVersion,
+            );
             await ChangelogSheet.show(context, changelogs);
+            MixpanelManager().changelogDismissed(changelogCount: changelogs.length);
           } finally {
             _isShowingAnnouncement = false;
           }
@@ -121,7 +128,15 @@ class AnnouncementService {
           continue;
         }
 
+        // Track announcement shown
+        MixpanelManager().announcementShown(
+          announcementId: announcement.id,
+          type: announcement.type.value,
+          priority: announcement.display?.priority,
+        );
+
         // Show based on announcement type
+        bool ctaClicked = false;
         switch (announcement.type) {
           case AnnouncementType.changelog:
             break;
@@ -129,12 +144,17 @@ class AnnouncementService {
             await FeatureScreen.show(context, announcement);
             break;
           case AnnouncementType.announcement:
-            await AnnouncementDialog.show(context, announcement);
+            ctaClicked = await AnnouncementDialog.show(context, announcement);
             break;
         }
 
-        // Mark as dismissed after showing
-        await provider.markAnnouncementDismissed(announcement.id);
+        // Track dismissal and mark as dismissed
+        MixpanelManager().announcementDismissed(
+          announcementId: announcement.id,
+          type: announcement.type.value,
+          ctaClicked: ctaClicked,
+        );
+        await provider.markAnnouncementDismissed(announcement.id, ctaClicked: ctaClicked);
       }
     } finally {
       _isShowingAnnouncement = false;
