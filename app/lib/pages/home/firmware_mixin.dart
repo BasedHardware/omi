@@ -98,11 +98,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
 
     String firmwareFile = zipFilePath ?? '${(await getApplicationDocumentsDirectory()).path}/firmware.zip';
     final file = File(firmwareFile);
-    if (!file.existsSync()) {
+    if (!await file.exists()) {
       Logger.debug('Firmware file not found: $firmwareFile');
-      setState(() {
-        isInstalling = false;
-      });
+      if (mounted) {
+        setState(() {
+          isInstalling = false;
+        });
+      }
       return;
     }
     final bytes = await file.readAsBytes();
