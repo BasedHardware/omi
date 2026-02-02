@@ -94,7 +94,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                if (value != null) ...[
+                if (value != null)
                   Container(
                     constraints: const BoxConstraints(maxWidth: 200),
                     child: Text(
@@ -108,15 +108,17 @@ class OmiSettingsTile extends AdaptiveWidget {
                       textAlign: TextAlign.end,
                     ),
                   ),
-                  if (trailing == null && showArrow) const SizedBox(width: 16),
-                ],
-                if (trailing != null) trailing!,
-                if (trailing == null && showArrow)
+                if (trailing != null) ...[
+                  if (value != null) const SizedBox(width: 16),
+                  trailing!,
+                ] else if (showArrow) ...[
+                  if (value != null) const SizedBox(width: 16),
                   const Icon(
                     FontAwesomeIcons.chevronRight,
                     size: 12,
                     color: ResponsiveHelper.textTertiary,
                   ),
+                ],
               ],
             ),
           ),
