@@ -16,7 +16,7 @@ class HttpPoolManager {
 
   HttpPoolManager._() {
     final httpClient = HttpClient()
-      ..maxConnectionsPerHost = 15
+      ..maxConnectionsPerHost = 20
       ..idleTimeout = const Duration(seconds: 15);
 
     _client = IOClient(httpClient);
