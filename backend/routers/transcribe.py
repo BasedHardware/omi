@@ -93,6 +93,7 @@ from utils.stt.speaker_embedding import (
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 
+
 router = APIRouter()
 
 
@@ -120,7 +121,6 @@ async def _stream_handler(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
-    server_person_id_enabled: bool = False,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -139,7 +139,6 @@ async def _stream_handler(
         conversation_timeout,
         f'custom_stt={custom_stt_mode}',
         f'onboarding={onboarding_mode}',
-        f'server_person_id={server_person_id_enabled}',
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
@@ -350,11 +349,6 @@ async def _stream_handler(
         if not websocket_active:
             return
         return asyncio.create_task(_asend_message_event(msg))
-
-    def _person_id_for_client(person_id: str) -> str:
-        if server_person_id_enabled:
-            return person_id
-        return ""
 
     # Heart beat
     started_at = time.time()
@@ -1426,7 +1420,7 @@ async def _stream_handler(
                 _send_message_event(
                     SpeakerLabelSuggestionEvent(
                         speaker_id=speaker_id,
-                        person_id=_person_id_for_client(person_id),
+                        person_id=person_id,
                         person_name=person_name,
                         segment_id=segment['id'],
                     )
@@ -1526,11 +1520,8 @@ async def _stream_handler(
 
                 # Trigger realtime integrations (including mentor notifications)
                 from utils.app_integrations import trigger_realtime_integrations
-
                 try:
-                    await trigger_realtime_integrations(
-                        uid, [s.dict() for s in transcript_segments], current_conversation_id
-                    )
+                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
                 except Exception as e:
                     print(f"Error triggering realtime integrations: {e}", uid, session_id)
 
@@ -1553,7 +1544,7 @@ async def _stream_handler(
                             _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
-                                    person_id=_person_id_for_client(person_id),
+                                    person_id=person_id,
                                     person_name=person_name,
                                     segment_id=segment.id,
                                 )
@@ -1591,26 +1582,10 @@ async def _stream_handler(
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
                         person_id = person['id'] if person else ''
-
-                        # Backend owns person creation - create if missing
-                        if not person_id:
-                            now = datetime.now(timezone.utc)
-                            new_person = {
-                                'id': str(uuid.uuid4()),
-                                'name': detected_name,
-                                'created_at': now,
-                                'updated_at': now,
-                                'speech_samples': [],
-                                'speech_samples_version': 3,
-                            }
-                            user_db.create_person(uid, new_person)
-                            person_id = new_person['id']
-                            print(f"Speaker ID: created person '{detected_name}' ({person_id})", uid, session_id)
-
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
-                                person_id=_person_id_for_client(person_id),
+                                person_id=person_id,
                                 person_name=detected_name,
                                 segment_id=segment.id,
                             )
@@ -2035,7 +2010,6 @@ async def _listen(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
-    server_person_id_enabled: bool = False,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2060,7 +2034,6 @@ async def _listen(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
-        server_person_id_enabled=server_person_id_enabled,
     )
     print("_listen ended", uid)
 
@@ -2079,11 +2052,9 @@ async def listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
-    server_person_id: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
-    server_person_id_enabled = server_person_id == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -2097,7 +2068,6 @@ async def listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
-        server_person_id_enabled=server_person_id_enabled,
     )
 
 
@@ -2113,7 +2083,6 @@ async def web_listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
-    server_person_id: str = 'disabled',
 ):
     """
     WebSocket endpoint for web browser clients using first-message authentication.
@@ -2160,7 +2129,6 @@ async def web_listen_handler(
     # Proceed with streaming (websocket already accepted, uid already validated)
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
-    server_person_id_enabled = server_person_id == 'enabled'
 
     await _stream_handler(
         websocket,
@@ -2175,6 +2143,5 @@ async def web_listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
-        server_person_id_enabled=server_person_id_enabled,
     )
     print("web_listen_handler ended", uid)
