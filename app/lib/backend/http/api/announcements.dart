@@ -4,13 +4,26 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/announcement.dart';
 
+/// Get app changelogs.
+///
+/// If [fromVersion] and [toVersion] are provided, returns changelogs between those versions.
+/// Otherwise returns the most recent [limit] changelogs (for "What's New" in settings).
 Future<List<Announcement>> getAppChangelogs({
+  String? fromVersion,
+  String? toVersion,
   String? maxVersion,
   int limit = 5,
 }) async {
-  var url = "${Env.apiBaseUrl}v1/announcements/changelogs?limit=$limit";
-  if (maxVersion != null) {
-    url += "&max_version=${Uri.encodeComponent(maxVersion)}";
+  String url;
+  if (fromVersion != null && toVersion != null) {
+    final encodedFrom = Uri.encodeComponent(fromVersion);
+    final encodedTo = Uri.encodeComponent(toVersion);
+    url = "${Env.apiBaseUrl}v1/announcements/changelogs?from_version=$encodedFrom&to_version=$encodedTo";
+  } else {
+    url = "${Env.apiBaseUrl}v1/announcements/changelogs?limit=$limit";
+    if (maxVersion != null) {
+      url += "&max_version=${Uri.encodeComponent(maxVersion)}";
+    }
   }
 
   var res = await makeApiCall(
