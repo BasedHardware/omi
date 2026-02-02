@@ -240,18 +240,41 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     provider.photos,
                                     deviceProvider.connectedDevice,
                                     bottomMargin: 150,
-                                    // No suggestions during live capture - backend owns assignment
-                                    suggestions: const {},
-                                    taggingSegmentIds: const [],
-                                    onAcceptSuggestion: null,
+                                    suggestions: provider.suggestionsBySegmentId,
+                                    taggingSegmentIds: provider.taggingSegmentIds,
+                                    onAcceptSuggestion: (suggestion) {
+                                      provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
+                                          suggestion.personName, [suggestion.segmentId]);
+                                    },
                                     editSegment: (segmentId, speakerId) {
-                                      final segment = provider.segments.cast<TranscriptSegment?>().firstWhere(
-                                            (s) => s?.id == segmentId,
-                                            orElse: () => null,
-                                          );
-                                      if (segment != null) {
-                                        _editSegmentSpeaker(segment, provider);
+                                      final connectivityProvider =
+                                          Provider.of<ConnectivityProvider>(context, listen: false);
+                                      if (!connectivityProvider.isConnected) {
+                                        ConnectivityProvider.showNoInternetDialog(context);
+                                        return;
                                       }
+                                      showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.black,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                          ),
+                                          builder: (context) {
+                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                                (s) => s.speakerId == speakerId,
+                                                orElse: () => SpeakerLabelSuggestionEvent.empty());
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                    speakerId, personId, personName, segmentIds);
+                                              },
+                                            );
+                                          });
                                     },
                                   ),
                         // Summary Tab
