@@ -672,12 +672,17 @@ def upload_wav_as_audio_chunks(
         # Free memory
         del pcm_data
 
-
     except Exception as e:
         print(f"Error uploading audio chunks for conversation {conversation_id}: {e}")
 
 
-def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
+def process_segment(
+    path: str,
+    uid: str,
+    response: dict,
+    source: ConversationSource = ConversationSource.omi,
+    private_cloud_sync_enabled: bool = False,
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -708,7 +713,8 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
 
-        upload_wav_as_audio_chunks(path, uid, created.id, timestamp)
+        if private_cloud_sync_enabled:
+            upload_wav_as_audio_chunks(path, uid, created.id, timestamp)
     else:
 
         transcript_segments = [s.dict() for s in transcript_segments]
@@ -746,8 +752,8 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         # save with updated finished_at
         response['updated_memories'].add(closest_memory['id'])
         update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
-
-        upload_wav_as_audio_chunks(path, uid, closest_memory['id'], timestamp)
+        if private_cloud_sync_enabled:
+            upload_wav_as_audio_chunks(path, uid, closest_memory['id'], timestamp)
 
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
@@ -774,6 +780,8 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         if f.filename and 'limitless' in f.filename.lower():
             source = ConversationSource.limitless
             break
+
+    private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
 
     paths = []
     wav_paths = []
@@ -818,23 +826,24 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     uid,
                     response,
                     source,
+                    private_cloud_sync_enabled,
                 ),
             )
             for path in segmented_paths
         ]
         chunk_threads(threads)
 
-
-        affected_conversation_ids = response['new_memories'] | response['updated_memories']
-        for conversation_id in affected_conversation_ids:
-            try:
-                audio_files = create_audio_files_from_chunks(uid, conversation_id)
-                if audio_files:
-                    conversations_db.update_conversation(
-                        uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
-                    )
-            except Exception as e:
-                print(f"Error updating audio_files for conversation {conversation_id}: {e}")
+        if private_cloud_sync_enabled:
+            affected_conversation_ids = response['new_memories'] | response['updated_memories']
+            for conversation_id in affected_conversation_ids:
+                try:
+                    audio_files = create_audio_files_from_chunks(uid, conversation_id)
+                    if audio_files:
+                        conversations_db.update_conversation(
+                            uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
+                        )
+                except Exception as e:
+                    print(f"Error updating audio_files for conversation {conversation_id}: {e}")
 
         # notify through FCM too ?
         return response
