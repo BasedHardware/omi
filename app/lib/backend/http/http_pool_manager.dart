@@ -109,7 +109,7 @@ class HttpPoolManager {
       return await _client.send(request).timeout(timeout);
     } on SocketException catch (e) {
       Logger.debug('HttpPoolManager sendStreaming SocketException: $e');
-      rethrow;
+      return http.StreamedResponse(const Stream.empty(), 503, reasonPhrase: 'Socket error: $e');
     }
   }
 
