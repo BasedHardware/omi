@@ -166,16 +166,16 @@ class _FCMNotificationService implements NotificationInterface {
 
         if (apnsToken == null) {
           Logger.debug('APNS token not available yet, will retry on refresh');
-          _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
           return;
         }
       }
 
       String? token = await _firebaseMessaging.getToken();
       await saveFcmToken(token);
-      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     } catch (e) {
       Logger.debug('Failed to save notification token: $e');
+    } finally {
+      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     }
   }
 
