@@ -107,6 +107,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       params += '&onboarding=enabled';
     }
 
+    // Enable server-side person creation for speaker auto-assignment
+    params += '&server_person_id=enabled';
+
     String url =
         Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
 
