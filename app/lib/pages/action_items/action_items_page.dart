@@ -44,9 +44,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
 
-  // FAB menu state
-  bool _isFabMenuOpen = false;
-
   @override
   bool get wantKeepAlive => true;
 
@@ -202,136 +199,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  void _toggleFabMenu() {
-    setState(() {
-      _isFabMenuOpen = !_isFabMenuOpen;
-    });
-    HapticFeedback.lightImpact();
-  }
-
-  void _closeFabMenu() {
-    if (_isFabMenuOpen) {
-      setState(() {
-        _isFabMenuOpen = false;
-      });
-    }
-  }
-
-  Widget _buildFabMenu() {
+  Widget _buildFab() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 48.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // Add Goal pill button
-          if (Provider.of<GoalsProvider>(context, listen: false).goals.length < 3)
-            AnimatedScale(
-              scale: _isFabMenuOpen ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              child: AnimatedOpacity(
-                opacity: _isFabMenuOpen ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 200),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _closeFabMenu();
-                      MixpanelManager().track('Add Goal Clicked from Tasks Page');
-                      _showCreateGoalSheet();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple,
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.flag_outlined,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            context.l10n.addGoal,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          // Add Task pill button
-          AnimatedScale(
-            scale: _isFabMenuOpen ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            child: AnimatedOpacity(
-              opacity: _isFabMenuOpen ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 150),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    _closeFabMenu();
-                    _showCreateActionItemSheet(
-                      defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_task,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          context.l10n.addTask,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Main FAB
-          FloatingActionButton(
-            heroTag: 'action_items_fab',
-            onPressed: _toggleFabMenu,
-            backgroundColor: Colors.deepPurple,
-            child: AnimatedRotation(
-              turns: _isFabMenuOpen ? 0.125 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: const Icon(Icons.add, color: Colors.white),
-            ),
-          ),
-        ],
+      child: FloatingActionButton(
+        heroTag: 'action_items_fab',
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          _showCreateActionItemSheet(
+            defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+          );
+        },
+        backgroundColor: Colors.deepPurple,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
@@ -525,9 +405,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: _buildFabMenu(),
+          floatingActionButton: _buildFab(),
           body: GestureDetector(
-            onTap: _closeFabMenu,
+            onTap: () {},
             child: RefreshIndicator(
               onRefresh: () async {
                 HapticFeedback.mediumImpact();
@@ -676,13 +556,27 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      '${goals.length}',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
+                    if (goals.length < 3)
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                          _showCreateGoalSheet();
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.add,
+                            size: 18,
+                            color: Colors.grey[400],
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
