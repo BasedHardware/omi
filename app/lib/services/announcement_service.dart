@@ -128,10 +128,12 @@ class AnnouncementService {
           continue;
         }
 
+        final typeName = announcement.type.toString().split('.').last;
+
         // Track announcement shown
         MixpanelManager().announcementShown(
           announcementId: announcement.id,
-          type: announcement.type.value,
+          type: typeName,
           priority: announcement.display?.priority,
         );
 
@@ -151,7 +153,7 @@ class AnnouncementService {
         // Track dismissal and mark as dismissed
         MixpanelManager().announcementDismissed(
           announcementId: announcement.id,
-          type: announcement.type.value,
+          type: typeName,
           ctaClicked: ctaClicked,
         );
         await provider.markAnnouncementDismissed(announcement.id, ctaClicked: ctaClicked);
