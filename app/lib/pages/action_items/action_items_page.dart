@@ -225,52 +225,53 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Add Goal pill button
-          AnimatedScale(
-            scale: _isFabMenuOpen ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            child: AnimatedOpacity(
-              opacity: _isFabMenuOpen ? 1.0 : 0.0,
+          if (Provider.of<GoalsProvider>(context, listen: false).goals.length < 3)
+            AnimatedScale(
+              scale: _isFabMenuOpen ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 200),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    _closeFabMenu();
-                    MixpanelManager().track('Add Goal Clicked from Tasks Page');
-                    _showCreateGoalSheet();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple,
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.flag_outlined,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          context.l10n.addGoal,
-                          style: const TextStyle(
+              curve: Curves.easeOut,
+              child: AnimatedOpacity(
+                opacity: _isFabMenuOpen ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _closeFabMenu();
+                      MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                      _showCreateGoalSheet();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple,
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.flag_outlined,
                             color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                            size: 20,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 12),
+                          Text(
+                            context.l10n.addGoal,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
           // Add Task pill button
           AnimatedScale(
             scale: _isFabMenuOpen ? 1.0 : 0.0,
