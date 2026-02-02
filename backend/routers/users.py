@@ -229,6 +229,9 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 # TODO: consider adding person photo.
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
+    existing_person = get_person_by_name(uid, data.name)
+    if existing_person:
+        return existing_person
     data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
