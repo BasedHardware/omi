@@ -100,7 +100,8 @@ class AudioPlayerUtils extends ChangeNotifier {
     final audioFilePath = await _getOrCreateAudioFile(wal);
     if (audioFilePath == null) {
       _resetPlaybackState();
-      throw Exception('Unable to create playable audio file');
+      Logger.debug('AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}');
+      return;
     }
 
     _currentPlayingId = wal.id;
