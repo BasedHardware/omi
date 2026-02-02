@@ -57,7 +57,7 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -92,7 +92,6 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-
 
 router = APIRouter()
 
@@ -1492,13 +1491,14 @@ async def _stream_handler(
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
-
-                # Trigger realtime integrations (including mentor notifications)
-                from utils.app_integrations import trigger_realtime_integrations
-                try:
-                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
-                except Exception as e:
-                    print(f"Error triggering realtime integrations: {e}", uid, session_id)
+                elif not PUSHER_ENABLED:
+                    # Fallback: trigger realtime integrations directly when pusher is disabled
+                    try:
+                        await trigger_realtime_integrations(
+                            uid, [s.dict() for s in transcript_segments], current_conversation_id
+                        )
+                    except Exception as e:
+                        print(f"Error triggering realtime integrations: {e}", uid, session_id)
 
                 # Onboarding: pass segments to handler for answer detection
                 if onboarding_handler and not onboarding_handler.completed:
