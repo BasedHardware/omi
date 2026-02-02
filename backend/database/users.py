@@ -999,33 +999,31 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
     if update_data:
         user_ref.update(update_data)
 
+
 def set_user_speaker_embedding(uid: str, embedding: list):
     """Store speaker embedding on the user document itself (not a person)."""
     user_ref = db.collection('users').document(uid)
-    user_ref.update({
-        'speaker_embedding': embedding,
-        'speaker_embedding_updated_at': datetime.now(timezone.utc),
-    })
+    user_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'speaker_embedding_updated_at': datetime.now(timezone.utc),
+        }
+    )
 
-
-def get_user_speaker_embedding(uid: str) -> Optional[list]:
-    """Get the user's own speaker embedding from their user document."""
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
-    if not user_doc.exists:
-        return None
-    return user_doc.to_dict().get('speaker_embedding')
 
 
 def share_speech_profile(owner_uid: str, target_uid: str):
     """Share the owner's speech profile with another user (target_uid)."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
-    shared_ref.set({
-        'shared_with_uid': target_uid,
-        'created_at': datetime.now(timezone.utc),
-        'revoked_at': None,
-    })
+    shared_ref.set(
+        {
+            'shared_with_uid': target_uid,
+            'created_at': datetime.now(timezone.utc),
+            'revoked_at': None,
+        }
+    )
     return True
+
 
 def revoke_speech_profile_share(owner_uid: str, target_uid: str):
     """Revoke a previously shared speech profile."""
@@ -1035,16 +1033,18 @@ def revoke_speech_profile_share(owner_uid: str, target_uid: str):
         return True
     return False
 
+
 def get_profiles_shared_with_user(target_uid: str):
     """Return a list of user IDs who have shared their speech profile with target_uid and not revoked."""
 
-    shares_query = db.collection_group('shared_speech_profiles').where(
-        filter=firestore.FieldFilter('shared_with_uid', '==', target_uid)
-    ).where(
-        filter=firestore.FieldFilter('revoked_at', '==', None)
+    shares_query = (
+        db.collection_group('shared_speech_profiles')
+        .where(filter=firestore.FieldFilter('shared_with_uid', '==', target_uid))
+        .where(filter=firestore.FieldFilter('revoked_at', '==', None))
     )
-    
+
     return [share.reference.parent.parent.id for share in shares_query.stream()]
+
 
 def get_users_shared_with(owner_uid: str):
     """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""

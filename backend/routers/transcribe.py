@@ -26,6 +26,7 @@ from firebase_admin.auth import InvalidIdTokenError
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
+from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
     get_cached_user_geolocation,
@@ -92,10 +93,6 @@ from utils.stt.speaker_embedding import (
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 
-from database.users import (
-    get_user_transcription_preferences,
-    get_profiles_shared_with_user,
-)
 
 router = APIRouter()
 
@@ -1267,14 +1264,14 @@ async def _stream_handler(
                     }
 
             # Shared profiles, load each sharer's own user-level embedding
-            shared_owners = get_profiles_shared_with_user(uid)
+            shared_owners = user_db.get_profiles_shared_with_user(uid)
             for owner_uid in shared_owners:
                 if owner_uid == uid:
                     continue
                 try:
-                    emb = user_db.get_user_speaker_embedding(owner_uid)
+                    profile = user_db.get_user_profile(owner_uid)
+                    emb = profile.get('speaker_embedding')
                     if emb:
-                        profile = user_db.get_user_profile(owner_uid)
                         name = profile.get('name') or owner_uid[:8]
                         person_embeddings_cache[f"shared:{owner_uid}"] = {
                             'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),

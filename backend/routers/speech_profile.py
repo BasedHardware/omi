@@ -10,6 +10,7 @@ from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
 from database.users import (
     get_person,
+    is_exists_user,
     set_user_speaker_embedding,
     share_speech_profile,
     revoke_speech_profile_share,
@@ -17,7 +18,7 @@ from database.users import (
     get_users_shared_with,
 )
 from models.conversation import Conversation
-from models.other import UploadProfile
+from models.other import ShareSpeechProfileRequest, UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
@@ -124,22 +125,22 @@ def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str =
 
 
 @router.post('/v1/speech-profile/share', tags=['v1'])
-def api_share_speech_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Share the current user's speech profile with another user"""
-    target_uid = data.get('target_uid')
-    if not target_uid or target_uid == uid:
-        raise HTTPException(status_code=400, detail="Invalid target user ID.")
-    share_speech_profile(uid, target_uid)
+    if data.target_uid == uid:
+        raise HTTPException(status_code=400, detail="Cannot share with yourself.")
+    if not is_exists_user(data.target_uid):
+        raise HTTPException(status_code=404, detail="Target user not found.")
+    share_speech_profile(uid, data.target_uid)
     return {"status": "ok"}
 
 
 @router.post('/v1/speech-profile/revoke', tags=['v1'])
-def api_revoke_speech_profile(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Revoke a previously shared speech profile"""
-    target_uid = data.get('target_uid')
-    if not target_uid or target_uid == uid:
+    if data.target_uid == uid:
         raise HTTPException(status_code=400, detail="Invalid target user ID.")
-    result = revoke_speech_profile_share(uid, target_uid)
+    result = revoke_speech_profile_share(uid, data.target_uid)
     if not result:
         raise HTTPException(status_code=404, detail="No active share found.")
     return {"status": "ok"}

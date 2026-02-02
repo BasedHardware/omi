@@ -9832,5 +9832,12 @@
   "resetFilters": "Reset filters",
   "applyFilters": "Apply filters",
   "mostInstalls": "Most Installs",
-  "couldNotOpenUrl": "Could not open URL. Please try again."
+  "couldNotOpenUrl": "Could not open URL. Please try again.",
+  "shareSpeechProfile": "Share Speech Profile",
+  "enterUserIdToShare": "Enter the user ID to share your speech profile with",
+  "profileSharedSuccess": "Speech profile shared successfully",
+  "profileSharedFail": "Failed to share speech profile",
+  "speechProfileSharingStatus": "Speech Profile Sharing Status",
+  "youHaveSharedWith": "You have shared with:",
+  "sharedWithYou": "Shared with you:"
 }

@@ -14,6 +14,10 @@ class UploadProfile(BaseModel):
     duration: int
 
 
+class ShareSpeechProfileRequest(BaseModel):
+    target_uid: str
+
+
 class CreatePerson(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
