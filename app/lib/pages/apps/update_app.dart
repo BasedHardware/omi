@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -166,7 +166,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: provider.isUploadingThumbnail
-                                              ? Shimmer.fromColors(
+                                              ? ShimmerWithTimeout(
                                                   baseColor: Colors.grey[900]!,
                                                   highlightColor: Colors.grey[800]!,
                                                   child: Container(
@@ -214,7 +214,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                                 ),
                                               ),
                                             ),
-                                            placeholder: (context, url) => Shimmer.fromColors(
+                                            placeholder: (context, url) => ShimmerWithTimeout(
                                               baseColor: Colors.grey[900]!,
                                               highlightColor: Colors.grey[800]!,
                                               child: Container(

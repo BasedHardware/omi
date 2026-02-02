@@ -105,6 +105,7 @@ class ChatTool {
   String method;
   bool authRequired;
   String? statusMessage;
+  bool isMcp;
 
   ChatTool({
     required this.name,
@@ -113,6 +114,7 @@ class ChatTool {
     this.method = 'POST',
     this.authRequired = true,
     this.statusMessage,
+    this.isMcp = false,
   });
 
   factory ChatTool.fromJson(Map<String, dynamic> json) {
@@ -123,6 +125,7 @@ class ChatTool {
       method: json['method'] ?? 'POST',
       authRequired: json['auth_required'] ?? true,
       statusMessage: json['status_message'],
+      isMcp: json['is_mcp'] ?? false,
     );
   }
 
@@ -134,6 +137,7 @@ class ChatTool {
       'method': method,
       'auth_required': authRequired,
       if (statusMessage != null) 'status_message': statusMessage,
+      'is_mcp': isMcp,
     };
   }
 
@@ -153,6 +157,7 @@ class ExternalIntegration {
   String? appHomeUrl;
   List<Action>? actions;
   String? chatToolsManifestUrl;
+  String? mcpServerUrl;
 
   ExternalIntegration({
     this.triggersOn,
@@ -164,6 +169,7 @@ class ExternalIntegration {
     this.appHomeUrl,
     this.actions,
     this.chatToolsManifestUrl,
+    this.mcpServerUrl,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -179,6 +185,7 @@ class ExternalIntegration {
           : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
       actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
       chatToolsManifestUrl: json['chat_tools_manifest_url'],
+      mcpServerUrl: json['mcp_server_url'],
     );
   }
 
@@ -206,6 +213,7 @@ class ExternalIntegration {
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
       'actions': actions?.map((e) => e.toJson()).toList(),
       'chat_tools_manifest_url': chatToolsManifestUrl,
+      if (mcpServerUrl != null) 'mcp_server_url': mcpServerUrl,
     };
   }
 }

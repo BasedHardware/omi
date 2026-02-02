@@ -1016,7 +1016,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Verbinden';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Binnenkort beschikbaar';
@@ -1658,7 +1658,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get whatShouldWeMake => 'Wat zullen we maken?';
 
   @override
-  String get appName => 'App-naam';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beschrijving';
@@ -2274,7 +2274,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get folderName => 'Mapnaam';
 
   @override
-  String get descriptionOptional => 'Beschrijving (optioneel)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kan map niet verwijderen';
@@ -8013,4 +8013,75 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Kan de URL niet openen. Probeer het opnieuw.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

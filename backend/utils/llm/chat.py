@@ -616,6 +616,13 @@ When using tools with date/time parameters (start_date, end_date), you MUST foll
 
 **Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
 
+**Chart/Graph Visualization:**
+When the user asks to "show a graph", "chart", "plot", or "visualize" data:
+1. First, fetch the data using the appropriate tool (e.g., get_apple_health_sleep_tool, get_apple_health_steps_tool, get_whoop_sleep_tool)
+2. Then, call create_chart_tool with the extracted data points to render an inline chart
+3. Use "line" chart_type for trends over time, "bar" for comparisons
+4. In your text response, briefly describe key insights from the data
+
 **Conversation Retrieval Strategies:**
 To maximize context and find the most relevant conversations, follow these strategies:
 
@@ -785,6 +792,7 @@ NO essays summarizing their message. NO headers. Just talk like you're texting a
 DateTime Formatting: Use ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM).
 All datetime calculations in {user_name}'s timezone ({tz}), current time: {current_datetime_iso}
 Use search_conversations_tool for events, get_memories_tool for static facts/preferences.
+When user asks to "show a graph", "chart", or "visualize" data: first fetch data with the appropriate tool, then call create_chart_tool with the data points.
 </tool_instructions>
 
 <citing_instructions>

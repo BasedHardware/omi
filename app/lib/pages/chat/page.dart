@@ -19,7 +19,9 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -31,6 +33,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -75,6 +78,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textFieldFocusNode = FocusNode();
     textController.addListener(() {
       setState(() {});
+    });
+    textFieldFocusNode.addListener(() {
+      setState(() {});
+      if (textFieldFocusNode.hasFocus) {
+        // Scroll to bottom when keyboard opens, with delay to allow keyboard animation
+        _ensureAtBottom(delayMs: 300);
+      }
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
@@ -148,6 +158,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);
         debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
+    }
+  }
+
+  void _openSettingsDrawer() {
+    HapticFeedback.mediumImpact();
+    MixpanelManager().pageOpened('Settings');
+    final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
+    final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+    final previousModel = SharedPreferencesUtil().transcriptionModel;
+    SettingsDrawer.show(context);
+    if (previousLanguage != SharedPreferencesUtil().userPrimaryLanguage ||
+        previousSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+        previousModel != SharedPreferencesUtil().transcriptionModel) {
+      context.read<CaptureProvider>().onRecordProfileSettingChanged();
     }
   }
 
@@ -417,7 +441,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       }),
                       // Send bar
                       SafeArea(
-                        bottom: !widget.isPivotBottom,
+                        bottom: false,
                         maintainBottomViewPadding: false,
                         child: Padding(
                           padding: EdgeInsets.only(
@@ -425,14 +449,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                             right: 8,
                             top: provider.selectedFiles.isNotEmpty ? 0 : 8,
                             bottom: widget.isPivotBottom
-                                ? 20
+                                ? 6
                                 : (textFieldFocusNode.hasFocus &&
                                         (textController.text.length > 40 || textController.text.contains('\n'))
                                     ? 0
-                                    : 10),
+                                    : 2),
                           ),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: const Color(0xFF2A2A2F),
                               borderRadius: BorderRadius.circular(32),
@@ -637,6 +661,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                     ]);
                   }),
                 ),
+                SizedBox(height: textFieldFocusNode.hasFocus ? 12 : 0),
+                if (!textFieldFocusNode.hasFocus)
+                  BottomNavBar(
+                    showCenterButton: false,
+                    onTabTap: (index, isRepeat) {
+                      context.read<HomeProvider>().setIndex(index);
+                      Navigator.of(context).pop();
+                    },
+                  ),
               ],
             ),
           ),

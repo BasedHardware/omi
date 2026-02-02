@@ -1000,7 +1000,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => '연결';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => '곧 출시';
@@ -1633,7 +1633,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get whatShouldWeMake => '무엇을 만들까요?';
 
   @override
-  String get appName => '앱 이름';
+  String get appName => 'App Name';
 
   @override
   String get description => '설명';
@@ -2225,7 +2225,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get folderName => '폴더 이름';
 
   @override
-  String get descriptionOptional => '설명 (선택사항)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => '폴더 삭제 실패';
@@ -7856,4 +7856,75 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

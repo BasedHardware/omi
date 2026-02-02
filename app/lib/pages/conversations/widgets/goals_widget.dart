@@ -144,6 +144,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       // Also save emojis
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
+
+      // Notify other widgets that goals have changed
+      widget.onRefresh?.call();
     } catch (e) {
       Logger.debug('[GOALS] Error saving goals: $e');
     }
@@ -235,7 +238,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return _goalEmojis[goalId] ?? '🎯';
   }
 
-  void _addGoal() {
+  void addGoal() {
     if (_goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -373,6 +376,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
+                      autofocus: true,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         filled: true,
@@ -617,23 +621,20 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return const SizedBox.shrink();
     }
 
+    // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
+    if (_goals.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.only(left: 16, right: 16),
       padding: const EdgeInsets.only(top: 16, bottom: 20),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
-          ),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(left: 8, bottom: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -641,52 +642,36 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   context.l10n.goals,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (_goals.length < _maxGoals)
                   GestureDetector(
-                    onTap: _addGoal,
-                    child: Icon(
-                      Icons.add_rounded,
-                      size: 22,
-                      color: Colors.white.withOpacity(0.5),
+                    onTap: addGoal,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.add,
+                        size: 18,
+                        color: Colors.grey[400],
+                      ),
                     ),
                   ),
               ],
             ),
           ),
           // Goals list
-          if (_goals.isEmpty)
-            GestureDetector(
-              onTap: _addGoal,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
-                      const SizedBox(width: 8),
-                      Text(
-                        context.l10n.tapToAddGoal,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            ..._goals.asMap().entries.map((entry) {
-              final goal = entry.value;
-              final isLast = entry.key == _goals.length - 1;
-              return _buildGoalItem(goal, isLast);
-            }),
+          ..._goals.asMap().entries.map((entry) {
+            final goal = entry.value;
+            final isLast = entry.key == _goals.length - 1;
+            return _buildGoalItem(goal, isLast);
+          }),
         ],
       ),
     );
@@ -697,78 +682,138 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     final color = _getColor(progress);
     final emoji = _getGoalEmoji(goal.id);
 
-    return GestureDetector(
-      onTap: () => _editGoal(goal),
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-        child: Row(
-          children: [
-            // Emoji icon
-            Container(
-              width: 36,
-              height: 36,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Dismissible(
+      key: Key(goal.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (direction) async {
+        await _deleteGoal(goal);
+      },
+      child: GestureDetector(
+        onTap: () => _editGoal(goal),
+        child: Container(
+          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              // Emoji icon
+              Container(
+                width: 40,
+                height: 40,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 18)),
+                ),
               ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 18)),
-              ),
-            ),
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    goal.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  // Progress bar
-                  Stack(
-                    children: [
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      goal.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                      FractionallySizedBox(
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        child: Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Progress bar with completion text
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Transform.translate(
+                            offset: const Offset(-12, 0),
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 6,
+                                activeTrackColor: color,
+                                inactiveTrackColor: Colors.white.withOpacity(0.1),
+                                thumbColor: color,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                trackShape: const RoundedRectSliderTrackShape(),
+                              ),
+                              child: Slider(
+                                value: goal.currentValue.clamp(0.0, goal.targetValue),
+                                min: 0,
+                                max: goal.targetValue,
+                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
+                                onChanged: (value) => _updateGoalProgressUI(goal, value),
+                                onChangeEnd: (value) => _saveGoalProgress(goal, value),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // Expand icon
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Icon(
-                _isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                size: 20,
-                color: Colors.white.withOpacity(0.3),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // Update UI state only (called during drag)
+  void _updateGoalProgressUI(Goal goal, double newValue) {
+    if (newValue == goal.currentValue) return;
+
+    HapticFeedback.lightImpact();
+
+    setState(() {
+      final index = _goals.indexWhere((g) => g.id == goal.id);
+      if (index != -1) {
+        _goals[index] = Goal(
+          id: goal.id,
+          title: goal.title,
+          goalType: goal.goalType,
+          targetValue: goal.targetValue,
+          currentValue: newValue,
+          minValue: goal.minValue,
+          maxValue: goal.maxValue,
+          unit: goal.unit,
+          isActive: goal.isActive,
+          createdAt: goal.createdAt,
+          updatedAt: DateTime.now(),
+        );
+      }
+    });
+  }
+
+  // Save to storage and API (called when drag ends)
+  Future<void> _saveGoalProgress(Goal goal, double newValue) async {
+    await _saveGoalsLocally();
+
+    if (!goal.id.startsWith('local_')) {
+      await updateGoalProgress(goal.id, newValue);
+    }
   }
 }

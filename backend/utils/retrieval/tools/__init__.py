@@ -33,11 +33,6 @@ from .calendar_tools import (
 from .gmail_tools import (
     get_gmail_messages_tool,
 )
-from .whoop_tools import (
-    get_whoop_sleep_tool,
-    get_whoop_recovery_tool,
-    get_whoop_workout_tool,
-)
 from .apple_health_tools import (
     get_apple_health_steps_tool,
     get_apple_health_sleep_tool,
@@ -45,23 +40,14 @@ from .apple_health_tools import (
     get_apple_health_workouts_tool,
     get_apple_health_summary_tool,
 )
-from .notion_tools import (
-    search_notion_pages_tool,
-)
-from .twitter_tools import (
-    get_twitter_tweets_tool,
-)
-from .github_tools import (
-    get_github_pull_requests_tool,
-    get_github_issues_tool,
-    create_github_issue_tool,
-    close_github_issue_tool,
-)
 from .file_tools import (
     search_files_tool,
 )
 from .notification_settings_tools import (
     manage_daily_summary_tool,
+)
+from .chart_tools import (
+    create_chart_tool,
 )
 
 __all__ = [
@@ -79,20 +65,12 @@ __all__ = [
     'update_calendar_event_tool',
     'delete_calendar_event_tool',
     'get_gmail_messages_tool',
-    'get_whoop_sleep_tool',
-    'get_whoop_recovery_tool',
-    'get_whoop_workout_tool',
     'get_apple_health_steps_tool',
     'get_apple_health_sleep_tool',
     'get_apple_health_heart_rate_tool',
     'get_apple_health_workouts_tool',
     'get_apple_health_summary_tool',
-    'search_notion_pages_tool',
-    'get_twitter_tweets_tool',
-    'get_github_pull_requests_tool',
-    'get_github_issues_tool',
-    'create_github_issue_tool',
-    'close_github_issue_tool',
     'search_files_tool',
     'manage_daily_summary_tool',
+    'create_chart_tool',
 ]
