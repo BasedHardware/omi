@@ -98,6 +98,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ..clear()
         ..addAll(savedLinks);
     });
+    // Prune orphaned links after loading
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pruneTaskGoalLinks();
+    });
+  }
+
+  /// Remove task-goal links where the goal no longer exists
+  void _pruneTaskGoalLinks() {
+    final goals = Provider.of<GoalsProvider>(context, listen: false).goals;
+    if (goals.isEmpty) return;
+    final goalIds = goals.map((goal) => goal.id).toSet();
+    final removed = _taskGoalLinks.keys.where((taskId) => !goalIds.contains(_taskGoalLinks[taskId])).toList();
+    if (removed.isEmpty) return;
+    for (final taskId in removed) {
+      _taskGoalLinks.remove(taskId);
+    }
+    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
   }
 
   void _attachTaskToGoal(String taskId, String goalId) {
