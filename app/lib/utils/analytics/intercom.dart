@@ -26,16 +26,24 @@ class IntercomManager {
   }
 
   Future<void> initIntercom() async {
-    if (Env.intercomAppId == null) return;
-    await PlatformService.executeIfSupportedAsync(
-      PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty),
-      () => intercom.initialize(
+    if (Env.intercomAppId == null || Env.intercomAppId!.isEmpty) {
+      _initialized = true; // Mark as initialized (no-op) so methods degrade gracefully
+      return;
+    }
+    if (!PlatformService.isIntercomSupported) {
+      _initialized = true; // Mark as initialized on unsupported platforms
+      return;
+    }
+    try {
+      await intercom.initialize(
         Env.intercomAppId!,
         iosApiKey: Env.intercomIOSApiKey,
         androidApiKey: Env.intercomAndroidApiKey,
-      ),
-    );
-    _initialized = true;
+      );
+      _initialized = true;
+    } catch (e) {
+      // Initialization failed - _initialized stays false, all methods will no-op
+    }
   }
 
   Future displayChargingArticle(String device) async {
