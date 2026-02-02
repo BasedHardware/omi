@@ -160,7 +160,6 @@ class BackgroundService {
 
   Future<void> init() async {
     _service = FlutterBackgroundService();
-    _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
       iosConfiguration: IosConfiguration(
