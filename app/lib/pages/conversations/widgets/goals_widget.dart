@@ -663,6 +663,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
                                 trackShape: const RoundedRectSliderTrackShape(),
+                                tickMarkShape: SliderTickMarkShape.noTickMark,
                               ),
                               child: Slider(
                                 value: goal.currentValue.clamp(0.0, goal.targetValue),
