@@ -453,6 +453,11 @@ def get_pending_announcements(
             if not device_model or device_model not in targeting.device_models:
                 continue
 
+        # 8. Check test_uids (if set, only those users see the announcement)
+        if targeting.test_uids:
+            if uid not in targeting.test_uids:
+                continue
+
         pending.append(announcement)
 
     # Sort by priority (highest first)

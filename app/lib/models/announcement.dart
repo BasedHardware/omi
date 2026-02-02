@@ -26,6 +26,7 @@ class Targeting {
   final List<String>? platforms;
   @JsonKey(defaultValue: TriggerType.versionUpgrade)
   final TriggerType trigger;
+  final List<String>? testUids;
 
   Targeting({
     this.appVersionMin,
@@ -35,6 +36,7 @@ class Targeting {
     this.deviceModels,
     this.platforms,
     this.trigger = TriggerType.versionUpgrade,
+    this.testUids,
   });
 
   factory Targeting.fromJson(Map<String, dynamic> json) => _$TargetingFromJson(json);

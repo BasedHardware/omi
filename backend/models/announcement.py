@@ -27,6 +27,7 @@ class Targeting(BaseModel):
     device_models: Optional[List[str]] = None  # ["Omi DevKit 2", "Omi Pro"]
     platforms: Optional[List[str]] = None  # ["ios", "android"]
     trigger: TriggerType = TriggerType.VERSION_UPGRADE
+    test_uids: Optional[List[str]] = None  # If set, only these users see the announcement (for testing)
 
     def to_dict(self) -> dict:
         return {
@@ -37,6 +38,7 @@ class Targeting(BaseModel):
             "device_models": self.device_models,
             "platforms": self.platforms,
             "trigger": self.trigger.value,
+            "test_uids": self.test_uids,
         }
 
 

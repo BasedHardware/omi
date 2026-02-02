@@ -19,6 +19,9 @@ Targeting _$TargetingFromJson(Map<String, dynamic> json) => Targeting(
           .toList(),
       trigger: $enumDecodeNullable(_$TriggerTypeEnumMap, json['trigger']) ??
           TriggerType.versionUpgrade,
+      testUids: (json['test_uids'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
     );
 
 Map<String, dynamic> _$TargetingToJson(Targeting instance) => <String, dynamic>{
@@ -29,6 +32,7 @@ Map<String, dynamic> _$TargetingToJson(Targeting instance) => <String, dynamic>{
       'device_models': instance.deviceModels,
       'platforms': instance.platforms,
       'trigger': _$TriggerTypeEnumMap[instance.trigger]!,
+      'test_uids': instance.testUids,
     };
 
 const _$TriggerTypeEnumMap = {
