@@ -8,6 +8,65 @@ enum AnnouncementType {
   announcement,
 }
 
+enum TriggerType {
+  immediate,
+  @JsonValue('version_upgrade')
+  versionUpgrade,
+  @JsonValue('firmware_upgrade')
+  firmwareUpgrade,
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class Targeting {
+  final String? appVersionMin;
+  final String? appVersionMax;
+  final String? firmwareVersionMin;
+  final String? firmwareVersionMax;
+  final List<String>? deviceModels;
+  final List<String>? platforms;
+  @JsonKey(defaultValue: TriggerType.versionUpgrade)
+  final TriggerType trigger;
+  final List<String>? testUids;
+
+  Targeting({
+    this.appVersionMin,
+    this.appVersionMax,
+    this.firmwareVersionMin,
+    this.firmwareVersionMax,
+    this.deviceModels,
+    this.platforms,
+    this.trigger = TriggerType.versionUpgrade,
+    this.testUids,
+  });
+
+  factory Targeting.fromJson(Map<String, dynamic> json) => _$TargetingFromJson(json);
+  Map<String, dynamic> toJson() => _$TargetingToJson(this);
+}
+
+// Display model for controlling announcement presentation
+@JsonSerializable(fieldRename: FieldRename.snake)
+class Display {
+  @JsonKey(defaultValue: 0)
+  final int priority;
+  final DateTime? startAt;
+  final DateTime? expiresAt;
+  @JsonKey(defaultValue: true)
+  final bool dismissible;
+  @JsonKey(defaultValue: true)
+  final bool showOnce;
+
+  Display({
+    this.priority = 0,
+    this.startAt,
+    this.expiresAt,
+    this.dismissible = true,
+    this.showOnce = true,
+  });
+
+  factory Display.fromJson(Map<String, dynamic> json) => _$DisplayFromJson(json);
+  Map<String, dynamic> toJson() => _$DisplayToJson(this);
+}
+
 // Changelog content models
 @JsonSerializable(fieldRename: FieldRename.snake)
 class ChangelogItem {
@@ -108,7 +167,7 @@ class AnnouncementContent {
 }
 
 // Main announcement model
-@JsonSerializable(fieldRename: FieldRename.snake)
+@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class Announcement {
   final String id;
   final AnnouncementType type;
@@ -116,14 +175,16 @@ class Announcement {
   @JsonKey(defaultValue: true)
   final bool active;
 
-  // Version triggers
+  // Version fields (used by /changelogs endpoint)
   final String? appVersion;
   final String? firmwareVersion;
   @JsonKey(defaultValue: [])
   final List<String>? deviceModels;
-
-  // For general announcements
   final DateTime? expiresAt;
+
+  // Flexible targeting and display options
+  final Targeting? targeting;
+  final Display? display;
 
   // Raw content - parsed based on type
   final Map<String, dynamic> content;
@@ -137,6 +198,8 @@ class Announcement {
     this.firmwareVersion,
     this.deviceModels,
     this.expiresAt,
+    this.targeting,
+    this.display,
     required this.content,
   });
 
@@ -147,4 +210,10 @@ class Announcement {
   ChangelogContent get changelogContent => ChangelogContent.fromJson(content);
   FeatureContent get featureContent => FeatureContent.fromJson(content);
   AnnouncementContent get announcementContent => AnnouncementContent.fromJson(content);
+
+  // Get effective display priority (defaults to 0)
+  int get effectivePriority => display?.priority ?? 0;
+
+  // Get effective trigger type
+  TriggerType get effectiveTrigger => targeting?.trigger ?? TriggerType.versionUpgrade;
 }
