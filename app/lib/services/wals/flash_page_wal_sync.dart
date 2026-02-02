@@ -314,14 +314,20 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           }
 
           if (opusFrames.isNotEmpty) {
-            const sessionGapThresholdMs = 120000;
-            if (batchMinTimestamp != null && accumulatedFrames.isNotEmpty) {
-              final gap = (timestampMs - batchMinTimestamp).abs();
-              if (gap > sessionGapThresholdMs) {
-                shouldSave = true;
-                pendingFrames = opusFrames;
-                pendingTimestamp = timestampMs;
-              }
+            // Use session markers from flash page to detect conversation boundaries.
+            // Previously used timestamp gaps (120s) which incorrectly split continuous
+            // offline recordings into multiple conversations (issue #4134).
+            final didStopSession = pageData['did_stop_session'] == true;
+            final didStartSession = pageData['did_start_session'] == true;
+
+            // Split only when a session boundary is detected
+            if (accumulatedFrames.isNotEmpty && (didStopSession || didStartSession)) {
+              // Save current batch (ends the previous session)
+              shouldSave = true;
+              pendingFrames = opusFrames;
+              pendingTimestamp = timestampMs;
+              Logger.debug(
+                  "FlashPageSync: Session boundary detected (stop=$didStopSession, start=$didStartSession), saving batch");
             }
 
             if (!shouldSave) {
