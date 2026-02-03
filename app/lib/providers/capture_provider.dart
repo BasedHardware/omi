@@ -1581,6 +1581,19 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    // Add backend-created person to local cache for UI display (backward compatibility)
+    final isUser = event.personId == 'user';
+    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+      SharedPreferencesUtil().addCachedPerson(
+        Person(
+          id: event.personId,
+          name: event.personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
+
     // Store suggestion to be displayed (backend owns assignment now)
     suggestionsBySegmentId[event.segmentId] = event;
     notifyListeners();
@@ -1596,12 +1609,26 @@ class CaptureProvider extends ChangeNotifier
     try {
       String finalPersonId = personId;
 
-      // Create person if new
+      // Create person if new (old app path - calls idempotent API)
       if (finalPersonId.isEmpty) {
         Person? newPerson = await peopleProvider?.createPersonProvider(personName);
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+
+      // Add person to local cache if not exists (backward compatibility for old apps)
+      if (finalPersonId.isNotEmpty &&
+          finalPersonId != 'user' &&
+          SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Find conversation id

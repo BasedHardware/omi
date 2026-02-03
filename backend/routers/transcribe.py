@@ -125,6 +125,7 @@ async def _stream_handler(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    server_person_id_enabled: bool = False,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -146,6 +147,14 @@ async def _stream_handler(
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+
+    # Helper to gate person_id based on client capability (backward compatibility)
+    # OLD apps don't send server_person_id param -> receive empty person_id
+    # NEW apps send server_person_id=enabled -> receive populated person_id
+    def _person_id_for_client(person_id: str) -> str:
+        if server_person_id_enabled:
+            return person_id
+        return ""
 
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
@@ -1388,11 +1397,11 @@ async def _stream_handler(
                 # Auto-assign processed segment
                 segment_person_assignment_map[segment['id']] = person_id
 
-                # Notify client
+                # Notify client (gated for backward compatibility)
                 _send_message_event(
                     SpeakerLabelSuggestionEvent(
                         speaker_id=speaker_id,
-                        person_id=person_id,
+                        person_id=_person_id_for_client(person_id),
                         person_name=person_name,
                         segment_id=segment['id'],
                     )
@@ -1517,7 +1526,7 @@ async def _stream_handler(
                             _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
-                                    person_id=person_id,
+                                    person_id=_person_id_for_client(person_id),
                                     person_name=person_name,
                                     segment_id=segment.id,
                                 )
@@ -1571,7 +1580,7 @@ async def _stream_handler(
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
-                                person_id=person_id,
+                                person_id=_person_id_for_client(person_id),
                                 person_name=detected_name,
                                 segment_id=segment.id,
                             )
@@ -2007,6 +2016,7 @@ async def _listen(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    server_person_id_enabled: bool = False,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2031,6 +2041,7 @@ async def _listen(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        server_person_id_enabled=server_person_id_enabled,
     )
     print("_listen ended", uid)
 
@@ -2049,9 +2060,11 @@ async def listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
+    server_person_id: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
+    server_person_id_enabled = server_person_id == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -2065,6 +2078,7 @@ async def listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        server_person_id_enabled=server_person_id_enabled,
     )
 
 
