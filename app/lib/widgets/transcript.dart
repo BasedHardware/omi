@@ -561,7 +561,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
                                 ),
                               )
-                            ] else if (suggestion != null && person == null) ...[
+                            ] else if (suggestion != null && person == null && widget.isConversationDetail) ...[
+                              // Only show Tag in conversation detail, not in live capture
                               const SizedBox(width: 6),
                               GestureDetector(
                                 onTap: () => widget.onAcceptSuggestion?.call(suggestion),

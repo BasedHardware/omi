@@ -68,6 +68,9 @@ class CaptureProvider extends ChangeNotifier
   UsageProvider? usageProvider;
   CalendarProvider? calendarProvider;
 
+  // Cache refresh for backend-created persons
+  Future<void>? _peopleRefreshFuture;
+
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
@@ -156,6 +159,17 @@ class CaptureProvider extends ChangeNotifier
   }
 
   bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
+
+  /// Check if any segment has a personId not in local cache
+  bool _hasMissingPerson(List<TranscriptSegment> segments) {
+    for (final seg in segments) {
+      final personId = seg.personId;
+      if (personId != null && SharedPreferencesUtil().getPersonById(personId) == null) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -1569,14 +1583,9 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Auto-accept if enabled for new person suggestions
-    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
-    } else {
-      // Otherwise, store suggestion to be displayed.
-      suggestionsBySegmentId[event.segmentId] = event;
-      notifyListeners();
-    }
+    // Store suggestion to be displayed (backend owns assignment now)
+    suggestionsBySegmentId[event.segmentId] = event;
+    notifyListeners();
   }
 
   Future<void> assignSpeakerToConversation(
@@ -1661,6 +1670,14 @@ class CaptureProvider extends ChangeNotifier
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
+
+    // Refresh people cache if we see unknown personIds (backend-created persons)
+    if (_peopleRefreshFuture == null && _hasMissingPerson(remainSegments)) {
+      _peopleRefreshFuture = peopleProvider?.setPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
+    }
+
     _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
     notifyListeners();
