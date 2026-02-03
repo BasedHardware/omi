@@ -13,6 +13,7 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/check.h>
+#include <ctype.h>
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -59,6 +60,10 @@ static bool current_file_needs_rename = false;      // True if file was created 
 static bool ble_connected = false;
 static int64_t ble_connect_time_ms = 0;
 
+// Track if the previously-recording file was explicitly deleted while BLE
+// was connected; in that case we defer creating a new file until disconnect
+static bool current_file_deleted = false;
+
 // Offset info (oldest file + offset in that file)
 static sd_offset_info_t current_offset_info = {0};
 
@@ -74,6 +79,27 @@ void sd_worker_thread(void);
 static int create_audio_file_with_timestamp(void);
 static int flush_batch_buffer(void);
 static void build_file_path(const char *filename, char *path, size_t path_size);
+
+/* Helper: case-insensitive filename comparison (up to MAX_FILENAME_LEN) */
+static bool filename_equals_ignore_case(const char *a, const char *b)
+{
+    if (!a || !b) {
+        return false;
+    }
+
+    for (size_t i = 0; i < MAX_FILENAME_LEN; i++) {
+        unsigned char ca = (unsigned char)a[i];
+        unsigned char cb = (unsigned char)b[i];
+
+        if (tolower(ca) != tolower(cb)) {
+            return false;
+        }
+        if (ca == '\0' || cb == '\0') {
+            break;
+        }
+    }
+    return true;
+}
 
 static int sd_enable_power(bool enable)
 {
@@ -650,6 +676,19 @@ void sd_notify_ble_state(bool connected)
     } else if (!connected && ble_connected) {
         // BLE just disconnected - reset tracking
         LOG_INF("BLE disconnected");
+
+        /* If the current recording file was deleted while BLE was
+         * connected, create a new file now so its timestamp matches
+         * the end of the BLE session, not the delete time. */
+        if (current_file_deleted) {
+            int ret = create_new_audio_file();
+            if (ret < 0) {
+                LOG_ERR("Failed to create new audio file on BLE disconnect: %d", ret);
+            } else {
+                LOG_INF("New audio file created on BLE disconnect after delete");
+                current_file_deleted = false;
+            }
+        }
     }
     ble_connected = connected;
 }
@@ -705,6 +744,40 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     }
 
     return length;
+}
+
+int delete_audio_file(const char *filename)
+{
+    if (filename == NULL) {
+        return -EINVAL;
+    }
+
+    struct read_resp resp;
+    k_sem_init(&resp.sem, 0, 1);
+
+    sd_req_t req = (sd_req_t){0};
+    req.type = REQ_DELETE_FILE;
+    strncpy(req.u.delete_file.filename, filename, MAX_FILENAME_LEN - 1);
+    req.u.delete_file.filename[MAX_FILENAME_LEN - 1] = '\0';
+    req.u.delete_file.resp = &resp;
+
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
+    if (ret) {
+        LOG_ERR("Failed to queue delete_audio_file request: %d", ret);
+        return ret;
+    }
+
+    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
+        LOG_ERR("Timeout waiting for delete_audio_file response");
+        return -ETIMEDOUT;
+    }
+
+    if (resp.res < 0 && resp.res != -ENOENT) {
+        LOG_ERR("Failed to delete audio file %s: %d", filename, resp.res);
+        return resp.res;
+    }
+
+    return 0;
 }
 
 int clear_audio_directory(void)
@@ -828,7 +901,8 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size)
     return 0;
 }
 
-int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count)
+/* Internal function to get file list - called from sd_worker thread only */
+static int get_audio_file_list_internal(char filenames[][MAX_FILENAME_LEN], int max_files, int *count)
 {
     if (filenames == NULL || count == NULL || max_files <= 0) {
         return -EINVAL;
@@ -881,6 +955,43 @@ int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *
     }
     
     *count = file_count;
+    return 0;
+}
+
+/* Public function - uses message queue to serialize with sd_worker */
+int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count)
+{
+    if (filenames == NULL || count == NULL || max_files <= 0) {
+        return -EINVAL;
+    }
+
+    struct file_list_resp resp;
+    k_sem_init(&resp.sem, 0, 1);
+    resp.count = 0;
+
+    sd_req_t req = {0};
+    req.type = REQ_GET_FILE_LIST;
+    req.u.file_list.filenames = filenames;
+    req.u.file_list.max_files = max_files;
+    req.u.file_list.resp = &resp;
+
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
+    if (ret) {
+        LOG_ERR("Failed to queue get_audio_file_list request: %d", ret);
+        return ret;
+    }
+
+    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
+        LOG_ERR("Timeout waiting for get_audio_file_list response");
+        return -ETIMEDOUT;
+    }
+
+    if (resp.res) {
+        LOG_ERR("Failed to get audio file list: %d", resp.res);
+        return resp.res;
+    }
+
+    *count = resp.count;
     return 0;
 }
 
@@ -986,6 +1097,15 @@ void sd_worker_thread(void)
             switch (req.type) {
             case REQ_WRITE_DATA:
                 LOG_DBG("[SD_WORK] Buffering %u bytes to batch write", (unsigned)req.u.write.len);
+
+                /* If current recording file was deleted while BLE is
+                 * connected, discard incoming data until BLE disconnect,
+                 * at which point a new file will be created with the
+                 * correct timestamp. */
+                if (current_file_deleted && ble_connected) {
+                    LOG_DBG("[SD_WORK] Current file deleted; discarding data until BLE disconnect");
+                    break;
+                }
 
                 /* If no file is open yet, try to create one now */
                 if (current_filename[0] == '\0') {
@@ -1204,6 +1324,66 @@ void sd_worker_thread(void)
                         req.u.file_stats.resp->file_count = file_count;
                         req.u.file_stats.resp->total_size = total_size;
                         k_sem_give(&req.u.file_stats.resp->sem);
+                    }
+                }
+                break;
+
+            case REQ_GET_FILE_LIST:
+                LOG_DBG("[SD_WORK] Getting file list");
+                
+                {
+                    int list_count = 0;
+                    res = get_audio_file_list_internal(
+                        req.u.file_list.filenames,
+                        req.u.file_list.max_files,
+                        &list_count);
+                    
+                    if (req.u.file_list.resp) {
+                        req.u.file_list.resp->res = res;
+                        req.u.file_list.resp->count = (res == 0) ? list_count : 0;
+                        k_sem_give(&req.u.file_list.resp->sem);
+                    }
+                }
+                break;
+
+            case REQ_DELETE_FILE:
+                LOG_DBG("[SD_WORK] Deleting file: %s", req.u.delete_file.filename);
+
+                {
+                    char del_path[64];
+                    build_file_path(req.u.delete_file.filename, del_path, sizeof(del_path));
+
+                    /* If this is the file currently being recorded to,
+                     * flush and close it, clear current file state, and
+                     * mark that we should create a new file on the next
+                     * BLE disconnect. Comparison is case-insensitive to
+                     * handle .txt vs .TXT variations. */
+                    if (current_filename[0] != '\0' &&
+                        filename_equals_ignore_case(current_filename,
+                                                   req.u.delete_file.filename)) {
+                        LOG_INF("[SD_WORK] Deleting current recording file, stopping writes");
+
+                        flush_batch_buffer();
+                        fs_close(&fil_data);
+
+                        current_filename[0] = '\0';
+                        current_file_path[0] = '\0';
+                        current_file_size = 0;
+                        bytes_since_sync = 0;
+                        write_batch_offset = 0;
+                        write_batch_counter = 0;
+
+                        current_file_deleted = true;
+                    }
+
+                    int unlink_res = fs_unlink(del_path);
+                    if (unlink_res < 0 && unlink_res != -ENOENT) {
+                        LOG_ERR("[SD_WORK] Failed to delete file %s: %d", del_path, unlink_res);
+                    }
+
+                    if (req.u.delete_file.resp) {
+                        req.u.delete_file.resp->res = unlink_res;
+                        k_sem_give(&req.u.delete_file.resp->sem);
                     }
                 }
                 break;

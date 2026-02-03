@@ -20,6 +20,8 @@ typedef enum {
     REQ_SAVE_OFFSET,
     REQ_CREATE_NEW_FILE,
     REQ_GET_FILE_STATS,
+    REQ_GET_FILE_LIST,
+    REQ_DELETE_FILE,
 } sd_req_type_t;
 
 /* Read request response object */
@@ -35,6 +37,13 @@ struct file_stats_resp {
     int res;
     uint32_t file_count;
     uint64_t total_size;
+};
+
+/* File list response */
+struct file_list_resp {
+    struct k_sem sem;
+    int res;
+    int count;
 };
 
 /* Offset info structure stored in info.txt */
@@ -71,6 +80,15 @@ typedef struct {
         struct {
             struct file_stats_resp *resp;
         } file_stats;
+        struct {
+            char (*filenames)[MAX_FILENAME_LEN];
+            int max_files;
+            struct file_list_resp *resp;
+        } file_list;
+        struct {
+            char filename[MAX_FILENAME_LEN];
+            struct read_resp *resp;
+        } delete_file;
     } u;
 } sd_req_t;
 
@@ -186,6 +204,18 @@ int get_audio_file_stats(uint32_t *file_count, uint64_t *total_size);
  * @return 0 on success, negative error code otherwise
  */
 int get_audio_file_list(char filenames[][MAX_FILENAME_LEN], int max_files, int *count);
+
+/**
+ * @brief Delete a specific audio file by name.
+ *
+ * If the file is currently being recorded to, the SD worker will stop
+ * using it (flushing and closing), mark it as deleted, and the next
+ * BLE disconnect will trigger creation of a new file.
+ *
+ * @param filename Name of the audio file to delete.
+ * @return 0 on success, negative error code otherwise
+ */
+int delete_audio_file(const char *filename);
 
 /**
  * @brief Update current audio filename after receiving time sync from BLE

@@ -177,7 +177,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 uint8_t transport_started = 0;
 #define SD_BLE_SIZE 440
 #define TCP_CHUNK_COUNT 10
-#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)  /* 4450 bytes: idx(1)+ts(4)+data(440) x 10 */
+#define STORAGE_BUFFER_SIZE (SD_BLE_SIZE * TCP_CHUNK_COUNT + 5 * TCP_CHUNK_COUNT)  /* Restore safe size ~4.5KB */
 static uint8_t storage_buffer[STORAGE_BUFFER_SIZE];  /* Shared buffer for BLE and WiFi */
 static uint32_t offset = 0;
 static uint8_t stop_started = 0;
@@ -261,6 +261,9 @@ static int refresh_file_list_cache(void)
     }
     
     /* Get file sizes */
+    char current_name[MAX_FILENAME_LEN] = {0};
+    /* If we can read the currently open filename, we will prefer in-memory size for it */
+    (void)get_current_filename(current_name, sizeof(current_name));
     for (int i = 0; i < sync_file_count; i++) {
         char file_path[64];
         snprintf(file_path, sizeof(file_path), "/SD:/audio/%s", sync_file_list[i]);
@@ -269,6 +272,13 @@ static int refresh_file_list_cache(void)
             sync_file_sizes[i] = file_stat.size;
         } else {
             sync_file_sizes[i] = 0;
+        }
+        /* If this is the currently recording file, use the live size */
+        if (current_name[0] != '\0' && strcmp(sync_file_list[i], current_name) == 0) {
+            uint32_t live_sz = get_file_size();
+            if (live_sz > sync_file_sizes[i]) {
+                sync_file_sizes[i] = live_sz;
+            }
         }
     }
     
@@ -346,17 +356,19 @@ static int delete_file_by_index(int file_index)
     if (file_index < 0 || file_index >= sync_file_count) {
         return -1;
     }
-    
-    char file_path[64];
-    snprintf(file_path, sizeof(file_path), "/SD:/audio/%s", sync_file_list[file_index]);
-    
-    int ret = fs_unlink(file_path);
-    if (ret < 0 && ret != -ENOENT) {
-        LOG_ERR("Failed to delete file %s: %d", file_path, ret);
+    /* Copy target filename so we are robust to list refreshes */
+    char target_name[MAX_FILENAME_LEN] = {0};
+    strncpy(target_name, sync_file_list[file_index], MAX_FILENAME_LEN - 1);
+
+    /* Delegate deletion to SD worker so it can safely handle
+     * the case where this is the currently-recording file. */
+    int ret = delete_audio_file(target_name);
+    if (ret < 0) {
+        LOG_ERR("Failed to delete file[%d]: %s (err=%d)", file_index, target_name, ret);
         return ret;
     }
-    
-    LOG_INF("Deleted file[%d]: %s", file_index, sync_file_list[file_index]);
+
+    LOG_INF("Deleted file[%d]: %s", file_index, target_name);
     refresh_file_list_cache();
     return 0;
 }
@@ -567,6 +579,21 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             result_buffer[0] = 0;
             break;
 
+        case 0x04: // WIFI_DELETE_ALL - Delete all synced files
+            LOG_INF("WIFI_DELETE_ALL command received");
+            storage_stop_transfer();
+            {
+                int err = clear_audio_directory();
+                if (err) {
+                    LOG_ERR("Failed to clear audio directory: %d", err);
+                    result_buffer[0] = 0x10; // error: delete failed
+                } else {
+                    LOG_INF("All audio files deleted successfully");
+                    result_buffer[0] = 0; // success
+                }
+            }
+            break;
+
         default:
             LOG_WRN("Unknown WIFI command: %d", cmd);
             result_buffer[0] = 0xFF; // unknown command
@@ -627,65 +654,60 @@ static void write_to_gatt(struct bt_conn *conn)
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
-    uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * TCP_CHUNK_COUNT);
+    /* Use valid storage buffer capacity for one large packet */
+    /* Protocol V2: [idx:1][ts:4][len:2][data:len] */
+    uint32_t max_payload = STORAGE_BUFFER_SIZE - 7;
+    uint32_t to_read = MIN(remaining_length, max_payload);
     
     /* New protocol: build packets with file_index + timestamp prefix */
     if (current_sync_file_index >= 0) {
         uint32_t timestamp = (uint32_t)strtoul(sync_file_list[current_sync_file_index], NULL, 16);
         uint8_t file_idx = (uint8_t)current_sync_file_index;
-        uint8_t hdr[5];  /* [file_index:1][timestamp:4] */
-        hdr[0] = file_idx;
-        hdr[1] = (timestamp >> 24) & 0xFF;
-        hdr[2] = (timestamp >> 16) & 0xFF;
-        hdr[3] = (timestamp >> 8) & 0xFF;
-        hdr[4] = timestamp & 0xFF;
         
-        /* Build packets in-place: [idx:1][ts:4][data:440]... */
-        uint32_t data_offset = 0;
-        uint32_t buf_offset = 0;
-        uint32_t read_offset = current_read_offset;
-        
-        while (data_offset < to_read) {
-            uint32_t chunk_size = MIN(SD_BLE_SIZE, to_read - data_offset);
-            
-            /* Add header: file_index + timestamp */
-            memcpy(storage_buffer + buf_offset, hdr, 5);
-            buf_offset += 5;
-            
-            /* Read audio data directly into buffer */
-            int ret = read_audio_data(current_read_filename, storage_buffer + buf_offset, chunk_size, read_offset);
-            if (ret < 0) {
-                LOG_ERR("Failed to read audio data: %d", ret);
-                remaining_length = 0;
-                return;
-            }
-            
-            buf_offset += chunk_size;
-            read_offset += chunk_size;
-            data_offset += chunk_size;
+        /* 1. Read audio data directly into storage_buffer payload area */
+        int ret = read_audio_data(current_read_filename, storage_buffer + 7, to_read, current_read_offset);
+        if (ret <= 0) {
+            LOG_ERR("Failed to read audio data or EOF: %d", ret);
+            remaining_length = 0;  /* Force move to next file */
+            return;
         }
         
-        current_read_offset = read_offset;
+        /* Adjust to_read if we hit EOF or read less */
+        to_read = ret;
+        
+        /* 2. Create Header: [idx][ts][len] */
+        storage_buffer[0] = file_idx;
+        storage_buffer[1] = (timestamp >> 24) & 0xFF;
+        storage_buffer[2] = (timestamp >> 16) & 0xFF;
+        storage_buffer[3] = (timestamp >> 8) & 0xFF;
+        storage_buffer[4] = timestamp & 0xFF;
+        storage_buffer[5] = (to_read >> 8) & 0xFF;
+        storage_buffer[6] = to_read & 0xFF;
+        
+        uint32_t packet_len = 7 + to_read;
+        
+        current_read_offset += to_read;
         offset = current_read_offset;
         remaining_length -= to_read;
         
-        /* Send all packets at once */
+        /* Send packet */
         size_t sent = 0;
-        while (sent < buf_offset && is_wifi_on()) {
-            int n = wifi_send_data(storage_buffer + sent, buf_offset - sent);
+        while (sent < packet_len && is_wifi_on()) {
+            int n = wifi_send_data(storage_buffer + sent, packet_len - sent);
             if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
         }
     } else {
         /* Legacy: raw audio data without timestamp */
-        int ret = read_audio_data(current_read_filename, storage_buffer, to_read, current_read_offset);
+        uint32_t legacy_chunk = MIN(remaining_length, SD_BLE_SIZE * 10); /* Keep legacy size reasonable */
+        int ret = read_audio_data(current_read_filename, storage_buffer, legacy_chunk, current_read_offset);
         if (ret > 0) {
-            current_read_offset += to_read;
+            current_read_offset += ret;
             offset = current_read_offset;
-            remaining_length -= to_read;
+            remaining_length -= ret;
             
             size_t sent = 0;
-            while ((sent < to_read) && is_wifi_on()) {
-                int n = wifi_send_data(storage_buffer + sent, to_read - sent);
+            while ((sent < ret) && is_wifi_on()) {
+                int n = wifi_send_data(storage_buffer + sent, ret - sent);
                 if (n <= 0) { k_msleep(10); } else { sent += n; k_yield(); }
             }
         } else {
@@ -713,7 +735,12 @@ void storage_write(void)
 
         if (transport_started) {
             LOG_INF("transport started in side : %d", transport_started);
-            setup_storage_tx();
+            /* Only call legacy setup for legacy mode (current_sync_file_index == -1)
+             * New protocol (CMD_READ_FILE) already set up via setup_file_transfer() */
+            if (current_sync_file_index < 0) {
+                setup_storage_tx();
+            }
+            transport_started = 0;  /* Clear flag after setup */
         }
         // probably prefer to implement using work orders for delete,nuke,etc...
         if (delete_started) {
@@ -778,8 +805,20 @@ void storage_write(void)
                 }
                 k_msleep(100);  /* Give app time to process header */
                 
-                current_sync_file_index = 0;
-                setup_file_transfer(0, 0);
+                /* Find first non-empty file */
+                int start_idx = 0;
+                while (start_idx < sync_file_count && sync_file_sizes[start_idx] == 0) {
+                    LOG_INF("WiFi sync: skipping empty file %d/%d", start_idx + 1, sync_file_count);
+                    start_idx++;
+                }
+                
+                if (start_idx < sync_file_count) {
+                    current_sync_file_index = start_idx;
+                    setup_file_transfer(start_idx, 0);
+                } else {
+                    LOG_INF("WiFi sync: all files are empty, nothing to sync");
+                    current_sync_file_index = -1;
+                }
             } else {
                 LOG_INF("No files to sync");
             }
@@ -858,6 +897,13 @@ void storage_write(void)
                     /* WiFi sync: auto continue to next file */
                     if (is_wifi_on() && current_sync_file_index >= 0) {
                         int next_idx = current_sync_file_index + 1;
+                        
+                        /* Skip files with 0 bytes */
+                        while (next_idx < sync_file_count && sync_file_sizes[next_idx] == 0) {
+                            LOG_INF("WiFi sync: skipping empty file %d/%d", next_idx + 1, sync_file_count);
+                            next_idx++;
+                        }
+                        
                         if (next_idx < sync_file_count) {
                             LOG_INF("WiFi sync: moving to file %d/%d", next_idx + 1, sync_file_count);
                             setup_file_transfer(next_idx, 0);
