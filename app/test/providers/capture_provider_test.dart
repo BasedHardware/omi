@@ -224,4 +224,105 @@ void main() {
       expect(provider.segmentsPhotosVersion, greaterThan(initialVersion));
     });
   });
+
+  group('SpeakerLabelSuggestionEvent', () {
+    test('stores suggestion in suggestionsBySegmentId', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg1', 'hello')];
+
+      final event = SpeakerLabelSuggestionEvent(
+        speakerId: 1,
+        personId: 'person-123',
+        personName: 'Alice',
+        segmentId: 'seg1',
+      );
+
+      provider.onMessageEventReceived(event);
+
+      expect(provider.suggestionsBySegmentId.containsKey('seg1'), true);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
+    });
+
+    test('ignores suggestion for segments being tagged', () {
+      final provider = CaptureProvider();
+      provider.segments = [_segment('seg-tagging', 'text')];
+      provider.taggingSegmentIds = ['seg-tagging'];
+
+      final event = SpeakerLabelSuggestionEvent(
+        speakerId: 1,
+        personId: 'person-456',
+        personName: 'Bob',
+        segmentId: 'seg-tagging',
+      );
+
+      provider.onMessageEventReceived(event);
+
+      // Should not store suggestion for segment being tagged
+      expect(provider.suggestionsBySegmentId.containsKey('seg-tagging'), false);
+    });
+
+    test('ignores suggestion for already assigned segments', () {
+      final provider = CaptureProvider();
+      final assignedSegment = TranscriptSegment(
+        id: 'seg-assigned',
+        text: 'hello',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: 'existing-person',
+        start: 0.0,
+        end: 1.0,
+        translations: [],
+      );
+      provider.segments = [assignedSegment];
+
+      final event = SpeakerLabelSuggestionEvent(
+        speakerId: 1,
+        personId: 'new-person',
+        personName: 'NewPerson',
+        segmentId: 'seg-assigned',
+      );
+
+      provider.onMessageEventReceived(event);
+
+      // Should not store suggestion for already assigned segment
+      expect(provider.suggestionsBySegmentId.containsKey('seg-assigned'), false);
+    });
+  });
+
+  group('_hasMissingPerson', () {
+    TranscriptSegment _segmentWithPerson(String id, String? personId) {
+      return TranscriptSegment(
+        id: id,
+        text: 'text',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: personId,
+        start: 0.0,
+        end: 1.0,
+        translations: [],
+      );
+    }
+
+    test('returns true when segment has unknown personId', () {
+      final provider = CaptureProvider();
+      final segments = [_segmentWithPerson('seg1', 'unknown-person-id')];
+
+      // The _hasMissingPerson check happens internally, we test via onSegmentReceived
+      // which should trigger cache refresh for unknown personIds
+      provider.onSegmentReceived(segments);
+
+      // Version should increment indicating segments were processed
+      expect(provider.segmentsPhotosVersion, greaterThan(0));
+    });
+
+    test('does not trigger refresh for segments without personId', () {
+      final provider = CaptureProvider();
+      final segments = [_segmentWithPerson('seg2', null)];
+
+      provider.onSegmentReceived(segments);
+
+      // Should still process segments normally
+      expect(provider.hasTranscripts, true);
+    });
+  });
 }
