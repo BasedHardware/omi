@@ -848,6 +848,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
+                            if (!convoProvider.showDailySummaries) {
+                              MixpanelManager().recapTabOpened();
+                            }
                             convoProvider.toggleDailySummaries();
                           },
                         ),
