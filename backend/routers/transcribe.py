@@ -125,7 +125,7 @@ async def _stream_handler(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
-    server_person_id_enabled: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -149,10 +149,10 @@ async def _stream_handler(
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
 
     # Helper to gate person_id based on client capability (backward compatibility)
-    # OLD apps don't send server_person_id param -> receive empty person_id
-    # NEW apps send server_person_id=enabled -> receive populated person_id
+    # OLD apps don't send speaker_auto_assign param -> receive empty person_id
+    # NEW apps send speaker_auto_assign=enabled -> receive populated person_id
     def _person_id_for_client(person_id: str) -> str:
-        if server_person_id_enabled:
+        if speaker_auto_assign_enabled:
             return person_id
         return ""
 
@@ -2016,7 +2016,7 @@ async def _listen(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
-    server_person_id_enabled: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2041,7 +2041,7 @@ async def _listen(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
-        server_person_id_enabled=server_person_id_enabled,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
     print("_listen ended", uid)
 
@@ -2060,11 +2060,11 @@ async def listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
-    server_person_id: str = 'disabled',
+    speaker_auto_assign: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
-    server_person_id_enabled = server_person_id == 'enabled'
+    speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -2078,7 +2078,7 @@ async def listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
-        server_person_id_enabled=server_person_id_enabled,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
 
 
