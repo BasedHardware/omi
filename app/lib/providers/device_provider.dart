@@ -338,6 +338,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void onDeviceDisconnected() async {
     Logger.debug('onDisconnected inside: $connectedDevice');
+    // PROFILING: Track disconnect
+    CaptureProvider._profilingDisconnectCount++;
+    CaptureProvider._logProfilingEvent('DEVICE_DISCONNECTED', {
+      'disconnectCount': CaptureProvider._profilingDisconnectCount,
+      'deviceId': connectedDevice?.id,
+    });
     _havingNewFirmware = false;
     setConnectedDevice(null);
     setisDeviceStorageSupport();
@@ -387,6 +393,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _onDeviceConnected(BtDevice device) async {
     Logger.debug('_onConnected inside: $connectedDevice');
+    // PROFILING: Track reconnect
+    CaptureProvider._profilingReconnectCount++;
+    CaptureProvider._logProfilingEvent('DEVICE_CONNECTED', {
+      'reconnectCount': CaptureProvider._profilingReconnectCount,
+      'deviceId': device.id,
+      'deviceName': device.name,
+    });
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
