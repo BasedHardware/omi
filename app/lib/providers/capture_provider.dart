@@ -141,38 +141,39 @@ class CaptureProvider extends ChangeNotifier
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
 
   // ============== PROFILING: Connection stability metrics ==============
-  static int _profilingSegmentCount = 0;
-  static int _profilingDisconnectCount = 0;
-  static int _profilingReconnectCount = 0;
-  static final List<int> _profilingSegmentTimesUs = [];
-  static DateTime? _profilingSessionStart;
+  // Public for access from device_provider.dart
+  static int profilingSegmentCount = 0;
+  static int profilingDisconnectCount = 0;
+  static int profilingReconnectCount = 0;
+  static final List<int> profilingSegmentTimesUs = [];
+  static DateTime? profilingSessionStart;
 
-  static void _logProfilingEvent(String event, [Map<String, dynamic>? data]) {
+  static void logProfilingEvent(String event, [Map<String, dynamic>? data]) {
     final timestamp = DateTime.now().toIso8601String();
     final dataStr = data != null ? ' ${data.toString()}' : '';
     debugPrint('[PROFILING] $timestamp $event$dataStr');
   }
 
   static void resetProfilingMetrics() {
-    _profilingSegmentCount = 0;
-    _profilingDisconnectCount = 0;
-    _profilingReconnectCount = 0;
-    _profilingSegmentTimesUs.clear();
-    _profilingSessionStart = DateTime.now();
-    _logProfilingEvent('SESSION_START');
+    profilingSegmentCount = 0;
+    profilingDisconnectCount = 0;
+    profilingReconnectCount = 0;
+    profilingSegmentTimesUs.clear();
+    profilingSessionStart = DateTime.now();
+    logProfilingEvent('SESSION_START');
   }
 
   static Map<String, dynamic> getProfilingMetrics() {
-    final avgTime = _profilingSegmentTimesUs.isEmpty
+    final avgTime = profilingSegmentTimesUs.isEmpty
         ? 0
-        : _profilingSegmentTimesUs.reduce((a, b) => a + b) ~/ _profilingSegmentTimesUs.length;
+        : profilingSegmentTimesUs.reduce((a, b) => a + b) ~/ profilingSegmentTimesUs.length;
     return {
-      'segments': _profilingSegmentCount,
-      'disconnects': _profilingDisconnectCount,
-      'reconnects': _profilingReconnectCount,
+      'segments': profilingSegmentCount,
+      'disconnects': profilingDisconnectCount,
+      'reconnects': profilingReconnectCount,
       'avgSegmentTimeUs': avgTime,
       'sessionDurationSec':
-          _profilingSessionStart != null ? DateTime.now().difference(_profilingSessionStart!).inSeconds : 0,
+          profilingSessionStart != null ? DateTime.now().difference(profilingSessionStart!).inSeconds : 0,
     };
   }
 
@@ -1689,7 +1690,7 @@ class CaptureProvider extends ChangeNotifier
 
     // PROFILING: Track segment processing
     final stopwatch = Stopwatch()..start();
-    _profilingSegmentCount++;
+    profilingSegmentCount++;
     developer.Timeline.startSync('process_new_segment');
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
@@ -1711,10 +1712,10 @@ class CaptureProvider extends ChangeNotifier
 
     // PROFILING: Log segment event
     stopwatch.stop();
-    _profilingSegmentTimesUs.add(stopwatch.elapsedMicroseconds);
+    profilingSegmentTimesUs.add(stopwatch.elapsedMicroseconds);
     developer.Timeline.finishSync();
-    _logProfilingEvent('SEGMENT_RECEIVED', {
-      'count': _profilingSegmentCount,
+    logProfilingEvent('SEGMENT_RECEIVED', {
+      'count': profilingSegmentCount,
       'newSegments': newSegments.length,
       'totalSegments': segments.length,
       'processingTimeUs': stopwatch.elapsedMicroseconds,
