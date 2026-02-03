@@ -1672,7 +1672,8 @@ class CaptureProvider extends ChangeNotifier
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)
-    if (_peopleRefreshFuture == null && _hasMissingPerson(remainSegments)) {
+    // Check all newSegments, not just remainSegments, to catch updates to existing segments
+    if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
       _peopleRefreshFuture = peopleProvider?.setPeople().whenComplete(() {
         _peopleRefreshFuture = null;
       });

@@ -1586,8 +1586,10 @@ async def _stream_handler(
                                 segment_id=segment.id,
                             )
                         )
-                        # Also set the maps so new segments get this assignment
-                        speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+                        # Set maps for future segments, but only if diarization is active
+                        # (speaker_id > 0 means diarization assigned a real speaker)
+                        if segment.speaker_id is not None and segment.speaker_id > 0:
+                            speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
