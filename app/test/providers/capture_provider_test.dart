@@ -331,6 +331,9 @@ void main() {
       final mockPeopleProvider = MockPeopleProvider();
       provider.peopleProvider = mockPeopleProvider;
 
+      // Pre-populate segments to skip platform-specific initialization code
+      provider.segments = [_segmentWithPerson('seed', null)];
+
       // Segment with personId that's not in cache (cachedPeople is empty)
       final segments = [_segmentWithPerson('seg1', 'unknown-person-id')];
 
@@ -344,6 +347,9 @@ void main() {
       final provider = CaptureProvider();
       final mockPeopleProvider = MockPeopleProvider();
       provider.peopleProvider = mockPeopleProvider;
+
+      // Pre-populate segments to skip platform-specific initialization code
+      provider.segments = [_segmentWithPerson('seed', null)];
 
       final segments = [_segmentWithPerson('seg2', null)];
 
@@ -362,6 +368,9 @@ void main() {
       mockPeopleProvider.setSetPeopleCompleter(completer);
 
       provider.peopleProvider = mockPeopleProvider;
+
+      // Pre-populate segments to skip platform-specific initialization code
+      provider.segments = [_segmentWithPerson('seed', null)];
 
       // First segment with unknown personId
       final segments1 = [_segmentWithPerson('seg-a', 'unknown-1')];

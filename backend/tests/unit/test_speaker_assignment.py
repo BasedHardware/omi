@@ -1,298 +1,228 @@
-"""Unit tests for speaker assignment logic in transcribe.py.
+"""Unit tests for speaker assignment utilities.
 
-Tests cover:
-1. _process_speaker_assigned_segments fallback logic
-2. Text detection person creation and map updates
-3. speaker_assigned event handling with can_assign gate
-
-Note: The speaker assignment logic in transcribe.py is currently defined inside
-nested async handlers, making it difficult to test directly. These tests verify
-the logic patterns and data flow. For full integration testing, consider
-refactoring _process_speaker_assigned_segments and related logic into standalone
-testable functions in a separate module.
+Tests the extracted helper functions in utils/speaker_assignment.py.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 import uuid
 
-
-class MockTranscriptSegment:
-    """Mock TranscriptSegment for testing."""
-
-    def __init__(self, id: str, speaker_id: int = None, is_user: bool = False, person_id: str = None):
-        self.id = id
-        self.speaker_id = speaker_id
-        self.is_user = is_user
-        self.person_id = person_id
+from utils.speaker_assignment import (
+    process_speaker_assigned_segments,
+    update_speaker_assignment_maps,
+    should_update_speaker_to_person_map,
+)
+from models.transcript_segment import TranscriptSegment
 
 
 class TestProcessSpeakerAssignedSegments:
-    """Tests for _process_speaker_assigned_segments logic."""
+    """Tests for process_speaker_assigned_segments helper."""
+
+    def _make_segment(self, id: str, speaker_id: int = 0, is_user: bool = False, person_id: str = None):
+        """Create a TranscriptSegment for testing.
+
+        Note: TranscriptSegment extracts speaker_id from speaker string in __init__,
+        so we format the speaker string to match the desired speaker_id.
+        """
+        speaker = f"SPEAKER_{speaker_id:02d}"
+        return TranscriptSegment(
+            id=id,
+            text="test text",
+            speaker=speaker,
+            is_user=is_user,
+            person_id=person_id,
+            start=0.0,
+            end=1.0,
+        )
 
     def test_assigns_person_from_segment_map(self):
         """Should assign person_id from segment_person_assignment_map."""
-        segment = MockTranscriptSegment(id="seg1", speaker_id=1)
+        segment = self._make_segment(id="seg1", speaker_id=1)
         segment_person_assignment_map = {"seg1": "person-123"}
         speaker_to_person_map = {}
 
-        # Simulate the logic from _process_speaker_assigned_segments
-        if not segment.is_user and not segment.person_id:
-            person_id = None
-            if segment.id in segment_person_assignment_map:
-                person_id = segment_person_assignment_map[segment.id]
-            elif segment.speaker_id in speaker_to_person_map:
-                person_id = speaker_to_person_map[segment.speaker_id][0]
-
-            if person_id and person_id != 'user':
-                segment.is_user = False
-                segment.person_id = person_id
+        process_speaker_assigned_segments(
+            [segment],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
         assert segment.person_id == "person-123"
         assert segment.is_user is False
 
     def test_fallback_to_speaker_to_person_map(self):
         """Should fall back to speaker_to_person_map when segment not in segment map."""
-        segment = MockTranscriptSegment(id="seg2", speaker_id=1)
+        segment = self._make_segment(id="seg2", speaker_id=1)
         segment_person_assignment_map = {}
         speaker_to_person_map = {1: ("person-456", "Alice")}
 
-        # Simulate the logic
-        if not segment.is_user and not segment.person_id:
-            person_id = None
-            if segment.id in segment_person_assignment_map:
-                person_id = segment_person_assignment_map[segment.id]
-            elif segment.speaker_id in speaker_to_person_map:
-                person_id = speaker_to_person_map[segment.speaker_id][0]
-
-            if person_id and person_id != 'user':
-                segment.is_user = False
-                segment.person_id = person_id
+        process_speaker_assigned_segments(
+            [segment],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
         assert segment.person_id == "person-456"
 
     def test_handles_user_person_id(self):
         """Should set is_user=True and clear person_id when person_id is 'user'."""
-        segment = MockTranscriptSegment(id="seg3", speaker_id=1)
+        segment = self._make_segment(id="seg3", speaker_id=1)
         segment_person_assignment_map = {"seg3": "user"}
         speaker_to_person_map = {}
 
-        # Simulate the logic
-        if not segment.is_user and not segment.person_id:
-            person_id = None
-            if segment.id in segment_person_assignment_map:
-                person_id = segment_person_assignment_map[segment.id]
-
-            if person_id:
-                if person_id == 'user':
-                    segment.is_user = True
-                    segment.person_id = None
-                else:
-                    segment.is_user = False
-                    segment.person_id = person_id
+        process_speaker_assigned_segments(
+            [segment],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
         assert segment.is_user is True
         assert segment.person_id is None
 
     def test_skips_already_assigned_segments(self):
         """Should skip segments that already have is_user or person_id set."""
-        segment = MockTranscriptSegment(id="seg4", speaker_id=1, person_id="existing-person")
+        segment = self._make_segment(id="seg4", speaker_id=1, person_id="existing-person")
         segment_person_assignment_map = {"seg4": "new-person"}
+        speaker_to_person_map = {}
 
-        # Simulate the logic with early continue
-        if segment.is_user or segment.person_id:
-            pass  # Skip
-        else:
-            segment.person_id = segment_person_assignment_map.get(segment.id)
+        process_speaker_assigned_segments(
+            [segment],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
         # Should not be modified
         assert segment.person_id == "existing-person"
 
-
-class TestTextDetectionSpeakerMapping:
-    """Tests for text detection branch in speaker assignment."""
-
-    def test_speaker_id_zero_does_not_update_speaker_map(self):
-        """Boundary: speaker_id <= 0 should not update speaker_to_person_map."""
+    def test_skips_is_user_segments(self):
+        """Should skip segments that have is_user=True."""
+        segment = self._make_segment(id="seg5", speaker_id=1, is_user=True)
+        segment_person_assignment_map = {"seg5": "person-789"}
         speaker_to_person_map = {}
-        segment_person_assignment_map = {}
-        segment_id = "seg-text"
-        speaker_id = 0  # Diarization off
-        person_id = "person-789"
-        detected_name = "Bob"
 
-        # Simulate the guarded logic
-        if speaker_id is not None and speaker_id > 0:
-            speaker_to_person_map[speaker_id] = (person_id, detected_name)
-        segment_person_assignment_map[segment_id] = person_id
+        process_speaker_assigned_segments(
+            [segment],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
-        assert speaker_id not in speaker_to_person_map
-        assert segment_person_assignment_map[segment_id] == person_id
+        # Should not be modified
+        assert segment.is_user is True
+        assert segment.person_id is None
 
-    def test_speaker_id_positive_updates_speaker_map(self):
-        """speaker_id > 0 should update speaker_to_person_map."""
-        speaker_to_person_map = {}
-        segment_person_assignment_map = {}
-        segment_id = "seg-text2"
-        speaker_id = 2  # Diarization active
-        person_id = "person-101"
-        detected_name = "Charlie"
+    def test_processes_multiple_segments(self):
+        """Should process multiple segments correctly."""
+        seg1 = self._make_segment(id="seg1", speaker_id=1)
+        seg2 = self._make_segment(id="seg2", speaker_id=2)
+        seg3 = self._make_segment(id="seg3", speaker_id=1)  # Same speaker as seg1
 
-        # Simulate the guarded logic
-        if speaker_id is not None and speaker_id > 0:
-            speaker_to_person_map[speaker_id] = (person_id, detected_name)
-        segment_person_assignment_map[segment_id] = person_id
+        segment_person_assignment_map = {"seg1": "person-A"}
+        speaker_to_person_map = {2: ("person-B", "Bob")}
 
-        assert speaker_to_person_map[speaker_id] == (person_id, detected_name)
-        assert segment_person_assignment_map[segment_id] == person_id
+        process_speaker_assigned_segments(
+            [seg1, seg2, seg3],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
-    def test_speaker_id_none_does_not_update_speaker_map(self):
-        """Boundary: speaker_id=None should not update speaker_to_person_map."""
-        speaker_to_person_map = {}
-        segment_person_assignment_map = {}
-        segment_id = "seg-text3"
-        speaker_id = None
-        person_id = "person-202"
-        detected_name = "Dave"
-
-        # Simulate the guarded logic
-        if speaker_id is not None and speaker_id > 0:
-            speaker_to_person_map[speaker_id] = (person_id, detected_name)
-        segment_person_assignment_map[segment_id] = person_id
-
-        assert speaker_id not in speaker_to_person_map
-        assert segment_person_assignment_map[segment_id] == person_id
+        assert seg1.person_id == "person-A"  # From segment map
+        assert seg2.person_id == "person-B"  # From speaker map
+        assert seg3.person_id is None  # No mapping found
 
 
-class TestSpeakerAssignedEvent:
-    """Tests for speaker_assigned event handling."""
+class TestUpdateSpeakerAssignmentMaps:
+    """Tests for update_speaker_assignment_maps helper."""
 
-    def test_updates_maps_even_when_can_assign_false(self):
-        """Should update maps even when can_assign is False."""
-        speaker_to_person_map = {}
-        segment_person_assignment_map = {}
-        can_assign = False
-        speaker_id = 1
-        person_id = "person-event"
-        person_name = "EventPerson"
-        segment_ids = ["seg-e1", "seg-e2"]
-
-        # Simulate the new logic (always set maps)
-        if speaker_id is not None and person_id is not None and person_name is not None:
-            speaker_to_person_map[speaker_id] = (person_id, person_name)
-            for sid in segment_ids:
-                segment_person_assignment_map[sid] = person_id
-
-        assert speaker_to_person_map[speaker_id] == (person_id, person_name)
-        assert segment_person_assignment_map["seg-e1"] == person_id
-        assert segment_person_assignment_map["seg-e2"] == person_id
-
-    def test_sample_extraction_only_when_can_assign_true(self):
-        """Should only enqueue speaker sample extraction when can_assign is True."""
-        can_assign = False
-        person_id = "person-sample"
-        extraction_called = False
-
-        def mock_create_task(coro):
-            nonlocal extraction_called
-            extraction_called = True
-
-        # Simulate the conditional
-        if can_assign and person_id and person_id != 'user':
-            mock_create_task(None)
-
-        assert extraction_called is False
-
-        # Now with can_assign = True
-        can_assign = True
-        if can_assign and person_id and person_id != 'user':
-            mock_create_task(None)
-
-        assert extraction_called is True
-
-    def test_ignores_incomplete_event_data(self):
-        """Should not update maps when required fields are missing."""
-        speaker_to_person_map = {}
-        segment_person_assignment_map = {}
-        speaker_id = 1
-        person_id = None  # Missing
-        person_name = "Name"
-        segment_ids = ["seg-incomplete"]
-
-        if speaker_id is not None and person_id is not None and person_name is not None:
-            speaker_to_person_map[speaker_id] = (person_id, person_name)
-            for sid in segment_ids:
-                segment_person_assignment_map[sid] = person_id
-
-        assert speaker_id not in speaker_to_person_map
-        assert "seg-incomplete" not in segment_person_assignment_map
-
-
-class TestPersonCreationOnTextDetection:
-    """Tests for person creation when text detection finds unknown name."""
-
-    def test_creates_person_when_not_found(self):
-        """Should create person in database when get_person_by_name returns None."""
-        # Simulate the text detection flow with mocked db calls
-        create_person_calls = []
-
-        def mock_get_person_by_name(uid, name):
-            return None  # Person not found
-
-        def mock_create_person(uid, data):
-            create_person_calls.append((uid, data))
-            return data
-
-        # Simulate the text detection logic
-        uid = "test-user"
-        detected_name = "Alice"
-        segment_speaker_id = 1
-        segment_id = "seg-text-create"
+    def test_updates_both_maps(self):
+        """Should update both maps when all fields are provided."""
         speaker_to_person_map = {}
         segment_person_assignment_map = {}
 
-        person = mock_get_person_by_name(uid, detected_name)
-        if person:
-            person_id = person['id']
-        else:
-            person_id = str(uuid.uuid4())
-            mock_create_person(
-                uid,
-                {
-                    'id': person_id,
-                    'name': detected_name,
-                    'created_at': datetime.now(timezone.utc),
-                    'updated_at': datetime.now(timezone.utc),
-                },
-            )
+        result = update_speaker_assignment_maps(
+            speaker_id=1,
+            person_id="person-event",
+            person_name="EventPerson",
+            segment_ids=["seg-e1", "seg-e2"],
+            speaker_to_person_map=speaker_to_person_map,
+            segment_person_assignment_map=segment_person_assignment_map,
+        )
 
-        # Verify person was created
-        assert len(create_person_calls) == 1
-        assert create_person_calls[0][0] == uid
-        assert create_person_calls[0][1]['name'] == detected_name
+        assert result is True
+        assert speaker_to_person_map[1] == ("person-event", "EventPerson")
+        assert segment_person_assignment_map["seg-e1"] == "person-event"
+        assert segment_person_assignment_map["seg-e2"] == "person-event"
 
-    def test_does_not_create_person_when_found(self):
-        """Should not create person when get_person_by_name returns existing person."""
-        create_person_calls = []
+    def test_returns_false_when_speaker_id_missing(self):
+        """Should return False and not update maps when speaker_id is None."""
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
 
-        def mock_get_person_by_name(uid, name):
-            return {'id': 'existing-person-id', 'name': name}  # Person found
+        result = update_speaker_assignment_maps(
+            speaker_id=None,
+            person_id="person-x",
+            person_name="X",
+            segment_ids=["seg-x"],
+            speaker_to_person_map=speaker_to_person_map,
+            segment_person_assignment_map=segment_person_assignment_map,
+        )
 
-        def mock_create_person(uid, data):
-            create_person_calls.append((uid, data))
+        assert result is False
+        assert len(speaker_to_person_map) == 0
+        assert len(segment_person_assignment_map) == 0
 
-        # Simulate the text detection logic
-        uid = "test-user"
-        detected_name = "Bob"
+    def test_returns_false_when_person_id_missing(self):
+        """Should return False and not update maps when person_id is None."""
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
 
-        person = mock_get_person_by_name(uid, detected_name)
-        if person:
-            person_id = person['id']
-        else:
-            person_id = str(uuid.uuid4())
-            mock_create_person(uid, {'id': person_id, 'name': detected_name})
+        result = update_speaker_assignment_maps(
+            speaker_id=1,
+            person_id=None,
+            person_name="Name",
+            segment_ids=["seg-y"],
+            speaker_to_person_map=speaker_to_person_map,
+            segment_person_assignment_map=segment_person_assignment_map,
+        )
 
-        # Verify person was NOT created
-        assert len(create_person_calls) == 0
-        assert person_id == 'existing-person-id'
+        assert result is False
+        assert len(speaker_to_person_map) == 0
+
+    def test_returns_false_when_person_name_missing(self):
+        """Should return False and not update maps when person_name is None."""
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
+
+        result = update_speaker_assignment_maps(
+            speaker_id=1,
+            person_id="person-z",
+            person_name=None,
+            segment_ids=["seg-z"],
+            speaker_to_person_map=speaker_to_person_map,
+            segment_person_assignment_map=segment_person_assignment_map,
+        )
+
+        assert result is False
+        assert len(speaker_to_person_map) == 0
+
+
+class TestShouldUpdateSpeakerToPersonMap:
+    """Tests for should_update_speaker_to_person_map helper."""
+
+    def test_returns_true_for_positive_speaker_id(self):
+        """Should return True for speaker_id > 0 (diarization active)."""
+        assert should_update_speaker_to_person_map(1) is True
+        assert should_update_speaker_to_person_map(2) is True
+        assert should_update_speaker_to_person_map(100) is True
+
+    def test_returns_false_for_zero_speaker_id(self):
+        """Should return False for speaker_id == 0 (diarization off)."""
+        assert should_update_speaker_to_person_map(0) is False
+
+    def test_returns_false_for_negative_speaker_id(self):
+        """Should return False for speaker_id < 0."""
+        assert should_update_speaker_to_person_map(-1) is False
+
+    def test_returns_false_for_none_speaker_id(self):
+        """Should return False for speaker_id is None."""
+        assert should_update_speaker_to_person_map(None) is False

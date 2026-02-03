@@ -23,6 +23,11 @@ from websockets.exceptions import ConnectionClosed
 
 from firebase_admin.auth import InvalidIdTokenError
 
+from utils.speaker_assignment import (
+    process_speaker_assigned_segments,
+    update_speaker_assignment_maps,
+    should_update_speaker_to_person_map,
+)
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -604,24 +609,13 @@ async def _stream_handler(
     )
     timed_out_conversation_id = await _prepare_in_progess_conversations()
 
-    def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
-        for segment in transcript_segments:
-            if segment.is_user or segment.person_id:
-                continue
-
-            person_id = None
-            if segment.id in segment_person_assignment_map:
-                person_id = segment_person_assignment_map[segment.id]
-            elif segment.speaker_id in speaker_to_person_map:
-                person_id = speaker_to_person_map[segment.speaker_id][0]
-
-            if person_id:
-                if person_id == 'user':
-                    segment.is_user = True
-                    segment.person_id = None
-                else:
-                    segment.is_user = False
-                    segment.person_id = person_id
+    def _process_speaker_assigned_segments_local(transcript_segments: List[TranscriptSegment]):
+        """Wrapper to call extracted helper with closure variables."""
+        process_speaker_assigned_segments(
+            transcript_segments,
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
 
     def _update_in_progress_conversation(
         conversation: Conversation,
@@ -636,7 +630,7 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(updated_segments)
+            _process_speaker_assigned_segments_local(updated_segments)
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -1588,7 +1582,8 @@ async def _stream_handler(
                         )
                         # Set maps for future segments, but only if diarization is active
                         # (speaker_id > 0 means diarization assigned a real speaker)
-                        if segment.speaker_id is not None and segment.speaker_id > 0:
+                        # Set maps for future segments using helper function
+                        if should_update_speaker_to_person_map(segment.speaker_id):
                             speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
@@ -1825,10 +1820,15 @@ async def _stream_handler(
                             speaker_id = json_data.get('speaker_id')
                             person_id = json_data.get('person_id')
                             person_name = json_data.get('person_name')
-                            if speaker_id is not None and person_id is not None and person_name is not None:
-                                speaker_to_person_map[speaker_id] = (person_id, person_name)
-                                for sid in segment_ids:
-                                    segment_person_assignment_map[sid] = person_id
+                            maps_updated = update_speaker_assignment_maps(
+                                speaker_id,
+                                person_id,
+                                person_name,
+                                segment_ids,
+                                speaker_to_person_map,
+                                segment_person_assignment_map,
+                            )
+                            if maps_updated:
                                 print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id)
 
                                 # Forward to pusher for speech sample extraction (non-blocking)
