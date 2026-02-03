@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
@@ -168,6 +169,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
       return;
     }
 
+    MixpanelManager().goalAddButtonTapped(source: 'desktop');
     _titleController.clear();
     _currentController.text = '0';
     _targetController.text = '100';
@@ -348,6 +350,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
             if (!isNew)
               TextButton(
                 onPressed: () async {
+                  MixpanelManager().goalDeleted(goalId: existingGoal.id, source: 'desktop', method: 'button');
                   Navigator.pop(context);
                   await _deleteGoal(existingGoal);
                 },
@@ -401,6 +404,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
         targetValue: target,
       );
 
+      MixpanelManager().goalUpdated(goalId: existingGoal.id, source: 'desktop');
       // Update emoji
       setState(() {
         _goalEmojis[existingGoal.id] = _selectedEmoji;
@@ -417,6 +421,8 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
       );
 
       if (newGoal != null) {
+        MixpanelManager()
+            .goalCreated(goalId: newGoal.id, titleLength: title.length, targetValue: target, source: 'desktop');
         setState(() {
           _goalEmojis[newGoal.id] = smartEmoji;
         });
@@ -547,7 +553,10 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _editGoal(goal),
+        onTap: () {
+          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'desktop');
+          _editGoal(goal);
+        },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
