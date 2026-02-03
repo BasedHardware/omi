@@ -249,10 +249,40 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('stores suggestion in suggestionsBySegmentId', () {
+    test('stores suggestion when personId is empty (old app path)', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
+      // Old app path: personId is empty, suggestion stored for user to confirm
+      final event = SpeakerLabelSuggestionEvent(
+        speakerId: 0,
+        personId: '', // Empty = old app, store suggestion
+        personName: 'Alice',
+        segmentId: 'seg1',
+      );
+
+      provider.onMessageEventReceived(event);
+
+      expect(provider.suggestionsBySegmentId.containsKey('seg1'), true);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
+    });
+
+    test('auto-applies assignment when personId is provided (new app path)', () {
+      final provider = CaptureProvider();
+      // Create segment with speakerId 1 to match the event
+      final segment = TranscriptSegment(
+        id: 'seg1',
+        text: 'hello',
+        speaker: 'SPEAKER_01',
+        isUser: false,
+        personId: null,
+        start: 0.0,
+        end: 1.0,
+        translations: [],
+      );
+      provider.segments = [segment];
+
+      // New app path: personId is provided, auto-apply to segment
       final event = SpeakerLabelSuggestionEvent(
         speakerId: 1,
         personId: 'person-123',
@@ -262,8 +292,10 @@ void main() {
 
       provider.onMessageEventReceived(event);
 
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), true);
-      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
+      // Suggestion should NOT be stored (auto-applied instead)
+      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      // Segment should be updated with personId
+      expect(provider.segments.first.personId, 'person-123');
     });
 
     test('ignores suggestion for segments being tagged', () {

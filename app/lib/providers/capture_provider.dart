@@ -1594,8 +1594,20 @@ class CaptureProvider extends ChangeNotifier
       );
     }
 
-    // Store suggestion to be displayed (backend owns assignment now)
-    suggestionsBySegmentId[event.segmentId] = event;
+    // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
+    if (event.personId.isNotEmpty) {
+      for (var seg in segments) {
+        if (seg.speakerId == event.speakerId) {
+          seg.isUser = isUser;
+          seg.personId = isUser ? null : event.personId;
+        }
+      }
+      // Clear suggestion since it's now applied
+      suggestionsBySegmentId.remove(event.segmentId);
+    } else {
+      // Store suggestion to be displayed (old app path - user taps Tag to confirm)
+      suggestionsBySegmentId[event.segmentId] = event;
+    }
     notifyListeners();
   }
 
