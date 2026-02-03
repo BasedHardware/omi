@@ -124,6 +124,30 @@ Future<bool> updateConversationTitle(String conversationId, String title) async 
   return response.statusCode == 200;
 }
 
+Future<bool> updateConversationOverview(String conversationId, String overview) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/overview',
+    headers: {'Content-Type': 'application/json'},
+    method: 'PATCH',
+    body: jsonEncode({'overview': overview}),
+  );
+  if (response == null) return false;
+  debugPrint('updateConversationOverview: ${response.body}');
+  return response.statusCode == 200;
+}
+
+Future<bool> updateSegmentText(String conversationId, String segmentId, String text) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/$segmentId/text',
+    headers: {'Content-Type': 'application/json'},
+    method: 'PATCH',
+    body: jsonEncode({'text': text}),
+  );
+  if (response == null) return false;
+  debugPrint('updateSegmentText: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/photos',

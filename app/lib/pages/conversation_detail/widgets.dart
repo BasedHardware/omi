@@ -285,6 +285,8 @@ class GetSummaryWidgets extends StatelessWidget {
                     controller: data.item2,
                     content: conversation.structured.title.decodeString,
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
+                    searchQuery: '',
+                    currentResultIndex: -1,
                   ),
             const SizedBox(height: 16),
             _buildInfoChips(context, conversation),
@@ -428,6 +430,9 @@ class GetEditTextField extends StatefulWidget {
   final TextStyle style;
   final TextEditingController? controller;
   final FocusNode? focusNode;
+  final String searchQuery;
+  final int currentResultIndex;
+  final Function(int)? onMatchCountChanged;
 
   const GetEditTextField({
     super.key,
@@ -436,27 +441,110 @@ class GetEditTextField extends StatefulWidget {
     required this.conversationId,
     required this.controller,
     required this.focusNode,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.onMatchCountChanged,
   });
 
   @override
   State<GetEditTextField> createState() => _GetEditTextFieldState();
 }
 
+class _EditableMarkdownField extends StatefulWidget {
+  final String conversationId;
+  final String content;
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
+  final String searchQuery;
+  final int currentResultIndex;
+  final Function(int)? onMatchCountChanged;
+
+  const _EditableMarkdownField({
+    required this.conversationId,
+    required this.content,
+    required this.controller,
+    required this.focusNode,
+    this.searchQuery = '',
+    this.currentResultIndex = -1,
+    this.onMatchCountChanged,
+  });
+
+  @override
+  State<_EditableMarkdownField> createState() => _EditableMarkdownFieldState();
+}
+
+class _EditableMarkdownFieldState extends State<_EditableMarkdownField> {
+  // bool _isEditing = false;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  void _handleDoubleTap() {
+    if (widget.controller == null) return;
+
+    // Toggle edit mode via provider
+    context.read<ConversationDetailProvider>().toggleSummaryEdit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Use provider state instead of local state
+    final isEditing = context.select<ConversationDetailProvider, bool>((p) => p.isEditingSummary);
+
+    if (isEditing) {
+      return GetEditTextField(
+        conversationId: widget.conversationId,
+        focusNode: widget.focusNode,
+        controller: widget.controller,
+        content: widget.content,
+        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+        searchQuery: widget.searchQuery,
+        currentResultIndex: widget.currentResultIndex,
+        onMatchCountChanged: widget.onMatchCountChanged,
+      );
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onDoubleTap: _handleDoubleTap,
+      child: ConversationMarkdownWidget(
+        content: widget.content,
+        searchQuery: widget.searchQuery,
+        currentResultIndex: widget.currentResultIndex,
+      ),
+    );
+  }
+}
+
 class _GetEditTextFieldState extends State<GetEditTextField> {
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      keyboardType: TextInputType.multiline,
-      minLines: 1,
-      maxLines: 3,
-      focusNode: widget.focusNode,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(borderSide: BorderSide.none),
-        contentPadding: EdgeInsets.all(0),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTap: () {
+        final provider = context.read<ConversationDetailProvider>();
+        provider.exitSummaryEdit();
+      },
+      child: TextField(
+        keyboardType: TextInputType.multiline,
+        minLines: 1,
+        maxLines: null,
+        focusNode: widget.focusNode,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(borderSide: BorderSide.none),
+          contentPadding: EdgeInsets.all(0),
+        ),
+        controller: widget.controller,
+        enabled: true,
+        style: widget.style,
       ),
-      controller: widget.controller,
-      enabled: true,
-      style: widget.style,
     );
   }
 }
@@ -541,6 +629,7 @@ class AppResultDetailWidget extends StatelessWidget {
   final ServerConversation conversation;
   final String searchQuery;
   final int currentResultIndex;
+  final Function(int)? onMatchCountChanged;
 
   const AppResultDetailWidget({
     super.key,
@@ -549,154 +638,163 @@ class AppResultDetailWidget extends StatelessWidget {
     required this.conversation,
     this.searchQuery = '',
     this.currentResultIndex = -1,
+    this.onMatchCountChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final String content = appResponse.content.trim().decodeString;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: content.isEmpty
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => const SummarizedAppsBottomSheet(),
-                            );
-                          },
-                          child: RichText(
-                            text: TextSpan(
-                                style: const TextStyle(color: Colors.grey), text: context.l10n.noSummaryForApp),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : ConversationMarkdownWidget(
-                    content: content,
-                    searchQuery: searchQuery,
-                    currentResultIndex: currentResultIndex,
-                  ),
-          ),
-
-          // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty)
-            GestureDetector(
-              onTap: () async {
-                if (app != null) {
-                  MixpanelManager().pageOpened('App Detail');
-                  await routeToPage(context, AppDetailPage(app: app!));
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12, left: 4),
-                child: Row(
-                  children: [
-                    // App icon
-                    app != null
-                        ? CachedNetworkImage(
-                            imageUrl: app!.getImageUrl(),
-                            imageBuilder: (context, imageProvider) {
-                              return CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                backgroundImage: imageProvider,
-                              );
-                            },
-                            errorWidget: (context, url, error) {
-                              return const CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                child: Icon(Icons.error_outline_rounded, size: 12),
-                              );
-                            },
-                            progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                              backgroundColor: Colors.white,
-                              radius: 12,
-                              child: CircularProgressIndicator(
-                                value: progress.progress,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              image: DecorationImage(
-                                image: AssetImage(Assets.images.background.path),
-                                fit: BoxFit.cover,
-                              ),
-                              borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-                            ),
-                            height: 24,
-                            width: 24,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Image.asset(
-                                  Assets.images.herologo.path,
-                                  height: 16,
-                                  width: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                    const SizedBox(width: 8),
-
-                    // App name and description with arrow
-                    Expanded(
-                      child: Row(
+    return Consumer<ConversationDetailProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: content.isEmpty
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  app != null ? app!.name.decodeString : context.l10n.unknownApp,
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (app != null)
-                                  Text(
-                                    app!.description.decodeString,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                              ],
+                            child: GestureDetector(
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (context) => const SummarizedAppsBottomSheet(),
+                                );
+                              },
+                              child: RichText(
+                                text: TextSpan(
+                                    style: const TextStyle(color: Colors.grey), text: context.l10n.noSummaryForApp),
+                              ),
                             ),
                           ),
-                          const SizedBox(
-                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                            width: 42,
-                          ),
                         ],
+                      )
+                    : _EditableMarkdownField(
+                        conversationId: conversation.id,
+                        focusNode: provider.overviewFocusNode,
+                        controller: provider.overviewController,
+                        content: content,
+                        searchQuery: searchQuery,
+                        currentResultIndex: currentResultIndex,
+                        onMatchCountChanged: onMatchCountChanged,
                       ),
-                    ),
-                  ],
-                ),
               ),
-            ),
-        ],
-      ),
+
+              // App info in a more subtle format below the content - only show if content is not empty
+              if (content.isNotEmpty)
+                GestureDetector(
+                  onTap: () async {
+                    if (app != null) {
+                      MixpanelManager().pageOpened('App Detail');
+                      await routeToPage(context, AppDetailPage(app: app!));
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12, left: 4),
+                    child: Row(
+                      children: [
+                        // App icon
+                        app != null
+                            ? CachedNetworkImage(
+                                imageUrl: app!.getImageUrl(),
+                                imageBuilder: (context, imageProvider) {
+                                  return CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    radius: 12,
+                                    backgroundImage: imageProvider,
+                                  );
+                                },
+                                errorWidget: (context, url, error) {
+                                  return const CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    radius: 12,
+                                    child: Icon(Icons.error_outline_rounded, size: 12),
+                                  );
+                                },
+                                progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+                                  backgroundColor: Colors.white,
+                                  radius: 12,
+                                  child: CircularProgressIndicator(
+                                    value: progress.progress,
+                                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  image: DecorationImage(
+                                    image: AssetImage(Assets.images.background.path),
+                                    fit: BoxFit.cover,
+                                  ),
+                                  borderRadius: const BorderRadius.all(Radius.circular(12.0)),
+                                ),
+                                height: 24,
+                                width: 24,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Image.asset(
+                                      Assets.images.herologo.path,
+                                      height: 16,
+                                      width: 16,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                        const SizedBox(width: 8),
+
+                        // App name and description with arrow
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      app != null ? app!.name.decodeString : context.l10n.unknownApp,
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    if (app != null)
+                                      Text(
+                                        app!.description.decodeString,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(
+                                child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                                width: 42,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -704,7 +802,8 @@ class AppResultDetailWidget extends StatelessWidget {
 class GetAppsWidgets extends StatelessWidget {
   final String searchQuery;
   final int currentResultIndex;
-  const GetAppsWidgets({super.key, this.searchQuery = '', this.currentResultIndex = -1});
+  final Function(int)? onMatchCountChanged;
+  const GetAppsWidgets({super.key, this.searchQuery = '', this.currentResultIndex = -1, this.onMatchCountChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -726,6 +825,7 @@ class GetAppsWidgets extends StatelessWidget {
                       conversation: provider.conversation,
                       searchQuery: searchQuery,
                       currentResultIndex: currentResultIndex,
+                      onMatchCountChanged: onMatchCountChanged,
                     ),
                   ],
                   const SizedBox(height: 8)
