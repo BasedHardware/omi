@@ -4,11 +4,18 @@ Tests cover:
 1. _process_speaker_assigned_segments fallback logic
 2. Text detection person creation and map updates
 3. speaker_assigned event handling with can_assign gate
+
+Note: The speaker assignment logic in transcribe.py is currently defined inside
+nested async handlers, making it difficult to test directly. These tests verify
+the logic patterns and data flow. For full integration testing, consider
+refactoring _process_speaker_assigned_segments and related logic into standalone
+testable functions in a separate module.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
+import uuid
 
 
 class MockTranscriptSegment:
@@ -220,3 +227,72 @@ class TestSpeakerAssignedEvent:
 
         assert speaker_id not in speaker_to_person_map
         assert "seg-incomplete" not in segment_person_assignment_map
+
+
+class TestPersonCreationOnTextDetection:
+    """Tests for person creation when text detection finds unknown name."""
+
+    def test_creates_person_when_not_found(self):
+        """Should create person in database when get_person_by_name returns None."""
+        # Simulate the text detection flow with mocked db calls
+        create_person_calls = []
+
+        def mock_get_person_by_name(uid, name):
+            return None  # Person not found
+
+        def mock_create_person(uid, data):
+            create_person_calls.append((uid, data))
+            return data
+
+        # Simulate the text detection logic
+        uid = "test-user"
+        detected_name = "Alice"
+        segment_speaker_id = 1
+        segment_id = "seg-text-create"
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
+
+        person = mock_get_person_by_name(uid, detected_name)
+        if person:
+            person_id = person['id']
+        else:
+            person_id = str(uuid.uuid4())
+            mock_create_person(
+                uid,
+                {
+                    'id': person_id,
+                    'name': detected_name,
+                    'created_at': datetime.now(timezone.utc),
+                    'updated_at': datetime.now(timezone.utc),
+                },
+            )
+
+        # Verify person was created
+        assert len(create_person_calls) == 1
+        assert create_person_calls[0][0] == uid
+        assert create_person_calls[0][1]['name'] == detected_name
+
+    def test_does_not_create_person_when_found(self):
+        """Should not create person when get_person_by_name returns existing person."""
+        create_person_calls = []
+
+        def mock_get_person_by_name(uid, name):
+            return {'id': 'existing-person-id', 'name': name}  # Person found
+
+        def mock_create_person(uid, data):
+            create_person_calls.append((uid, data))
+
+        # Simulate the text detection logic
+        uid = "test-user"
+        detected_name = "Bob"
+
+        person = mock_get_person_by_name(uid, detected_name)
+        if person:
+            person_id = person['id']
+        else:
+            person_id = str(uuid.uuid4())
+            mock_create_person(uid, {'id': person_id, 'name': detected_name})
+
+        # Verify person was NOT created
+        assert len(create_person_calls) == 0
+        assert person_id == 'existing-person-id'

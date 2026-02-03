@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,7 +8,28 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/services.dart';
+
+/// Mock PeopleProvider that tracks setPeople calls
+class MockPeopleProvider extends PeopleProvider {
+  int setPeopleCallCount = 0;
+  Completer<void>? _setPeopleCompleter;
+
+  @override
+  Future<void> setPeople() async {
+    setPeopleCallCount++;
+    if (_setPeopleCompleter != null) {
+      // Simulate async work - wait for completer
+      await _setPeopleCompleter!.future;
+    }
+  }
+
+  /// Set a completer to control when setPeople completes
+  void setSetPeopleCompleter(Completer<void> completer) {
+    _setPeopleCompleter = completer;
+  }
+}
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -289,7 +312,7 @@ void main() {
     });
   });
 
-  group('_hasMissingPerson', () {
+  group('People cache refresh', () {
     TranscriptSegment _segmentWithPerson(String id, String? personId) {
       return TranscriptSegment(
         id: id,
@@ -303,26 +326,67 @@ void main() {
       );
     }
 
-    test('returns true when segment has unknown personId', () {
+    test('triggers setPeople when segment has unknown personId', () {
       final provider = CaptureProvider();
+      final mockPeopleProvider = MockPeopleProvider();
+      provider.peopleProvider = mockPeopleProvider;
+
+      // Segment with personId that's not in cache (cachedPeople is empty)
       final segments = [_segmentWithPerson('seg1', 'unknown-person-id')];
 
-      // The _hasMissingPerson check happens internally, we test via onSegmentReceived
-      // which should trigger cache refresh for unknown personIds
       provider.onSegmentReceived(segments);
 
-      // Version should increment indicating segments were processed
-      expect(provider.segmentsPhotosVersion, greaterThan(0));
+      // Should have triggered setPeople
+      expect(mockPeopleProvider.setPeopleCallCount, 1);
     });
 
     test('does not trigger refresh for segments without personId', () {
       final provider = CaptureProvider();
+      final mockPeopleProvider = MockPeopleProvider();
+      provider.peopleProvider = mockPeopleProvider;
+
       final segments = [_segmentWithPerson('seg2', null)];
 
       provider.onSegmentReceived(segments);
 
-      // Should still process segments normally
-      expect(provider.hasTranscripts, true);
+      // Should NOT trigger setPeople (no personId to check)
+      expect(mockPeopleProvider.setPeopleCallCount, 0);
+    });
+
+    test('does not trigger multiple refreshes while one is in-flight', () async {
+      final provider = CaptureProvider();
+      final mockPeopleProvider = MockPeopleProvider();
+
+      // Set up a completer to control when setPeople completes
+      final completer = Completer<void>();
+      mockPeopleProvider.setSetPeopleCompleter(completer);
+
+      provider.peopleProvider = mockPeopleProvider;
+
+      // First segment with unknown personId
+      final segments1 = [_segmentWithPerson('seg-a', 'unknown-1')];
+      provider.onSegmentReceived(segments1);
+
+      // Should trigger first call
+      expect(mockPeopleProvider.setPeopleCallCount, 1);
+
+      // Second segment with different unknown personId while first is still in-flight
+      final segments2 = [_segmentWithPerson('seg-b', 'unknown-2')];
+      provider.onSegmentReceived(segments2);
+
+      // Should NOT trigger another call (first is still in-flight)
+      expect(mockPeopleProvider.setPeopleCallCount, 1);
+
+      // Complete the first call
+      completer.complete();
+      await Future.delayed(Duration.zero); // Let the future complete
+
+      // Third segment - now a new call should be allowed
+      final segments3 = [_segmentWithPerson('seg-c', 'unknown-3')];
+      provider.onSegmentReceived(segments3);
+
+      // Should trigger a new call
+      expect(mockPeopleProvider.setPeopleCallCount, 2);
     });
   });
 }
