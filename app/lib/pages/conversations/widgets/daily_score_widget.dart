@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -121,6 +122,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                           GestureDetector(
                             onTap: () {
                               HapticFeedback.lightImpact();
+                              MixpanelManager().dailyScoreCtaTapped(ctaType: goals.isEmpty ? 'add_goal' : 'new_task');
                               if (goals.isEmpty) {
                                 _addGoal();
                               } else {
@@ -201,6 +203,7 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
                   child: GestureDetector(
                     onTap: () {
                       HapticFeedback.lightImpact();
+                      MixpanelManager().dailyScoreHelpTapped();
                       _showScoreDetails(context, score, completedTasks, totalTasks);
                     },
                     child: Container(

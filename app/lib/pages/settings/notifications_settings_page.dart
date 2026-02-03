@@ -66,6 +66,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateNotificationFrequency(int value) async {
+    MixpanelManager().notificationFrequencyChanged(oldFrequency: _notificationFrequency, newFrequency: value);
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
     await setMentorNotificationSettings(value);
@@ -128,6 +129,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   void _updateDailyReflectionEnabled(bool value) {
+    MixpanelManager().dailyReflectionToggled(enabled: value);
     setState(() => _dailyReflectionEnabled = value);
     SharedPreferencesUtil().dailyReflectionEnabled = value;
 

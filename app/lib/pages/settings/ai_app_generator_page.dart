@@ -8,6 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -27,6 +28,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
   @override
   void initState() {
     super.initState();
+    MixpanelManager().aiAppGeneratorPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AiAppGeneratorProvider>();
       provider.setAppProvider(context.read<AppProvider>());
@@ -1310,7 +1312,9 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
 
   Future<void> _generateApp(AiAppGeneratorProvider provider) async {
     FocusScope.of(context).unfocus();
+    MixpanelManager().aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
     await provider.generateApp(_promptController.text);
+    MixpanelManager().aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
   }
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {

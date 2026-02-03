@@ -10,6 +10,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -29,6 +30,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   @override
   void initState() {
     super.initState();
+    MixpanelManager().importHistoryPageOpened();
     _loadJobs();
   }
 
@@ -90,6 +92,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   Future<void> _startLimitlessImport() async {
     try {
       if (!mounted) return;
+      MixpanelManager().importStarted(source: 'limitless');
       setState(() => _isUploading = true);
 
       // Pick ZIP file
