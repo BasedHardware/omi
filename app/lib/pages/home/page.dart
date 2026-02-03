@@ -264,12 +264,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        if (SharedPreferencesUtil().locationEnabled) {
-          await ForegroundUtil.initializeForegroundService();
-          await ForegroundUtil.startForegroundTask();
-        } else {
-          Logger.debug('Skipping foreground service: location is not enabled');
-        }
+        await ForegroundUtil.initializeForegroundService();
+        await ForegroundUtil.startForegroundTask();
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
