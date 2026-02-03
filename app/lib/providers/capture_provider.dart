@@ -161,10 +161,11 @@ class CaptureProvider extends ChangeNotifier
   bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
 
   /// Check if any segment has a personId not in local cache.
-  /// Uses Set lookup for O(N+M) complexity instead of O(N*M).
+  /// Uses Set difference for O(N+M) complexity instead of O(N*M).
   bool _hasMissingPerson(List<TranscriptSegment> segments) {
     final cachedIds = SharedPreferencesUtil().cachedPeople.map((p) => p.id).toSet();
-    return segments.any((seg) => seg.personId != null && !cachedIds.contains(seg.personId));
+    final segmentPersonIds = segments.map((s) => s.personId).whereType<String>().toSet();
+    return segmentPersonIds.difference(cachedIds).isNotEmpty;
   }
 
   CaptureProvider() {
