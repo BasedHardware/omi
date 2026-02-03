@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -138,6 +139,45 @@ class CaptureProvider extends ChangeNotifier
   int _metricsListenersCount = 0;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
+
+  // ============== PROFILING: Connection stability metrics ==============
+  static int _profilingSegmentCount = 0;
+  static int _profilingDisconnectCount = 0;
+  static int _profilingReconnectCount = 0;
+  static final List<int> _profilingSegmentTimesUs = [];
+  static DateTime? _profilingSessionStart;
+
+  static void _logProfilingEvent(String event, [Map<String, dynamic>? data]) {
+    final timestamp = DateTime.now().toIso8601String();
+    final dataStr = data != null ? ' ${data.toString()}' : '';
+    debugPrint('[PROFILING] $timestamp $event$dataStr');
+  }
+
+  static void resetProfilingMetrics() {
+    _profilingSegmentCount = 0;
+    _profilingDisconnectCount = 0;
+    _profilingReconnectCount = 0;
+    _profilingSegmentTimesUs.clear();
+    _profilingSessionStart = DateTime.now();
+    _logProfilingEvent('SESSION_START');
+  }
+
+  static Map<String, dynamic> getProfilingMetrics() {
+    final avgTime = _profilingSegmentTimesUs.isEmpty
+        ? 0
+        : _profilingSegmentTimesUs.reduce((a, b) => a + b) ~/ _profilingSegmentTimesUs.length;
+    return {
+      'segments': _profilingSegmentCount,
+      'disconnects': _profilingDisconnectCount,
+      'reconnects': _profilingReconnectCount,
+      'avgSegmentTimeUs': avgTime,
+      'sessionDurationSec':
+          _profilingSessionStart != null ? DateTime.now().difference(_profilingSessionStart!).inSeconds : 0,
+    };
+  }
+
+  // ============== END PROFILING ==============
+
   double get wsSendRateKbps => _wsSendRateKbps;
 
   /// Call this in initState of a widget that needs BLE/WS metrics
@@ -1647,6 +1687,11 @@ class CaptureProvider extends ChangeNotifier
   void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
+    // PROFILING: Track segment processing
+    final stopwatch = Stopwatch()..start();
+    _profilingSegmentCount++;
+    developer.Timeline.startSync('process_new_segment');
+
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
       if (!PlatformService.isDesktop) {
@@ -1663,6 +1708,18 @@ class CaptureProvider extends ChangeNotifier
     segments.addAll(remainSegments);
     _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
+
+    // PROFILING: Log segment event
+    stopwatch.stop();
+    _profilingSegmentTimesUs.add(stopwatch.elapsedMicroseconds);
+    developer.Timeline.finishSync();
+    _logProfilingEvent('SEGMENT_RECEIVED', {
+      'count': _profilingSegmentCount,
+      'newSegments': newSegments.length,
+      'totalSegments': segments.length,
+      'processingTimeUs': stopwatch.elapsedMicroseconds,
+    });
+
     notifyListeners();
   }
 
