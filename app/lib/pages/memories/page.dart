@@ -155,14 +155,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
             floatingActionButton: Padding(
-              padding: const EdgeInsets.only(bottom: 100.0),
+              padding: const EdgeInsets.only(bottom: 48.0),
               child: FloatingActionButton(
                 heroTag: 'memories_fab',
                 onPressed: () {
                   showMemoryDialog(context, provider);
                   MixpanelManager().memoriesPageCreateMemoryBtn();
                 },
-                backgroundColor: Colors.deepPurpleAccent,
+                backgroundColor: Colors.deepPurple,
                 tooltip: context.l10n.createMemoryTooltip,
                 child: const Icon(
                   Icons.add,
