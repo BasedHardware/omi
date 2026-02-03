@@ -188,12 +188,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         onSave: (title, current, target) async {
           // Create goal via provider
           final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          await goalsProvider.createGoal(
+          final created = await goalsProvider.createGoal(
             title: title,
             goalType: 'numeric',
             targetValue: target,
             currentValue: current,
           );
+          if (created != null) {
+            MixpanelManager()
+                .goalCreated(goalId: created.id, titleLength: title.length, targetValue: target, source: 'tasks_page');
+          }
         },
       ),
     );
@@ -596,6 +600,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onWillAcceptWithDetails: (details) => goal != null,
       onAcceptWithDetails: (details) {
         if (goal == null) return;
+        MixpanelManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
         _attachTaskToGoal(details.data.id, goal.id);
       },
       builder: (context, candidateData, rejectedData) {
@@ -1185,6 +1190,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             false;
       },
       onDismissed: (direction) async {
+        MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
         await _deleteGoal(goal);
       },
       background: Container(
@@ -1198,7 +1204,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
       child: GestureDetector(
-        onTap: () => _showEditGoalSheet(goal),
+        onTap: () {
+          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+          _showEditGoalSheet(goal);
+        },
         child: Container(
           color: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1256,8 +1265,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             currentValue: current,
             targetValue: target,
           );
+          MixpanelManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
         },
-        onDelete: () => _deleteGoal(goal),
+        onDelete: () {
+          MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+          _deleteGoal(goal);
+        },
       ),
     );
   }
