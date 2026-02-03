@@ -249,25 +249,26 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('stores suggestion when personId is empty (old app path)', () {
+    test('ignores event when personId is empty', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
-      // Old app path: personId is empty, suggestion stored for user to confirm
+      // Empty personId: backend didn't assign, nothing happens
       final event = SpeakerLabelSuggestionEvent(
         speakerId: 0,
-        personId: '', // Empty = old app, store suggestion
+        personId: '',
         personName: 'Alice',
         segmentId: 'seg1',
       );
 
       provider.onMessageEventReceived(event);
 
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), true);
-      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
+      // Nothing stored, nothing applied
+      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      expect(provider.segments.first.personId, isNull);
     });
 
-    test('auto-applies assignment when personId is provided (new app path)', () {
+    test('auto-applies assignment when personId is provided', () {
       final provider = CaptureProvider();
       // Create segment with speakerId 1 to match the event
       final segment = TranscriptSegment(

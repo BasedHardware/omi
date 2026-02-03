@@ -1602,11 +1602,7 @@ class CaptureProvider extends ChangeNotifier
           seg.personId = isUser ? null : event.personId;
         }
       }
-      // Clear suggestion since it's now applied
-      suggestionsBySegmentId.remove(event.segmentId);
-    } else {
-      // Store suggestion to be displayed (old app path - user taps Tag to confirm)
-      suggestionsBySegmentId[event.segmentId] = event;
+      _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
     }
     notifyListeners();
   }

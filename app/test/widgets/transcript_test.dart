@@ -40,98 +40,66 @@ void main() {
     );
   }
 
-  group('Tag button visibility', () {
-    testWidgets('Tag is hidden in live capture (isConversationDetail=false)', (tester) async {
-      final segment = _segment('seg1', 1);
-      final suggestion = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: 'person-123',
-        personName: 'Alice',
-        segmentId: 'seg1',
-      );
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: false, // Live capture mode
-            suggestions: {'seg1': suggestion},
-          ),
-        ),
-      ));
-
-      // Tag should NOT be visible in live capture
-      expect(find.text('Tag'), findsNothing);
-    });
-
-    testWidgets('Tag is visible in conversation detail (isConversationDetail=true)', (tester) async {
-      final segment = _segment('seg2', 1);
-      final suggestion = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: 'person-456',
-        personName: 'Bob',
-        segmentId: 'seg2',
-      );
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: true, // Conversation detail mode
-            suggestions: {'seg2': suggestion},
-          ),
-        ),
-      ));
-
-      // Tag SHOULD be visible in conversation detail
-      expect(find.text('Tag'), findsOneWidget);
-    });
-
-    testWidgets('Tag is not shown when no suggestion exists', (tester) async {
-      final segment = _segment('seg3', 1);
-
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: TranscriptWidget(
-            segments: [segment],
-            isConversationDetail: true,
-            suggestions: {}, // No suggestions
-          ),
-        ),
-      ));
-
-      // Tag should not be visible without suggestions
-      expect(find.text('Tag'), findsNothing);
-    });
-
-    testWidgets('Tag is not shown when person is already assigned', (tester) async {
-      // Mock a cached person to simulate "person already assigned"
+  group('Speaker label display', () {
+    testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();
       await setupSharedPreferences(cachedPeople: [
         {
-          'id': 'already-assigned-person',
-          'name': 'AssignedPerson',
+          'id': 'person-123',
+          'name': 'Alice',
           'created_at': now.toUtc().toIso8601String(),
           'updated_at': now.toUtc().toIso8601String(),
         }
       ]);
 
-      // Note: speakerId is extracted from speaker string by constructor
       final segment = TranscriptSegment(
-        id: 'seg4',
-        text: 'Hello',
+        id: 'seg1',
+        text: 'Hello world',
         speaker: 'SPEAKER_01',
         isUser: false,
-        personId: 'already-assigned-person', // Person already assigned (and in cache)
+        personId: 'person-123',
         start: 0.0,
         end: 1.0,
         translations: [],
       );
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TranscriptWidget(
+            segments: [segment],
+            isConversationDetail: false,
+          ),
+        ),
+      ));
+
+      // Should show person name
+      expect(find.text('Alice'), findsOneWidget);
+      expect(find.text('Speaker 1'), findsNothing);
+    });
+
+    testWidgets('shows Speaker X when no person is assigned', (tester) async {
+      final segment = _segment('seg2', 1);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TranscriptWidget(
+            segments: [segment],
+            isConversationDetail: false,
+          ),
+        ),
+      ));
+
+      // Should show Speaker X fallback
+      expect(find.text('Speaker 1'), findsOneWidget);
+    });
+
+    testWidgets('Tag button is removed from UI', (tester) async {
+      final segment = _segment('seg3', 1);
       final suggestion = SpeakerLabelSuggestionEvent(
         speakerId: 1,
-        personId: 'new-person',
-        personName: 'NewPerson',
-        segmentId: 'seg4',
+        personId: 'person-456',
+        personName: 'Bob',
+        segmentId: 'seg3',
       );
 
       await tester.pumpWidget(MaterialApp(
@@ -139,13 +107,12 @@ void main() {
           body: TranscriptWidget(
             segments: [segment],
             isConversationDetail: true,
-            suggestions: {'seg4': suggestion},
+            suggestions: {'seg3': suggestion},
           ),
         ),
       ));
 
-      // Tag should not be visible when person is in cache
-      // (the condition is suggestion != null && person == null)
+      // Tag button should no longer exist
       expect(find.text('Tag'), findsNothing);
     });
   });
