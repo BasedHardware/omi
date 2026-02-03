@@ -68,6 +68,9 @@ class CaptureProvider extends ChangeNotifier
   UsageProvider? usageProvider;
   CalendarProvider? calendarProvider;
 
+  // Cache refresh for backend-created persons
+  Future<void>? _peopleRefreshFuture;
+
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
@@ -156,6 +159,14 @@ class CaptureProvider extends ChangeNotifier
   }
 
   bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
+
+  /// Check if any segment has a personId not in local cache.
+  /// Uses Set difference for O(N+M) complexity instead of O(N*M).
+  bool _hasMissingPerson(List<TranscriptSegment> segments) {
+    final cachedIds = SharedPreferencesUtil().cachedPeople.map((p) => p.id).toSet();
+    final segmentPersonIds = segments.map((s) => s.personId).whereType<String>().toSet();
+    return segmentPersonIds.difference(cachedIds).isNotEmpty;
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -893,6 +904,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener?.cancel();
     _recordingTimer?.cancel();
     _metricsTimer?.cancel();
+    _peopleRefreshFuture = null; // Clear in-flight tracker
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -1569,14 +1581,30 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Auto-accept if enabled for new person suggestions
-    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
-    } else {
-      // Otherwise, store suggestion to be displayed.
-      suggestionsBySegmentId[event.segmentId] = event;
-      notifyListeners();
+    // Add backend-created person to local cache for UI display (backward compatibility)
+    final isUser = event.personId == 'user';
+    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+      SharedPreferencesUtil().addCachedPerson(
+        Person(
+          id: event.personId,
+          name: event.personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
     }
+
+    // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
+    if (event.personId.isNotEmpty) {
+      for (var seg in segments) {
+        if (seg.speakerId == event.speakerId) {
+          seg.isUser = isUser;
+          seg.personId = isUser ? null : event.personId;
+        }
+      }
+      _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
+    }
+    notifyListeners();
   }
 
   Future<void> assignSpeakerToConversation(
@@ -1589,12 +1617,26 @@ class CaptureProvider extends ChangeNotifier
     try {
       String finalPersonId = personId;
 
-      // Create person if new
+      // Create person if new (old app path - calls idempotent API)
       if (finalPersonId.isEmpty) {
         Person? newPerson = await peopleProvider?.createPersonProvider(personName);
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+
+      // Add person to local cache if not exists (backward compatibility for old apps)
+      if (finalPersonId.isNotEmpty &&
+          finalPersonId != 'user' &&
+          SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Find conversation id
@@ -1661,6 +1703,15 @@ class CaptureProvider extends ChangeNotifier
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
+
+    // Refresh people cache if we see unknown personIds (backend-created persons)
+    // Check all newSegments, not just remainSegments, to catch updates to existing segments
+    if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
+      _peopleRefreshFuture = peopleProvider?.setPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
+    }
+
     _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
     notifyListeners();

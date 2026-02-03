@@ -23,6 +23,11 @@ from websockets.exceptions import ConnectionClosed
 
 from firebase_admin.auth import InvalidIdTokenError
 
+from utils.speaker_assignment import (
+    process_speaker_assigned_segments,
+    update_speaker_assignment_maps,
+    should_update_speaker_to_person_map,
+)
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -120,6 +125,7 @@ async def _stream_handler(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -141,6 +147,14 @@ async def _stream_handler(
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+
+    # Helper to gate person_id based on client capability (backward compatibility)
+    # OLD apps don't send speaker_auto_assign param -> receive empty person_id
+    # NEW apps send speaker_auto_assign=enabled -> receive populated person_id
+    def _person_id_for_client(person_id: str) -> str:
+        if speaker_auto_assign_enabled:
+            return person_id
+        return ""
 
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
@@ -604,17 +618,6 @@ async def _stream_handler(
     )
     timed_out_conversation_id = await _prepare_in_progess_conversations()
 
-    def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
-        for segment in transcript_segments:
-            if segment.id in segment_person_assignment_map and not segment.is_user and not segment.person_id:
-                person_id = segment_person_assignment_map[segment.id]
-                if person_id == 'user':
-                    segment.is_user = True
-                    segment.person_id = None
-                else:
-                    segment.is_user = False
-                    segment.person_id = person_id
-
     def _update_in_progress_conversation(
         conversation: Conversation,
         segments: List[TranscriptSegment],
@@ -628,7 +631,11 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(updated_segments)
+            process_speaker_assigned_segments(
+                updated_segments,
+                segment_person_assignment_map,
+                speaker_to_person_map,
+            )
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -1390,11 +1397,11 @@ async def _stream_handler(
                 # Auto-assign processed segment
                 segment_person_assignment_map[segment['id']] = person_id
 
-                # Notify client
+                # Notify client (gated for backward compatibility)
                 _send_message_event(
                     SpeakerLabelSuggestionEvent(
                         speaker_id=speaker_id,
-                        person_id=person_id,
+                        person_id=_person_id_for_client(person_id),
                         person_name=person_name,
                         segment_id=segment['id'],
                     )
@@ -1519,7 +1526,7 @@ async def _stream_handler(
                             _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
-                                    person_id=person_id,
+                                    person_id=_person_id_for_client(person_id),
                                     person_name=person_name,
                                     segment_id=segment.id,
                                 )
@@ -1556,15 +1563,34 @@ async def _stream_handler(
                     detected_name = detect_speaker_from_text(segment.text)
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
-                        person_id = person['id'] if person else ''
+                        if person:
+                            person_id = person['id']
+                        else:
+                            # Backend creates person if missing
+                            person_id = str(uuid.uuid4())
+                            user_db.create_person(
+                                uid,
+                                {
+                                    'id': person_id,
+                                    'name': detected_name,
+                                    'created_at': datetime.now(timezone.utc),
+                                    'updated_at': datetime.now(timezone.utc),
+                                },
+                            )
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
-                                person_id=person_id,
+                                person_id=_person_id_for_client(person_id),
                                 person_name=detected_name,
                                 segment_id=segment.id,
                             )
                         )
+                        # Set maps for future segments, but only if diarization is active
+                        # (speaker_id > 0 means diarization assigned a real speaker)
+                        # Set maps for future segments using helper function
+                        if should_update_speaker_to_person_map(segment.speaker_id):
+                            speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+                        segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
     image_chunks = {str: any}  # A temporary in-memory cache for image chunks
@@ -1795,37 +1821,42 @@ async def _stream_handler(
                                         can_assign = True
                                         break
 
-                            if can_assign:
-                                speaker_id = json_data.get('speaker_id')
-                                person_id = json_data.get('person_id')
-                                person_name = json_data.get('person_name')
-                                if speaker_id is not None and person_id is not None and person_name is not None:
-                                    speaker_to_person_map[speaker_id] = (person_id, person_name)
-                                    for sid in segment_ids:
-                                        segment_person_assignment_map[sid] = person_id
-                                    print(
-                                        f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
-                                    )
+                            # Always set maps regardless of can_assign (fixes latest segments missed)
+                            speaker_id = json_data.get('speaker_id')
+                            person_id = json_data.get('person_id')
+                            person_name = json_data.get('person_name')
+                            maps_updated = update_speaker_assignment_maps(
+                                speaker_id,
+                                person_id,
+                                person_name,
+                                segment_ids,
+                                speaker_to_person_map,
+                                segment_person_assignment_map,
+                            )
+                            if maps_updated:
+                                print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id)
 
-                                    # Forward to pusher for speech sample extraction (non-blocking)
-                                    # Only for real people (not 'user') and when private cloud sync is enabled
-                                    if (
-                                        person_id
-                                        and person_id != 'user'
-                                        and private_cloud_sync_enabled
-                                        and send_speaker_sample_request is not None
-                                        and current_conversation_id
-                                    ):
-                                        asyncio.create_task(
-                                            send_speaker_sample_request(
-                                                person_id=person_id,
-                                                conv_id=current_conversation_id,
-                                                segment_ids=segment_ids,
-                                            )
+                                # Forward to pusher for speech sample extraction (non-blocking)
+                                # Only for real people (not 'user') and when private cloud sync is enabled
+                                # Only when can_assign is true (has speech_profile_processed segment)
+                                if (
+                                    can_assign
+                                    and person_id
+                                    and person_id != 'user'
+                                    and private_cloud_sync_enabled
+                                    and send_speaker_sample_request is not None
+                                    and current_conversation_id
+                                ):
+                                    asyncio.create_task(
+                                        send_speaker_sample_request(
+                                            person_id=person_id,
+                                            conv_id=current_conversation_id,
+                                            segment_ids=segment_ids,
                                         )
+                                    )
                             else:
                                 print(
-                                    "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
+                                    "Speaker assignment ignored: missing speaker_id/person_id/person_name.",
                                     uid,
                                     session_id,
                                 )
@@ -1985,6 +2016,7 @@ async def _listen(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2009,6 +2041,7 @@ async def _listen(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
     print("_listen ended", uid)
 
@@ -2027,9 +2060,11 @@ async def listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
+    speaker_auto_assign: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
+    speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -2043,6 +2078,7 @@ async def listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
 
 
