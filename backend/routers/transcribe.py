@@ -609,14 +609,6 @@ async def _stream_handler(
     )
     timed_out_conversation_id = await _prepare_in_progess_conversations()
 
-    def _process_speaker_assigned_segments_local(transcript_segments: List[TranscriptSegment]):
-        """Wrapper to call extracted helper with closure variables."""
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
-
     def _update_in_progress_conversation(
         conversation: Conversation,
         segments: List[TranscriptSegment],
@@ -630,7 +622,11 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments_local(updated_segments)
+            process_speaker_assigned_segments(
+                updated_segments,
+                segment_person_assignment_map,
+                speaker_to_person_map,
+            )
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )

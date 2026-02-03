@@ -160,15 +160,11 @@ class CaptureProvider extends ChangeNotifier
 
   bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
 
-  /// Check if any segment has a personId not in local cache
+  /// Check if any segment has a personId not in local cache.
+  /// Uses Set lookup for O(N+M) complexity instead of O(N*M).
   bool _hasMissingPerson(List<TranscriptSegment> segments) {
-    for (final seg in segments) {
-      final personId = seg.personId;
-      if (personId != null && SharedPreferencesUtil().getPersonById(personId) == null) {
-        return true;
-      }
-    }
-    return false;
+    final cachedIds = SharedPreferencesUtil().cachedPeople.map((p) => p.id).toSet();
+    return segments.any((seg) => seg.personId != null && !cachedIds.contains(seg.personId));
   }
 
   CaptureProvider() {
@@ -907,6 +903,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener?.cancel();
     _recordingTimer?.cancel();
     _metricsTimer?.cancel();
+    _peopleRefreshFuture = null; // Clear in-flight tracker
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
