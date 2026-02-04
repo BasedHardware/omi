@@ -1465,6 +1465,9 @@ async def _stream_handler(
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.6)
 
+            # Periodic cleanup of expired image chunks (enforces TTL even when uploads stop)
+            _cleanup_expired_image_chunks()
+
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
