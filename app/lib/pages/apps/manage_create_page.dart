@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
 
 class ManageCreatePage extends StatelessWidget {
   const ManageCreatePage({super.key});
@@ -21,7 +24,7 @@ class ManageCreatePage extends StatelessWidget {
               children: [
                 const SizedBox(width: 16),
                 ChoiceChip(
-                  label: const Text('Installed Apps'),
+                  label: Text(context.l10n.installedApps),
                   selected: provider.installedAppsOptionSelected,
                   showCheckmark: true,
                   backgroundColor: Colors.transparent,
@@ -34,7 +37,7 @@ class ManageCreatePage extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 ChoiceChip(
-                  label: const Text('My Apps'),
+                  label: Text(context.l10n.myApps),
                   selected: !provider.installedAppsOptionSelected,
                   showCheckmark: true,
                   backgroundColor: Colors.transparent,
@@ -62,7 +65,7 @@ class ManageCreatePage extends StatelessWidget {
                         const SizedBox(height: 16),
                         Padding(
                           padding: const EdgeInsets.only(left: 16.0),
-                          child: Text('Apps (${provider.apps.where((a) => a.enabled).length})',
+                          child: Text(context.l10n.appsCount(provider.apps.where((a) => a.enabled).length.toString()),
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w400)),
                         ),
                         Selector<AppProvider, List<App>>(
@@ -102,15 +105,15 @@ class ManageCreatePage extends StatelessWidget {
                               color: const Color(0xFF1F1F25),
                               borderRadius: BorderRadius.circular(16.0),
                             ),
-                            child: const ListTile(
+                            child: ListTile(
                               title: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.add, color: Colors.white),
-                                  SizedBox(width: 8),
+                                  const Icon(Icons.add, color: Colors.white),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Create and submit a new app',
+                                    context.l10n.createAndSubmitNewApp,
                                     textAlign: TextAlign.center,
                                   ),
                                 ],
@@ -122,7 +125,7 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Private Apps (${provider.userPrivateApps.length})',
+                                child: Text(context.l10n.privateAppsCount(provider.userPrivateApps.length.toString()),
                                     style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPrivateApps.isEmpty
@@ -142,7 +145,7 @@ class ManageCreatePage extends StatelessWidget {
                             ? const SizedBox()
                             : Padding(
                                 padding: const EdgeInsets.only(left: 16.0, bottom: 10),
-                                child: Text('Public Apps (${provider.userPublicApps.length})',
+                                child: Text(context.l10n.publicAppsCount(provider.userPublicApps.length.toString()),
                                     style: const TextStyle(fontSize: 18)),
                               ),
                         provider.userPublicApps.isEmpty

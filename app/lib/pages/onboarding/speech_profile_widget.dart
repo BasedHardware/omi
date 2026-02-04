@@ -1,16 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:gradient_borders/box_borders/gradient_box_border.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
-import 'package:provider/provider.dart';
 
 class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
@@ -25,7 +30,7 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   late AnimationController _questionAnimationController;
   late Animation<double> _questionFadeAnimation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -36,22 +41,29 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
     );
-    
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
     });
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
   }
 
   @override
   void dispose() {
+    final speechProvider = context.read<SpeechProfileProvider>();
+
+    speechProvider.forceCompletionTimer?.cancel();
+    speechProvider.forceCompletionTimer = null;
+    speechProvider.close();
+
+    _scrollController.dispose();
     _questionAnimationController.dispose();
-    // if (mounted) {
-    //   context.read<SpeechProfileProvider>().close();
-    // }
+
     super.dispose();
   }
 
@@ -68,10 +80,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
   }
 
+  String _getLoadingText(BuildContext context, SpeechProfileLoadingState state) {
+    switch (state) {
+      case SpeechProfileLoadingState.uploading:
+        return context.l10n.uploadingVoiceProfile;
+      case SpeechProfileLoadingState.memorizing:
+        return context.l10n.memorizingYourVoice;
+      case SpeechProfileLoadingState.personalizing:
+        return context.l10n.personalizingExperience;
+      case SpeechProfileLoadingState.allSet:
+        return context.l10n.youreAllSet;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Future restartDeviceRecording() async {
-      debugPrint("restartDeviceRecording $mounted");
+      Logger.debug("restartDeviceRecording $mounted");
 
       // Restart device recording, clear transcripts
       if (mounted) {
@@ -84,7 +109,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
     }
 
     Future stopAllRecording() async {
-      debugPrint("stopAllRecording $mounted");
+      Logger.debug("stopAllRecording $mounted");
       if (mounted) {
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         // Stop any active device recording
@@ -106,9 +131,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
               } else if (info == 'NEXT_QUESTION') {
-                // Animate question change
-                _questionAnimationController.reset();
-                _questionAnimationController.forward();
+                if (!mounted) return;
+
+                _questionAnimationController
+                  ..reset()
+                  ..forward();
               }
             },
             showError: (error) {
@@ -119,9 +146,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     context,
                     () => Navigator.pop(context),
                     () {},
-                    'Connection Error',
-                    'Failed to connect to the server. Please check your internet connection and try again.',
-                    okButtonText: 'Ok',
+                    context.l10n.connectionError,
+                    context.l10n.connectionErrorDesc,
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -136,9 +163,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                       Navigator.pop(context);
                     },
                     () {},
-                    'Invalid recording detected',
-                    'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.',
-                    okButtonText: 'Try Again',
+                    context.l10n.invalidRecordingMultipleSpeakers,
+                    context.l10n.multipleSpeakersDesc,
+                    okButtonText: context.l10n.tryAgain,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -153,9 +180,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                       //  Navigator.pop(context);
                     },
                     () {},
-                    'Invalid recording detected',
-                    'There is not enough speech detected. Please speak more and try again.',
-                    okButtonText: 'Ok',
+                    context.l10n.invalidRecordingMultipleSpeakers,
+                    context.l10n.tooShortDesc,
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -171,9 +198,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     },
                     () {},
                     // TODO: improve this
-                    'Invalid recording detected',
-                    'Please make sure you speak for at least 5 seconds and not more than 90.',
-                    okButtonText: 'Ok',
+                    context.l10n.invalidRecordingMultipleSpeakers,
+                    context.l10n.invalidRecordingDesc,
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -187,9 +214,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                       Navigator.pop(context);
                     },
                     () {},
-                    'Are you there?',
-                    'We could not detect any speech. Please make sure to speak for at least 10 seconds and not more than 3 minutes.',
-                    okButtonText: 'Ok',
+                    context.l10n.areYouThere,
+                    context.l10n.noSpeechDesc,
+                    okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -204,9 +231,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                       Navigator.pop(context);
                     },
                     () {},
-                    'Connection Lost',
-                    'The connection was interrupted. Please check your internet connection and try again.',
-                    okButtonText: 'Try Again',
+                    context.l10n.connectionLost,
+                    context.l10n.connectionLostDesc,
+                    okButtonText: context.l10n.tryAgain,
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -227,7 +254,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         ? Column(
                             children: [
                               Text(
-                                'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.',
+                                context.l10n.speechProfileIntro,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,
@@ -311,7 +338,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       }
 
                                       await stopAllRecording();
-                                      
+
                                       // Initialize speech profile with phone mic as input source
                                       // Don't pass restartDeviceRecording - we don't want to restart device recording
                                       bool success = await provider.initialise(
@@ -321,23 +348,23 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                               .forceProcessingCurrentConversation();
                                         },
                                       );
-                                      
+
                                       if (!success) {
                                         // Initialization failed, error dialog will be shown
                                         return;
                                       }
-                                      
+
                                       provider.forceCompletionTimer =
                                           Timer(Duration(seconds: provider.maxDuration), () async {
                                         provider.finalize();
                                       });
-                                      
-                                      // Start question animation
+
+                                      if (!mounted) return;
                                       _questionAnimationController.forward();
                                     },
-                                    child: const Text(
-                                      'Get Started',
-                                      style: TextStyle(color: Colors.white, fontSize: 16),
+                                    child: Text(
+                                      context.l10n.getStarted,
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
                                     ),
                                   ),
                                 ),
@@ -365,9 +392,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   // Conversation processing already triggered in finalize()
                                   widget.goNext();
                                 },
-                                child: const Text(
-                                  "All done!",
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                child: Text(
+                                  context.l10n.allDone,
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                               ),
                             )
@@ -387,7 +414,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         ),
                                       ),
                                       const SizedBox(width: 24),
-                                      Text(provider.loadingText,
+                                      Text(_getLoadingText(context, provider.loadingState),
                                           style: const TextStyle(color: Colors.white, fontSize: 18)),
                                     ],
                                   ),
@@ -407,20 +434,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                     const SizedBox(height: 8),
                                     SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 0.9,
-                                        child: ProgressBarWithPercentage(
-                                            progressValue: provider.questionProgress)),
+                                        child: ProgressBarWithPercentage(progressValue: provider.questionProgress)),
                                     const SizedBox(height: 8),
                                     Text(
-                                      'Keep going, you are doing great',
+                                      context.l10n.keepGoing,
                                       style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 8),
                                     TextButton(
                                       onPressed: () => provider.skipCurrentQuestion(),
-                                      child: const Text(
-                                        'Skip this question',
-                                        style: TextStyle(
+                                      child: Text(
+                                        context.l10n.skipThisQuestion,
+                                        style: const TextStyle(
                                           color: Colors.white70,
                                           fontSize: 14,
                                         ),
@@ -433,9 +459,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           onPressed: () {
                             widget.onSkip();
                           },
-                          child: const Text(
-                            'Skip for now',
-                            style: TextStyle(
+                          child: Text(
+                            context.l10n.skipForNow,
+                            style: const TextStyle(
                               color: Colors.white,
                               decoration: TextDecoration.underline,
                               fontSize: 14,

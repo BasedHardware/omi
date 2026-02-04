@@ -22,6 +22,7 @@
         "group": "Core Development",
         "pages": [
           "doc/developer/AppSetup",
+          "doc/developer/Cursor",
           {
             "group": "Backend",
             "pages": [
@@ -104,7 +105,15 @@
           "doc/hardware/OmiConsumer",
           "doc/hardware/DevKit2",
           "doc/hardware/DevKit1",
-          "doc/hardware/omiGlass"
+          "doc/hardware/PaintingOMI"
+        ]
+      },
+      {
+        "group": "OmiGlass",
+        "pages": [
+          "doc/hardware/omiGlass",
+          "doc/hardware/omiglass/flash-firmware",
+          "doc/hardware/omiglass/monitoring"
         ]
       },
       {

@@ -92,6 +92,7 @@ dist/
 # Web specific
 **/web/**/build/
 **/web/.dart_tool/
+web/app/public/firebase-messaging-sw.js
 
 # Miscellaneous
 !app/pubspec.lock
@@ -197,3 +198,15 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+.playwright-mcp/
+
+CLAUDE.md
+web/app/next-env.d.ts
+.claude/settings.local.json
+LOCAL_DEV_SETUP.md
+app/macos/Config/Prod/GoogleService-Info.plist
+app/.metadata
+app/macos/DerivedData/
+app/macos/Runner/LocalDev.entitlements
+.env.local
+.backups/

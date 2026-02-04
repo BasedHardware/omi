@@ -30,6 +30,10 @@ abstract class MessageEvent {
         return OnboardingQuestionAnsweredEvent.fromJson(json);
       case 'onboarding_complete':
         return OnboardingCompleteEvent.fromJson(json);
+      case 'freemium_threshold_reached':
+        return FreemiumThresholdReachedEvent.fromJson(json);
+      case 'segments_deleted':
+        return SegmentsDeletedEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -224,6 +228,58 @@ class OnboardingCompleteEvent extends MessageEvent {
       conversationId: json['conversation_id'],
       memoriesCreated: json['memories_created'] ?? 0,
       error: json['error'],
+    );
+  }
+}
+
+/// Freemium action types sent by backend
+enum FreemiumAction {
+  /// User needs to setup on-device transcription to continue after credits run out
+  setupOnDeviceStt,
+
+  /// No action required - backend handles fallback automatically (future use)
+  none;
+
+  static FreemiumAction fromString(String? value) {
+    switch (value) {
+      case 'setup_on_device_stt':
+        return FreemiumAction.setupOnDeviceStt;
+      default:
+        return FreemiumAction.none;
+    }
+  }
+}
+
+/// Freemium: Sent when user's credits are approaching the limit (e.g., 3 minutes remaining)
+/// Includes action type to tell the app what the user needs to do (if anything)
+class FreemiumThresholdReachedEvent extends MessageEvent {
+  final int remainingSeconds;
+  final FreemiumAction action;
+
+  FreemiumThresholdReachedEvent({
+    required this.remainingSeconds,
+    required this.action,
+  }) : super(eventType: 'freemium_threshold_reached');
+
+  /// Whether user action is required
+  bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;
+
+  factory FreemiumThresholdReachedEvent.fromJson(Map<String, dynamic> json) {
+    return FreemiumThresholdReachedEvent(
+      remainingSeconds: json['remaining_seconds'] ?? 0,
+      action: FreemiumAction.fromString(json['action']),
+    );
+  }
+}
+
+class SegmentsDeletedEvent extends MessageEvent {
+  final List<String> segmentIds;
+
+  SegmentsDeletedEvent({required this.segmentIds}) : super(eventType: 'segments_deleted');
+
+  factory SegmentsDeletedEvent.fromJson(Map<String, dynamic> json) {
+    return SegmentsDeletedEvent(
+      segmentIds: (json['segment_ids'] as List<dynamic>).map((e) => e.toString()).toList(),
     );
   }
 }

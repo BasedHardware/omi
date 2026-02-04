@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/services/devices/discovery/device_locator.dart';
 
 enum ImageOrientation {
   orientation0, // 0 degrees
@@ -209,7 +212,10 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
         .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
         .expand((s) => s.characteristics)
         .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
-    deviceType = hasImageStream ? DeviceType.openglass : DeviceType.omi;
+    // Also check device name for OpenGlass/OmiGlass detection
+    final isOpenGlassByName =
+        device.platformName.toLowerCase().contains('openglass') || device.platformName.toLowerCase().contains('glass');
+    deviceType = (hasImageStream || isOpenGlassByName) ? DeviceType.openglass : DeviceType.omi;
   } else if (BtDevice.isFrameDeviceFromDevice(device)) {
     deviceType = DeviceType.frame;
   }
@@ -244,6 +250,7 @@ class BtDevice {
   String? _firmwareRevision;
   String? _hardwareRevision;
   String? _manufacturerName;
+  String? _serialNumber;
 
   BtDevice(
       {required this.name,
@@ -254,11 +261,13 @@ class BtDevice {
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
-      String? manufacturerName}) {
+      String? manufacturerName,
+      String? serialNumber}) {
     _modelNumber = modelNumber;
     _firmwareRevision = firmwareRevision;
     _hardwareRevision = hardwareRevision;
     _manufacturerName = manufacturerName;
+    _serialNumber = serialNumber;
   }
 
   // create an empty device
@@ -271,19 +280,22 @@ class BtDevice {
         _modelNumber = '',
         _firmwareRevision = '',
         _hardwareRevision = '',
-        _manufacturerName = '';
+        _manufacturerName = '',
+        _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
   String get firmwareRevision => _firmwareRevision ?? 'Unknown';
   String get hardwareRevision => _hardwareRevision ?? 'Unknown';
   String get manufacturerName => _manufacturerName ?? 'Unknown';
+  String? get serialNumber => _serialNumber;
 
   // set details
   set modelNumber(String modelNumber) => _modelNumber = modelNumber;
   set firmwareRevision(String firmwareRevision) => _firmwareRevision = firmwareRevision;
   set hardwareRevision(String hardwareRevision) => _hardwareRevision = hardwareRevision;
   set manufacturerName(String manufacturerName) => _manufacturerName = manufacturerName;
+  set serialNumber(String? serialNumber) => _serialNumber = serialNumber;
 
   String getShortId() => BtDevice.shortId(id);
 
@@ -307,7 +319,8 @@ class BtDevice {
       String? modelNumber,
       String? firmwareRevision,
       String? hardwareRevision,
-      String? manufacturerName}) {
+      String? manufacturerName,
+      String? serialNumber}) {
     return BtDevice(
       name: name ?? this.name,
       id: id ?? this.id,
@@ -318,6 +331,7 @@ class BtDevice {
       firmwareRevision: firmwareRevision ?? _firmwareRevision,
       hardwareRevision: hardwareRevision ?? _hardwareRevision,
       manufacturerName: manufacturerName ?? _manufacturerName,
+      serialNumber: serialNumber ?? _serialNumber,
     );
   }
 
@@ -375,16 +389,17 @@ class BtDevice {
     var firmwareRevision = '1.0.2';
     var hardwareRevision = 'Seeed Xiao BLE Sense';
     var manufacturerName = 'Based Hardware';
+    String? serialNumber;
     var t = DeviceType.omi;
 
     try {
-      if (conn is OmiDeviceConnection) {
-        final deviceInfo = await conn.getDeviceInfo();
+      Map<String, dynamic>? deviceInfo;
 
-        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
-        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
-        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
-        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+      if (conn is OmiGlassConnection) {
+        deviceInfo = await conn.getDeviceInfo();
+        t = DeviceType.openglass;
+      } else if (conn is OmiDeviceConnection) {
+        deviceInfo = await conn.getDeviceInfo();
 
         // Check if device has image streaming capability (OpenGlass detection)
         if (type == DeviceType.openglass) {
@@ -392,6 +407,14 @@ class BtDevice {
         } else if (deviceInfo['hasImageStream'] == 'true') {
           t = DeviceType.openglass;
         }
+      }
+
+      if (deviceInfo != null) {
+        modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+        firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+        hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+        manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+        serialNumber = deviceInfo['serialNumber'];
       }
     } on PlatformException catch (e) {
       Logger.error('Device Disconnected while getting device info: $e');
@@ -404,6 +427,7 @@ class BtDevice {
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
+      serialNumber: serialNumber,
       type: t,
     );
   }
@@ -677,7 +701,7 @@ class BtDevice {
       final data = manufacturerData[93]!;
 
       // Log the pattern to learn new devices
-      debugPrint(
+      Logger.debug(
           '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}');
 
       // Known pattern for NotePin: 0456cf00
@@ -688,7 +712,7 @@ class BtDevice {
       // Accept any device with manufacturer ID 93 if it has data
       // This catches other PLAUD models we haven't seen yet
       if (data.isNotEmpty) {
-        debugPrint('[PLAUD] Accepting device with manufacturer ID 93');
+        Logger.debug('[PLAUD] Accepting device with manufacturer ID 93');
         return true;
       }
     }
@@ -806,6 +830,7 @@ class BtDevice {
       firmwareRevision: json['firmwareRevision'],
       hardwareRevision: json['hardwareRevision'],
       manufacturerName: json['manufacturerName'],
+      serialNumber: json['serialNumber'],
     );
   }
 
@@ -821,6 +846,7 @@ class BtDevice {
       'firmwareRevision': firmwareRevision,
       'hardwareRevision': hardwareRevision,
       'manufacturerName': manufacturerName,
+      'serialNumber': _serialNumber,
     };
   }
 }

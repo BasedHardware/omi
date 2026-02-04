@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
-import 'package:omi/pages/apps/widgets/api_keys_widget.dart';
-import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/api_keys_widget.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'widgets/app_metadata_widget.dart';
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
@@ -43,7 +45,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
           backgroundColor: Theme.of(context).colorScheme.primary,
           extendBody: true,
           appBar: AppBar(
-            title: const Text('Manage Your App'),
+            title: Text(context.l10n.manageYourApp),
             backgroundColor: Theme.of(context).colorScheme.primary,
           ),
           body: PopScope(
@@ -52,42 +54,42 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
             },
             child: Builder(builder: (context) {
               if (provider.isUpdating) {
-                return const Center(
+                return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      CircularProgressIndicator(
+                      const CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
-                      SizedBox(
+                      const SizedBox(
                         height: 14,
                       ),
                       Text(
-                        'Updating your app',
-                        style: TextStyle(color: Colors.white),
+                        context.l10n.updatingYourApp,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     ],
                   ),
                 );
               }
               if (provider.isLoading) {
-                return const Center(
+                return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      CircularProgressIndicator(
+                      const CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
-                      SizedBox(
+                      const SizedBox(
                         height: 14,
                       ),
                       Text(
-                        'Fetching your app details',
-                        style: TextStyle(color: Colors.white),
+                        context.l10n.fetchingYourAppDetails,
+                        style: const TextStyle(color: Colors.white),
                       ),
                     ],
                   ),
@@ -137,7 +139,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               Padding(
                                 padding: const EdgeInsets.only(left: 8.0),
                                 child: Text(
-                                  'Preview and Screenshots',
+                                  context.l10n.previewAndScreenshots,
                                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                 ),
                               ),
@@ -164,7 +166,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                             borderRadius: BorderRadius.circular(8),
                                           ),
                                           child: provider.isUploadingThumbnail
-                                              ? Shimmer.fromColors(
+                                              ? ShimmerWithTimeout(
                                                   baseColor: Colors.grey[900]!,
                                                   highlightColor: Colors.grey[800]!,
                                                   child: Container(
@@ -212,7 +214,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                                 ),
                                               ),
                                             ),
-                                            placeholder: (context, url) => Shimmer.fromColors(
+                                            placeholder: (context, url) => ShimmerWithTimeout(
                                               baseColor: Colors.grey[900]!,
                                               highlightColor: Colors.grey[800]!,
                                               child: Container(
@@ -273,14 +275,14 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                               Padding(
                                 padding: const EdgeInsets.only(left: 8.0),
                                 child: Text(
-                                  'App Capabilities',
+                                  context.l10n.appCapabilities,
                                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                 ),
                               ),
                               const SizedBox(
                                 height: 10,
                               ),
-                              const SizedBox(height: 48, child: CapabilitiesChipsWidget()),
+                              const CapabilitiesChipsWidget(),
                             ],
                           ),
                         ),
@@ -308,9 +310,8 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                         if (provider.isCapabilitySelectedById('chat'))
                                           PromptTextField(
                                             controller: provider.chatPromptController,
-                                            label: 'Chat Prompt',
-                                            hint:
-                                                'You are an awesome app, your job is to respond to the user queries and make them feel good...',
+                                            label: context.l10n.chatPrompt,
+                                            hint: context.l10n.chatPromptPlaceholder,
                                           ),
                                         if (provider.isCapabilitySelectedById('memories') &&
                                             provider.isCapabilitySelectedById('chat'))
@@ -320,9 +321,8 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                         if (provider.isCapabilitySelectedById('memories'))
                                           PromptTextField(
                                             controller: provider.conversationPromptController,
-                                            label: 'Conversation Prompt',
-                                            hint:
-                                                'You are an awesome app, you will be given transcript and summary of a conversation...',
+                                            label: context.l10n.conversationPrompt,
+                                            hint: context.l10n.conversationPromptPlaceholder,
                                           ),
                                       ],
                                     ),
@@ -349,7 +349,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                     Padding(
                                       padding: const EdgeInsets.only(left: 8.0),
                                       child: Text(
-                                        'Notification Scopes',
+                                        context.l10n.notificationScopes,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                       ),
                                     ),
@@ -410,9 +410,9 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                       Navigator.pop(context);
                                     }
                                   },
-                                  'Update App?',
-                                  'Are you sure you want to update your app? The changes will reflect once reviewed by our team.',
-                                  okButtonText: 'Confirm',
+                                  context.l10n.updateAppQuestion,
+                                  context.l10n.updateAppConfirmation,
+                                  okButtonText: context.l10n.confirm,
                                 ),
                               );
                             }
@@ -423,9 +423,9 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         borderRadius: BorderRadius.circular(12.0),
                         color: provider.isValid ? Colors.white : Colors.grey.shade700,
                       ),
-                      child: const Text(
-                        'Update App',
-                        style: TextStyle(color: Colors.black, fontSize: 16),
+                      child: Text(
+                        context.l10n.updateApp,
+                        style: const TextStyle(color: Colors.black, fontSize: 16),
                         textAlign: TextAlign.center,
                       ),
                     ),

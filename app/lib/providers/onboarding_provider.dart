@@ -5,11 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
@@ -19,8 +23,9 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
@@ -75,10 +80,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         String accessibilityStatus = await _screenCaptureChannel.invokeMethod('checkAccessibilityPermission');
         hasAccessibilityPermission = accessibilityStatus == 'granted';
 
-        debugPrint(
+        Logger.debug(
             'Permissions update - Mic: $microphoneStatus, Screen: $screenCaptureStatus, Accessibility: $accessibilityStatus');
       } catch (e) {
-        debugPrint('Error updating permissions on macOS: $e');
+        Logger.debug('Error updating permissions on macOS: $e');
         // Fallback to standard permission checking
         hasBluetoothPermission = await Permission.bluetooth.isGranted;
         hasLocationPermission = await Permission.location.isGranted;
@@ -166,24 +171,28 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestBluetoothPermission');
           updateBluetoothPermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError('Bluetooth permission is required to connect to your device.');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothRequired ??
+                'Bluetooth permission is required to connect to your device.');
           }
         } else if (bluetoothStatus == 'denied' || bluetoothStatus == 'restricted') {
           updateBluetoothPermission(false);
-          AppSnackbar.showSnackbarError('Bluetooth permission denied. Please grant permission in System Preferences.');
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothDeniedSystemPrefs ??
+              'Bluetooth permission denied. Please grant permission in System Preferences.');
         } else {
           updateBluetoothPermission(false);
           AppSnackbar.showSnackbarError(
-              'Bluetooth permission status: $bluetoothStatus. Please check System Preferences.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingBluetoothStatusCheckPrefs(bluetoothStatus) ??
+                  'Bluetooth permission status: $bluetoothStatus. Please check System Preferences.');
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Bluetooth permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Bluetooth permission: $e');
+        Logger.debug('Error checking/requesting Bluetooth permission on macOS: $e');
+        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckBluetooth('$e') ??
+            'Failed to check Bluetooth permission: $e');
         updateBluetoothPermission(false);
       }
     } else if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
-      debugPrint('bleStatus: $bleStatus');
+      Logger.debug('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
       if (Platform.isAndroid) {
@@ -212,7 +221,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (PlatformService.isDesktop) {
       try {
         String notificationStatus = await _screenCaptureChannel.invokeMethod('checkNotificationPermission');
-        debugPrint('notificationStatus: $notificationStatus');
+        Logger.debug('notificationStatus: $notificationStatus');
         if (notificationStatus == 'granted') {
           updateNotificationPermission(true);
           return;
@@ -223,25 +232,29 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           updateNotificationPermission(granted);
           if (!granted) {
             AppSnackbar.showSnackbarError(
-                'Notification permission denied. Please grant permission in System Preferences.');
+                MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationDeniedSystemPrefs ??
+                    'Notification permission denied. Please grant permission in System Preferences.');
           }
         } else if (notificationStatus == 'denied') {
           updateNotificationPermission(false);
           // Request permission which will redirect to settings if denied
           await _screenCaptureChannel.invokeMethod('requestNotificationPermission');
           AppSnackbar.showSnackbarError(
-              'Notification permission denied. Please grant permission in System Preferences > Notifications.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationDeniedNotifications ??
+                  'Notification permission denied. Please grant permission in System Preferences > Notifications.');
         } else if (notificationStatus == 'provisional') {
           updateNotificationPermission(true); // Provisional permissions are still functional
-          debugPrint('Notification permission is provisional - notifications will be delivered quietly');
+          Logger.debug('Notification permission is provisional - notifications will be delivered quietly');
         } else {
           updateNotificationPermission(false);
           AppSnackbar.showSnackbarError(
-              'Notification permission status: $notificationStatus. Please check System Preferences.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingNotificationStatusCheckPrefs(notificationStatus) ??
+                  'Notification permission status: $notificationStatus. Please check System Preferences.');
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Notification permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Notification permission: $e');
+        Logger.debug('Error checking/requesting Notification permission on macOS: $e');
+        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckNotification('$e') ??
+            'Failed to check Notification permission: $e');
         updateNotificationPermission(false);
       }
     } else {
@@ -263,7 +276,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (PlatformService.isDesktop) {
       try {
         String locationStatus = await _screenCaptureChannel.invokeMethod('checkLocationPermission');
-        debugPrint('locationStatus: $locationStatus');
+        Logger.debug('locationStatus: $locationStatus');
         if (locationStatus == 'granted') {
           updateLocationPermission(true);
           return (true, PermissionStatus.granted);
@@ -272,11 +285,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         if (locationStatus == 'undetermined') {
           bool granted = await _screenCaptureChannel.invokeMethod('requestLocationPermission');
           updateLocationPermission(granted);
-          debugPrint('undetermined location permission granted: $granted');
+          Logger.debug('undetermined location permission granted: $granted');
           return (true, granted ? PermissionStatus.granted : PermissionStatus.denied);
         } else if (locationStatus == 'denied' || locationStatus == 'restricted') {
           updateLocationPermission(false);
-          AppSnackbar.showSnackbarError(
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingLocationGrantInSettings ??
               'Please grant location permission in Settings > Privacy & Security > Location Services');
           return (true, PermissionStatus.permanentlyDenied);
         } else {
@@ -284,14 +297,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           return (true, PermissionStatus.denied);
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Location permission on macOS: $e');
+        Logger.debug('Error checking/requesting Location permission on macOS: $e');
         updateLocationPermission(false);
         return (false, PermissionStatus.denied);
       }
     } else {
       // Existing logic for iOS/Android
       if (await Permission.location.serviceStatus.isDisabled) {
-        debugPrint('Location service is disabled');
+        Logger.debug('Location service is disabled');
         return (false, PermissionStatus.permanentlyDenied);
       } else {
         var res = await Permission.locationWhenInUse.request();
@@ -308,13 +321,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         updateLocationPermission(granted);
         return granted;
       } catch (e) {
-        debugPrint('Error checking location permission on macOS: $e');
+        Logger.debug('Error checking location permission on macOS: $e');
         updateLocationPermission(false);
         return false;
       }
     } else {
       PermissionStatus locationStatus = await Permission.locationAlways.request();
-      debugPrint('alwaysAllowLocation permission status: $locationStatus');
+      Logger.debug('alwaysAllowLocation permission status: $locationStatus');
       updateLocationPermission(locationStatus.isGranted);
       return locationStatus.isGranted;
     }
@@ -324,7 +337,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (PlatformService.isDesktop) {
       try {
         String microphoneStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
-        debugPrint('microphoneStatus: $microphoneStatus');
+        Logger.debug('microphoneStatus: $microphoneStatus');
         if (microphoneStatus == 'granted') {
           updateMicrophonePermission(true);
           return true;
@@ -334,30 +347,33 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
           updateMicrophonePermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError('Microphone permission is required for recording.');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneRequired ??
+                'Microphone permission is required for recording.');
           }
           return granted;
         } else if (microphoneStatus == 'denied' || microphoneStatus == 'restricted') {
           updateMicrophonePermission(false);
-          AppSnackbar.showSnackbarError(
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneDenied ??
               'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
           return false;
         } else {
           updateMicrophonePermission(false);
           AppSnackbar.showSnackbarError(
-              'Microphone permission status: $microphoneStatus. Please check System Preferences.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingMicrophoneStatusCheckPrefs(microphoneStatus) ??
+                  'Microphone permission status: $microphoneStatus. Please check System Preferences.');
           return false;
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Microphone permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Microphone permission: $e');
+        Logger.debug('Error checking/requesting Microphone permission on macOS: $e');
+        AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckMicrophone('$e') ??
+            'Failed to check Microphone permission: $e');
         updateMicrophonePermission(false);
         return false;
       }
     } else {
       // Existing logic for iOS/Android
       PermissionStatus micStatus = await Permission.microphone.request();
-      debugPrint('micStatus: $micStatus');
+      Logger.debug('micStatus: $micStatus');
       updateMicrophonePermission(micStatus.isGranted);
       return micStatus.isGranted;
     }
@@ -367,7 +383,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (PlatformService.isDesktop) {
       try {
         String screenCaptureStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
-        debugPrint('screenCaptureStatus: $screenCaptureStatus');
+        Logger.debug('screenCaptureStatus: $screenCaptureStatus');
         if (screenCaptureStatus == 'granted') {
           updateScreenCapturePermission(true);
           return true;
@@ -377,23 +393,27 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
           updateScreenCapturePermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError('Screen capture permission is required for system audio recording.');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureRequired ??
+                'Screen capture permission is required for system audio recording.');
           }
           return granted;
         } else if (screenCaptureStatus == 'denied') {
           updateScreenCapturePermission(false);
-          AppSnackbar.showSnackbarError(
+          AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureDenied ??
               'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
           return false;
         } else {
           updateScreenCapturePermission(false);
           AppSnackbar.showSnackbarError(
-              'Screen capture permission status: $screenCaptureStatus. Please check System Preferences.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingScreenCaptureStatusCheckPrefs(screenCaptureStatus) ??
+                  'Screen capture permission status: $screenCaptureStatus. Please check System Preferences.');
           return false;
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Screen Capture permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Screen Capture permission: $e');
+        Logger.debug('Error checking/requesting Screen Capture permission on macOS: $e');
+        AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckScreenCapture('$e') ??
+                'Failed to check Screen Capture permission: $e');
         updateScreenCapturePermission(false);
         return false;
       }
@@ -408,7 +428,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (PlatformService.isDesktop) {
       try {
         String accessibilityStatus = await _screenCaptureChannel.invokeMethod('checkAccessibilityPermission');
-        debugPrint('accessibilityStatus: $accessibilityStatus');
+        Logger.debug('accessibilityStatus: $accessibilityStatus');
         if (accessibilityStatus == 'granted') {
           updateAccessibilityPermission(true);
           return true;
@@ -418,18 +438,22 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           bool granted = await _screenCaptureChannel.invokeMethod('requestAccessibilityPermission');
           updateAccessibilityPermission(granted);
           if (!granted) {
-            AppSnackbar.showSnackbarError('Accessibility permission is required for detecting browser meetings.');
+            AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.onboardingAccessibilityRequired ??
+                'Accessibility permission is required for detecting browser meetings.');
           }
           return granted;
         } else {
           updateAccessibilityPermission(false);
           AppSnackbar.showSnackbarError(
-              'Accessibility permission status: $accessibilityStatus. Please check System Preferences.');
+              MyApp.navigatorKey.currentContext?.l10n.onboardingAccessibilityStatusCheckPrefs(accessibilityStatus) ??
+                  'Accessibility permission status: $accessibilityStatus. Please check System Preferences.');
           return false;
         }
       } catch (e) {
-        debugPrint('Error checking/requesting Accessibility permission on macOS: $e');
-        AppSnackbar.showSnackbarError('Failed to check Accessibility permission: $e');
+        Logger.debug('Error checking/requesting Accessibility permission on macOS: $e');
+        AppSnackbar.showSnackbarError(
+            MyApp.navigatorKey.currentContext?.l10n.onboardingFailedCheckAccessibility('$e') ??
+                'Failed to check Accessibility permission: $e');
         updateAccessibilityPermission(false);
         return false;
       }
@@ -458,7 +482,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = device.id;
       notifyListeners();
       await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-      debugPrint('Connected to device: ${device.name}');
+      Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
       deviceName = device.name;
@@ -487,7 +511,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         notifyInfo('DEVICE_CONNECTED');
       }
     } catch (e) {
-      debugPrint('Error connecting to device: $e');
+      Logger.debug('Error connecting to device: $e');
       foundDevicesMap.remove(device.id);
       deviceList.removeWhere((element) => element.id == device.id);
       isClicked = false; // Allow clicks again after finishing the operation

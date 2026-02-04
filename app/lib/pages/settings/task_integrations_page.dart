@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
@@ -219,6 +224,40 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       return;
     }
 
+    // Check if Apple Reminders requires permission
+    if (app == TaskIntegrationApp.appleReminders) {
+      final provider = context.read<TaskIntegrationProvider>();
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final remindersService = AppleRemindersService();
+      final hasPermission = await remindersService.hasPermission();
+      if (!hasPermission) {
+        final granted = await remindersService.requestPermission();
+        if (granted) {
+          // Update the provider's cached permission status with the granted result
+          await provider.updateAppleRemindersPermission(granted: true);
+          // Save connected status to backend so auto-sync works
+          await provider.saveConnectionDetails(app.key, {'connected': true});
+          await provider.setSelectedApp(app);
+          Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
+        } else {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text(context.l10n.enableRemindersAccess),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+        return;
+      }
+      // Permission already granted - ensure backend knows it's connected
+      await provider.saveConnectionDetails(app.key, {'connected': true});
+      await provider.setSelectedApp(app);
+      return;
+    }
+
     // Check if Todoist requires authentication
     if (app == TaskIntegrationApp.todoist) {
       final todoistService = TodoistService();
@@ -229,16 +268,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
             // Provider will refresh when user returns to this page
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -247,10 +286,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Todoist authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Todoist')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -270,14 +309,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -286,10 +325,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Asana authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Asana')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -309,14 +348,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -325,10 +364,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Google Tasks authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Google Tasks')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -348,14 +387,14 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
-            debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+            Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
             // Track authentication failure
             MixpanelManager().taskIntegrationAuthFailed(
@@ -364,10 +403,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start ClickUp authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('ClickUp')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -381,7 +420,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     await context.read<TaskIntegrationProvider>().setSelectedApp(app);
 
     // Log app selection
-    debugPrint('✓ Task integration selected: ${app.displayName} (${app.key})');
+    Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
   }
 
   Future<bool?> _showAuthDialog(TaskIntegrationApp app) {
@@ -394,26 +433,26 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Connect to ${app.displayName}',
+            context.l10n.connectToAppTitle(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'You\'ll need to authorize Omi to create tasks in your ${app.displayName} account. This will open your browser for authentication.',
+            context.l10n.authorizeOmiForTasks(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Continue',
-                style: TextStyle(color: Colors.white),
+              child: Text(
+                context.l10n.continueButton,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -432,19 +471,19 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            '${app.displayName} Integration',
+            context.l10n.appIntegration(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'Integration with ${app.displayName} is coming soon! We\'re working hard to bring you more task management options.',
+            context.l10n.integrationComingSoon(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                'Got it',
-                style: TextStyle(color: Colors.white),
+              child: Text(
+                context.l10n.gotIt,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -474,7 +513,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(
@@ -587,9 +626,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                   color: const Color(0xFF3C3C43),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Coming Soon',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.comingSoon,
+                  style: const TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -604,9 +643,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Connect',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.connect,
+                  style: const TextStyle(
                     color: Colors.black,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -654,9 +693,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Task Integrations',
-          style: TextStyle(
+        title: Text(
+          context.l10n.taskIntegrations,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -669,7 +708,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             IconButton(
               icon: const Icon(Icons.settings, color: Colors.white),
               onPressed: _openSelectedAppSettings,
-              tooltip: 'Configure Settings',
+              tooltip: context.l10n.configureSettings,
             ),
         ],
       ),
@@ -713,7 +752,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Tasks can be exported to one app at a time.',
+                        context.l10n.tasksExportedOneApp,
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 14,

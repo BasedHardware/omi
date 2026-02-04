@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AppsPage extends StatefulWidget {
   final bool showAppBar;
@@ -45,7 +48,7 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
           ? AppBar(
               backgroundColor: Theme.of(context).colorScheme.primary,
               automaticallyImplyLeading: true,
-              title: const Text('Apps'),
+              title: Text(context.l10n.apps),
               centerTitle: true,
               elevation: 0,
             )
@@ -110,9 +113,7 @@ class EmptyAppsWidget extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 64, left: 14, right: 14),
                   child: Center(
                     child: Text(
-                      state.isConnected
-                          ? 'No apps found'
-                          : 'Unable to fetch apps :(\n\nPlease check your internet connection and try again.',
+                      state.isConnected ? context.l10n.noAppsFound : context.l10n.unableToFetchApps,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       textAlign: TextAlign.center,
                     ),

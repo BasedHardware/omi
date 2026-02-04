@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/clickup_service.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ClickUpSettingsPage extends StatefulWidget {
   const ClickUpSettingsPage({super.key});
@@ -204,7 +207,7 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Connected as user: ${_clickupService.currentUserId}',
+                    context.l10n.connectedAsUser(_clickupService.currentUserId!),
                     style: const TextStyle(
                       color: Colors.green,
                       fontSize: 12,
@@ -214,18 +217,18 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
               ],
             ),
           ),
-        const Text(
-          'Default Workspace',
-          style: TextStyle(
+        Text(
+          context.l10n.defaultWorkspace,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Tasks will be created in this workspace',
-          style: TextStyle(
+        Text(
+          context.l10n.tasksCreatedInWorkspace,
+          style: const TextStyle(
             color: Color(0xFF8E8E93),
             fontSize: 14,
           ),
@@ -269,18 +272,18 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
         }),
         const SizedBox(height: 32),
         if (_selectedTeamId != null) ...[
-          const Text(
-            'Default Space',
-            style: TextStyle(
+          Text(
+            context.l10n.defaultSpace,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Select a space in your workspace',
-            style: TextStyle(
+          Text(
+            context.l10n.selectSpaceInWorkspace,
+            style: const TextStyle(
               color: Color(0xFF8E8E93),
               fontSize: 14,
             ),
@@ -300,10 +303,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'No spaces found in this workspace',
-                  style: TextStyle(
+                  context.l10n.noSpacesInWorkspace,
+                  style: const TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 14,
                   ),
@@ -350,18 +353,18 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
           const SizedBox(height: 32),
         ],
         if (_selectedSpaceId != null) ...[
-          const Text(
-            'Default List',
-            style: TextStyle(
+          Text(
+            context.l10n.defaultList,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Tasks will be added to this list',
-            style: TextStyle(
+          Text(
+            context.l10n.tasksAddedToList,
+            style: const TextStyle(
               color: Color(0xFF8E8E93),
               fontSize: 14,
             ),
@@ -381,10 +384,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'No lists found in this space',
-                  style: TextStyle(
+                  context.l10n.noListsInSpace,
+                  style: const TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 14,
                   ),

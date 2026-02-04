@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 /// Maps folder icon strings (emojis) to FontAwesome IconData.
@@ -32,6 +33,8 @@ const Map<String, IconData> _emojiToFaMap = {
   '🏆': FontAwesomeIcons.trophy,
   '🔒': FontAwesomeIcons.lock,
   '⭐': FontAwesomeIcons.solidStar,
+  '🕐': FontAwesomeIcons.solidClock,
+  '📊': FontAwesomeIcons.chartSimple,
 };
 
 /// List of all available folder icon strings (for use in icon picker UI).

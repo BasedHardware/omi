@@ -1,19 +1,22 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/flutter_communicator.g.dart';
+import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
-import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/utils/device.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
@@ -57,7 +60,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       final connection = await ServiceManager.instance().device.ensureConnection(device.id);
 
       if (connection is! AppleWatchDeviceConnection) {
-        debugPrint('Device is not an Apple Watch connection');
+        Logger.debug('Device is not an Apple Watch connection');
         return;
       }
 
@@ -72,11 +75,11 @@ class _FoundDevicesState extends State<FoundDevices> {
         if (!mounted) return;
       }
     } catch (e) {
-      debugPrint('Error handling Apple Watch onboarding: $e');
+      Logger.debug('Error handling Apple Watch onboarding: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error connecting to Apple Watch: $e'),
+          content: Text(context.l10n.errorConnectingAppleWatch(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -88,7 +91,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     final provider = Provider.of<OnboardingProvider>(context, listen: false);
     final device = provider.deviceList.firstWhereOrNull((d) => d.id == deviceId);
     if (device == null) {
-      debugPrint('Device with id $deviceId not found in provider list.');
+      Logger.debug('Device with id $deviceId not found in provider list.');
       return;
     }
 
@@ -109,7 +112,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     final provider = Provider.of<OnboardingProvider>(context, listen: false);
     final device = provider.deviceList.firstWhereOrNull((d) => d.id == connection.device.id);
     if (device == null) {
-      debugPrint('Device with id ${connection.device.id} not found in provider list.');
+      Logger.debug('Device with id ${connection.device.id} not found in provider list.');
       return;
     }
 
@@ -149,7 +152,7 @@ class _FoundDevicesState extends State<FoundDevices> {
         if (mounted) Navigator.pop(context);
       }
     } catch (e) {
-      debugPrint('Error completing Apple Watch onboarding: $e');
+      Logger.debug('Error completing Apple Watch onboarding: $e');
     }
   }
 
@@ -169,23 +172,25 @@ class _FoundDevicesState extends State<FoundDevices> {
 
     bool dontShowAgain = false;
 
+    if (!mounted) return;
+
     await showDialog(
       context: context,
       barrierDismissible: false, // Must click button
-      builder: (context) => ConfirmationDialog(
+      builder: (dialogContext) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
-        checkboxText: "Don't show it again",
-        checkboxValue: false,
+        checkboxText: context.l10n.dontShowAgain,
+        checkboxValue: dontShowAgain,
         onCheckboxChanged: (value) {
           dontShowAgain = value;
         },
-        confirmText: "I Understand",
+        confirmText: context.l10n.iUnderstand,
         onConfirm: () {
           if (dontShowAgain) {
             SharedPreferencesUtil().saveBool(prefKey, true);
           }
-          Navigator.of(context).pop();
+          Navigator.pop(dialogContext);
         },
         onCancel: () {
           // Not used, but required by ConfirmationDialog
@@ -227,17 +232,17 @@ class _FoundDevicesState extends State<FoundDevices> {
             !provider.isConnected
                 ? Text(
                     provider.deviceList.isEmpty
-                        ? 'Searching for devices...'
-                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                        ? context.l10n.searchingForDevices
+                        : context.l10n.devicesFoundNearby(provider.deviceList.length),
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                       color: Color(0x66FFFFFF),
                     ),
                   )
-                : const Text(
-                    'PAIRING SUCCESSFUL',
-                    style: TextStyle(
+                : Text(
+                    context.l10n.pairingSuccessful,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
                       color: Color(0x66FFFFFF),
@@ -260,18 +265,18 @@ class _FoundDevicesState extends State<FoundDevices> {
                   color: Color(0xCCFFFFFF),
                 ),
               ),
-            if (provider.isConnected)
+            if (provider.isConnected && provider.batteryPercentage > 0)
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Text(
-                    '🔋 ${provider.batteryPercentage.toString()}%',
+                    '🔋 ${provider.batteryPercentage}%',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 18,
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
-                          : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
+                          : provider.batteryPercentage <= 50
                               ? Colors.orange
                               : Colors.green,
                     ),

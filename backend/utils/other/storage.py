@@ -141,6 +141,31 @@ def delete_user_person_speech_samples(uid: str, person_id: str) -> None:
         blob.delete()
 
 
+def upload_person_speech_sample_from_bytes(
+    audio_bytes: bytes,
+    uid: str,
+    person_id: str,
+    sample_rate: int = 16000,
+) -> str:
+    """Upload PCM audio bytes as WAV speech sample. Returns GCS path."""
+    import uuid as uuid_module
+
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_bytes)
+
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    filename = f"{uuid_module.uuid4()}.wav"
+    path = f'{uid}/people_profiles/{person_id}/{filename}'
+    blob = bucket.blob(path)
+    blob.upload_from_string(wav_buffer.getvalue(), content_type='audio/wav')
+
+    return path
+
+
 def get_user_people_ids(uid: str) -> List[str]:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
@@ -159,6 +184,27 @@ def get_user_person_speech_samples(uid: str, person_id: str, download: bool = Fa
         return paths
 
     return [_get_signed_url(blob, 60) for blob in blobs]
+
+
+def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
+    """
+    Generate signed URLs for speech samples given their GCS paths.
+    Uses the paths stored in Firestore instead of listing GCS blobs.
+
+    Args:
+        paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
+
+    Returns:
+        List of signed URLs
+    """
+    if not paths:
+        return []
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    signed_urls = []
+    for path in paths:
+        blob = bucket.blob(path)
+        signed_urls.append(_get_signed_url(blob, 60))
+    return signed_urls
 
 
 # ********************************************
@@ -356,7 +402,13 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
-def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: List[float]) -> bytes:
+def download_audio_chunks_and_merge(
+    uid: str,
+    conversation_id: str,
+    timestamps: List[float],
+    fill_gaps: bool = True,
+    sample_rate: int = 16000,
+) -> bytes:
     """
     Download and merge audio chunks on-demand, handling mixed encryption states.
     Downloads chunks in parallel.
@@ -366,6 +418,9 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
         uid: User ID
         conversation_id: Conversation ID
         timestamps: List of chunk timestamps to merge
+        fill_gaps: If True, insert silence (zero bytes) between chunks to maintain
+                   continuous time-aligned audio. Default True.
+        sample_rate: Audio sample rate in Hz (default 16000)
 
     Returns:
         Merged audio bytes (PCM16)
@@ -416,9 +471,42 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
 
     # Merge chunks
     merged_data = bytearray()
-    for timestamp in timestamps:
-        if timestamp in chunk_results:
-            merged_data.extend(chunk_results[timestamp])
+
+    if fill_gaps and timestamps and chunk_results:
+        # Sort timestamps to ensure proper ordering
+        sorted_timestamps = sorted(timestamps)
+        first_timestamp = sorted_timestamps[0]
+        current_time = first_timestamp  # Track current audio end time in seconds
+
+        for timestamp in sorted_timestamps:
+            if timestamp not in chunk_results:
+                continue
+
+            pcm_data = chunk_results[timestamp]
+
+            # Calculate gap from current position to this chunk's start
+            gap_seconds = timestamp - current_time
+            if gap_seconds > 0:
+                # Insert silence: 16-bit mono = 2 bytes per sample
+                gap_samples = int(gap_seconds * sample_rate)
+                silence_bytes = bytes(gap_samples * 2)  # Zero bytes for silence
+                merged_data.extend(silence_bytes)
+                print(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
+
+            merged_data.extend(pcm_data)
+
+            # Update current time based on chunk duration
+            # PCM16 mono: 2 bytes per sample
+            chunk_duration = len(pcm_data) / (sample_rate * 2)
+            current_time = timestamp + chunk_duration
+    else:
+        # Original behavior - just concatenate without gap filling
+        for timestamp in timestamps:
+            if timestamp in chunk_results:
+                merged_data.extend(chunk_results[timestamp])
+
+    # Free memory from chunk results immediately after merging
+    chunk_results.clear()
 
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
@@ -432,7 +520,13 @@ def get_cached_merged_audio_path(uid: str, conversation_id: str, audio_file_id: 
 
 
 def get_or_create_merged_audio(
-    uid: str, conversation_id: str, audio_file_id: str, timestamps: List[float], pcm_to_wav_func
+    uid: str,
+    conversation_id: str,
+    audio_file_id: str,
+    timestamps: List[float],
+    pcm_to_wav_func,
+    fill_gaps: bool = True,
+    sample_rate: int = 16000,
 ) -> tuple[bytes, bool]:
     """
     Get merged audio from cache or create it.
@@ -444,6 +538,8 @@ def get_or_create_merged_audio(
         audio_file_id: Audio file ID
         timestamps: List of chunk timestamps
         pcm_to_wav_func: Function to convert PCM to WAV
+        fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
+        sample_rate: Audio sample rate in Hz (default 16000)
 
     Returns:
         Tuple of (audio_data_bytes, was_cached)
@@ -475,10 +571,13 @@ def get_or_create_merged_audio(
     print(f"Cache miss, merging audio for: {cache_path}")
 
     # Download and merge chunks
-    pcm_data = download_audio_chunks_and_merge(uid, conversation_id, timestamps)
+    pcm_data = download_audio_chunks_and_merge(
+        uid, conversation_id, timestamps, fill_gaps=fill_gaps, sample_rate=sample_rate
+    )
 
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
+    del pcm_data  # Free PCM data immediately after WAV conversion
 
     # Upload to cache in background thread with 3-day TTL
     def _upload_to_cache():
@@ -549,7 +648,9 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) ->
     return wav_buffer.getvalue()
 
 
-def precache_conversation_audio(uid: str, conversation_id: str, audio_files: list) -> None:
+def precache_conversation_audio(
+    uid: str, conversation_id: str, audio_files: list, fill_gaps: bool = True, sample_rate: int = 16000
+) -> None:
     """
     Pre-cache all audio files for a conversation in a background thread.
 
@@ -557,6 +658,8 @@ def precache_conversation_audio(uid: str, conversation_id: str, audio_files: lis
         uid: User ID
         conversation_id: Conversation ID
         audio_files: List of audio file dicts with 'id' and 'chunk_timestamps'
+        fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
+        sample_rate: Audio sample rate in Hz (default 16000)
     """
     if not audio_files:
         return
@@ -575,6 +678,8 @@ def precache_conversation_audio(uid: str, conversation_id: str, audio_files: lis
                     audio_file_id=audio_file_id,
                     timestamps=timestamps,
                     pcm_to_wav_func=_pcm_to_wav,
+                    fill_gaps=fill_gaps,
+                    sample_rate=sample_rate,
                 )
             except Exception as e:
                 print(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
@@ -589,6 +694,74 @@ def precache_conversation_audio(uid: str, conversation_id: str, audio_files: lis
 # **********************************
 # ************* UTILS **************
 # **********************************
+
+
+def download_blob_bytes(bucket_name: str, path: str) -> bytes:
+    """
+    Download blob content as bytes from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        Blob content as bytes
+
+    Raises:
+        NotFound: If the blob doesn't exist
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    return blob.download_as_bytes()
+
+
+def delete_blob(bucket_name: str, path: str) -> bool:
+    """
+    Delete a blob from GCS.
+
+    Args:
+        bucket_name: Name of the GCS bucket
+        path: Path to the blob within the bucket
+
+    Returns:
+        True if deleted, False if not found
+    """
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(path)
+    try:
+        blob.delete()
+        return True
+    except NotFound:
+        return False
+
+
+def download_speech_profile_bytes(path: str) -> bytes:
+    """
+    Download speech profile/sample audio from GCS.
+
+    Args:
+        path: GCS path to the sample (e.g., '{uid}/people_profiles/{person_id}/{filename}.wav')
+
+    Returns:
+        Audio bytes (WAV format)
+
+    Raises:
+        NotFound: If the sample doesn't exist
+    """
+    return download_blob_bytes(speech_profiles_bucket, path)
+
+
+def delete_speech_profile_blob(path: str) -> bool:
+    """
+    Delete speech profile/sample from GCS.
+
+    Args:
+        path: GCS path to the sample
+
+    Returns:
+        True if deleted, False if not found
+    """
+    return delete_blob(speech_profiles_bucket, path)
 
 
 def _get_signed_url(blob, minutes):

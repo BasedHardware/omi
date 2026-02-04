@@ -20,6 +20,6 @@ app = App(
 image = Image.debian_slim().apt_install('ffmpeg', 'git', 'unzip').pip_install_from_requirements('requirements.txt')
 
 
-@app.function(image=image, schedule=Cron('* * * * *'))
+@app.function(image=image, schedule=Cron('0 * * * *'))  # Run at minute 0 of every hour
 async def notifications_cronjob():
     await start_cron_job()

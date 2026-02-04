@@ -104,9 +104,11 @@ env:
         name: prod-omi-backend-secrets
         key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.128.101:8080/v1/vad"
+    value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://172.16.128.101:8080/v1/speaker-identification"
+    value: "http://vad.omi.me:80/v1/speaker-identification"
+  - name: HOSTED_SPEAKER_EMBEDDING_API_URL
+    value: "http://diarizer.omi.me:80"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -277,10 +279,10 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 0.7
+    cpu: 1.5
     memory: 2Gi
   limits:
-    cpu: 1
+    cpu: 2
     memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -359,3 +361,7 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: type
+              operator: In
+              values:
+                - high-cpu

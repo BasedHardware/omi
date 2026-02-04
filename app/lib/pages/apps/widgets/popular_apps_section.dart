@@ -1,10 +1,13 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 // Custom notification class to communicate with parent widgets
 class SelectAppNotification extends Notification {
@@ -38,9 +41,9 @@ class PopularAppsSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
           child: Row(
             children: [
-              const Text(
-                'Popular Apps',
-                style: TextStyle(
+              Text(
+                context.l10n.popularApps,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -96,7 +99,7 @@ class PopularAppsSection extends StatelessWidget {
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Opening ${app.name}...'),
+                    content: Text(context.l10n.openingApp(app.name)),
                     duration: const Duration(milliseconds: 500),
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -133,7 +136,7 @@ class PopularAppsSection extends StatelessWidget {
                                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                           },
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Shimmer.fromColors(
+                          placeholder: (context, url) => ShimmerWithTimeout(
                             baseColor: const Color(0xFF1F1F25),
                             highlightColor: const Color(0xFF35343B),
                             child: Container(
@@ -226,11 +229,11 @@ class PopularAppsSection extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          app.enabled ? 'Open' : 'Get',
-                          style: TextStyle(
+                          app.enabled ? context.l10n.open : context.l10n.getButton,
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: app.enabled ? Colors.white : Colors.white,
+                            color: Colors.white,
                           ),
                         ),
                       ),

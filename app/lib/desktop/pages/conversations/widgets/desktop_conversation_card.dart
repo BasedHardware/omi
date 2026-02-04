@@ -1,23 +1,22 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/usage_page.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/other/time_utils.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/ui/atoms/omi_avatar.dart';
-import 'package:omi/ui/atoms/omi_badge.dart';
-import 'package:omi/ui/atoms/omi_button.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/ui/molecules/omi_edit_dialog.dart';
-import 'package:omi/ui/molecules/omi_context_menu.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/ui/molecules/omi_context_menu.dart';
+import 'package:omi/ui/molecules/omi_edit_dialog.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/string.dart';
 
 class DesktopConversationCard extends StatefulWidget {
   final ServerConversation conversation;
@@ -44,10 +43,10 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   void _showDeleteConfirmation() async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Delete Conversation',
-      message: 'Are you sure you want to delete this conversation? This action cannot be undone.',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
+      title: context.l10n.deleteConversation,
+      message: context.l10n.deleteConversationConfirmation,
+      confirmLabel: context.l10n.delete,
+      cancelLabel: context.l10n.cancel,
       confirmColor: ResponsiveHelper.errorColor,
     );
 
@@ -60,20 +59,19 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     final provider = Provider.of<ConversationProvider>(context, listen: false);
     provider.deleteConversationLocally(widget.conversation, widget.index, widget.date);
 
-    // Show simple delete confirmation snackbar (no undo for now)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.check_circle_outline_rounded,
               color: ResponsiveHelper.successColor,
               size: 20,
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Conversation deleted',
-              style: TextStyle(
+              context.l10n.conversationDeleted,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -94,7 +92,11 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
   @override
   Widget build(BuildContext context) {
+    final duration = _getConversationDuration(context);
+    final isStarred = widget.conversation.starred;
+
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -113,22 +115,98 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
           },
           child: Container(
             width: double.maxFinite,
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: _isHovered ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4) : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isHovered ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.05),
-                width: 1,
-              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                _buildHeader(),
-                const SizedBox(height: 12),
-                _buildContent(),
+                // Emoji icon in rounded square
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(fontSize: 22),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Title and subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.conversation.discarded
+                            ? context.l10n.discardedConversation
+                            : (widget.conversation.structured.title.isNotEmpty
+                                ? widget.conversation.structured.title.decodeString
+                                : context.l10n.untitledConversation),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: ResponsiveHelper.textPrimary,
+                          height: 1.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      // Timestamp • Duration
+                      Row(
+                        children: [
+                          Text(
+                            _getTimeString(),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: ResponsiveHelper.textTertiary,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          if (duration.isNotEmpty) ...[
+                            const Text(
+                              ' • ',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: ResponsiveHelper.textTertiary,
+                              ),
+                            ),
+                            Text(
+                              duration,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: ResponsiveHelper.textTertiary,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Star icon if starred, or lock icon if locked
+                if (isStarred)
+                  const FaIcon(
+                    FontAwesomeIcons.solidStar,
+                    size: 14,
+                    color: Colors.amber,
+                  )
+                else if (widget.conversation.isLocked)
+                  Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
+                  ),
               ],
             ),
           ),
@@ -137,11 +215,25 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     );
   }
 
+  String _getTimeString() {
+    final time = widget.conversation.startedAt ?? widget.conversation.createdAt;
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _getConversationDuration(BuildContext context) {
+    if (widget.conversation.transcriptSegments.isEmpty) return '';
+
+    int durationSeconds = widget.conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds, context);
+  }
+
   void _showContextMenu(TapDownDetails details) async {
     final List<OmiContextMenuItem> menuItems = [
       OmiContextMenuItem(
         id: 'copy_link',
-        title: _isSharing ? 'Generating link...' : 'Copy link',
+        title: _isSharing ? context.l10n.generatingLink : context.l10n.copyLink,
         icon: _isSharing ? Icons.hourglass_empty : Icons.link_outlined,
         iconColor: _isSharing ? ResponsiveHelper.textTertiary : ResponsiveHelper.purplePrimary,
         backgroundColor: _isSharing
@@ -151,21 +243,21 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       ),
       OmiContextMenuItem(
         id: 'copy',
-        title: 'Copy transcript',
+        title: context.l10n.copyTranscript,
         icon: Icons.copy_outlined,
         iconColor: ResponsiveHelper.infoColor,
         backgroundColor: ResponsiveHelper.infoColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'edit',
-        title: 'Edit conversation',
+        title: context.l10n.editConversation,
         icon: Icons.edit_outlined,
         iconColor: ResponsiveHelper.warningColor,
         backgroundColor: ResponsiveHelper.warningColor.withValues(alpha: 0.1),
       ),
       OmiContextMenuItem(
         id: 'delete',
-        title: 'Delete conversation',
+        title: context.l10n.deleteConversation,
         icon: Icons.delete_outline_rounded,
         iconColor: ResponsiveHelper.errorColor,
         backgroundColor: ResponsiveHelper.errorColor.withValues(alpha: 0.1),
@@ -211,7 +303,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be shared.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeShared);
         setState(() => _isSharing = false);
         return;
       }
@@ -219,7 +311,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
       await Share.share(content);
     } catch (e) {
-      _showSnackBar('Failed to generate share link');
+      _showSnackBar(context.l10n.failedToGenerateShareLink);
     } finally {
       setState(() => _isSharing = false);
     }
@@ -232,7 +324,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     try {
       bool shared = await setConversationVisibility(widget.conversation.id);
       if (!shared) {
-        _showSnackBar('Conversation URL could not be generated.');
+        _showSnackBar(context.l10n.conversationUrlCouldNotBeGenerated);
         setState(() => _isSharing = false);
         return;
       }
@@ -242,17 +334,17 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline_rounded,
                 color: ResponsiveHelper.successColor,
                 size: 20,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Text(
-                'Conversation link copied to clipboard',
-                style: TextStyle(
+                context.l10n.conversationLinkCopiedToClipboard,
+                style: const TextStyle(
                   color: ResponsiveHelper.textPrimary,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -270,7 +362,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
         ),
       );
     } catch (e) {
-      _showSnackBar('Failed to generate conversation link');
+      _showSnackBar(context.l10n.failedToGenerateConversationLink);
     } finally {
       setState(() => _isSharing = false);
     }
@@ -309,23 +401,22 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   }
 
   void _copyConversation() {
-    // Copy conversation text to clipboard
     final text = widget.conversation.getTranscript();
     Clipboard.setData(ClipboardData(text: text));
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.check_circle_outline_rounded,
               color: ResponsiveHelper.successColor,
               size: 20,
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Text(
-              'Conversation transcript copied to clipboard',
-              style: TextStyle(
+              context.l10n.conversationTranscriptCopiedToClipboard,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -347,16 +438,16 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   void _editConversation() async {
     final currentTitle = widget.conversation.structured.title.isNotEmpty
         ? widget.conversation.structured.title.decodeString
-        : 'Untitled Conversation';
+        : context.l10n.untitledConversation;
 
     final newTitle = await OmiEditDialog.show(
       context,
-      title: 'Edit Conversation',
-      subtitle: 'Change the conversation title',
+      title: context.l10n.editConversationDialogTitle,
+      subtitle: context.l10n.changeTheConversationTitle,
       currentValue: currentTitle,
       icon: Icons.edit_outlined,
-      fieldLabel: 'Conversation Title',
-      fieldHint: 'Enter conversation title...',
+      fieldLabel: context.l10n.conversationTitle,
+      fieldHint: context.l10n.enterConversationTitle,
       maxLines: 2,
     );
 
@@ -370,138 +461,15 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       final success = await updateConversationTitle(widget.conversation.id, newTitle);
 
       if (success) {
-        // Update the conversation locally by modifying the structured title
         widget.conversation.structured.title = newTitle;
-
-        // Update in provider
         final provider = Provider.of<ConversationProvider>(context, listen: false);
         provider.updateConversationInSortedList(widget.conversation);
-
-        _showSnackBar('Conversation title updated successfully');
+        _showSnackBar(context.l10n.conversationTitleUpdatedSuccessfully);
       } else {
-        _showSnackBar('Failed to update conversation title');
+        _showSnackBar(context.l10n.failedToUpdateConversationTitle);
       }
     } catch (e) {
-      _showSnackBar('Error updating conversation title');
+      _showSnackBar(context.l10n.errorUpdatingConversationTitle);
     }
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Text(
-          widget.conversation.structured.getEmoji(),
-          style: const TextStyle(fontSize: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.conversation.discarded
-                    ? 'Discarded Conversation'
-                    : (widget.conversation.structured.title.isNotEmpty
-                        ? widget.conversation.structured.title.decodeString
-                        : 'Untitled Conversation'),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: ResponsiveHelper.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                dateTimeFormat(
-                  'MMM d, h:mm a',
-                  widget.conversation.startedAt ?? widget.conversation.createdAt,
-                ),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_getConversationDuration().isNotEmpty) ...[
-          const SizedBox(width: 8),
-          Text(
-            _getConversationDuration(),
-            style: const TextStyle(
-              fontSize: 12,
-              color: ResponsiveHelper.textTertiary,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildLockedOverlay(BuildContext context) {
-    return Positioned.fill(
-      child: ClipRRect(
-        borderRadius: const BorderRadius.all(Radius.circular(8)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.01),
-            ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    if (widget.conversation.discarded) {
-      return Text(
-        widget.conversation.getTranscript(maxCount: 150),
-        style: const TextStyle(
-          fontSize: 13,
-          color: ResponsiveHelper.textSecondary,
-          height: 1.5,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
-    return Stack(
-      children: [
-        Text(
-          widget.conversation.structured.overview.decodeString,
-          style: const TextStyle(
-            fontSize: 13,
-            color: ResponsiveHelper.textSecondary,
-            height: 1.5,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(context),
-      ],
-    );
-  }
-
-  String _getConversationDuration() {
-    if (widget.conversation.transcriptSegments.isEmpty) return '';
-
-    int durationSeconds = widget.conversation.getDurationInSeconds();
-    if (durationSeconds <= 0) return '';
-
-    return secondsToCompactDuration(durationSeconds);
   }
 }

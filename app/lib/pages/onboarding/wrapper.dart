@@ -1,30 +1,31 @@
 import 'dart:math';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
-import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
-import 'package:omi/pages/onboarding/welcome/page.dart';
-import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
-import 'package:provider/provider.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key});
@@ -38,24 +39,28 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kAuthPage = 0;
   static const int kNamePage = 1;
   static const int kPrimaryLanguagePage = 2;
-  static const int kPermissionsPage = 3;
-  static const int kUserReviewPage = 4; // "Loving Omi?" screen
-  static const int kWelcomePage = 5;
-  static const int kFindDevicesPage = 6;
-  static const int kSpeechProfilePage = 7; // Speech profile with questions (requires device)
+  static const int kFoundOmiPage = 3;
+  static const int kPermissionsPage = 4;
+  static const int kUserReviewPage = 5; // "Loving Omi?" screen
+  static const int kWelcomePage = 6;
+  static const int kFindDevicesPage = 7;
+  static const int kSpeechProfilePage = 8; // Speech profile with questions (requires device)
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
   late Animation<double> _backgroundFadeAnimation;
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
+  SpeechProfileProvider? _speechProfileProvider;
 
   @override
   void initState() {
-    _controller = TabController(length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
+    _speechProfileProvider = SpeechProfileProvider();
+    _controller = TabController(
+        length: 9, vsync: this); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -107,6 +112,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void dispose() {
     _controller?.dispose();
     _backgroundAnimationController.dispose();
+    _speechProfileProvider?.dispose();
     super.dispose();
   }
 
@@ -128,6 +134,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         break;
       case kPrimaryLanguagePage:
         newImage = Assets.images.onboardingBg4.path;
+        break;
+      case kFoundOmiPage:
+        newImage = Assets.images.onboardingBg1.path;
         break;
       case kPermissionsPage:
         newImage = Assets.images.onboardingBg3.path;
@@ -173,6 +182,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return Assets.images.onboardingBg1.path;
       case kPrimaryLanguagePage:
         return Assets.images.onboardingBg4.path;
+      case kFoundOmiPage:
+        return Assets.images.onboardingBg1.path;
       case kPermissionsPage:
         return Assets.images.onboardingBg3.path;
       case kUserReviewPage:
@@ -209,8 +220,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         MixpanelManager().onboardingStepCompleted('Name');
       }),
       PrimaryLanguageWidget(goNext: () {
-        _goNext(); // Go to Permissions page
+        _goNext(); // Go to Found Omi page
         MixpanelManager().onboardingStepCompleted('Primary Language');
+      }),
+      FoundOmiWidget(goNext: () {
+        _goNext(); // Go to Permissions page
+        MixpanelManager().onboardingStepCompleted('Acquisition Source');
       }),
       PermissionsWidget(
         goNext: () {
@@ -228,12 +243,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      ChangeNotifierProvider(
-        create: (context) => SpeechProfileProvider(),
+      ChangeNotifierProvider.value(
+        value: _speechProfileProvider!,
         child: SpeechProfileWidget(
           goNext: () {
             // Speech profile complete, finish onboarding
             SharedPreferencesUtil().onboardingCompleted = true;
+            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile');
             PaintingBinding.instance.imageCache.clear();
             routeToPage(context, const HomePageWrapper(), replace: true);
@@ -241,6 +257,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           onSkip: () {
             // Skip speech profile, finish onboarding
             SharedPreferencesUtil().onboardingCompleted = true;
+            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
             PaintingBinding.instance.imageCache.clear();
             routeToPage(context, const HomePageWrapper(), replace: true);
@@ -281,12 +298,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               )
             : _controller!.index == kNamePage ||
                     _controller!.index == kPrimaryLanguagePage ||
+                    _controller!.index == kFoundOmiPage ||
                     _controller!.index == kPermissionsPage ||
                     _controller!.index == kUserReviewPage ||
                     _controller!.index == kWelcomePage
                 ? Stack(
                     children: [
-                      // Animated background image for name, language, permissions, and user review pages (not welcome page)
+                      // Animated background image (skip for welcome page)
                       if (_controller!.index != kWelcomePage)
                         FadeTransition(
                           opacity: _backgroundFadeAnimation,
@@ -314,9 +332,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
-                            7,
+                            8,
                             (index) {
-                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
                               return Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                 width: pageIndex == _controller!.index ? 12.0 : 8.0,
@@ -384,7 +402,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                   : Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 16),
                                       child: Text(
-                                        'Your personal growth journey with AI that listens to your every word.',
+                                        context.l10n.personalGrowthJourney,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                                         textAlign: TextAlign.center,
                                       ),
@@ -424,7 +442,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {
-                                    if (_controller!.index > kNamePage) {
+                                    if (_controller!.index == kSpeechProfilePage) {
+                                      _speechProfileProvider?.close();
+                                      _controller!.animateTo(kUserReviewPage);
+                                    } else if (_controller!.index > kNamePage) {
                                       _controller!.animateTo(_controller!.index - 1);
                                     }
                                   },
@@ -439,9 +460,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: List.generate(
-                                6,
+                                7,
                                 (index) {
-                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
+                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
                                   return Container(
                                     margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                     width: pageIndex == _controller!.index ? 12.0 : 8.0,
@@ -477,4 +498,3 @@ double maxHeightWithTextScale(BuildContext context, int index) {
     return 305;
   }
 }
-

@@ -32,6 +32,7 @@ from models.other import Person
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -120,9 +121,10 @@ def get_conversations(
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
+    starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('get_conversations', uid, limit, offset, statuses, folder_id)
+    print('get_conversations', uid, limit, offset, statuses, folder_id, starred)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
@@ -136,6 +138,7 @@ def get_conversations(
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
+        starred=starred,
     )
 
     for conv in conversations:
@@ -495,6 +498,7 @@ def set_assignee_conversation_segment(
 def assign_segments_bulk(
     conversation_id: str,
     data: BulkAssignSegmentsRequest,
+    background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
@@ -521,6 +525,17 @@ def assign_segments_bulk(
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
     )
+
+    # Trigger speaker sample extraction when assigning to a person
+    if data.assign_type == 'person_id' and value:
+        background_tasks.add_task(
+            extract_speaker_samples,
+            uid=uid,
+            person_id=value,
+            conversation_id=conversation_id,
+            segment_ids=data.segment_ids,
+        )
+
     return conversation
 
 

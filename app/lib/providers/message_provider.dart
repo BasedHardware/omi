@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -14,12 +19,13 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/main.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:omi/utils/file.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/file.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
   static late MethodChannel _askAIChannel;
@@ -40,6 +46,7 @@ class MessageProvider extends ChangeNotifier {
   bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+  double aiStreamProgress = 1.0;
 
   String firstTimeLoadingText = '';
 
@@ -56,6 +63,16 @@ class MessageProvider extends ChangeNotifier {
     appProvider = p;
   }
 
+  void setChatApps(List<App> apps) {
+    chatApps = apps;
+    notifyListeners();
+  }
+
+  void removeChatApp(String appId) {
+    chatApps.removeWhere((app) => app.id == appId);
+    notifyListeners();
+  }
+
   Future<void> fetchChatApps() async {
     if (isLoadingChatApps) return;
 
@@ -70,7 +87,7 @@ class MessageProvider extends ChangeNotifier {
 
       chatApps = result.apps.where((app) => app.worksWithChat()).toList();
     } catch (e) {
-      debugPrint('Error fetching chat apps: $e');
+      Logger.debug('Error fetching chat apps: $e');
       chatApps = [];
     } finally {
       isLoadingChatApps = false;
@@ -97,6 +114,42 @@ class MessageProvider extends ChangeNotifier {
     }
     setIsUploadingFiles();
     notifyListeners();
+  }
+
+  Future<void> addFiles(List<File> files) async {
+    if (selectedFiles.length + files.length > 4) {
+      AppSnackbar.showSnackbarError('You can only select up to 4 files');
+      return;
+    }
+
+    List<File> filesToAdd = [];
+    List<String> typesToAdd = [];
+
+    for (var file in files) {
+      String ext = p.extension(file.path).toLowerCase().replaceAll('.', '');
+      if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'tiff', 'tif'].contains(ext)) {
+        typesToAdd.add('image');
+      } else {
+        typesToAdd.add('file');
+      }
+      filesToAdd.add(file);
+    }
+
+    if (filesToAdd.isNotEmpty) {
+      selectedFiles.addAll(filesToAdd);
+      selectedFileTypes.addAll(typesToAdd);
+      try {
+        await uploadFiles(filesToAdd, appProvider?.selectedChatAppId);
+      } catch (e) {
+        Logger.debug('Failed to upload files: $e');
+        if (selectedFiles.length >= filesToAdd.length) {
+          selectedFiles.removeRange(selectedFiles.length - filesToAdd.length, selectedFiles.length);
+          selectedFileTypes.removeRange(selectedFileTypes.length - filesToAdd.length, selectedFileTypes.length);
+        }
+        AppSnackbar.showSnackbarError('File upload failed. Please try again.');
+      }
+      notifyListeners();
+    }
   }
 
   bool isFileUploading(String id) {
@@ -129,8 +182,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   void captureImage() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (PlatformService.isDesktop) {
-      AppSnackbar.showSnackbarError('Camera capture is not available on this platform');
+      AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
       return;
     }
 
@@ -145,18 +199,21 @@ class MessageProvider extends ChangeNotifier {
       }
     } on PlatformException catch (e) {
       if (e.code == 'camera_access_denied') {
-        AppSnackbar.showSnackbarError('Camera permission denied. Please allow access to camera');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgCameraPermissionDenied ?? 'Camera permission denied. Please allow access to camera');
       } else {
-        AppSnackbar.showSnackbarError('Error accessing camera: ${e.message ?? e.code}');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgCameraAccessError(e.message ?? e.code) ?? 'Error accessing camera: ${e.message ?? e.code}');
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError('Error taking photo. Please try again.');
+      AppSnackbar.showSnackbarError(l10n?.msgPhotoError ?? 'Error taking photo. Please try again.');
     }
   }
 
   void selectImage() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
-      AppSnackbar.showSnackbarError('You can only select up to 4 images');
+      AppSnackbar.showSnackbarError(l10n?.msgMaxImagesLimit ?? 'You can only select up to 4 images');
       return;
     }
 
@@ -184,11 +241,12 @@ class MessageProvider extends ChangeNotifier {
             return;
           }
         } on PlatformException catch (e) {
-          AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
+          AppSnackbar.showSnackbarError(
+              l10n?.msgFilePickerError(e.message ?? '') ?? 'Error opening file picker: ${e.message}');
           return;
         } catch (e) {
-          debugPrint('FilePicker general error: $e');
-          AppSnackbar.showSnackbarError('Error selecting images: $e');
+          Logger.debug('FilePicker general error: $e');
+          AppSnackbar.showSnackbarError(l10n?.msgSelectImagesError(e.toString()) ?? 'Error selecting images: $e');
           return;
         }
       } else {
@@ -214,21 +272,24 @@ class MessageProvider extends ChangeNotifier {
       }
       notifyListeners();
     } on PlatformException catch (e) {
-      debugPrint('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
+      Logger.debug('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
       if (e.code == 'photo_access_denied') {
-        AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select images');
+        AppSnackbar.showSnackbarError(l10n?.msgPhotosPermissionDenied ??
+            'Photos permission denied. Please allow access to photos to select images');
       } else {
-        AppSnackbar.showSnackbarError('Error selecting images: ${e.message ?? e.code}');
+        AppSnackbar.showSnackbarError(
+            l10n?.msgSelectImagesError(e.message ?? e.code) ?? 'Error selecting images: ${e.message ?? e.code}');
       }
     } catch (e) {
-      debugPrint('🖼️ General exception during image picking: $e');
-      AppSnackbar.showSnackbarError('Error selecting images. Please try again.');
+      Logger.debug('🖼️ General exception during image picking: $e');
+      AppSnackbar.showSnackbarError(l10n?.msgSelectImagesGenericError ?? 'Error selecting images. Please try again.');
     }
   }
 
   void selectFile() async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (selectedFiles.length >= 4) {
-      AppSnackbar.showSnackbarError('You can only select up to 4 files');
+      AppSnackbar.showSnackbarError(l10n?.msgMaxFilesLimit ?? 'You can only select up to 4 files');
       return;
     }
 
@@ -258,9 +319,10 @@ class MessageProvider extends ChangeNotifier {
         notifyListeners();
       }
     } on PlatformException catch (e) {
-      AppSnackbar.showSnackbarError('Error selecting files: ${e.message ?? e.code}');
+      AppSnackbar.showSnackbarError(
+          l10n?.msgSelectFilesError(e.message ?? e.code) ?? 'Error selecting files: ${e.message ?? e.code}');
     } catch (e) {
-      AppSnackbar.showSnackbarError('Error selecting files. Please try again.');
+      AppSnackbar.showSnackbarError(l10n?.msgSelectFilesGenericError ?? 'Error selecting files. Please try again.');
     }
   }
 
@@ -290,7 +352,8 @@ class MessageProvider extends ChangeNotifier {
         uploadedFiles.addAll(res);
       } else {
         clearSelectedFiles();
-        AppSnackbar.showSnackbarError('Failed to upload file, please try again later');
+        final l10n = MyApp.navigatorKey.currentContext?.l10n;
+        AppSnackbar.showSnackbarError(l10n?.msgUploadFileFailed ?? 'Failed to upload file, please try again later');
       }
       setMultiUploadingFileStatus(files.map((e) => e.path).toList(), false);
       notifyListeners();
@@ -332,8 +395,9 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+    final l10n = MyApp.navigatorKey.currentContext?.l10n;
     if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Reading your memories...';
+      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
       notifyListeners();
     }
     setLoadingMessages(true);
@@ -342,7 +406,7 @@ class MessageProvider extends ChangeNotifier {
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
-      firstTimeLoadingText = 'Learning from your memories...';
+      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
       notifyListeners();
     }
     messages = mes;
@@ -352,9 +416,11 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
-  Future setMessageNps(ServerMessage message, int value) async {
-    await setMessageResponseRating(message.id, value);
+  Future setMessageNps(ServerMessage message, int value, {String? reason}) async {
+    await setMessageResponseRating(message.id, value, reason: reason);
     message.askForNps = false;
+    // Update local message rating so it persists when scrolling
+    message.rating = value == 0 ? null : value;
     notifyListeners();
   }
 
@@ -424,13 +490,15 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
-    final aiIndex = messages.length - 1;
+    var aiIndex = messages.length - 1;
     notifyListeners();
 
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+        if (!firstChunkRecieved &&
+            [MessageChunkType.message, MessageChunkType.data, MessageChunkType.done, MessageChunkType.think]
+                .contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -457,7 +525,8 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(1, chunk.message!);
+          messages.insert(aiIndex, chunk.message!);
+          aiIndex++;
           notifyListeners();
           continue;
         }
@@ -477,6 +546,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -511,6 +581,7 @@ class MessageProvider extends ChangeNotifier {
       if (textBuffer.isNotEmpty) {
         message.text += textBuffer;
         textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
         HapticFeedback.lightImpact();
         notifyListeners();
       }
@@ -556,7 +627,9 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
+      setSendingMessage(false);
     }
   }
 
@@ -589,9 +662,10 @@ class MessageProvider extends ChangeNotifier {
           if (uploadedFilesResult != null) {
             fileIds = uploadedFilesResult.map((f) => f.id).toList();
           } else {
+            final l10n = MyApp.navigatorKey.currentContext?.l10n;
             _askAIChannel.invokeMethod('aiResponseChunk', {
               'type': 'error',
-              'text': 'Failed to upload the attached file.',
+              'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
             });
             return;
           }

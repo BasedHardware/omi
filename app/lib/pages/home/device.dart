@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -9,15 +13,14 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'firmware_update.dart';
+import 'omiglass_ota_update.dart';
 
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
@@ -47,10 +50,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<DeviceProvider>().getDeviceInfo();
-    });
     super.initState();
+    // Register as a metrics listener immediately to avoid race condition
+    // where widget unmounts before async getDeviceInfo completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CaptureProvider>().addMetricsListener();
+      context.read<DeviceProvider>().getDeviceInfo();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Unregister as a metrics listener when widget is unmounted
+    context.read<CaptureProvider>().removeMetricsListener();
+    super.dispose();
   }
 
   IconData _getBatteryIcon(int batteryLevel) {
@@ -80,7 +94,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   void _copyToClipboard(String title, String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title copied to clipboard')),
+      SnackBar(content: Text(context.l10n.copiedToClipboard(title))),
     );
   }
 
@@ -183,10 +197,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
             ),
             const SizedBox(width: 16),
-            const Expanded(
+            Expanded(
               child: Text(
-                'Battery Level',
-                style: TextStyle(
+                context.l10n.batteryLevel,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w400,
@@ -228,19 +242,42 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           // Firmware Update
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.download,
-            title: 'Product Update',
+            title: context.l10n.productUpdate,
             chipValue: provider.connectedDevice == null
-                ? 'Offline'
+                ? context.l10n.offline
                 : provider.havingNewFirmware
-                    ? 'Available'
+                    ? context.l10n.available
                     : null,
             onTap: provider.connectedDevice != null
                 ? () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => FirmwareUpdate(device: provider.pairedDevice),
-                      ),
-                    );
+                    // Route to OmiGlass OTA page for openglass devices
+                    final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
+                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
+                        deviceName.contains('openglass') ||
+                        deviceName.contains('omiglass') ||
+                        deviceName.contains('glass');
+                    debugPrint('ProductUpdate: connectedDevice type: ${provider.connectedDevice?.type}');
+                    debugPrint('ProductUpdate: connectedDevice name: "${provider.connectedDevice?.name}"');
+                    debugPrint('ProductUpdate: deviceName lowercase: "$deviceName"');
+                    debugPrint('ProductUpdate: isOpenGlass: $isOpenGlass');
+                    if (isOpenGlass) {
+                      debugPrint('ProductUpdate: Routing to OmiGlassOtaUpdate');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => OmiGlassOtaUpdate(
+                            device: provider.pairedDevice,
+                            latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+                          ),
+                        ),
+                      );
+                    } else {
+                      debugPrint('ProductUpdate: Routing to FirmwareUpdate');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FirmwareUpdate(device: provider.pairedDevice),
+                        ),
+                      );
+                    }
                   }
                 : null,
             showChevron: provider.connectedDevice != null,
@@ -250,8 +287,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.sdCard,
-              title: 'SD Card Sync',
-              chipValue: pendingSeconds > 0 ? secondsToCompactDuration(pendingSeconds) : null,
+              title: context.l10n.sdCardSync,
+              chipValue: pendingSeconds > 0 ? secondsToCompactDuration(pendingSeconds, context) : null,
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
@@ -298,10 +335,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Charging Issues',
-                      style: TextStyle(
+                      context.l10n.chargingIssues,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,
@@ -348,7 +385,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    provider.connectedDevice == null ? 'Unpair Device' : 'Disconnect Device',
+                    provider.connectedDevice == null ? context.l10n.unpairDevice : context.l10n.disconnectDevice,
                     style: const TextStyle(
                       color: Colors.redAccent,
                       fontSize: 17,
@@ -383,25 +420,24 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         context.read<DeviceProvider>().updateConnectingStatus(false);
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'Device unpaired. Go to Settings > Bluetooth and forget the device to complete unpairing.'),
-                            duration: Duration(seconds: 5),
+                          SnackBar(
+                            content: Text(context.l10n.deviceUnpairedMessage),
+                            duration: const Duration(seconds: 5),
                           ),
                         );
                       }
                     },
-                    'Unpair Device',
-                    'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.',
-                    okButtonText: 'Unpair',
+                    context.l10n.unpairDeviceDialogTitle,
+                    context.l10n.unpairDeviceDialogMessage,
+                    okButtonText: context.l10n.unpair,
                   ),
                 );
               },
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 24,
                       height: 24,
                       child: Padding(
@@ -409,10 +445,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
                       ),
                     ),
-                    SizedBox(width: 16),
+                    const SizedBox(width: 16),
                     Text(
-                      'Unpair and Forget Device',
-                      style: TextStyle(
+                      context.l10n.unpairAndForgetDevice,
+                      style: const TextStyle(
                         color: Colors.orange,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,
@@ -429,12 +465,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildDeviceInfoSection(DeviceProvider provider) {
-    final deviceName = provider.pairedDevice?.name ?? 'Unknown Device';
-    final modelNumber = provider.pairedDevice?.modelNumber ?? 'Unknown';
-    final manufacturer = provider.pairedDevice?.manufacturerName ?? 'Unknown';
-    final firmware = provider.pairedDevice?.firmwareRevision ?? 'Unknown';
-    final deviceId = provider.pairedDevice?.id ?? 'Unknown';
-    final serialNumber = provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ?? 'Unknown';
+    final deviceName = provider.pairedDevice?.name ?? context.l10n.unknownDevice;
+    final modelNumber = provider.pairedDevice?.modelNumber ?? context.l10n.unknown;
+    final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
+    final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
+    final deviceId = provider.pairedDevice?.id ?? context.l10n.unknown;
+    final serialNumber = provider.pairedDevice?.serialNumber ??
+        provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ??
+        context.l10n.unknown;
 
     String truncateValue(String value) {
       if (value.length > 12) {
@@ -452,7 +490,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         children: [
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.microchip,
-            title: 'Product Name',
+            title: context.l10n.productName,
             chipValue: deviceName,
             copyValue: deviceName,
             showChevron: false,
@@ -460,7 +498,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.hashtag,
-            title: 'Model Number',
+            title: context.l10n.modelNumber,
             chipValue: modelNumber,
             copyValue: modelNumber,
             showChevron: false,
@@ -468,7 +506,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.industry,
-            title: 'Manufacturer',
+            title: context.l10n.manufacturer,
             chipValue: manufacturer,
             copyValue: manufacturer,
             showChevron: false,
@@ -476,7 +514,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.code,
-            title: 'Firmware',
+            title: context.l10n.firmware,
             chipValue: firmware,
             copyValue: firmware,
             showChevron: false,
@@ -484,7 +522,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.fingerprint,
-            title: 'Device ID',
+            title: context.l10n.deviceId,
             chipValue: truncateValue(deviceId),
             copyValue: deviceId,
             showChevron: false,
@@ -492,7 +530,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.barcode,
-            title: 'Serial Number',
+            title: context.l10n.serialNumber,
             chipValue: truncateValue(serialNumber),
             copyValue: serialNumber,
             showChevron: false,
@@ -524,7 +562,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               Column(
                 children: [
                   Text(
-                    provider.pairedDevice?.name ?? 'Unknown Device',
+                    provider.pairedDevice?.name ?? context.l10n.unknownDevice,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 32,
@@ -554,7 +592,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          provider.connectedDevice != null ? 'Connected' : 'Offline',
+                          provider.connectedDevice != null ? context.l10n.connected : context.l10n.offline,
                           style: TextStyle(
                             color: provider.connectedDevice != null ? Colors.green : Colors.grey,
                             fontSize: 14,
@@ -578,7 +616,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               const SizedBox(height: 24),
 
               // Battery Level Section
-              if (provider.connectedDevice != null) ...[
+              if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
                 _buildBatterySection(provider),
                 const SizedBox(height: 16),
               ],

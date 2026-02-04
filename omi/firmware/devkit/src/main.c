@@ -13,6 +13,7 @@
 #include "transport.h"
 #include "usb.h"
 #include "utils.h"
+#include "wdog_facade.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 #define VBUS_DETECT (1U << 20)
@@ -38,6 +39,30 @@ static void mic_handler(int16_t *buffer)
 void bt_ctlr_assert_handle(char *name, int type)
 {
     LOG_INF("Bluetooth assert: %s (type %d)", name ? name : "NULL", type);
+}
+
+static void print_reset_reason(void)
+{
+    uint32_t reas = NRF_POWER->RESETREAS;
+
+    // Clear the reset reason register
+    NRF_POWER->RESETREAS = reas;
+
+    if (reas & POWER_RESETREAS_DOG_Msk) {
+        printk("Reset by WATCHDOG\n");
+    } else if (reas & POWER_RESETREAS_NFC_Msk) {
+        printk("Wake up by NFC field detect\n");
+    } else if (reas & POWER_RESETREAS_RESETPIN_Msk) {
+        printk("Reset by pin-reset\n");
+    } else if (reas & POWER_RESETREAS_SREQ_Msk) {
+        printk("Reset by soft-reset\n");
+    } else if (reas & POWER_RESETREAS_LOCKUP_Msk) {
+        printk("Reset by CPU LOCKUP\n");
+    } else if (reas) {
+        printk("Reset by a different source (0x%08X)\n", reas);
+    } else {
+        printk("Power-on-reset\n");
+    }
 }
 
 bool is_connected = false;
@@ -109,20 +134,17 @@ int main(void)
 {
     int err;
 
-    // Store reset reason code
-    uint32_t reset_reason = NRF_POWER->RESETREAS;
+    // Print and clear reset reason
+    print_reset_reason();
 
     NRF_POWER->DCDCEN = 1;
     NRF_POWER->DCDCEN0 = 1;
-    NRF_POWER->RESETREAS = 1;
 
     LOG_INF("Booting...\n");
 
     LOG_INF("Model: %s", CONFIG_BT_DIS_MODEL);
     LOG_INF("Firmware revision: %s", CONFIG_BT_DIS_FW_REV_STR);
     LOG_INF("Hardware revision: %s", CONFIG_BT_DIS_HW_REV_STR);
-
-    LOG_DBG("Reset reason: %d\n", reset_reason);
     // Force QSPI flash into deep sleep mode
     const struct device *flash_dev = DEVICE_DT_GET(DT_NODELABEL(p25q16h));
     if (device_is_ready(flash_dev)) {
@@ -144,6 +166,12 @@ int main(void)
 
     // Run the boot LED sequence
     boot_led_sequence();
+
+    // Initialize watchdog early to catch any freezes during boot
+    err = watchdog_init();
+    if (err) {
+        LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", err);
+    }
 
     // Enable battery
 #ifdef CONFIG_OMI_ENABLE_BATTERY
@@ -327,6 +355,8 @@ int main(void)
     LOG_INF("Entering main loop...\n");
 
     while (1) {
+        watchdog_feed();
+
         set_led_state();
         k_msleep(500);
     }

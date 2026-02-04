@@ -88,18 +88,22 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
 
-    while (mic_running) {
-        void *buffer;
-        uint32_t size;
-
-        int ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
-        if (ret < 0) {
-            LOG_ERR("Read failed: %d", ret);
-            continue;
+    while (true) {
+        if (mic_running) {
+            void *buffer;
+            uint32_t size;
+    
+            int ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
+            if (ret < 0) {
+                LOG_ERR("Read failed: %d", ret);
+                continue;
+            }
+    
+            LOG_DBG("Got buffer %p of %u bytes", buffer, size);
+            process_audio_buffer(buffer, size);
+        } else {
+            k_sleep(K_MSEC(100));
         }
-
-        LOG_DBG("Got buffer %p of %u bytes", buffer, size);
-        process_audio_buffer(buffer, size);
     }
 }
 
@@ -179,6 +183,37 @@ int mic_start()
 void set_mic_callback(mix_handler callback)
 {
     callback_func = callback;
+}
+
+void mic_pause()
+{
+    LOG_INF("Pausing microphone");
+    if (mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
+        if (ret < 0) {
+            LOG_ERR("STOP trigger failed: %d", ret);
+            return;
+        }
+        mic_running = false;
+    }
+}
+
+void mic_resume()
+{
+    LOG_INF("Resuming microphone");
+    if (!mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
+        if (ret < 0) {
+            LOG_ERR("START trigger failed: %d", ret);
+            return;
+        }
+        mic_running = true;
+    }
+}
+
+bool mic_is_running()
+{
+    return mic_running;
 }
 
 void mic_off()

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/home/device.dart';
@@ -7,8 +11,8 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
@@ -18,19 +22,21 @@ class BatteryInfoWidget extends StatelessWidget {
     return Selector<HomeProvider, bool>(
       selector: (context, state) => state.selectedIndex == 0,
       builder: (context, isMemoriesPage, child) {
-        return Consumer<DeviceProvider>(
-          builder: (context, deviceProvider, child) {
-            if (deviceProvider.connectedDevice != null) {
+        // Use Selector to only rebuild when battery level, connected device, or connecting state changes
+        // This reduces battery drain by avoiding unnecessary rebuilds during other provider updates
+        return Selector<DeviceProvider, (int, BtDevice?, bool)>(
+          selector: (_, provider) => (provider.batteryLevel, provider.connectedDevice, provider.isConnecting),
+          builder: (context, data, child) {
+            final (batteryLevel, connectedDevice, isConnecting) = data;
+            if (connectedDevice != null) {
               return GestureDetector(
-                onTap: deviceProvider.connectedDevice == null
-                    ? null
-                    : () {
-                        routeToPage(
-                          context,
-                          const ConnectedDevice(),
-                        );
-                        MixpanelManager().batteryIndicatorClicked();
-                      },
+                onTap: () {
+                  routeToPage(
+                    context,
+                    const ConnectedDevice(),
+                  );
+                  MixpanelManager().batteryIndicatorClicked();
+                },
                 child: Container(
                     height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
@@ -42,39 +48,40 @@ class BatteryInfoWidget extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: deviceProvider.batteryLevel > 75
-                                ? const Color.fromARGB(255, 0, 255, 8)
-                                : deviceProvider.batteryLevel > 20
-                                    ? Colors.yellow.shade700
-                                    : deviceProvider.batteryLevel > 0
-                                        ? Colors.red
-                                        : Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6.0),
                         // Add device icon
                         SizedBox(
                           width: 16,
                           height: 16,
                           child: Image.asset(
                             DeviceUtils.getDeviceImagePath(
-                              deviceType: deviceProvider.connectedDevice?.type,
-                              modelNumber: deviceProvider.connectedDevice?.modelNumber,
-                              deviceName: deviceProvider.connectedDevice?.name,
+                              deviceType: connectedDevice.type,
+                              modelNumber: connectedDevice.modelNumber,
+                              deviceName: connectedDevice.name,
                             ),
                             fit: BoxFit.contain,
                           ),
                         ),
-                        const SizedBox(width: 6.0),
-                        Text(
-                          deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
+                        // Only show battery indicator and percentage when battery level is valid (> 0)
+                        if (batteryLevel > 0) ...[
+                          const SizedBox(width: 6.0),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: batteryLevel > 75
+                                  ? const Color.fromARGB(255, 0, 255, 8)
+                                  : batteryLevel > 20
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6.0),
+                          Text(
+                            '$batteryLevel%',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ],
                     )),
               );
@@ -116,7 +123,7 @@ class BatteryInfoWidget extends StatelessWidget {
                       ),
                       const SizedBox(width: 6.0),
                       Text(
-                        "Disconnected",
+                        context.l10n.disconnected,
                         style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
                       ),
                     ],
@@ -150,15 +157,15 @@ class BatteryInfoWidget extends StatelessWidget {
                         height: 16,
                       ),
                       isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                      deviceProvider.isConnecting && isMemoriesPage
+                      isConnecting && isMemoriesPage
                           ? Text(
-                              "Searching",
+                              context.l10n.searching,
                               style:
                                   Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
                               ? Text(
-                                  "Connect Device",
+                                  context.l10n.connectDevice,
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium!

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
@@ -16,6 +20,9 @@ class FolderTabs extends StatefulWidget {
   final Function(String?) onFolderSelected;
   final bool showStarredOnly;
   final VoidCallback onStarredToggle;
+  final bool showDailySummaries;
+  final VoidCallback onDailySummariesToggle;
+  final bool hasDailySummaries;
 
   const FolderTabs({
     super.key,
@@ -24,6 +31,9 @@ class FolderTabs extends StatefulWidget {
     required this.onFolderSelected,
     required this.showStarredOnly,
     required this.onStarredToggle,
+    required this.showDailySummaries,
+    required this.onDailySummariesToggle,
+    required this.hasDailySummaries,
   });
 
   @override
@@ -34,21 +44,26 @@ class _FolderTabsState extends State<FolderTabs> {
   final ScrollController _scrollController = ScrollController();
   String? _previousSelectedFolderId;
   bool _previousShowStarredOnly = false;
+  bool _previousShowDailySummaries = false;
 
   @override
   void initState() {
     super.initState();
     _previousSelectedFolderId = widget.selectedFolderId;
     _previousShowStarredOnly = widget.showStarredOnly;
+    _previousShowDailySummaries = widget.showDailySummaries;
   }
 
   @override
   void didUpdateWidget(FolderTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
+    if (widget.selectedFolderId != _previousSelectedFolderId ||
+        widget.showStarredOnly != _previousShowStarredOnly ||
+        widget.showDailySummaries != _previousShowDailySummaries) {
       _previousSelectedFolderId = widget.selectedFolderId;
       _previousShowStarredOnly = widget.showStarredOnly;
+      _previousShowDailySummaries = widget.showDailySummaries;
       _scrollToStart();
     }
   }
@@ -73,7 +88,7 @@ class _FolderTabsState extends State<FolderTabs> {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: _FolderTab(
-        label: 'Starred',
+        label: context.l10n.starred,
         icon: '⭐',
         color: Colors.amber,
         isSelected: widget.showStarredOnly,
@@ -109,23 +124,34 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: selected item comes first (after "All" and "Starred")
+    // Build ordered list of tabs: All, Recap (if available), Starred, folders
     final List<Widget> tabs = [];
 
-    // "All" tab always first
+    // "All" tab always first - clears all filters when clicked
     tabs.add(_FolderTab(
-      label: 'All',
-      isSelected: widget.selectedFolderId == null,
-      onTap: () => widget.onFolderSelected(null),
+      label: context.l10n.all,
+      isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
+      onTap: () {
+        // Clear folder filter
+        widget.onFolderSelected(null);
+        // Clear starred filter if active
+        if (widget.showStarredOnly) {
+          widget.onStarredToggle();
+        }
+        // Clear daily summaries filter if active
+        if (widget.showDailySummaries) {
+          widget.onDailySummariesToggle();
+        }
+      },
     ));
     tabs.add(const SizedBox(width: 8));
 
-    // Starred always second (right after "All")
+    // Starred tab
     tabs.add(_buildStarredTab());
 
     // If a folder is selected, show it first (after Starred)
     final selectedFolder = widget.selectedFolderId != null
-        ? widget.folders.where((f) => f.id == widget.selectedFolderId).firstOrNull
+        ? widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId)
         : null;
     if (selectedFolder != null) {
       tabs.add(_buildFolderTab(selectedFolder));
@@ -333,7 +359,7 @@ class _FolderContextMenu extends StatelessWidget {
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
               scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Failed to delete folder')),
+                SnackBar(content: Text(context.l10n.failedToDeleteFolder)),
               );
             }
           });
@@ -393,7 +419,7 @@ class _FolderContextMenu extends StatelessWidget {
             // Edit option
             ListTile(
               leading: const Icon(Icons.edit_outlined, color: Colors.white),
-              title: const Text('Edit Folder', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.editFolder, style: const TextStyle(color: Colors.white)),
               onTap: () => _handleEdit(context),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -402,7 +428,7 @@ class _FolderContextMenu extends StatelessWidget {
             if (!folder.isSystem)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete Folder', style: TextStyle(color: Colors.red)),
+                title: Text(context.l10n.deleteFolder, style: const TextStyle(color: Colors.red)),
                 onTap: () => _handleDelete(context),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -413,9 +439,9 @@ class _FolderContextMenu extends StatelessWidget {
               width: double.infinity,
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                child: Text(
+                  context.l10n.cancel,
+                  style: const TextStyle(color: Colors.grey, fontSize: 16),
                 ),
               ),
             ),
@@ -477,7 +503,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Delete "${folder.name}"',
+                            context.l10n.deleteQuoted(folder.name),
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -486,7 +512,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Move ${folder.conversationCount} conversations to:',
+                            context.l10n.moveConversationsTo(folder.conversationCount),
                             style: const TextStyle(
                               fontSize: 13,
                               color: ResponsiveHelper.textTertiary,
@@ -515,8 +541,8 @@ class _DeleteFolderSheet extends StatelessWidget {
                     // No folder option
                     _MoveOption(
                       icon: '🚫',
-                      name: 'No folder',
-                      description: 'Remove from all folders',
+                      name: context.l10n.noFolder,
+                      description: context.l10n.removeFromAllFolders,
                       color: Colors.grey,
                       onTap: () => onDelete(null),
                     ),

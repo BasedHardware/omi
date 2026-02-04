@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/extensions/string.dart';
+
 import 'package:provider/provider.dart';
 
-import '../payment_method_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/pages/payments/payment_method_provider.dart';
 
 class CountryBottomSheet extends StatefulWidget {
   const CountryBottomSheet({super.key});
@@ -55,7 +57,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                   controller: _searchController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: 'Search countries...',
+                    hintText: context.l10n.searchCountries,
                     hintStyle: TextStyle(color: Colors.grey[400]),
                     filled: true,
                     fillColor: Colors.white.withOpacity(0.1),

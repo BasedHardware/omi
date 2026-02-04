@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/asana_service.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AsanaSettingsPage extends StatefulWidget {
   const AsanaSettingsPage({super.key});
@@ -172,7 +175,7 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Connected as user: ${_asanaService.currentUserGid}',
+                    context.l10n.connectedAsUser(_asanaService.currentUserGid!),
                     style: const TextStyle(
                       color: Colors.green,
                       fontSize: 12,
@@ -182,18 +185,18 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
               ],
             ),
           ),
-        const Text(
-          'Default Workspace',
-          style: TextStyle(
+        Text(
+          context.l10n.defaultWorkspace,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Tasks will be created in this workspace',
-          style: TextStyle(
+        Text(
+          context.l10n.tasksCreatedInWorkspace,
+          style: const TextStyle(
             color: Color(0xFF8E8E93),
             fontSize: 14,
           ),
@@ -240,9 +243,9 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Default Project (Optional)',
-                style: TextStyle(
+              Text(
+                context.l10n.defaultProjectOptional,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -251,17 +254,17 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
               if (_selectedProjectGid != null)
                 TextButton(
                   onPressed: _clearProject,
-                  child: const Text(
-                    'Clear',
-                    style: TextStyle(color: Colors.red),
+                  child: Text(
+                    context.l10n.clear,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Leave unselected to create tasks without a project',
-            style: TextStyle(
+          Text(
+            context.l10n.leaveUnselectedTasks,
+            style: const TextStyle(
               color: Color(0xFF8E8E93),
               fontSize: 14,
             ),
@@ -281,10 +284,10 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
                 color: const Color(0xFF1C1C1E),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(
+              child: Center(
                 child: Text(
-                  'No projects found in this workspace',
-                  style: TextStyle(
+                  context.l10n.noProjectsInWorkspace,
+                  style: const TextStyle(
                     color: Color(0xFF8E8E93),
                     fontSize: 14,
                   ),

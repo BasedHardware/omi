@@ -9,6 +9,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
+import database.users as users_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -33,11 +34,11 @@ from dependencies import (
 )
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
-from utils.llm.memories import identify_category_for_memory
 from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 
@@ -118,6 +119,8 @@ class CreateMemoryRequest(BaseModel):
 class UpdateMemoryRequest(BaseModel):
     content: Optional[str] = Field(default=None, description="New content for the memory", min_length=1, max_length=500)
     visibility: Optional[str] = Field(default=None, description="New visibility: public or private")
+    tags: Optional[List[str]] = Field(default=None, description="New tags for the memory")
+    category: Optional[MemoryCategory] = Field(default=None, description="New category for the memory")
 
 
 class MemoryResponse(BaseModel):
@@ -178,19 +181,16 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
+    # Auto-categorize if no category provided
+    category = request.category if request.category else identify_category_for_memory(request.content.strip())
+
     # Create Memory object
     memory = Memory(
         content=request.content.strip(),
-        category=request.category if request.category else MemoryCategory.manual,
+        category=category,
         visibility=request.visibility,
         tags=request.tags,
     )
-
-    # Auto-categorize if category not manually set
-    if request.category is None:
-        categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
-        category_str = identify_category_for_memory(memory.content, categories)
-        memory.category = MemoryCategory(category_str)
 
     # Convert to MemoryDB object
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -239,19 +239,16 @@ def create_memories_batch(
         if not mem_req.content or len(mem_req.content.strip()) == 0:
             raise HTTPException(status_code=422, detail="All memories must have non-empty content")
 
+        # Auto-categorize if no category provided
+        category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
+
         # Create Memory object
         memory = Memory(
             content=mem_req.content.strip(),
-            category=mem_req.category if mem_req.category else MemoryCategory.manual,
+            category=category,
             visibility=mem_req.visibility,
             tags=mem_req.tags,
         )
-
-        # Auto-categorize if category not manually set
-        if mem_req.category is None:
-            categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
-            category_str = identify_category_for_memory(memory.content, categories)
-            memory.category = MemoryCategory(category_str)
 
         # Convert to MemoryDB object
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -311,18 +308,22 @@ def update_memory(
     uid: str = Depends(get_uid_with_memories_write),
 ):
     """
-    Update a memory's content or visibility.
+    Update a memory's content, visibility, tags, or category.
 
     - **memory_id**: The ID of the memory to update
     - **content**: New content for the memory (optional)
     - **visibility**: New visibility: public or private (optional)
+    - **tags**: New tags for the memory (optional)
+    - **category**: New category for the memory (optional)
     """
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    if request.content is None and request.visibility is None:
-        raise HTTPException(status_code=422, detail="At least one field (content or visibility) must be provided")
+    if request.content is None and request.visibility is None and request.tags is None and request.category is None:
+        raise HTTPException(
+            status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
+        )
 
     old_visibility = memory.get('visibility')
 
@@ -333,6 +334,15 @@ def update_memory(
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
         memories_db.change_memory_visibility(uid, memory_id, request.visibility)
+
+    update_data = {}
+    if request.tags is not None:
+        update_data['tags'] = request.tags
+    if request.category is not None:
+        update_data['category'] = request.category.value
+
+    if update_data:
+        memories_db.update_memory_fields(uid, memory_id, update_data)
 
     return memories_db.get_memory(uid, memory_id)
 
@@ -607,6 +617,7 @@ class SimpleTranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
     speaker_id: Optional[int] = None
+    speaker_name: Optional[str] = None
     start: float
     end: float
 
@@ -647,7 +658,9 @@ class ConversationResponse(BaseModel):
 
 
 class UpdateConversationRequest(BaseModel):
-    title: Optional[str] = Field(default=None, description="New title for the conversation", min_length=1, max_length=500)
+    title: Optional[str] = Field(
+        default=None, description="New title for the conversation", min_length=1, max_length=500
+    )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
 
@@ -677,6 +690,32 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+
+
+def _add_speaker_names_to_segments(uid, conversations: list):
+    """Add speaker_name to transcript segments based on person_id mappings."""
+    user_profile = users_db.get_user_profile(uid)
+    user_name = user_profile.get('name') or 'User'
+
+    all_person_ids = set()
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('person_id'):
+                all_person_ids.add(seg['person_id'])
+
+    people_map = {}
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+        people_map = {p['id']: p['name'] for p in people_data}
+
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('is_user'):
+                seg['speaker_name'] = user_name
+            elif seg.get('person_id') and seg['person_id'] in people_map:
+                seg['speaker_name'] = people_map[seg['person_id']]
+            else:
+                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
@@ -717,6 +756,8 @@ def get_conversations(
     if not include_transcript:
         for conv in unlocked_conversations:
             conv.pop('transcript_segments', None)
+    else:
+        _add_speaker_names_to_segments(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -822,6 +863,8 @@ def get_conversation_endpoint(
     # Remove transcript_segments if not requested
     if not include_transcript:
         conversation.pop('transcript_segments', None)
+    else:
+        _add_speaker_names_to_segments(uid, [conversation])
 
     return conversation
 

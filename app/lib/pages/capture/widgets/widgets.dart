@@ -1,22 +1,26 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
-import 'package:provider/provider.dart';
 
 class SpeechProfileCardWidget extends StatelessWidget {
   const SpeechProfileCardWidget({super.key});
@@ -56,22 +60,22 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         ),
                         margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
                         padding: const EdgeInsets.all(16),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Row(
                                 children: [
-                                  Icon(Icons.multitrack_audio),
-                                  SizedBox(width: 16),
+                                  const Icon(Icons.multitrack_audio),
+                                  const SizedBox(width: 16),
                                   Text(
-                                    'Teach Omi your voice',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    context.l10n.teachOmiYourVoice,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                           ],
                         ),
                       ),
@@ -96,44 +100,57 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DeviceProvider>(
       builder: (context, provider, child) {
-        return (!provider.havingNewFirmware)
-            ? const SizedBox()
-            : Stack(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      MixpanelManager().pageOpened('Update Firmware Memories');
-                      routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
-                    },
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.all(Radius.circular(20)),
-                      ),
-                      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                      padding: const EdgeInsets.all(16),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        if (!provider.havingNewFirmware) return const SizedBox();
+
+        final isOmiGlass = provider.pairedDevice?.type == DeviceType.openglass ||
+            (provider.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
+
+        return Stack(
+          children: [
+            GestureDetector(
+              onTap: () {
+                MixpanelManager().pageOpened('Update Firmware Memories');
+                if (isOmiGlass) {
+                  routeToPage(
+                    context,
+                    OmiGlassOtaUpdate(
+                      device: provider.pairedDevice,
+                      latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+                    ),
+                  );
+                } else {
+                  routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
+                }
+              },
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
+                  borderRadius: BorderRadius.all(Radius.circular(20)),
+                ),
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
                         children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Icon(Icons.upload),
-                                SizedBox(width: 16),
-                                Text(
-                                  'Update omi firmware',
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                              ],
-                            ),
+                          const Icon(Icons.upload),
+                          const SizedBox(width: 16),
+                          Text(
+                            isOmiGlass ? 'Update OmiGlass Firmware' : context.l10n.updateOmiFirmware,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
                           ),
-                          Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              );
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -152,16 +169,18 @@ class PhotosPreviewWidget extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: displayPhotos.reversed.map((photo) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0),
-            child: AspectRatio(
-              aspectRatio: 800 / 600,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8.0),
-                child: Image.memory(
-                  base64Decode(photo.base64),
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true, // Avoids flicker when image updates
+          return Flexible(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2.0),
+              child: AspectRatio(
+                aspectRatio: 800 / 600,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8.0),
+                  child: Image.memory(
+                    base64Decode(photo.base64),
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true, // Avoids flicker when image updates
+                  ),
                 ),
               ),
             ),
@@ -189,6 +208,7 @@ getTranscriptWidget(
   String searchQuery = '',
   int currentResultIndex = -1,
   VoidCallback? onTapWhenSearchEmpty,
+  Function(TranscriptSegment)? onSegmentTap,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -221,6 +241,7 @@ getTranscriptWidget(
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+      onSegmentTap: onSegmentTap,
     );
   }
 

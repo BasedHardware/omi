@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -10,7 +12,11 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/constants.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+
+// Use speaker colors from person.dart for bubble colors
+final List<Color> _speakerColors = speakerColors;
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -28,6 +34,7 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
 
   const TranscriptWidget({
     super.key,
@@ -46,6 +53,7 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
   });
 
   @override
@@ -74,35 +82,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Toggle to show/hide speaker names globally
   bool _showSpeakerNames = false;
 
-  // Define distinct muted colors for different speakers
-  static const List<Color> _speakerColors = [
-    Color(0xFF3A2E26), // Dark warm brown
-    Color(0xFF26313A), // Dark navy blue
-    Color(0xFF2E3A26), // Dark forest green
-    Color(0xFF3A2634), // Dark burgundy
-    Color(0xFF263A34), // Dark teal
-    Color(0xFF34332A), // Dark olive
-    Color(0xFF2F2A3A), // Dark plum
-    Color(0xFF3A3026), // Dark bronze
-  ];
-
-  Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
+  Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
     if (isUser) {
       return const Color(0xFF8B5CF6).withValues(alpha: 0.8);
     }
-    // Use speakerId to get consistent color for each speaker
-    final colorIndex = speakerId % _speakerColors.length;
+    final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.8);
   }
 
-  Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
+  Color _getSpeakerAvatarColor(bool isUser, int speakerId, Person? person) {
     if (isUser) {
       return const Color(0xFF8B5CF6).withValues(alpha: 0.3);
     }
     if (speakerId == omiSpeakerId) {
       return Colors.purple.withValues(alpha: 0.3);
     }
-    final colorIndex = speakerId % _speakerColors.length;
+    final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
@@ -121,8 +116,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         height: 24,
       );
     }
+    // Always modulo by speakerImagePath.length to prevent index out of bounds
+    final imageIndex =
+        person != null ? person.colorIdx! % speakerImagePath.length : speakerId % speakerImagePath.length;
     return Image.asset(
-      person != null ? speakerImagePath[person.colorIdx!] : speakerImagePath[speakerId % speakerImagePath.length],
+      speakerImagePath[imageIndex],
       width: 24,
       height: 24,
     );
@@ -476,7 +474,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
-    final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
@@ -490,12 +487,17 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               if (!isUser) ...[
                 // Avatar for other speakers (left side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: data.speakerId == omiSpeakerId
+                      ? null
+                      : () {
+                          widget.editSegment?.call(data.id, data.speakerId);
+                          MixpanelManager().tagSheetOpened();
+                        },
                   child: Column(
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
                         child: _getSpeakerAvatar(data.speakerId, isUser, person),
                       ),
                       const SizedBox(height: 2),
@@ -510,8 +512,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 child: Column(
                   crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
-                    // Speaker name (only shown when toggled)
-                    if (!isUser && _showSpeakerNames) ...[
+                    if (!isUser) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
                         child: Row(
@@ -525,30 +526,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       MixpanelManager().tagSheetOpened();
                                     },
                               child: Text(
-                                data.speakerId == omiSpeakerId
-                                    ? 'omi'
-                                    : (suggestion != null && person == null
-                                        ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                data.speakerId == omiSpeakerId ? 'omi' : (person?.name ?? 'Speaker ${data.speakerId}'),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
-                                      : (isTagging ? Colors.grey.shade300 : Colors.grey.shade400),
+                                      : Colors.grey.shade400,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                            if (!data.speechProfileProcessed &&
-                                (data.personId ?? "").isEmpty &&
-                                data.speakerId != omiSpeakerId) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.help_outline,
-                                color: Colors.orange,
-                                size: 12,
-                              ),
-                            ],
                             if (isTagging) ...[
                               const SizedBox(width: 6),
                               const SizedBox(
@@ -557,20 +544,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ] else if (suggestion != null && person == null) ...[
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: Colors.white,
-                                  ),
                                 ),
                               )
                             ],
@@ -590,7 +563,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                              color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
                               borderRadius: BorderRadius.only(
                                 topLeft: Radius.circular(isUser
                                     ? 18
@@ -657,8 +630,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp and provider (only shown when toggled)
-                                  if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
+                                  // Timestamp, provider, and play button
+                                  if (widget.canDisplaySeconds ||
+                                      data.sttProvider != null ||
+                                      widget.onSegmentTap != null) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -683,6 +658,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                               ),
                                             ),
                                           ],
+                                        ],
+                                        // Play button for tap-to-seek
+                                        if (widget.onSegmentTap != null) ...[
+                                          GestureDetector(
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              widget.onSegmentTap?.call(data);
+                                            },
+                                            child: Icon(
+                                              Icons.play_circle_outline,
+                                              size: 16,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
                                         ],
                                         if (widget.canDisplaySeconds)
                                           Text(
@@ -711,12 +702,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 const SizedBox(width: 8),
                 // Avatar for user (right side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: () {
+                    widget.editSegment?.call(data.id, data.speakerId);
+                    MixpanelManager().tagSheetOpened();
+                  },
                   child: Column(
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
                         child: _getSpeakerAvatar(data.speakerId, isUser, person),
                       ),
                       const SizedBox(height: 2),
@@ -736,14 +730,14 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: const Text('Translation Notice'),
-              content: const Text(
-                'Omi translates conversations into your primary language. Update it anytime in Settings →  Profiles.',
-                style: TextStyle(fontSize: 14),
+              title: Text(context.l10n.translationNotice),
+              content: Text(
+                context.l10n.translationNoticeMessage,
+                style: const TextStyle(fontSize: 14),
               ),
               actions: [
                 TextButton(
-                  child: const Text('OK'),
+                  child: Text(context.l10n.ok),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
@@ -842,17 +836,21 @@ String tryDecodingText(String text) {
   return _decodedTextCache[text]!;
 }
 
-String formatChatTimestamp(DateTime dateTime) {
+String formatChatTimestamp(DateTime dateTime, {BuildContext? context}) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+  final timeStr = dateTimeFormat('h:mm a', dateTime);
 
   if (messageDate == today) {
     // Today, show time only
-    return dateTimeFormat('h:mm a', dateTime);
+    return timeStr;
   } else if (messageDate == today.subtract(const Duration(days: 1))) {
     // Yesterday
-    return 'Yesterday ${dateTimeFormat('h:mm a', dateTime)}';
+    if (context != null) {
+      return context.l10n.yesterdayAtTime(timeStr);
+    }
+    return 'Yesterday $timeStr';
   } else {
     // Other days
     return dateTimeFormat('MMM d, h:mm a', dateTime);

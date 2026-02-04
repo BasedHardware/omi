@@ -1,9 +1,14 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 class UserReviewPage extends StatefulWidget {
   final VoidCallback goNext;
@@ -33,7 +38,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
       MixpanelManager().track('App Review Opened', properties: {'source': 'onboarding'});
       await Future.delayed(const Duration(milliseconds: 500));
     } else {
-      debugPrint('Could not launch review URL');
+      Logger.debug('Could not launch review URL');
     }
 
     setState(() {
@@ -94,7 +99,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
 
                 // Subtitle
                 Text(
-                  'Help us reach more people by leaving a review in the ${Platform.isIOS ? 'App Store' : 'Google Play Store'}. Your feedback means the world to us!',
+                  Platform.isIOS ? context.l10n.leaveReviewIos : context.l10n.leaveReviewAndroid,
                   style: const TextStyle(
                     color: Colors.grey,
                     fontSize: 16,
@@ -138,7 +143,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                'Rate on ${Platform.isIOS ? 'App Store' : 'Google Play'}',
+                                Platform.isIOS ? context.l10n.rateOnAppStore : context.l10n.rateOnGooglePlay,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -152,9 +157,9 @@ class _UserReviewPageState extends State<UserReviewPage> {
                 // Skip button
                 TextButton(
                   onPressed: _isLoading ? null : _skipReview,
-                  child: const Text(
-                    'Maybe later',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.maybeLater,
+                    style: const TextStyle(
                       color: Colors.grey,
                       fontSize: 16,
                     ),

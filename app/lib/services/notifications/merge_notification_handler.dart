@@ -1,7 +1,12 @@
 import 'dart:async';
 
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+
+import 'package:awesome_notifications/awesome_notifications.dart';
+
+import 'package:omi/main.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Event data for merge completion
 class MergeCompletedEvent {
@@ -39,14 +44,14 @@ class MergeNotificationHandler {
     final removedIdsStr = data['removed_conversation_ids'] as String?;
 
     if (mergedConversationId == null) {
-      debugPrint('[MergeNotification] Invalid merge completed data');
+      Logger.debug('[MergeNotification] Invalid merge completed data');
       return;
     }
 
     final removedIds = removedIdsStr?.isNotEmpty == true ? removedIdsStr!.split(',') : <String>[];
 
-    debugPrint('[MergeNotification] Merge completed: $mergedConversationId, removed: $removedIds');
-    debugPrint(
+    Logger.debug('[MergeNotification] Merge completed: $mergedConversationId, removed: $removedIds');
+    Logger.debug(
         '[MergeNotification] Broadcasting event to stream (hasListener: ${_mergeCompletedController.hasListener})');
 
     // Broadcast the event so providers can update their state
@@ -54,7 +59,7 @@ class MergeNotificationHandler {
       mergedConversationId: mergedConversationId,
       removedConversationIds: removedIds,
     ));
-    debugPrint('[MergeNotification] Event broadcasted');
+    Logger.debug('[MergeNotification] Event broadcasted');
 
     // Show notification if app was in background
     if (!isAppInForeground) {
@@ -74,13 +79,16 @@ class MergeNotificationHandler {
   }) async {
     try {
       final notificationId = mergedConversationId.hashCode;
+      final ctx = MyApp.navigatorKey.currentContext;
+      final totalCount = removedCount + 1;
 
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '✅ Conversations Merged Successfully',
-          body: '${removedCount + 1} conversations have been merged successfully',
+          title: '✅ ${ctx?.l10n.mergeConversationsSuccessTitle ?? 'Conversations Merged Successfully'}',
+          body: ctx?.l10n.mergeConversationsSuccessBody(totalCount) ??
+              '$totalCount conversations have been merged successfully',
           payload: {
             'merged_conversation_id': mergedConversationId,
             'navigate_to': '/conversation/$mergedConversationId',
@@ -90,9 +98,9 @@ class MergeNotificationHandler {
         ),
       );
 
-      debugPrint('[MergeNotification] Showed merge completed notification');
+      Logger.debug('[MergeNotification] Showed merge completed notification');
     } catch (e) {
-      debugPrint('[MergeNotification] Error showing notification: $e');
+      Logger.debug('[MergeNotification] Error showing notification: $e');
     }
   }
 }

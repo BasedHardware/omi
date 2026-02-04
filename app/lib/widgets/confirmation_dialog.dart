@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class ConfirmationDialog extends StatefulWidget {
   final String title;
   final String description;
@@ -130,7 +132,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 foregroundColor: Colors.grey.shade300,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
-              child: Text(widget.cancelText ?? "Cancel"),
+              child: Text(widget.cancelText ?? context.l10n.cancel),
             ),
           TextButton(
             onPressed: widget.onConfirm,
@@ -142,7 +144,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: Text(widget.confirmText ?? "Confirm"),
+            child: Text(widget.confirmText ?? context.l10n.confirm),
           ),
         ],
       );
@@ -199,7 +201,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
               onPressed: widget.onCancel,
               isDestructiveAction: false,
               child: Text(
-                widget.cancelText ?? "Cancel",
+                widget.cancelText ?? context.l10n.cancel,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey.shade300,
@@ -210,7 +212,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             onPressed: widget.onConfirm,
             isDefaultAction: true,
             child: Text(
-              widget.confirmText ?? "Confirm",
+              widget.confirmText ?? context.l10n.confirm,
               style: const TextStyle(
                 fontSize: 16,
                 color: Colors.deepPurple,

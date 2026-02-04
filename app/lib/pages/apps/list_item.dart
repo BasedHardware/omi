@@ -1,14 +1,15 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-
 import 'app_detail/app_detail.dart';
 
 class AppListItem extends StatelessWidget {
@@ -63,7 +64,7 @@ class AppListItem extends StatelessWidget {
                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                       },
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Shimmer.fromColors(
+                      placeholder: (context, url) => ShimmerWithTimeout(
                         baseColor: const Color(0xFF1F1F25),
                         highlightColor: const Color(0xFF35343B),
                         child: Container(
@@ -182,10 +183,10 @@ class AppListItem extends StatelessWidget {
                             showDialog(
                               context: context,
                               builder: (c) => getDialog(
-                                context,
-                                () => Navigator.pop(context),
+                                c,
+                                () => Navigator.pop(c),
                                 () async {
-                                  Navigator.pop(context);
+                                  Navigator.pop(c);
                                   appProvider.toggleApp(app.id.toString(), true, index);
                                 },
                                 'Authorize External App',

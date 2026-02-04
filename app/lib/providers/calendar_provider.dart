@@ -1,10 +1,14 @@
 import 'dart:async';
-import 'package:collection/collection.dart';
+
 import 'package:flutter/material.dart';
-import 'package:omi/backend/preferences.dart';
+
+import 'package:collection/collection.dart';
+
 import 'package:omi/backend/http/api/calendar_meetings.dart' as calendar_api;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/calendar_meeting_context.dart';
 import 'package:omi/services/calendar_service.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class CalendarProvider extends ChangeNotifier {
@@ -83,6 +87,7 @@ class CalendarProvider extends ChangeNotifier {
     // Apply saved settings to calendar monitor
     await _service.updateSettings(
       showEventsWithNoParticipants: SharedPreferencesUtil().showEventsWithNoParticipants,
+      showMeetingsInMenuBar: SharedPreferencesUtil().showMeetingsInMenuBar,
     );
   }
 
@@ -94,6 +99,7 @@ class CalendarProvider extends ChangeNotifier {
 
   Future<void> updateShowMeetingsInMenuBar(bool value) async {
     SharedPreferencesUtil().showMeetingsInMenuBar = value;
+    await _service.updateSettings(showMeetingsInMenuBar: value);
   }
 
   Future<void> checkPermissionStatus() async {
@@ -175,7 +181,7 @@ class CalendarProvider extends ChangeNotifier {
   Future<void> _syncMeetingsToBackend() async {
     // Prevent concurrent syncs - if already syncing, skip this call
     if (_isSyncing) {
-      debugPrint('CalendarProvider: Sync already in progress, skipping');
+      Logger.debug('CalendarProvider: Sync already in progress, skipping');
       return;
     }
 
@@ -184,7 +190,7 @@ class CalendarProvider extends ChangeNotifier {
       // Build a map of already synced event IDs to avoid re-syncing on every refresh
       final alreadySyncedIds = _upcomingMeetings.where((m) => m.meetingId != null).map((m) => m.id).toSet();
 
-      debugPrint(
+      Logger.debug(
           'CalendarProvider: Syncing ${_upcomingMeetings.length} meetings (${alreadySyncedIds.length} already synced)');
 
       for (final meeting in _upcomingMeetings) {
@@ -223,7 +229,7 @@ class CalendarProvider extends ChangeNotifier {
             }
           }
         } catch (e) {
-          debugPrint('CalendarProvider: Error syncing meeting ${meeting.id}: $e');
+          Logger.debug('CalendarProvider: Error syncing meeting ${meeting.id}: $e');
           // Continue with other meetings even if one fails
         }
       }

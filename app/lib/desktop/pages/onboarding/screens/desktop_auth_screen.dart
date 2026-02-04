@@ -1,13 +1,16 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/auth_provider.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/gen/assets.gen.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/molecules/omi_sign_in_button.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopAuthScreen extends StatefulWidget {
   final VoidCallback onSignIn;
@@ -53,7 +56,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                   SizedBox(height: responsive.spacing(baseSpacing: 32)),
 
                   Text(
-                    'Welcome to Omi',
+                    context.l10n.welcomeToOmi,
                     style: responsive.headlineLarge.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -63,7 +66,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                   SizedBox(height: responsive.spacing(baseSpacing: 12)),
 
                   Text(
-                    'Your personal growth journey with AI that listens to your every word.',
+                    context.l10n.personalGrowthJourney,
                     style: responsive.bodyLarge.copyWith(
                       color: ResponsiveHelper.textSecondary,
                     ),
@@ -92,7 +95,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                           // Apple Sign In
                           OmiSignInButton(
                             icon: Icons.apple,
-                            label: 'Continue with Apple',
+                            label: context.l10n.continueWithApple,
                             onPressed: provider.loading ? null : () => _handleAppleSignIn(provider),
                             enabled: !provider.loading,
                           ),
@@ -101,7 +104,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                           // Google Sign In
                           OmiSignInButton(
                             icon: Icons.g_mobiledata,
-                            label: 'Continue with Google',
+                            label: context.l10n.continueWithGoogle,
                             onPressed: provider.loading ? null : () => _handleGoogleSignIn(provider),
                             enabled: !provider.loading,
                           ),
@@ -116,18 +119,18 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                 color: ResponsiveHelper.textTertiary,
                               ),
                               children: [
-                                const TextSpan(text: 'By continuing, you agree to our '),
+                                TextSpan(text: context.l10n.byContinuingYouAgree),
                                 TextSpan(
-                                  text: 'Terms of Service',
+                                  text: context.l10n.termsOfService,
                                   style: responsive.bodySmall.copyWith(
                                     color: ResponsiveHelper.textSecondary,
                                     decoration: TextDecoration.underline,
                                   ),
                                   recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
                                 ),
-                                const TextSpan(text: ' and '),
+                                TextSpan(text: context.l10n.and),
                                 TextSpan(
-                                  text: 'Privacy Policy',
+                                  text: context.l10n.privacyPolicy,
                                   style: responsive.bodySmall.copyWith(
                                     color: ResponsiveHelper.textSecondary,
                                     decoration: TextDecoration.underline,
@@ -268,7 +271,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             SizedBox(width: responsive.spacing(baseSpacing: 12)),
                             Expanded(
                               child: Text(
-                                'Data & Privacy',
+                                context.l10n.dataAndPrivacy,
                                 style: responsive.titleLarge.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -316,14 +319,14 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Continue with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
+                                      authMethod == 'apple' ? context.l10n.continueWithApple : context.l10n.continueWithGoogle,
                                       style: responsive.bodyLarge.copyWith(
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                     SizedBox(height: responsive.spacing(baseSpacing: 4)),
                                     Text(
-                                      'Secure authentication via ${authMethod == 'apple' ? 'Apple ID' : 'Google Account'}',
+                                      authMethod == 'apple' ? context.l10n.secureAuthViaAppleId : context.l10n.secureAuthViaGoogleAccount,
                                       style: responsive.bodySmall.copyWith(
                                         color: ResponsiveHelper.textTertiary,
                                       ),
@@ -367,7 +370,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                   ),
                                   SizedBox(width: responsive.spacing(baseSpacing: 8)),
                                   Text(
-                                    'What we collect',
+                                    context.l10n.whatWeCollect,
                                     style: responsive.bodyLarge.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: ResponsiveHelper.textPrimary,
@@ -377,7 +380,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                               ),
                               SizedBox(height: responsive.spacing(baseSpacing: 12)),
                               Text(
-                                'By continuing, your conversations, recordings, and personal information will be securely stored on our servers to provide AI-powered insights and enable all app features.',
+                                context.l10n.dataCollectionMessage,
                                 style: responsive.bodyMedium.copyWith(
                                   height: 1.5,
                                   color: ResponsiveHelper.textSecondary,
@@ -408,7 +411,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                   ),
                                   SizedBox(width: responsive.spacing(baseSpacing: 8)),
                                   Text(
-                                    'Data Protection',
+                                    context.l10n.dataProtection,
                                     style: responsive.bodyMedium.copyWith(
                                       fontWeight: FontWeight.w500,
                                       color: ResponsiveHelper.textSecondary,
@@ -424,9 +427,9 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                     height: 1.4,
                                   ),
                                   children: [
-                                    const TextSpan(text: 'Your data is protected and governed by our '),
+                                    TextSpan(text: context.l10n.yourDataIsProtected),
                                     TextSpan(
-                                      text: 'Privacy Policy',
+                                      text: context.l10n.privacyPolicy,
                                       style: responsive.bodySmall.copyWith(
                                         color: ResponsiveHelper.purplePrimary,
                                         decoration: TextDecoration.underline,
@@ -437,9 +440,9 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                                           context.read<AuthenticationProvider>().openPrivacyPolicy();
                                         },
                                     ),
-                                    const TextSpan(text: ' and '),
+                                    TextSpan(text: context.l10n.and),
                                     TextSpan(
-                                      text: 'Terms of Service',
+                                      text: context.l10n.termsOfService,
                                       style: responsive.bodySmall.copyWith(
                                         color: ResponsiveHelper.purplePrimary,
                                         decoration: TextDecoration.underline,
@@ -465,7 +468,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             // Cancel button
                             Expanded(
                               child: OmiButton(
-                                label: 'Cancel',
+                                label: context.l10n.cancel,
                                 type: OmiButtonType.text,
                                 onPressed: () => Navigator.of(context).pop(),
                               ),
@@ -477,7 +480,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                             Expanded(
                               flex: 2,
                               child: OmiButton(
-                                label: 'Continue with ${authMethod == 'apple' ? 'Apple' : 'Google'}',
+                                label: authMethod == 'apple' ? context.l10n.continueWithApple : context.l10n.continueWithGoogle,
                                 icon: authMethod == 'apple' ? Icons.apple : Icons.g_mobiledata,
                                 onPressed: () {
                                   Navigator.of(context).pop();

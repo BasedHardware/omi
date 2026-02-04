@@ -1,35 +1,41 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
-
+import 'package:omi/widgets/text_selection_controls.dart';
+import 'chart_message_widget.dart';
 import 'markdown_message_widget.dart';
-import 'package:omi/providers/app_provider.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
-String? _parseAppIdFromThinking(String thinkingText) {
+String? parseAppIdFromThinking(String thinkingText) {
   if (thinkingText.contains('|app_id:')) {
     var parts = thinkingText.split('|app_id:');
     if (parts.length == 2) {
@@ -40,12 +46,10 @@ String? _parseAppIdFromThinking(String thinkingText) {
 }
 
 /// Get the display text from thinking (removes app_id suffix if present)
-String _getThinkingDisplayText(String thinkingText) {
-  if (thinkingText.contains('|app_id:')) {
-    var parts = thinkingText.split('|app_id:');
-    if (parts.length == 2) {
-      return parts[0];
-    }
+String getThinkingDisplayText(String thinkingText) {
+  int index = thinkingText.indexOf('|app_id:');
+  if (index >= 0) {
+    return thinkingText.substring(0, index);
   }
   return thinkingText;
 }
@@ -53,7 +57,10 @@ String _getThinkingDisplayText(String thinkingText) {
 /// Build app icon widget from app_id
 Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
   final appProvider = Provider.of<AppProvider>(context, listen: false);
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId);
+  final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+  // Check both public apps and user's installed chat apps (includes private MCP apps)
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+      messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
     return Opacity(
@@ -177,15 +184,17 @@ class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
   final ServerMessage message;
   final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
   final bool displayOptions;
   final App? appSender;
   final Function(ServerConversation) updateConversation;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
 
   const AIMessage({
     super.key,
     required this.message,
     required this.sendMessage,
+    this.onAskOmi,
     required this.displayOptions,
     required this.updateConversation,
     required this.setMessageNps,
@@ -211,14 +220,20 @@ class _AIMessageState extends State<AIMessage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildMessageWidget(
-          widget.message,
-          widget.sendMessage,
-          widget.showTypingIndicator,
-          widget.displayOptions,
-          widget.appSender,
-          widget.updateConversation,
-          widget.setMessageNps,
+        SelectionArea(
+          contextMenuBuilder: (context, selectableRegionState) {
+            return omiSelectionMenuBuilder(context, selectableRegionState, widget.onAskOmi ?? (text) {});
+          },
+          child: buildMessageWidget(
+            widget.message,
+            widget.sendMessage,
+            widget.showTypingIndicator,
+            widget.displayOptions,
+            widget.appSender,
+            widget.updateConversation,
+            widget.setMessageNps,
+            onAskOmi: widget.onAskOmi,
+          ),
         ),
       ],
     );
@@ -232,8 +247,9 @@ Widget buildMessageWidget(
   bool displayOptions,
   App? appSender,
   Function(ServerConversation) updateConversation,
-  Function(int) sendMessageNps,
-) {
+  Function(int, {String? reason}) sendMessageNps, {
+  Function(String)? onAskOmi,
+}) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
         showTypingIndicator: showTypingIndicator,
@@ -242,7 +258,8 @@ Widget buildMessageWidget(
         updateConversation: updateConversation,
         message: message,
         setMessageNps: sendMessageNps,
-        date: message.createdAt);
+        date: message.createdAt,
+        onAskOmi: onAskOmi);
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
@@ -251,6 +268,7 @@ Widget buildMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageText: message.text.decodeString,
       sendMessage: sendMessage,
+      onAskOmi: onAskOmi,
     );
   } else {
     return NormalMessageWidget(
@@ -260,6 +278,7 @@ Widget buildMessageWidget(
       message: message,
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
+      onAskOmi: onAskOmi,
     );
   }
 }
@@ -268,9 +287,14 @@ class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
   final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
 
   const InitialMessageWidget(
-      {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
+      {super.key,
+      required this.showTypingIndicator,
+      required this.messageText,
+      required this.sendMessage,
+      this.onAskOmi});
 
   @override
   Widget build(BuildContext context) {
@@ -287,7 +311,7 @@ class InitialMessageWidget extends StatelessWidget {
                   Spacer(),
                 ],
               )
-            : getMarkdownWidget(context, messageText),
+            : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -402,8 +426,9 @@ class NormalMessageWidget extends StatefulWidget {
   final String messageText;
   final List<String> thinkings;
   final ServerMessage message;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
+  final Function(String)? onAskOmi;
 
   const NormalMessageWidget({
     super.key,
@@ -413,6 +438,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.setMessageNps,
     required this.createdAt,
     this.thinkings = const [],
+    this.onAskOmi,
   });
 
   @override
@@ -443,22 +469,32 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     super.dispose();
   }
 
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    var previousThinkingTextRaw = widget.message.thinkings.length > 1
-        ? widget.message.thinkings
-            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    String? previousThinkingText =
-        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
@@ -483,30 +519,6 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                previousThinkingText != null
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          previousAppId != null
-                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
-                                              : Opacity(
-                                                  opacity: 0.6,
-                                                  child: _buildThinkingIconWidget(previousThinkingText,
-                                                      size: 15, color: Colors.white),
-                                                ),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              overflow: TextOverflow.fade,
-                                              maxLines: 1,
-                                              softWrap: false,
-                                              previousThinkingText,
-                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -520,7 +532,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                     ],
                                     // Shimmer only applies to text
                                     Flexible(
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.white,
                                         highlightColor: Colors.grey,
                                         child: Text(
@@ -557,12 +569,40 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             ? const SizedBox.shrink()
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: getMarkdownWidget(context, widget.messageText),
+                child: Builder(
+                  builder: (context) {
+                    String? selectedText;
+                    return SelectionArea(
+                      onSelectionChanged: (SelectedContent? selectedContent) {
+                        selectedText = selectedContent?.plainText;
+                      },
+                      contextMenuBuilder: (context, selectableRegionState) {
+                        return omiSelectionMenuBuilder(
+                          context,
+                          selectableRegionState,
+                          (text) {
+                            widget.onAskOmi?.call(text);
+                          },
+                          selectedText: selectedText,
+                        );
+                      },
+                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                    );
+                  },
+                ),
               ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
             setMessageNps: widget.setMessageNps,
+            currentNps: widget.message.rating,
           ),
       ],
     );
@@ -575,8 +615,9 @@ class MemoriesMessageWidget extends StatefulWidget {
   final String messageText;
   final Function(ServerConversation) updateConversation;
   final ServerMessage message;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
   final DateTime date;
+  final Function(String)? onAskOmi;
 
   const MemoriesMessageWidget({
     super.key,
@@ -587,6 +628,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.message,
     required this.setMessageNps,
     required this.date,
+    this.onAskOmi,
   });
 
   @override
@@ -619,22 +661,32 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     super.dispose();
   }
 
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    var previousThinkingTextRaw = widget.message.thinkings.length > 1
-        ? widget.message.thinkings
-            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
-            .first
-            .decodeString
-        : null;
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
 
     // Parse app_id and display text from thinking messages
-    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
-    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
-    String? previousThinkingText =
-        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
-    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? parseAppIdFromThinking(thinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
@@ -666,30 +718,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                previousThinkingText != null
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          previousAppId != null
-                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
-                                              : Opacity(
-                                                  opacity: 0.6,
-                                                  child: _buildThinkingIconWidget(previousThinkingText,
-                                                      size: 15, color: Colors.white),
-                                                ),
-                                          const SizedBox(width: 6),
-                                          Flexible(
-                                            child: Text(
-                                              overflow: TextOverflow.fade,
-                                              maxLines: 1,
-                                              softWrap: false,
-                                              previousThinkingText,
-                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -703,7 +731,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                     ],
                                     // Shimmer only applies to text
                                     Flexible(
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.white,
                                         highlightColor: Colors.grey,
                                         child: Text(
@@ -734,16 +762,44 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       Spacer(),
                     ],
                   )
-                : getMarkdownWidget(context, widget.messageText),
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(
+                            context,
+                            selectableRegionState,
+                            (text) {
+                              widget.onAskOmi?.call(text);
+                            },
+                            selectedText: selectedText,
+                          );
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
+                    },
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
             setMessageNps: widget.setMessageNps,
+            currentNps: widget.message.rating,
           ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
+            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
             child: GestureDetector(
               onTap: () async {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
@@ -799,19 +855,19 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   }
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please check your internet connection and try again'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(context.l10n.pleaseCheckInternetConnection),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                 width: double.maxFinite,
                 decoration: BoxDecoration(
                   color: const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(16.0),
                 ),
                 child: Row(
                   children: [
@@ -826,12 +882,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     const SizedBox(width: 8),
                     conversationDetailLoading[data.$1]
                         ? const SizedBox(
-                            height: 24,
-                            width: 24,
+                            height: 16,
+                            width: 16,
                             child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                              strokeWidth: 2,
                             ))
-                        : const Icon(Icons.arrow_right_alt)
+                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54)
                   ],
                 ),
               ),
@@ -851,9 +908,228 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   }
 }
 
+/// Feedback reason options for thumbs down
+enum FeedbackReason {
+  tooVerbose('too_verbose', 'Too verbose'),
+  incorrectOrHallucination('incorrect_or_hallucination', 'Incorrect / hallucination'),
+  notHelpfulOrIrrelevant('not_helpful_or_irrelevant', 'Not helpful / irrelevant'),
+  didntFollowInstructions('didnt_follow_instructions', "Didn't follow instructions"),
+  other('other', 'Other');
+
+  final String key;
+  final String label;
+
+  const FeedbackReason(this.key, this.label);
+}
+
+/// Bottom sheet for collecting feedback on chat messages
+class FeedbackBottomSheet extends StatefulWidget {
+  final Function(String reason, String? comment) onSubmit;
+
+  const FeedbackBottomSheet({
+    super.key,
+    required this.onSubmit,
+  });
+
+  @override
+  State<FeedbackBottomSheet> createState() => _FeedbackBottomSheetState();
+}
+
+class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
+  FeedbackReason? _selectedReason;
+  final TextEditingController _commentController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _commentFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSubmit() {
+    if (_selectedReason == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.pleaseSelectReason),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    final comment = _commentController.text.trim();
+    widget.onSubmit(_selectedReason!.key, comment.isEmpty ? null : comment);
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade600,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            // Header with title and submit button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'What went wrong?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _selectedReason != null ? _handleSubmit : null,
+                  child: Text(
+                    'Submit',
+                    style: TextStyle(
+                      color: _selectedReason != null ? Colors.blue : Colors.grey.shade600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Reason options
+            const Text(
+              'Select a reason',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Reason chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: FeedbackReason.values.map((reason) {
+                final isSelected = _selectedReason == reason;
+                return GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _selectedReason = reason;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue.withOpacity(0.2) : const Color(0xFF2C2C2E),
+                      borderRadius: BorderRadius.circular(20),
+                      border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
+                    ),
+                    child: Text(
+                      reason.label,
+                      style: TextStyle(
+                        color: isSelected ? Colors.blue : Colors.white,
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+
+            // Comment input
+            const Text(
+              'Additional feedback (optional)',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextField(
+                controller: _commentController,
+                focusNode: _commentFocusNode,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  hintText: context.l10n.tellUsMoreWhatWentWrong,
+                  hintStyle: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 15,
+                  ),
+                ),
+                maxLines: 3,
+                minLines: 2,
+                maxLength: 500,
+                buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Show the feedback bottom sheet
+Future<void> showFeedbackBottomSheet(
+  BuildContext context, {
+  required Function(String reason, String? comment) onSubmit,
+}) async {
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => FeedbackBottomSheet(onSubmit: onSubmit),
+  );
+}
+
 class MessageActionBar extends StatefulWidget {
   final String messageText;
-  final Function(int)? setMessageNps;
+  final Function(int, {String? reason})? setMessageNps;
   final int? currentNps;
 
   const MessageActionBar({
@@ -877,9 +1153,51 @@ class _MessageActionBarState extends State<MessageActionBar> {
   }
 
   @override
+  void didUpdateWidget(MessageActionBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update local state if the widget's currentNps changed (e.g., from server fetch)
+    if (oldWidget.currentNps != widget.currentNps) {
+      setState(() {
+        _selectedNps = widget.currentNps;
+      });
+    }
+  }
+
+  /// Show bottom sheet with thumbs down reason options and comment field
+  void _showThumbsDownReasonPicker() {
+    showFeedbackBottomSheet(
+      context,
+      onSubmit: (reason, comment) {
+        setState(() {
+          _selectedNps = -1;
+        });
+        // Combine reason and comment for the API call
+        String feedbackReason = reason;
+        if (comment != null && comment.isNotEmpty) {
+          feedbackReason = '$reason: $comment';
+        }
+        widget.setMessageNps?.call(-1, reason: feedbackReason);
+
+        // Show confirmation snackbar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Thanks for your feedback!',
+                style: TextStyle(color: Colors.white),
+              ),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 2, left: 4),
+      padding: const EdgeInsets.only(top: 8, left: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -889,14 +1207,21 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
+              MixpanelManager().track('Chat Message Copied', properties: {'message': widget.messageText});
+
+              // Implicit positive feedback - user copied the message (silent, no UI change)
+              if (_selectedNps == null) {
+                widget.setMessageNps?.call(1, reason: 'user_copied_message');
+              }
+
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
-                      'Message copied to clipboard',
-                      style: TextStyle(color: Colors.white, fontSize: 12.0),
+                      context.l10n.messageCopied,
+                      style: const TextStyle(color: Colors.white, fontSize: 12.0),
                     ),
-                    duration: Duration(milliseconds: 1500),
+                    duration: const Duration(milliseconds: 1500),
                   ),
                 );
               }
@@ -922,10 +1247,16 @@ class _MessageActionBarState extends State<MessageActionBar> {
             isSelected: _selectedNps == -1,
             onTap: () {
               HapticFeedback.lightImpact();
-              setState(() {
-                _selectedNps = _selectedNps == -1 ? null : -1;
-              });
-              widget.setMessageNps?.call(_selectedNps ?? 0);
+              if (_selectedNps == -1) {
+                // Already thumbs down, toggle off
+                setState(() {
+                  _selectedNps = null;
+                });
+                widget.setMessageNps?.call(0);
+              } else {
+                // Show reason picker for thumbs down
+                _showThumbsDownReasonPicker();
+              }
             },
           ),
           const SizedBox(width: 20),
@@ -935,6 +1266,12 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
+              MixpanelManager().track('Chat Message Shared', properties: {'message': widget.messageText});
+
+              // Implicit positive feedback - user shared the message (silent, no UI change)
+              if (_selectedNps == null) {
+                widget.setMessageNps?.call(1, reason: 'user_shared_message');
+              }
             },
           ),
         ],
@@ -956,7 +1293,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
       child: FaIcon(
         icon,
         color: isSelected ? Colors.white : Colors.grey.shade600,
-        size: 16,
+        size: 14,
       ),
     );
   }

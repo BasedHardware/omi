@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/action_items.dart' as api;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/utils/logger.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
@@ -13,6 +15,9 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _hasMore = false;
 
   bool _includeCompleted = true;
+
+  // UI filter: show completed tasks view
+  bool _showCompletedView = false;
 
   // Date range filter
   DateTime? _startDate;
@@ -33,6 +38,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
+  bool get showCompletedView => _showCompletedView;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
@@ -128,7 +134,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _actionItems = response.actionItems;
       _hasMore = response.hasMore;
     } catch (e) {
-      debugPrint('Error fetching action items: $e');
+      Logger.debug('Error fetching action items: $e');
     } finally {
       if (showShimmer) {
         setLoading(false);
@@ -157,7 +163,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _actionItems.addAll(response.actionItems);
       _hasMore = response.hasMore;
     } catch (e) {
-      debugPrint('Error loading more action items: $e');
+      Logger.debug('Error loading more action items: $e');
     } finally {
       setFetching(false);
     }
@@ -182,7 +188,7 @@ class ActionItemsProvider extends ChangeNotifier {
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
-        debugPrint('Failed to update action item state on server');
+        Logger.debug('Failed to update action item state on server');
       } else {
         // Cancel notification if the action item is marked as completed
         if (newState == true) {
@@ -192,7 +198,7 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
-      debugPrint('Error updating action item state: $e');
+      Logger.debug('Error updating action item state: $e');
     }
   }
 
@@ -219,12 +225,12 @@ class ActionItemsProvider extends ChangeNotifier {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
         notifyListeners();
-        debugPrint('Failed to update action item description on server');
+        Logger.debug('Failed to update action item description on server');
       }
     } catch (e) {
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
-      debugPrint('Error updating action item description: $e');
+      Logger.debug('Error updating action item description: $e');
     }
   }
 
@@ -233,6 +239,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final updatedItem = await api.updateActionItem(
         item.id,
         dueAt: dueDate,
+        clearDueAt: dueDate == null, // Explicitly clear if null
       );
 
       if (updatedItem != null) {
@@ -243,10 +250,10 @@ class ActionItemsProvider extends ChangeNotifier {
           notifyListeners();
         }
       } else {
-        debugPrint('Failed to update action item due date on server');
+        Logger.debug('Failed to update action item due date on server');
       }
     } catch (e) {
-      debugPrint('Error updating action item due date: $e');
+      Logger.debug('Error updating action item due date: $e');
     }
   }
 
@@ -261,11 +268,11 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       } else {
-        debugPrint('Failed to delete action item on server');
+        Logger.debug('Failed to delete action item on server');
         return false;
       }
     } catch (e) {
-      debugPrint('Error deleting action item: $e');
+      Logger.debug('Error deleting action item: $e');
       return false;
     }
   }
@@ -307,13 +314,13 @@ class ActionItemsProvider extends ChangeNotifier {
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         notifyListeners();
-        debugPrint('Failed to create action item on server');
+        Logger.debug('Failed to create action item on server');
         return null;
       }
     } catch (e) {
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
       notifyListeners();
-      debugPrint('Error creating action item: $e');
+      Logger.debug('Error creating action item: $e');
       return null;
     }
   }
@@ -344,6 +351,11 @@ class ActionItemsProvider extends ChangeNotifier {
     // TODO: Add analytics for completed action items toggle
   }
 
+  void toggleShowCompletedView() {
+    _showCompletedView = !_showCompletedView;
+    notifyListeners();
+  }
+
   void setDateRangeFilter(DateTime? startDate, DateTime? endDate) {
     _startDate = startDate;
     _endDate = endDate;
@@ -359,7 +371,7 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> refreshActionItems() async {
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint('Skipping action items refresh - too soon since last refresh');
+      Logger.debug('Skipping action items refresh - too soon since last refresh');
       return;
     }
 

@@ -56,6 +56,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         RegisterGeneratedPlugins(registry: flutterViewController)
 
+        // Register Focus Monitoring plugin
+        FocusPlugin.register(with: flutterViewController.registrar(forPlugin: "FocusPlugin"))
+
         screenCaptureChannel = FlutterMethodChannel(
             name: "screenCapturePlatform",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
@@ -660,15 +663,22 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             case "getAvailableCalendars":
                 let calendars = self.calendarMonitor?.getAvailableCalendars() ?? []
                 result(calendars)
-                
+
             case "updateCalendarSettings":
-                if let args = call.arguments as? [String: Any],
-                   let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool {
-                    self.calendarMonitor?.updateSettings(showEventsWithNoParticipants: showEventsWithNoParticipants)
+                let args = call.arguments as? [String: Any] ?? [:]
+                let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool
+                let showMeetingsInMenuBar = args["showMeetingsInMenuBar"] as? Bool
+
+                if showEventsWithNoParticipants == nil && showMeetingsInMenuBar == nil {
                     result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Settings required", details: nil))
+                    return
                 }
+
+                self.calendarMonitor?.updateSettings(
+                    showEventsWithNoParticipants: showEventsWithNoParticipants,
+                    showMeetingsInMenuBar: showMeetingsInMenuBar
+                )
+                result(nil)
 
             case "snoozeMeeting":
                 if let args = call.arguments as? [String: Any],
@@ -742,12 +752,29 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 }
 
             case "getToggleControlBarShortcut":
-                // Fixed shortcut: Cmd+\
+                let (keyCode, modifiers) = GlobalShortcutManager.shared.getToggleControlBarShortcut()
                 result([
-                    "keyCode": 42,
-                    "modifiers": 256, // cmdKey
-                    "displayString": "⌘\\"
+                    "keyCode": keyCode,
+                    "modifiers": Int(modifiers),
+                    "displayString": GlobalShortcutManager.shared.getToggleControlBarShortcutString()
                 ])
+
+            case "setToggleControlBarShortcut":
+                if let args = call.arguments as? [String: Any],
+                   let keyCode = args["keyCode"] as? Int,
+                   let modifiers = args["modifiers"] as? Int {
+                    GlobalShortcutManager.shared.setToggleControlBarShortcut(
+                        keyCode: keyCode,
+                        modifiers: UInt32(modifiers)
+                    )
+                    result(true)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
+                }
+
+            case "resetToggleControlBarShortcut":
+                GlobalShortcutManager.shared.resetToggleControlBarShortcut()
+                result(true)
 
             default:
                 result(FlutterMethodNotImplemented)

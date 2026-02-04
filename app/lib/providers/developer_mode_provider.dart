@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
 
@@ -30,7 +34,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
-  bool showDailyGradeEnabled = false;
+  bool showGoalTrackerEnabled = true; // Default to true
+  bool dailyReflectionEnabled = true;
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -107,7 +112,8 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
-    showDailyGradeEnabled = SharedPreferencesUtil().showDailyGradeEnabled;
+    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
+    dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -151,7 +157,9 @@ class DeveloperModeProvider extends BaseProvider {
     final prefs = SharedPreferencesUtil();
 
     if (webhookAudioBytes.text.isNotEmpty && !isValidUrl(webhookAudioBytes.text)) {
-      AppSnackbar.showSnackbarError('Invalid audio bytes webhook URL');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidAudioBytesWebhookUrl ?? 'Invalid audio bytes webhook URL',
+      );
       setIsLoading(false);
       return;
     }
@@ -159,17 +167,25 @@ class DeveloperModeProvider extends BaseProvider {
       webhookAudioBytesDelay.text = '5';
     }
     if (webhookOnTranscriptReceived.text.isNotEmpty && !isValidUrl(webhookOnTranscriptReceived.text)) {
-      AppSnackbar.showSnackbarError('Invalid realtime transcript webhook URL');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidRealtimeTranscriptWebhookUrl ??
+            'Invalid realtime transcript webhook URL',
+      );
       setIsLoading(false);
       return;
     }
     if (webhookOnConversationCreated.text.isNotEmpty && !isValidUrl(webhookOnConversationCreated.text)) {
-      AppSnackbar.showSnackbarError('Invalid conversation created webhook URL');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidConversationCreatedWebhookUrl ??
+            'Invalid conversation created webhook URL',
+      );
       setIsLoading(false);
       return;
     }
     if (webhookDaySummary.text.isNotEmpty && !isValidUrl(webhookDaySummary.text)) {
-      AppSnackbar.showSnackbarError('Invalid day summary webhook URL');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.devModeInvalidDaySummaryWebhookUrl ?? 'Invalid day summary webhook URL',
+      );
       setIsLoading(false);
       return;
     }
@@ -203,7 +219,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
-    prefs.showDailyGradeEnabled = showDailyGradeEnabled;
+    prefs.showGoalTrackerEnabled = showGoalTrackerEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -211,7 +227,9 @@ class DeveloperModeProvider extends BaseProvider {
     );
     setIsLoading(false);
     notifyListeners();
-    AppSnackbar.showSnackbar('Settings saved!');
+    AppSnackbar.showSnackbar(
+      MyApp.navigatorKey.currentContext?.l10n.devModeSettingsSaved ?? 'Settings saved!',
+    );
   }
 
   void setIsLoading(bool value) {
@@ -234,8 +252,23 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onShowDailyGradeChanged(var value) {
-    showDailyGradeEnabled = value;
+  void onShowGoalTrackerChanged(var value) {
+    showGoalTrackerEnabled = value;
+    SharedPreferencesUtil().showGoalTrackerEnabled = value; // Save immediately
+    notifyListeners();
+  }
+
+  void onDailyReflectionChanged(var value) {
+    dailyReflectionEnabled = value;
+    SharedPreferencesUtil().dailyReflectionEnabled = value; // Save immediately
+
+    // Schedule or cancel the notification based on the setting
+    if (value) {
+      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+    } else {
+      DailyReflectionNotification.cancelNotification();
+    }
+
     notifyListeners();
   }
 }

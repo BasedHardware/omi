@@ -1,12 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:tuple/tuple.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
-// import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
@@ -14,30 +22,41 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/audio_download_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:tuple/tuple.dart';
-import 'package:pull_down_button/pull_down_button.dart';
-
 import 'conversation_detail_provider.dart';
-import 'widgets/name_speaker_sheet.dart';
-// import 'share.dart';
 import 'test_prompts.dart';
+import 'widgets/audio_download_progress_sheet.dart';
+import 'widgets/name_speaker_sheet.dart';
+import 'widgets/share_to_contacts_sheet.dart';
+
+// import 'package:omi/backend/preferences.dart';
+
+// import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
 // import 'package:omi/backend/http/webhooks.dart';
 
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
+  final bool openShareToContactsOnLoad;
+  final int initialTabIndex;
 
-  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
+  const ConversationDetailPage({
+    super.key,
+    this.isFromOnboarding = false,
+    required this.conversation,
+    this.openShareToContactsOnLoad = false,
+    this.initialTabIndex = 1, // Default to summary tab
+  });
 
   @override
   State<ConversationDetailPage> createState() => _ConversationDetailPageState();
@@ -51,8 +70,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   TabController? _controller;
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
+
+  // Callback to seek audio to transcript segment
+  Future<void> Function(double)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
+  bool _isDownloadingAudio = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -130,7 +153,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -148,7 +171,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             tabName = 'Action Items';
             break;
           default:
-            debugPrint('Invalid tab index: ${_controller!.index}');
+            Logger.debug('Invalid tab index: ${_controller!.index}');
             selectedTab = ConversationTab.summary;
         }
         if (tabName != null) {
@@ -161,15 +184,25 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-      var conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      if (!mounted) return;
+
+      final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
 
+      conversationProvider.groupConversationsByDate();
+
       // Find the proper date and index for this conversation in the grouped conversations
-      var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.updateConversation(widget.conversation.id, date);
+      final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
+      if (result != null) {
+        final (date, index) = result;
+        provider.updateConversation(widget.conversation.id, date);
+      } else {
+        final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
+        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
@@ -187,6 +220,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
         }
       }
+
+      // Auto-open share to contacts sheet if requested (from important conversation notification)
+      if (widget.openShareToContactsOnLoad && mounted) {
+        // Small delay to ensure the page is fully rendered
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _showShareToContactsBottomSheet();
+        }
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -194,8 +236,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
-
-    super.initState();
   }
 
   @override
@@ -208,15 +248,66 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.dispose();
   }
 
-  String _getTabTitle(ConversationTab tab) {
+  /// Show the share to contacts bottom sheet
+  void _showShareToContactsBottomSheet() {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showShareToContactsBottomSheet(context, provider.conversation);
+  }
+
+  String _getTabTitle(BuildContext context, ConversationTab tab) {
     switch (tab) {
       case ConversationTab.transcript:
-        return 'Transcript';
+        return context.l10n.transcriptTab;
       case ConversationTab.summary:
-        return 'Conversation';
+        return context.l10n.conversationTab;
       case ConversationTab.actionItems:
-        return 'Action Items';
+        return context.l10n.actionItemsTab;
     }
+  }
+
+  /// Navigate to adjacent conversation with slide animation.
+  /// [direction]: 1 for older (swipe left), -1 for newer (swipe right)
+  void _navigateToAdjacentConversation(int direction) {
+    final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+    final currentConvoId = detailProvider.conversation.id;
+    final currentDate = detailProvider.selectedDate;
+
+    final adjacent = conversationProvider.getAdjacentConversation(currentConvoId, currentDate, direction);
+    if (adjacent == null) {
+      // At boundary, provide haptic feedback
+      HapticFeedback.lightImpact();
+      return;
+    }
+
+    HapticFeedback.selectionClick();
+
+    // Navigate with slide animation (new page will initialize its own state)
+    final currentTabIndex = _controller?.index ?? 1;
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => ConversationDetailPage(
+          conversation: adjacent.conversation,
+          isFromOnboarding: widget.isFromOnboarding,
+          initialTabIndex: currentTabIndex,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Slide from right for older (direction=1), from left for newer (direction=-1)
+          final begin = Offset(direction.toDouble(), 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(position: offsetAnimation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
   }
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
@@ -238,6 +329,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ? conversation.appResults[0].content.trim()
                 : conversation.structured.toString();
         _copyContent(context, summaryContent);
+        break;
+      case 'download_audio':
+        await _downloadAudio(context, provider);
         break;
       // case 'export_transcript':
       //   showShareBottomSheet(context, provider.conversation, (fn) {});
@@ -287,9 +381,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },
-          'Delete Conversation?',
-          'Are you sure you want to delete this conversation? This action cannot be undone.',
-          okButtonText: 'Confirm',
+          context.l10n.deleteConversationTitle,
+          context.l10n.deleteConversationMessage,
+          okButtonText: context.l10n.confirm,
         ),
       );
     } else {
@@ -299,10 +393,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () => Navigator.pop(context),
-          'Unable to Delete Conversation',
-          'Please check your internet connection and try again.',
+          context.l10n.unableToDeleteConversation,
+          context.l10n.noInternetConnection,
           singleButton: true,
-          okButtonText: 'OK',
+          okButtonText: context.l10n.ok,
         ),
       );
     }
@@ -311,9 +405,146 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void _copyContent(BuildContext context, String content) {
     Clipboard.setData(ClipboardData(text: content));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Content copied to clipboard')),
+      SnackBar(content: Text(context.l10n.contentCopied)),
     );
     HapticFeedback.lightImpact();
+  }
+
+  Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isDownloadingAudio = true;
+    });
+
+    final audioFileCount = provider.conversation.audioFiles.length;
+    final startTime = DateTime.now();
+
+    // Track share start
+    MixpanelManager().audioShareStarted(
+      conversationId: provider.conversation.id,
+      audioFileCount: audioFileCount,
+    );
+
+    AudioDownloadState currentState = AudioDownloadState.preparing;
+    double currentProgress = 0.0;
+    void Function(void Function())? updateSheet;
+
+    // Show the progress sheet
+    final sheetContext = context;
+    showModalBottomSheet(
+      context: sheetContext,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withOpacity(0.5),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          updateSheet = setState;
+          return AudioDownloadProgressSheet(
+            state: currentState,
+            progress: currentProgress,
+          );
+        },
+      ),
+    );
+
+    AudioDownloadService? service;
+    try {
+      service = AudioDownloadService();
+
+      final file = await service.downloadAndCombineAudio(
+        provider.conversation,
+        onProgress: (progress) {
+          currentProgress = progress;
+          updateSheet?.call(() {});
+        },
+        onStageChange: (stage) {
+          switch (stage) {
+            case AudioDownloadStage.preparing:
+              currentState = AudioDownloadState.preparing;
+              break;
+            case AudioDownloadStage.downloading:
+              currentState = AudioDownloadState.downloading;
+              break;
+            case AudioDownloadStage.processing:
+              currentState = AudioDownloadState.processing;
+              break;
+          }
+          updateSheet?.call(() {});
+        },
+      );
+
+      if (file != null) {
+        currentState = AudioDownloadState.success;
+        updateSheet?.call(() {});
+
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+
+        await Share.shareXFiles(
+          [XFile(file.path, mimeType: 'audio/wav')],
+        );
+
+        // Track successful completion
+        final durationSeconds = DateTime.now().difference(startTime).inSeconds;
+        MixpanelManager().audioShareCompleted(
+          conversationId: provider.conversation.id,
+          audioFileCount: audioFileCount,
+          wasCombined: audioFileCount > 1,
+          durationSeconds: durationSeconds,
+        );
+
+        await service.cleanup();
+      } else {
+        if (mounted) {
+          Navigator.of(sheetContext).pop();
+        }
+
+        // Track failure (no audio available)
+        MixpanelManager().audioShareFailed(
+          conversationId: provider.conversation.id,
+          errorMessage: 'No audio files available',
+        );
+      }
+    } catch (e) {
+      Logger.debug('Error downloading audio: $e');
+
+      // Track failure
+      MixpanelManager().audioShareFailed(
+        conversationId: provider.conversation.id,
+        errorMessage: e.toString(),
+      );
+
+      currentState = AudioDownloadState.error;
+      updateSheet?.call(() {});
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (mounted) {
+        Navigator.of(sheetContext).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.audioDownloadFailed),
+            action: SnackBarAction(
+              label: context.l10n.retry,
+              onPressed: () => _downloadAudio(context, provider),
+            ),
+          ),
+        );
+      }
+    } finally {
+      service?.dispose();
+      if (mounted) {
+        setState(() {
+          _isDownloadingAudio = false;
+        });
+      }
+    }
   }
 
   // void _triggerWebhookIntegration(BuildContext context, ServerConversation conversation) {
@@ -358,8 +589,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(context.l10n.errorProcessingConversation)));
           }
         },
         showInfo: (info) {},
@@ -399,7 +630,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               child: Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: Text(
-                  _getTabTitle(selectedTab),
+                  _getTabTitle(context, selectedTab),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -457,11 +688,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Failed to update starred status.')),
+                                        SnackBar(content: Text(context.l10n.failedToUpdateStarred)),
                                       );
                                     }
                                   } catch (e) {
-                                    debugPrint('Failed to toggle starred status: $e');
+                                    Logger.debug('Failed to toggle starred status: $e');
                                   } finally {
                                     if (mounted) {
                                       setState(() {
@@ -510,7 +741,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     bool shared = await setConversationVisibility(provider.conversation.id);
                                     if (!shared) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Conversation URL could not be shared.')),
+                                        SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
                                       );
                                       setState(() {
                                         _isSharing = false;
@@ -600,33 +831,41 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         child: PullDownButton(
                           itemBuilder: (context) => [
                             PullDownMenuItem(
-                              title: 'Copy Transcript',
+                              title: context.l10n.copyTranscript,
                               iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                             ),
                             PullDownMenuItem(
-                              title: 'Copy Summary',
+                              title: context.l10n.copySummary,
                               iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                             ),
+                            if (provider.conversation.hasAudio())
+                              PullDownMenuItem(
+                                title: context.l10n.shareAudio,
+                                iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                onTap: _isDownloadingAudio
+                                    ? null
+                                    : () => _handleMenuSelection(context, 'download_audio', provider),
+                              ),
                             // PullDownMenuItem(
                             //   title: 'Trigger Integration',
                             //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
                             //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                             // ),
                             PullDownMenuItem(
-                              title: 'Test Prompt',
+                              title: context.l10n.testPrompt,
                               iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
                               onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                             ),
                             if (!provider.conversation.discarded)
                               PullDownMenuItem(
-                                title: 'Reprocess Conversation',
+                                title: context.l10n.reprocessConversation,
                                 iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                               ),
                             PullDownMenuItem(
-                              title: 'Delete Conversation',
+                              title: context.l10n.deleteConversation,
                               iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                               onTap: () => _handleMenuSelection(context, 'delete', provider),
                             ),
@@ -674,6 +913,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     });
                   }
                 },
+                // Horizontal swipe to navigate between conversations (mobile only)
+                onHorizontalDragEnd: PlatformService.isMobile
+                    ? (details) {
+                        // Skip if on Action Items tab (to not interfere with Dismissible swipe-to-delete)
+                        if (selectedTab == ConversationTab.actionItems) return;
+
+                        final velocity = details.primaryVelocity ?? 0;
+                        const swipeThreshold = 300.0; // minimum velocity to trigger navigation
+
+                        if (velocity < -swipeThreshold) {
+                          // Swipe left -> go to older conversation
+                          _navigateToAdjacentConversation(1);
+                        } else if (velocity > swipeThreshold) {
+                          // Swipe right -> go to newer conversation
+                          _navigateToAdjacentConversation(-1);
+                        }
+                      }
+                    : null,
                 child: Column(
                   children: [
                     Expanded(
@@ -694,6 +951,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _searchController.clear();
                                       _searchFocusNode.unfocus();
                                     });
+                                  }
+                                },
+                                onSegmentTap: (segment) async {
+                                  if (selectedTab != ConversationTab.transcript) {
+                                    setState(() {
+                                      selectedTab = ConversationTab.transcript;
+                                    });
+                                    _controller!.animateTo(0);
+                                  }
+
+                                  // Seek to segment using callback
+                                  if (_seekToSegmentCallback != null) {
+                                    await _seekToSegmentCallback!(segment.start);
+                                    HapticFeedback.lightImpact();
                                   }
                                 },
                               ),
@@ -738,6 +1009,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
                       hasActionItems: hasActionItems,
+                      onSeekFunctionReady: (seekFunction) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            setState(() {
+                              _seekToSegmentCallback = seekFunction;
+                            });
+                          }
+                        });
+                      },
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -886,7 +1166,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               focusNode: _searchFocusNode,
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
-                                hintText: 'Search transcript or summary...',
+                                hintText: context.l10n.searchTranscriptOrSummary,
                                 hintStyle: TextStyle(color: Colors.grey[400]),
                                 prefixIcon: const Icon(Icons.search, color: Colors.white70),
                                 suffixIcon: _searchQuery.isNotEmpty
@@ -993,7 +1273,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       conversationId: provider.conversation.id,
                                       query: value,
                                       resultsCount: _totalSearchResults,
-                                      activeTab: _getTabTitle(selectedTab),
+                                      activeTab: _getTabTitle(context, selectedTab),
                                     );
                                   }
                                 });
@@ -1082,12 +1362,14 @@ class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
 
   const TranscriptWidgets({
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
   });
 
   @override
@@ -1151,6 +1433,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 searchQuery: widget.searchQuery,
                 currentResultIndex: widget.currentResultIndex,
                 onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+                onSegmentTap: widget.onSegmentTap,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
@@ -1383,7 +1666,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
           _pendingStates.remove(itemDescription);
         });
       }
-      debugPrint('Error updating action item state: $e');
+      Logger.debug('Error updating action item state: $e');
     }
   }
 }

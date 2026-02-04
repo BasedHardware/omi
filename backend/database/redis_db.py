@@ -694,6 +694,21 @@ def has_silent_user_notification_been_sent(uid: str) -> bool:
 
 
 # ******************************************************
+# ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
+# ******************************************************
+
+
+def set_important_conversation_notification_sent(uid: str, conversation_id: str):
+    """Mark that important conversation notification was sent for this conversation (no expiry - one-time per conversation)"""
+    r.set(f'users:{uid}:important_conv_notif:{conversation_id}', '1')
+
+
+def has_important_conversation_notification_been_sent(uid: str, conversation_id: str) -> bool:
+    """Check if important conversation notification was already sent for this conversation"""
+    return r.exists(f'users:{uid}:important_conv_notif:{conversation_id}')
+
+
+# ******************************************************
 # ******** CONVERSATION SUMMARY APP IDS ****************
 # ******************************************************
 
@@ -769,3 +784,35 @@ def get_speech_profile_duration(uid: str) -> Optional[float]:
 def delete_speech_profile_duration(uid: str):
     """Delete cached speech profile duration"""
     r.delete(f'users:{uid}:speech_profile_duration')
+
+
+# ******************************************************
+# ************ DAILY SUMMARY NOTIFICATIONS *************
+# ******************************************************
+
+
+def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 2):
+    """
+    Mark that a daily summary was sent to user for a specific date.
+    Default TTL is 2 hours to prevent duplicate sends within the same hour window.
+
+    Args:
+        uid: User ID
+        date: Date string in YYYY-MM-DD format
+        ttl: Time to live in seconds (default: 2 hours)
+    """
+    r.set(f'users:{uid}:daily_summary_sent:{date}', '1', ex=ttl)
+
+
+def has_daily_summary_been_sent(uid: str, date: str) -> bool:
+    """
+    Check if daily summary was already sent to user for a specific date.
+
+    Args:
+        uid: User ID
+        date: Date string in YYYY-MM-DD format
+
+    Returns:
+        True if summary was already sent for this date, False otherwise
+    """
+    return r.exists(f'users:{uid}:daily_summary_sent:{date}')

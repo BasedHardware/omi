@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/widgets/dialog.dart';
 

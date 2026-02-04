@@ -103,9 +103,11 @@ env:
         name: dev-omi-backend-secrets
         key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
-    value: "http://34.172.155.20:80/v1/vad"
+    value: "http://vad.omiapi.com:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://34.172.155.20:80/v1/speaker-identification"
+    value: "http://vad.omiapi.com:80/v1/speaker-identification"
+  - name: HOSTED_SPEAKER_EMBEDDING_API_URL
+    value: "http://diarizer.omiapi.com:80"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:

@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<ActionItemsResponse> getActionItems({
   int limit = 50,
@@ -41,7 +41,7 @@ Future<ActionItemsResponse> getActionItems({
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
-    debugPrint('getActionItems error ${response.statusCode}');
+    Logger.debug('getActionItems error ${response.statusCode}');
     return ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
@@ -60,7 +60,7 @@ Future<ActionItemWithMetadata?> getActionItem(String actionItemId) async {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
   } else {
-    debugPrint('getActionItem error ${response.statusCode}');
+    Logger.debug('getActionItem error ${response.statusCode}');
     return null;
   }
 }
@@ -96,7 +96,7 @@ Future<ActionItemWithMetadata?> createActionItem({
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
   } else {
-    debugPrint('createActionItem error ${response.statusCode}');
+    Logger.debug('createActionItem error ${response.statusCode}');
     return null;
   }
 }
@@ -106,6 +106,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? description,
   bool? completed,
   DateTime? dueAt,
+  bool clearDueAt = false, // Flag to explicitly clear due date
   bool? exported,
   DateTime? exportDate,
   String? exportPlatform,
@@ -118,7 +119,10 @@ Future<ActionItemWithMetadata?> updateActionItem(
   if (completed != null) {
     requestBody['completed'] = completed;
   }
-  if (dueAt != null) {
+  // Handle dueAt - send ISO string if set, or null to clear deadline
+  if (clearDueAt) {
+    requestBody['due_at'] = null;
+  } else if (dueAt != null) {
     requestBody['due_at'] = dueAt.toUtc().toIso8601String();
   }
   if (exported != null) {
@@ -144,7 +148,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
   } else {
-    debugPrint('updateActionItem error ${response.statusCode}');
+    Logger.debug('updateActionItem error ${response.statusCode}');
     return null;
   }
 }
@@ -166,7 +170,7 @@ Future<ActionItemWithMetadata?> toggleActionItemCompletion(
     var body = utf8.decode(response.bodyBytes);
     return ActionItemWithMetadata.fromJson(jsonDecode(body));
   } else {
-    debugPrint('toggleActionItemCompletion error ${response.statusCode}');
+    Logger.debug('toggleActionItemCompletion error ${response.statusCode}');
     return null;
   }
 }
@@ -204,7 +208,7 @@ Future<ActionItemsResponse> getConversationActionItems(String conversationId) as
       hasMore: false, // Conversation-specific calls don't have pagination
     );
   } else {
-    debugPrint('getConversationActionItems error ${response.statusCode}');
+    Logger.debug('getConversationActionItems error ${response.statusCode}');
     return ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
@@ -240,7 +244,7 @@ Future<List<ActionItemWithMetadata>> createActionItemsBatch(
     var data = jsonDecode(body);
     return (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList();
   } else {
-    debugPrint('createActionItemsBatch error ${response.statusCode}');
+    Logger.debug('createActionItemsBatch error ${response.statusCode}');
     return [];
   }
 }
