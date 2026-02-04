@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:intl/intl.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -58,13 +60,14 @@ class DesktopProcessingConversationWidget extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              // Timestamp placeholder
-              Container(
-                width: 60,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundQuaternary,
-                  borderRadius: BorderRadius.circular(4),
+              // Timestamp
+              Text(
+                DateFormat.jm(Localizations.localeOf(context).languageCode)
+                    .format(conversation.startedAt ?? conversation.createdAt),
+                style: const TextStyle(
+                  color: ResponsiveHelper.textTertiary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
