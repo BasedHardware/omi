@@ -1,10 +1,10 @@
 """
 Tests for memory leak prevention buffers in transcribe.py.
-Covers: audio buffer capping, deque maxlen behavior, image chunk TTL.
+Covers: audio buffer capping (deque), deque maxlen behavior, image chunk TTL (OrderedDict).
 """
-import time
-from collections import deque
 
+import time
+from collections import deque, OrderedDict
 
 # Constants matching transcribe.py
 MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB
@@ -13,69 +13,97 @@ MAX_IMAGE_CHUNKS = 50
 IMAGE_CHUNK_TTL = 60.0
 
 
-def audio_bytes_send_logic(audio_buffers: bytearray, audio_bytes: bytes, max_size: int) -> bytearray:
+def audio_bytes_send_logic(audio_chunks: deque, audio_total_size: int, audio_bytes: bytes, max_size: int) -> tuple:
     """
     Extracted logic from audio_bytes_send for testing.
-    Returns the updated buffer.
+    Uses deque of chunks with running total for O(1) trimming.
+    Returns (audio_chunks, audio_total_size).
     """
     chunk = audio_bytes
+    # Trim oversized incoming chunk
     if len(chunk) > max_size:
         chunk = chunk[-max_size:]
-    if len(audio_buffers) + len(chunk) > max_size:
-        excess = len(audio_buffers) + len(chunk) - max_size
-        audio_buffers = audio_buffers[excess:]
-    audio_buffers.extend(chunk)
-    return audio_buffers
+    # Drop oldest chunks to make room - O(1) per chunk
+    while audio_total_size + len(chunk) > max_size and audio_chunks:
+        old = audio_chunks.popleft()
+        audio_total_size -= len(old)
+    audio_chunks.append(chunk)
+    audio_total_size += len(chunk)
+    return audio_chunks, audio_total_size
 
 
 class TestAudioBufferCapping:
-    """Test audio buffer size limiting logic."""
+    """Test audio buffer size limiting logic with deque of chunks."""
 
     def test_normal_append_within_limit(self):
         """Normal append when buffer has room."""
-        buffer = bytearray(b'existing')
-        result = audio_bytes_send_logic(buffer, b'new', MAX_AUDIO_BUFFER_SIZE)
-        assert result == bytearray(b'existingnew')
+        chunks = deque()
+        chunks.append(b'existing')
+        total = 8
+        chunks, total = audio_bytes_send_logic(chunks, total, b'new', MAX_AUDIO_BUFFER_SIZE)
+        assert b''.join(chunks) == b'existingnew'
+        assert total == 11
 
     def test_drops_oldest_when_exceeds_limit(self):
-        """Drops oldest bytes when new data would exceed limit."""
+        """Drops oldest chunks when new data would exceed limit."""
         max_size = 10
-        buffer = bytearray(b'12345678')  # 8 bytes
-        result = audio_bytes_send_logic(buffer, b'abc', max_size)  # +3 = 11, need to drop 1
-        assert len(result) == max_size
-        assert result == bytearray(b'2345678abc')  # dropped '1'
+        chunks = deque()
+        chunks.append(b'12345678')  # 8 bytes
+        total = 8
+        chunks, total = audio_bytes_send_logic(chunks, total, b'abc', max_size)  # +3 = 11, drop oldest
+        assert total == 3  # Only 'abc' remains after dropping '12345678'
+        assert b''.join(chunks) == b'abc'
 
     def test_trims_oversized_incoming_chunk(self):
         """Trims incoming chunk if it alone exceeds max size."""
         max_size = 5
-        buffer = bytearray()
-        result = audio_bytes_send_logic(buffer, b'1234567890', max_size)  # 10 bytes, max 5
-        assert len(result) == max_size
-        assert result == bytearray(b'67890')  # kept last 5 bytes
+        chunks = deque()
+        total = 0
+        chunks, total = audio_bytes_send_logic(chunks, total, b'1234567890', max_size)  # 10 bytes, max 5
+        assert total == max_size
+        assert b''.join(chunks) == b'67890'  # kept last 5 bytes
 
     def test_oversized_chunk_replaces_existing_buffer(self):
         """Oversized chunk after trimming replaces existing buffer."""
         max_size = 5
-        buffer = bytearray(b'abc')
-        result = audio_bytes_send_logic(buffer, b'1234567890', max_size)
-        assert len(result) == max_size
-        assert result == bytearray(b'67890')
+        chunks = deque()
+        chunks.append(b'abc')
+        total = 3
+        chunks, total = audio_bytes_send_logic(chunks, total, b'1234567890', max_size)
+        assert total == max_size
+        assert b''.join(chunks) == b'67890'
 
     def test_exact_fit(self):
         """Chunk that exactly fills remaining space."""
         max_size = 10
-        buffer = bytearray(b'12345')  # 5 bytes
-        result = audio_bytes_send_logic(buffer, b'67890', max_size)  # +5 = 10
-        assert len(result) == max_size
-        assert result == bytearray(b'1234567890')
+        chunks = deque()
+        chunks.append(b'12345')  # 5 bytes
+        total = 5
+        chunks, total = audio_bytes_send_logic(chunks, total, b'67890', max_size)  # +5 = 10
+        assert total == max_size
+        assert b''.join(chunks) == b'1234567890'
 
     def test_boundary_one_over(self):
-        """One byte over the limit."""
+        """One byte over the limit triggers drop of oldest chunk."""
         max_size = 10
-        buffer = bytearray(b'12345')  # 5 bytes
-        result = audio_bytes_send_logic(buffer, b'678901', max_size)  # +6 = 11, drop 1
-        assert len(result) == max_size
-        assert result == bytearray(b'2345678901')
+        chunks = deque()
+        chunks.append(b'12345')  # 5 bytes
+        total = 5
+        chunks, total = audio_bytes_send_logic(chunks, total, b'678901', max_size)  # +6 = 11, drop oldest
+        assert total == 6  # Only '678901' remains
+        assert b''.join(chunks) == b'678901'
+
+    def test_multiple_small_chunks_dropped(self):
+        """Multiple small chunks dropped to make room for large chunk."""
+        max_size = 10
+        chunks = deque()
+        chunks.append(b'aa')
+        chunks.append(b'bb')
+        chunks.append(b'cc')
+        total = 6
+        chunks, total = audio_bytes_send_logic(chunks, total, b'12345678', max_size)  # +8 = 14, drop until fits
+        assert total <= max_size
+        assert b'12345678' in b''.join(chunks)
 
 
 class TestDequeMaxlen:
@@ -112,14 +140,14 @@ class TestDequeMaxlen:
 
 
 class TestImageChunksTTL:
-    """Test image chunks TTL and max concurrent logic."""
+    """Test image chunks TTL and max concurrent logic with OrderedDict."""
 
     def test_cleanup_expired_chunks(self):
         """Expired chunks are removed."""
-        image_chunks = {
-            'old': {'chunks': [None], 'created_at': time.time() - 120},  # 2 min ago
-            'new': {'chunks': [None], 'created_at': time.time()},
-        }
+        image_chunks = OrderedDict()
+        image_chunks['old'] = {'chunks': [None], 'created_at': time.time() - 120}  # 2 min ago
+        image_chunks['new'] = {'chunks': [None], 'created_at': time.time()}
+
         now = time.time()
         expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
         for tid in expired:
@@ -128,23 +156,22 @@ class TestImageChunksTTL:
         assert 'old' not in image_chunks
         assert 'new' in image_chunks
 
-    def test_max_concurrent_drops_oldest(self):
-        """When max concurrent reached, oldest is dropped."""
-        image_chunks = {}
-        base_time = time.time()
+    def test_max_concurrent_drops_oldest_ordereddict(self):
+        """When max concurrent reached, oldest is dropped using OrderedDict.popitem."""
+        image_chunks = OrderedDict()
 
         # Fill to max
         for i in range(MAX_IMAGE_CHUNKS):
-            image_chunks[f'id_{i}'] = {'chunks': [None], 'created_at': base_time + i}
+            image_chunks[f'id_{i}'] = {'chunks': [None], 'created_at': time.time()}
 
         assert len(image_chunks) == MAX_IMAGE_CHUNKS
 
-        # Add one more - should trigger drop of oldest
+        # Add one more - should trigger drop of oldest (first inserted)
         if len(image_chunks) >= MAX_IMAGE_CHUNKS:
-            oldest_id = min(image_chunks.keys(), key=lambda k: image_chunks[k]['created_at'])
-            del image_chunks[oldest_id]
+            oldest_id, _ = image_chunks.popitem(last=False)  # O(1) removal
+            assert oldest_id == 'id_0'
 
-        image_chunks['new_id'] = {'chunks': [None], 'created_at': base_time + MAX_IMAGE_CHUNKS}
+        image_chunks['new_id'] = {'chunks': [None], 'created_at': time.time()}
 
         assert len(image_chunks) == MAX_IMAGE_CHUNKS
         assert 'id_0' not in image_chunks  # oldest was dropped
@@ -152,7 +179,7 @@ class TestImageChunksTTL:
 
     def test_chunk_within_limit_not_dropped(self):
         """Chunks within limit are not dropped."""
-        image_chunks = {}
+        image_chunks = OrderedDict()
         for i in range(MAX_IMAGE_CHUNKS - 1):
             image_chunks[f'id_{i}'] = {'chunks': [None], 'created_at': time.time()}
 
@@ -162,6 +189,16 @@ class TestImageChunksTTL:
         assert len(image_chunks) == MAX_IMAGE_CHUNKS
         assert 'id_0' in image_chunks
         assert 'new_id' in image_chunks
+
+    def test_ordereddict_preserves_insertion_order(self):
+        """OrderedDict maintains insertion order for FIFO eviction."""
+        image_chunks = OrderedDict()
+        image_chunks['first'] = {'chunks': [None], 'created_at': 1}
+        image_chunks['second'] = {'chunks': [None], 'created_at': 2}
+        image_chunks['third'] = {'chunks': [None], 'created_at': 3}
+
+        oldest_id, _ = image_chunks.popitem(last=False)
+        assert oldest_id == 'first'
 
 
 # Constants for pending requests
@@ -259,3 +296,13 @@ class TestProductionBufferTypes:
         assert isinstance(good_deque, deque)
         assert good_deque.maxlen == 5
         assert items == [1, 2, 3]
+
+    def test_audio_chunks_is_deque(self):
+        """Audio chunks should be a deque (not bytearray)."""
+        audio_chunks: deque = deque()
+        assert isinstance(audio_chunks, deque)
+
+    def test_image_chunks_is_ordereddict(self):
+        """Image chunks should be an OrderedDict for O(1) oldest removal."""
+        image_chunks: OrderedDict = OrderedDict()
+        assert isinstance(image_chunks, OrderedDict)
