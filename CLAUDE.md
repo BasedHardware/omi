@@ -97,6 +97,10 @@ clang-format -i <files>
   3. Push and create a PR
   4. Merge the PR (no squash — regular merge)
   5. Switch back to main and pull
+- **RELEASEWITHBACKEND command**: Same as RELEASE, plus deploy the backend to production after merging:
+  ```bash
+  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
+  ```
 
 ## Testing
 
