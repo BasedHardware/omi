@@ -1574,10 +1574,34 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           isEnabled: provider.audioBytesToggled,
                           onToggle: provider.onAudioBytesToggled,
                           controller: provider.webhookAudioBytes,
-                          extraField: _buildTextField(
-                            controller: provider.webhookAudioBytesDelay,
-                            label: 'Interval (seconds)',
-                            keyboardType: TextInputType.number,
+                          extraField: Column(
+                            children: [
+                              _buildTextField(
+                                controller: provider.webhookAudioBytesDelay,
+                                label: 'Interval (seconds)',
+                                keyboardType: TextInputType.number,
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: provider.audioBytesOfflineSyncEnabled,
+                                      onChanged: (v) => provider.onAudioBytesOfflineSyncChanged(v ?? false),
+                                      activeColor: const Color(0xFF22C55E),
+                                      side: BorderSide(color: Colors.grey.shade600),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Include offline sync recordings',
+                                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                         Padding(

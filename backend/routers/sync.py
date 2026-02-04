@@ -729,7 +729,11 @@ def _cleanup_files(file_paths):
 
 
 @router.post("/v1/sync-local-files")
-async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def sync_local_files(
+    files: List[UploadFile] = File(...),
+    include_audio_bytes_webhook: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
     # Detect source from filenames
     source = ConversationSource.omi
@@ -746,10 +750,10 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         paths = retrieve_file_paths(files, uid)
         wav_paths = decode_files_to_wav(paths)
 
-        # Send audio bytes to developer webhook for offline sync
-        # This ensures webhooks are triggered even for offline-recorded audio
-        if wav_paths:
-            asyncio.create_task(trigger_audio_bytes_webhook_for_sync(uid, wav_paths))
+        # Send audio bytes to developer webhook for offline sync (opt-in via query param)
+        # Awaited to ensure files are read before cleanup
+        if include_audio_bytes_webhook and wav_paths:
+            await trigger_audio_bytes_webhook_for_sync(uid, wav_paths)
 
         def chunk_threads(threads):
             chunk_size = 5

@@ -614,6 +614,26 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   decoration: _getTextFieldDecoration('Every x seconds'),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
+                                                const SizedBox(height: 8),
+                                                Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 24,
+                                                      height: 24,
+                                                      child: Checkbox(
+                                                        value: provider.audioBytesOfflineSyncEnabled,
+                                                        onChanged: (v) => provider.onAudioBytesOfflineSyncChanged(v ?? false),
+                                                        activeColor: const Color(0xFF22C55E),
+                                                        side: BorderSide(color: Colors.grey.shade600),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'Include offline sync recordings',
+                                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                                    ),
+                                                  ],
+                                                ),
                                                 const SizedBox(height: 16),
                                               ],
                                               onSectionEnabledChanged: provider.onAudioBytesToggled),

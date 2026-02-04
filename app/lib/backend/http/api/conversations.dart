@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
@@ -354,8 +355,12 @@ Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDa
 
 Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files) async {
   try {
+    var url = '${Env.apiBaseUrl}v1/sync-local-files';
+    if (SharedPreferencesUtil().audioBytesOfflineSyncEnabled) {
+      url += '?include_audio_bytes_webhook=true';
+    }
     var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v1/sync-local-files',
+      url: url,
       files: files,
     );
 

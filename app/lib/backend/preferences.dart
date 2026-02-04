@@ -198,6 +198,10 @@ class SharedPreferencesUtil {
 
   bool get daySummaryToggled => getBool('daySummaryToggled');
 
+  set audioBytesOfflineSyncEnabled(bool value) => saveBool('audioBytesOfflineSyncEnabled', value);
+
+  bool get audioBytesOfflineSyncEnabled => getBool('audioBytesOfflineSyncEnabled');
+
   bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation', defaultValue: true);
 
   set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
