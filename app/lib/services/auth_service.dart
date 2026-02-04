@@ -186,8 +186,15 @@ class AuthService {
             SharedPreferencesUtil().familyName = '';
           }
         }
+        return newToken?.token;
       }
-      return newToken?.token;
+      // Fallback: use cached token if Firebase has no user (for dev builds)
+      final cachedToken = SharedPreferencesUtil().authToken;
+      if (cachedToken.isNotEmpty) {
+        print('DEBUG AuthService.getIdToken: Using cached token fallback');
+        return cachedToken;
+      }
+      return null;
     } catch (e) {
       Logger.debug(e.toString());
       return SharedPreferencesUtil().authToken;
@@ -443,6 +450,11 @@ class AuthService {
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
     }
+  }
+
+  /// Restore onboarding state from server. Call this on app startup when using cached credentials.
+  Future<void> restoreOnboardingState() async {
+    return _restoreOnboardingState();
   }
 
   Future<void> _restoreOnboardingState() async {
