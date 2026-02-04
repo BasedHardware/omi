@@ -6,7 +6,7 @@ import struct
 import time
 import uuid
 import wave
-from collections import deque
+from collections import deque, OrderedDict
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Callable
@@ -936,29 +936,30 @@ async def _stream_handler(
                     await _transcript_flush(auto_reconnect=True)
 
         # Audio bytes (bounded to prevent memory growth when pusher is down)
-        audio_buffers = bytearray()
+        # Using deque of chunks for O(1) trimming instead of O(n) bytearray slice
+        audio_chunks: deque = deque()  # deque of bytes objects
+        audio_total_size = 0  # Track total size for O(1) limit check
         audio_buffer_last_received: float = None  # Track when last audio was received
         audio_bytes_enabled = (
             bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid) or private_cloud_sync_enabled
         )
 
         def audio_bytes_send(audio_bytes: bytes, received_at: float):
-            nonlocal audio_buffers, audio_buffer_last_received
-            # Cap buffer size to prevent unbounded growth when pusher is disconnected
-            # Also trim incoming chunk if it alone exceeds max size
+            nonlocal audio_chunks, audio_total_size, audio_buffer_last_received
             chunk = audio_bytes
+            # Trim oversized incoming chunk
             if len(chunk) > MAX_AUDIO_BUFFER_SIZE:
-                # Keep only the most recent MAX_AUDIO_BUFFER_SIZE bytes of the chunk
                 chunk = chunk[-MAX_AUDIO_BUFFER_SIZE:]
-            if len(audio_buffers) + len(chunk) > MAX_AUDIO_BUFFER_SIZE:
-                # Drop oldest data to make room (keep most recent audio)
-                excess = len(audio_buffers) + len(chunk) - MAX_AUDIO_BUFFER_SIZE
-                audio_buffers = audio_buffers[excess:]
-            audio_buffers.extend(chunk)
+            # Drop oldest chunks to make room - O(1) per chunk
+            while audio_total_size + len(chunk) > MAX_AUDIO_BUFFER_SIZE and audio_chunks:
+                old = audio_chunks.popleft()
+                audio_total_size -= len(old)
+            audio_chunks.append(chunk)
+            audio_total_size += len(chunk)
             audio_buffer_last_received = received_at
 
         async def _audio_bytes_flush(auto_reconnect: bool = True):
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal audio_buffer_last_received
             nonlocal pusher_ws
             nonlocal pusher_connected
@@ -984,20 +985,26 @@ async def _stream_handler(
                     print(f"Failed to send conversation_id to pusher: {e}", uid, session_id)
 
             # Send audio bytes
-            if pusher_connected and pusher_ws and len(audio_buffers) > 0:
+            if pusher_connected and pusher_ws and audio_total_size > 0:
                 try:
                     # Calculate buffer start time:
                     # buffer_start = last_received_time - buffer_duration
                     # buffer_duration = buffer_length_bytes / (sample_rate * 2 bytes per sample)
-                    buffer_duration_seconds = len(audio_buffers) / (sample_rate * 2)
+                    buffer_duration_seconds = audio_total_size / (sample_rate * 2)
                     buffer_start_time = (audio_buffer_last_received or time.time()) - buffer_duration_seconds
+
+                    # Join chunks into contiguous bytes for sending
+                    audio_data = b''.join(audio_chunks)
 
                     # 101|timestamp(8 bytes double)|audio_data
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
                     data.extend(struct.pack("d", buffer_start_time))
-                    data.extend(audio_buffers.copy())
-                    audio_buffers = bytearray()  # reset
+                    data.extend(audio_data)
+                    # Reset buffer
+                    audio_chunks.clear()
+                    audio_total_size = 0
+                    del audio_data  # Free immediately
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher audio_bytes Connection closed: {e}", uid, session_id)
@@ -1009,12 +1016,12 @@ async def _stream_handler(
 
         async def audio_bytes_consume():
             nonlocal websocket_active
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active:
                 await asyncio.sleep(1)
-                if len(audio_buffers) > 0:
+                if audio_total_size > 0:
                     await _audio_bytes_flush(auto_reconnect=True)
 
         async def pusher_receive():
@@ -1633,7 +1640,8 @@ async def _stream_handler(
                         suggested_segments.add(segment.id)
 
     # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
-    image_chunks: Dict[str, dict] = {}
+    # Using OrderedDict for O(1) oldest removal (insertion order preserved)
+    image_chunks: OrderedDict[str, dict] = OrderedDict()
 
     def _cleanup_expired_image_chunks():
         """Remove image chunks that have exceeded TTL."""
@@ -1643,9 +1651,7 @@ async def _stream_handler(
             del image_chunks[tid]
             print(f"Expired incomplete image upload: {tid}", uid, session_id)
 
-    async def process_photo(
-        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer
-    ):
+    async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer):
         from utils.llm.openglass import describe_image
 
         photo_id = str(uuid.uuid4())
@@ -1663,9 +1669,7 @@ async def _stream_handler(
         photo_buffer.append(final_photo)
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
-    async def handle_image_chunk(
-        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer
-    ):
+    async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
         total = chunk_data.get('total')
@@ -1681,11 +1685,10 @@ async def _stream_handler(
         if temp_id not in image_chunks_cache:
             if total <= 0:
                 return
-            # Enforce max concurrent uploads
+            # Enforce max concurrent uploads - O(1) with OrderedDict
             if len(image_chunks_cache) >= MAX_IMAGE_CHUNKS:
-                # Remove oldest entry
-                oldest_id = min(image_chunks_cache.keys(), key=lambda k: image_chunks_cache[k]['created_at'])
-                del image_chunks_cache[oldest_id]
+                # Remove oldest entry (first inserted)
+                oldest_id, _ = image_chunks_cache.popitem(last=False)
                 print(f"Dropped oldest image upload to make room: {oldest_id}", uid, session_id)
             image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
