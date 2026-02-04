@@ -21,6 +21,7 @@ import 'widgets/desktop_conversation_card.dart';
 import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
 import 'widgets/desktop_goals_widget.dart';
+import 'widgets/desktop_processing_conversation_widget.dart';
 import 'widgets/desktop_recording_widget.dart';
 import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_search_widget.dart';
@@ -315,6 +316,21 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                           hasConversations: true,
                                           onStartRecording: _showExpandedRecordingView,
                                         ),
+                                      ),
+                                    ),
+                                  ),
+
+                                if (convoProvider.processingConversations.isNotEmpty)
+                                  SliverPadding(
+                                    padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                    sliver: SliverList(
+                                      delegate: SliverChildBuilderDelegate(
+                                        (context, index) {
+                                          return DesktopProcessingConversationWidget(
+                                            conversation: convoProvider.processingConversations[index],
+                                          );
+                                        },
+                                        childCount: convoProvider.processingConversations.length,
                                       ),
                                     ),
                                   ),
