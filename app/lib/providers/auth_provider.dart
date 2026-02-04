@@ -40,15 +40,20 @@ class AuthenticationProvider extends BaseProvider {
         Logger.debug(
             'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}');
         this.user = user;
-        SharedPreferencesUtil().uid = user?.uid ?? '';
-        SharedPreferencesUtil().email = user?.email ?? '';
-        SharedPreferencesUtil().givenName = user?.displayName?.split(' ')[0] ?? '';
+        // Only update SharedPreferences if Firebase has a user
+        // Don't clear cached credentials - allows fallback for dev builds
+        if (user != null) {
+          SharedPreferencesUtil().uid = user.uid;
+          SharedPreferencesUtil().email = user.email ?? '';
+          SharedPreferencesUtil().givenName = user.displayName?.split(' ')[0] ?? '';
+        }
       });
       _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked! ${user == null}');
-          SharedPreferencesUtil().authToken = '';
-          authToken = null;
+          // Don't clear cached token - allows fallback for dev builds
+          // SharedPreferencesUtil().authToken = '';
+          // authToken = null;
         } else {
           Logger.debug('User is signed in at ${DateTime.now()} with user ${user.uid}');
           try {
@@ -66,7 +71,22 @@ class AuthenticationProvider extends BaseProvider {
     });
   }
 
-  bool isSignedIn() => _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+  bool isSignedIn() {
+    // Check Firebase SDK first
+    if (_auth.currentUser != null && !_auth.currentUser!.isAnonymous) {
+      return true;
+    }
+    // Fallback: check cached credentials (for dev builds where Keychain doesn't persist)
+    // This matches the Swift desktop app behavior
+    final cachedUid = SharedPreferencesUtil().uid;
+    final cachedToken = SharedPreferencesUtil().authToken;
+    print('DEBUG AuthProvider.isSignedIn: cachedUid="${cachedUid}", tokenLength=${cachedToken.length}');
+    if (cachedUid.isNotEmpty && cachedToken.isNotEmpty) {
+      print('DEBUG AuthProvider: Using cached credentials fallback - uid=$cachedUid');
+      return true;
+    }
+    return false;
+  }
 
   void setLoading(bool value) {
     _loading = value;
