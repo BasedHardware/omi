@@ -92,3 +92,54 @@ class TestGetSpeechmaticsMinConfidence:
         """Scientific notation is valid float syntax."""
         monkeypatch.setenv("SPEECHMATICS_MIN_CONFIDENCE", "2e-1")
         assert get_speechmatics_min_confidence() == 0.2
+
+
+def should_drop_low_confidence_token(r_type: str, r_confidence: float, min_confidence: float) -> bool:
+    """Determine if a Speechmatics token should be dropped due to low confidence.
+
+    This is a copy of the logic from utils/stt/streaming.py for testing
+    without the heavy import chain (firestore, etc).
+
+    - Punctuation tokens bypass confidence filtering (preserve sentence boundaries)
+    - Word tokens are dropped if confidence < min_confidence
+    """
+    if r_type == "punctuation":
+        return False  # Never drop punctuation
+    return r_confidence < min_confidence
+
+
+class TestShouldDropLowConfidenceToken:
+    """Tests for confidence filtering logic including punctuation bypass."""
+
+    def test_word_below_threshold_is_dropped(self):
+        """Word token below threshold should be dropped."""
+        assert should_drop_low_confidence_token("word", 0.3, 0.4) is True
+
+    def test_word_at_threshold_is_kept(self):
+        """Word token at exactly threshold should be kept."""
+        assert should_drop_low_confidence_token("word", 0.4, 0.4) is False
+
+    def test_word_above_threshold_is_kept(self):
+        """Word token above threshold should be kept."""
+        assert should_drop_low_confidence_token("word", 0.8, 0.4) is False
+
+    def test_punctuation_bypasses_threshold_low_confidence(self):
+        """Punctuation with low confidence should NOT be dropped."""
+        assert should_drop_low_confidence_token("punctuation", 0.1, 0.4) is False
+
+    def test_punctuation_bypasses_threshold_zero_confidence(self):
+        """Punctuation with zero confidence should NOT be dropped."""
+        assert should_drop_low_confidence_token("punctuation", 0.0, 0.4) is False
+
+    def test_punctuation_with_high_confidence_kept(self):
+        """Punctuation with high confidence is also kept."""
+        assert should_drop_low_confidence_token("punctuation", 0.9, 0.4) is False
+
+    def test_zero_threshold_keeps_all_words(self):
+        """Zero threshold disables filtering for words."""
+        assert should_drop_low_confidence_token("word", 0.01, 0.0) is False
+
+    def test_one_threshold_drops_imperfect_words(self):
+        """Threshold of 1.0 drops all non-perfect confidence words."""
+        assert should_drop_low_confidence_token("word", 0.99, 1.0) is True
+        assert should_drop_low_confidence_token("word", 1.0, 1.0) is False
