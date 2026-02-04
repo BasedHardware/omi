@@ -5,7 +5,6 @@ Tool for creating inline chart visualizations in chat responses.
 import contextvars
 from typing import List, Optional
 
-from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 try:
@@ -24,7 +23,6 @@ def create_chart_tool(
     color: Optional[str] = None,
     x_label: Optional[str] = None,
     y_label: Optional[str] = None,
-    config: RunnableConfig = None,
 ) -> str:
     """
     Create an inline chart visualization in the chat response.
@@ -73,11 +71,10 @@ def create_chart_tool(
         ],
     }
 
-    if config is None:
-        try:
-            config = agent_config_context.get()
-        except LookupError:
-            config = None
+    try:
+        config = agent_config_context.get()
+    except LookupError:
+        config = None
 
     if config:
         configurable = config.get('configurable', {})
