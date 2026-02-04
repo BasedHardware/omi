@@ -2,15 +2,15 @@
 Tests for memory leak prevention buffers in transcribe.py.
 Covers: audio buffer capping (deque), deque maxlen behavior, image chunk TTL (OrderedDict).
 """
-
 import time
-from collections import deque, OrderedDict
-
+from collections import OrderedDict, deque
 # Constants matching transcribe.py
 MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB
 MAX_SEGMENT_BUFFER_SIZE = 1000
 MAX_IMAGE_CHUNKS = 50
 IMAGE_CHUNK_TTL = 60.0
+IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0
+IMAGE_CHUNK_CLEANUP_MIN_SIZE = 5
 
 
 def audio_bytes_send_logic(audio_chunks: deque, audio_total_size: int, audio_bytes: bytes, max_size: int) -> tuple:
@@ -142,16 +142,26 @@ class TestDequeMaxlen:
 class TestImageChunksTTL:
     """Test image chunks TTL and max concurrent logic with OrderedDict."""
 
-    def test_cleanup_expired_chunks(self):
-        """Expired chunks are removed."""
-        image_chunks = OrderedDict()
-        image_chunks['old'] = {'chunks': [None], 'created_at': time.time() - 120}  # 2 min ago
-        image_chunks['new'] = {'chunks': [None], 'created_at': time.time()}
-
-        now = time.time()
+    def _cleanup_expired_image_chunks_logic(self, image_chunks, now, last_cleanup):
+        if now - last_cleanup < IMAGE_CHUNK_CLEANUP_INTERVAL:
+            return image_chunks, last_cleanup
+        if image_chunks and len(image_chunks) < IMAGE_CHUNK_CLEANUP_MIN_SIZE:
+            oldest_created_at = next(iter(image_chunks.values()))['created_at']
+            if now - oldest_created_at <= IMAGE_CHUNK_TTL:
+                return image_chunks, now
+        last_cleanup = now
         expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
         for tid in expired:
             del image_chunks[tid]
+        return image_chunks, last_cleanup
+
+    def test_cleanup_expired_chunks(self):
+        """Expired chunks are removed."""
+        base_time = 1000.0
+        image_chunks = OrderedDict()
+        image_chunks['old'] = {'chunks': [None], 'created_at': base_time - 120}  # 2 min ago
+        image_chunks['new'] = {'chunks': [None], 'created_at': base_time}
+        _, _ = self._cleanup_expired_image_chunks_logic(image_chunks, base_time, base_time - 10.0)
 
         assert 'old' not in image_chunks
         assert 'new' in image_chunks
@@ -199,6 +209,33 @@ class TestImageChunksTTL:
 
         oldest_id, _ = image_chunks.popitem(last=False)
         assert oldest_id == 'first'
+
+    def test_cleanup_skipped_within_interval(self):
+        """Cleanup is throttled by the interval."""
+        base_time = 1000.0
+        image_chunks = OrderedDict()
+        image_chunks['old'] = {'chunks': [None], 'created_at': base_time - 120}
+        _, last_cleanup = self._cleanup_expired_image_chunks_logic(image_chunks, base_time, base_time - 1.0)
+        assert 'old' in image_chunks
+        assert last_cleanup == base_time - 1.0
+
+    def test_small_cache_skips_cleanup_when_not_expired(self):
+        """Small caches skip cleanup when oldest is not expired."""
+        base_time = 1000.0
+        image_chunks = OrderedDict()
+        image_chunks['recent'] = {'chunks': [None], 'created_at': base_time - 10}
+        _, last_cleanup = self._cleanup_expired_image_chunks_logic(image_chunks, base_time, base_time - 10.0)
+        assert 'recent' in image_chunks
+        assert last_cleanup == base_time
+
+    def test_small_cache_still_cleans_when_expired(self):
+        """Small caches still clean when oldest is expired."""
+        base_time = 1000.0
+        image_chunks = OrderedDict()
+        image_chunks['old'] = {'chunks': [None], 'created_at': base_time - 120}
+        _, last_cleanup = self._cleanup_expired_image_chunks_logic(image_chunks, base_time, base_time - 10.0)
+        assert 'old' not in image_chunks
+        assert last_cleanup == base_time
 
 
 # Constants for pending requests

@@ -229,6 +229,8 @@ async def _stream_handler(
     MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
     MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
     IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
+    IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
+    IMAGE_CHUNK_CLEANUP_MIN_SIZE = 5  # Skip scans for tiny caches unless oldest can expire
 
     # Initialize segment buffers early (before onboarding handler needs them)
     realtime_segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
@@ -1645,10 +1647,20 @@ async def _stream_handler(
     # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
     # Using OrderedDict for O(1) oldest removal (insertion order preserved)
     image_chunks: OrderedDict[str, dict] = OrderedDict()
+    last_image_chunk_cleanup = 0.0
 
     def _cleanup_expired_image_chunks():
         """Remove image chunks that have exceeded TTL."""
+        nonlocal last_image_chunk_cleanup
         now = time.time()
+        if now - last_image_chunk_cleanup < IMAGE_CHUNK_CLEANUP_INTERVAL:
+            return
+        if image_chunks and len(image_chunks) < IMAGE_CHUNK_CLEANUP_MIN_SIZE:
+            oldest_created_at = next(iter(image_chunks.values()))['created_at']
+            if now - oldest_created_at <= IMAGE_CHUNK_TTL:
+                last_image_chunk_cleanup = now
+                return
+        last_image_chunk_cleanup = now
         expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
         for tid in expired:
             del image_chunks[tid]
