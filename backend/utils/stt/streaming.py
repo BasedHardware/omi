@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import random
 import time
@@ -209,6 +210,13 @@ def get_speechmatics_min_confidence() -> float:
         value = float(raw)
     except (TypeError, ValueError):
         logging.warning("Invalid SPEECHMATICS_MIN_CONFIDENCE=%r; using 0.4", raw)
+        return 0.4
+    # Handle special float values (nan, inf)
+    if math.isnan(value) or math.isinf(value):
+        logging.warning(
+            "SPEECHMATICS_MIN_CONFIDENCE=%r is nan/inf; using 0.4",
+            raw,
+        )
         return 0.4
     if value < 0.0 or value > 1.0:
         logging.warning(

@@ -5,6 +5,7 @@ importing the full streaming module (which has heavy dependencies).
 """
 
 import logging
+import math
 import os
 import pytest
 
@@ -23,6 +24,13 @@ def get_speechmatics_min_confidence() -> float:
         value = float(raw)
     except (TypeError, ValueError):
         logging.warning("Invalid SPEECHMATICS_MIN_CONFIDENCE=%r; using 0.4", raw)
+        return 0.4
+    # Handle special float values (nan, inf)
+    if math.isnan(value) or math.isinf(value):
+        logging.warning(
+            "SPEECHMATICS_MIN_CONFIDENCE=%r is nan/inf; using 0.4",
+            raw,
+        )
         return 0.4
     if value < 0.0 or value > 1.0:
         logging.warning(
@@ -92,6 +100,30 @@ class TestGetSpeechmaticsMinConfidence:
         """Scientific notation is valid float syntax."""
         monkeypatch.setenv("SPEECHMATICS_MIN_CONFIDENCE", "2e-1")
         assert get_speechmatics_min_confidence() == 0.2
+
+    def test_nan_value_falls_back_to_default(self, monkeypatch, caplog):
+        """NaN value logs warning and returns default."""
+        monkeypatch.setenv("SPEECHMATICS_MIN_CONFIDENCE", "nan")
+        with caplog.at_level(logging.WARNING):
+            result = get_speechmatics_min_confidence()
+        assert result == 0.4
+        assert "nan/inf" in caplog.text
+
+    def test_inf_value_falls_back_to_default(self, monkeypatch, caplog):
+        """Infinity value logs warning and returns default."""
+        monkeypatch.setenv("SPEECHMATICS_MIN_CONFIDENCE", "inf")
+        with caplog.at_level(logging.WARNING):
+            result = get_speechmatics_min_confidence()
+        assert result == 0.4
+        assert "nan/inf" in caplog.text
+
+    def test_negative_inf_value_falls_back_to_default(self, monkeypatch, caplog):
+        """Negative infinity value logs warning and returns default."""
+        monkeypatch.setenv("SPEECHMATICS_MIN_CONFIDENCE", "-inf")
+        with caplog.at_level(logging.WARNING):
+            result = get_speechmatics_min_confidence()
+        assert result == 0.4
+        assert "nan/inf" in caplog.text
 
 
 def should_drop_low_confidence_token(r_type: str, r_confidence: float, min_confidence: float) -> bool:
