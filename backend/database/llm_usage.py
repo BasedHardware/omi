@@ -44,6 +44,9 @@ def record_llm_usage(
     # Use nested field paths for atomic increments
     # Structure: {feature}.{model}.{input_tokens|output_tokens}
     # Firestore doesn't allow '.', '/', '[', ']', '*', '`', '~' in field names
+    if not isinstance(model, str) or not model:
+        model = "unknown"
+
     safe_model = (
         model.replace(".", "_")
         .replace("/", "_")

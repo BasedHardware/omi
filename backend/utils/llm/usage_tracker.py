@@ -69,12 +69,13 @@ class LLMUsageCallback(BaseCallbackHandler):
 
         # Extract token usage from response
         token_usage = {}
+        model = "unknown"
         if response.llm_output:
             token_usage = response.llm_output.get("token_usage", {})
+            model = response.llm_output.get("model_name") or token_usage.get("model_name", model)
 
         input_tokens = token_usage.get("prompt_tokens", 0)
         output_tokens = token_usage.get("completion_tokens", 0)
-        model = token_usage.get("model_name", "unknown")
 
         # Also try to get model from response metadata
         if model == "unknown" and response.generations:
