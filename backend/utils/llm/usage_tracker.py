@@ -65,7 +65,7 @@ class LLMUsageCallback(BaseCallbackHandler):
         """Called when LLM call ends. Records token usage."""
         ctx = _usage_context.get()
         if not ctx:
-            return
+            ctx = UsageContext(uid="unknown", feature=Features.OTHER)
 
         # Extract token usage from response
         token_usage = {}

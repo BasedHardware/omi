@@ -113,7 +113,7 @@ def test_llm_callback_uses_generation_info_model_when_missing():
     assert buffered == {"user-4:rag:fallback-model": {"input_tokens": 1, "output_tokens": 2}}
 
 
-def test_llm_callback_no_context_noop():
+def test_llm_callback_no_context_defaults_to_other():
     usage_tracker.get_and_clear_buffer()
     callback = usage_tracker.LLMUsageCallback()
     result = LLMResult(
@@ -129,7 +129,9 @@ def test_llm_callback_no_context_noop():
 
     callback.on_llm_end(result)
 
-    assert usage_tracker.get_and_clear_buffer() == {}
+    assert usage_tracker.get_and_clear_buffer() == {
+        "unknown:other:gpt-4.1-mini": {"input_tokens": 4, "output_tokens": 5}
+    }
 
 
 def test_llm_callback_buffers_when_no_flush_fn():
