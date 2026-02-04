@@ -464,16 +464,26 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     if external_integration := data.get('external_integration'):
         manifest_url = external_integration.get('chat_tools_manifest_url')
         if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                app_dict['chat_tools'] = fetched_tools
+            manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+            if manifest_result:
+                fetched_tools = manifest_result.get('tools')
+                if fetched_tools:
+                    # Resolve relative endpoints to absolute URLs
+                    base_url = external_integration.get('app_home_url', '').rstrip('/')
+                    if base_url:
+                        for tool in fetched_tools:
+                            endpoint = tool.get('endpoint', '')
+                            if endpoint.startswith('/') and not endpoint.startswith('//'):
+                                tool['endpoint'] = f"{base_url}{endpoint}"
+                    app_dict['chat_tools'] = fetched_tools
+                # Store chat_messages config in external_integration
+                chat_messages = manifest_result.get('chat_messages')
+                if chat_messages:
+                    if 'external_integration' not in app_dict:
+                        app_dict['external_integration'] = {}
+                    app_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
+                    app_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
+                    app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', True)
 
     add_app_to_db(app_dict)
 
@@ -699,16 +709,28 @@ def update_app(
     if external_integration := data.get('external_integration'):
         manifest_url = external_integration.get('chat_tools_manifest_url')
         if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                update_dict['chat_tools'] = fetched_tools
+            manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+            if manifest_result:
+                fetched_tools = manifest_result.get('tools')
+                if fetched_tools:
+                    # Resolve relative endpoints to absolute URLs
+                    base_url = external_integration.get('app_home_url', '').rstrip('/')
+                    if base_url:
+                        for tool in fetched_tools:
+                            endpoint = tool.get('endpoint', '')
+                            if endpoint.startswith('/') and not endpoint.startswith('//'):
+                                tool['endpoint'] = f"{base_url}{endpoint}"
+                    update_dict['chat_tools'] = fetched_tools
+                # Store chat_messages config in external_integration
+                if 'external_integration' not in update_dict:
+                    update_dict['external_integration'] = {}
+                chat_messages = manifest_result.get('chat_messages')
+                if chat_messages:
+                    update_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
+                    update_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
+                    update_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', True)
+                else:
+                    update_dict['external_integration']['chat_messages_enabled'] = False
 
     update_app_in_db(update_dict)
 
