@@ -6,6 +6,7 @@ import struct
 import time
 import uuid
 import wave
+from collections import deque, OrderedDict
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Callable
@@ -69,7 +70,6 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
-from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -222,9 +222,19 @@ async def _stream_handler(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
+    # Buffer size limits to prevent memory leaks during outages/lag
+    MAX_SEGMENT_BUFFER_SIZE = 1000  # Max segments to buffer
+    MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
+    MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
+    MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
+    IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
+    IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
+    IMAGE_CHUNK_CLEANUP_MIN_SIZE = 5  # Skip scans for tiny caches unless oldest can expire
+
     # Initialize segment buffers early (before onboarding handler needs them)
-    realtime_segment_buffers = []
-    realtime_photo_buffers: list[ConversationPhoto] = []
+    realtime_segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
+    realtime_photo_buffers: deque[ConversationPhoto] = deque(maxlen=MAX_PHOTO_BUFFER_SIZE)
 
     # === Speaker Identification State ===
     RING_BUFFER_DURATION = 60.0  # seconds
@@ -235,6 +245,25 @@ async def _stream_handler(
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
+
+    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
+    bg_tasks: Set[asyncio.Task] = set()
+
+    def spawn(coro) -> asyncio.Task:
+        """Create a tracked background task that will be cancelled on cleanup."""
+        task = asyncio.create_task(coro)
+        bg_tasks.add(task)
+
+        def on_done(t):
+            bg_tasks.discard(t)
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                print(f"Unhandled exception in background task: {exc}", uid, session_id)
+
+        task.add_done_callback(on_done)
+        return task
 
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
@@ -253,7 +282,7 @@ async def _stream_handler(
             realtime_segment_buffers.extend(segments)
 
         onboarding_handler = OnboardingHandler(uid, send_onboarding_event, onboarding_stream_transcript)
-        asyncio.create_task(onboarding_handler.send_current_question())
+        spawn(onboarding_handler.send_current_question())
 
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
@@ -361,7 +390,7 @@ async def _stream_handler(
         nonlocal websocket_active
         if not websocket_active:
             return
-        return asyncio.create_task(_asend_message_event(msg))
+        return spawn(_asend_message_event(msg))
 
     # Heart beat
     started_at = time.time()
@@ -840,13 +869,13 @@ async def _stream_handler(
         pusher_connect_lock = asyncio.Lock()
         pusher_connected = False
 
-        # Transcript
-        segment_buffers = []
+        # Transcript (bounded to prevent memory growth when pusher is down)
+        segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
 
         last_synced_conversation_id = None
 
         # Conversation processing
-        pending_conversation_requests = set()
+        pending_conversation_requests: Set[str] = set()
         pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
@@ -859,6 +888,10 @@ async def _stream_handler(
             if not pusher_connected or not pusher_ws:
                 print(f"Pusher not connected, falling back to local processing for {conversation_id}", uid, session_id)
                 return False
+            # Prevent unbounded growth of pending requests
+            if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
+                print(f"Too many pending requests, dropping one to add {conversation_id}", uid, session_id)
+                pending_conversation_requests.pop()  # Remove arbitrary element (set has no order)
             try:
                 pending_conversation_requests.add(conversation_id)
                 pending_request_event.set()  # Signal the receiver
@@ -874,7 +907,6 @@ async def _stream_handler(
                 return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
-            nonlocal segment_buffers
             nonlocal pusher_ws
             nonlocal pusher_connected
             if pusher_connected and pusher_ws and len(segment_buffers) > 0:
@@ -884,11 +916,11 @@ async def _stream_handler(
                     data.extend(struct.pack("I", 102))
                     data.extend(
                         bytes(
-                            json.dumps({"segments": segment_buffers, "memory_id": current_conversation_id}),
+                            json.dumps({"segments": list(segment_buffers), "memory_id": current_conversation_id}),
                             "utf-8",
                         )
                     )
-                    segment_buffers = []  # reset
+                    segment_buffers.clear()  # reset
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher transcripts Connection closed: {e}", uid, session_id)
@@ -900,26 +932,36 @@ async def _stream_handler(
 
         async def transcript_consume():
             nonlocal websocket_active
-            nonlocal segment_buffers
             while websocket_active:
                 await asyncio.sleep(1)
                 if len(segment_buffers) > 0:
                     await _transcript_flush(auto_reconnect=True)
 
-        # Audio bytes
-        audio_buffers = bytearray()
+        # Audio bytes (bounded to prevent memory growth when pusher is down)
+        # Using deque of chunks for O(1) trimming instead of O(n) bytearray slice
+        audio_chunks: deque = deque()  # deque of bytes objects
+        audio_total_size = 0  # Track total size for O(1) limit check
         audio_buffer_last_received: float = None  # Track when last audio was received
         audio_bytes_enabled = (
             bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid) or private_cloud_sync_enabled
         )
 
         def audio_bytes_send(audio_bytes: bytes, received_at: float):
-            nonlocal audio_buffers, audio_buffer_last_received
-            audio_buffers.extend(audio_bytes)
+            nonlocal audio_chunks, audio_total_size, audio_buffer_last_received
+            chunk = audio_bytes
+            # Trim oversized incoming chunk
+            if len(chunk) > MAX_AUDIO_BUFFER_SIZE:
+                chunk = chunk[-MAX_AUDIO_BUFFER_SIZE:]
+            # Drop oldest chunks to make room - O(1) per chunk
+            while audio_total_size + len(chunk) > MAX_AUDIO_BUFFER_SIZE and audio_chunks:
+                old = audio_chunks.popleft()
+                audio_total_size -= len(old)
+            audio_chunks.append(chunk)
+            audio_total_size += len(chunk)
             audio_buffer_last_received = received_at
 
         async def _audio_bytes_flush(auto_reconnect: bool = True):
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal audio_buffer_last_received
             nonlocal pusher_ws
             nonlocal pusher_connected
@@ -945,20 +987,26 @@ async def _stream_handler(
                     print(f"Failed to send conversation_id to pusher: {e}", uid, session_id)
 
             # Send audio bytes
-            if pusher_connected and pusher_ws and len(audio_buffers) > 0:
+            if pusher_connected and pusher_ws and audio_total_size > 0:
                 try:
                     # Calculate buffer start time:
                     # buffer_start = last_received_time - buffer_duration
                     # buffer_duration = buffer_length_bytes / (sample_rate * 2 bytes per sample)
-                    buffer_duration_seconds = len(audio_buffers) / (sample_rate * 2)
+                    buffer_duration_seconds = audio_total_size / (sample_rate * 2)
                     buffer_start_time = (audio_buffer_last_received or time.time()) - buffer_duration_seconds
+
+                    # Join chunks into contiguous bytes for sending
+                    audio_data = b''.join(audio_chunks)
 
                     # 101|timestamp(8 bytes double)|audio_data
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
                     data.extend(struct.pack("d", buffer_start_time))
-                    data.extend(audio_buffers.copy())
-                    audio_buffers = bytearray()  # reset
+                    data.extend(audio_data)
+                    # Reset buffer
+                    audio_chunks.clear()
+                    audio_total_size = 0
+                    del audio_data  # Free immediately
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher audio_bytes Connection closed: {e}", uid, session_id)
@@ -970,12 +1018,12 @@ async def _stream_handler(
 
         async def audio_bytes_consume():
             nonlocal websocket_active
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active:
                 await asyncio.sleep(1)
-                if len(audio_buffers) > 0:
+                if audio_total_size > 0:
                     await _audio_bytes_flush(auto_reconnect=True)
 
         async def pusher_receive():
@@ -1292,7 +1340,7 @@ async def _stream_handler(
 
             duration = seg['duration']
             if duration >= SPEAKER_ID_MIN_AUDIO:
-                asyncio.create_task(_match_speaker_embedding(speaker_id, seg))
+                spawn(_match_speaker_embedding(speaker_id, seg))
 
         print("Speaker ID task ended", uid, session_id)
 
@@ -1419,14 +1467,17 @@ async def _stream_handler(
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.6)
 
+            # Periodic cleanup of expired image chunks (enforces TTL even when uploads stop)
+            _cleanup_expired_image_chunks()
+
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = realtime_segment_buffers.copy()
-            realtime_segment_buffers = []
+            segments_to_process = list(realtime_segment_buffers)
+            realtime_segment_buffers.clear()
 
-            photos_to_process = realtime_photo_buffers.copy()
-            realtime_photo_buffers = []
+            photos_to_process = list(realtime_photo_buffers)
+            realtime_photo_buffers.clear()
 
             finished_at = datetime.now(timezone.utc)
 
@@ -1593,11 +1644,29 @@ async def _stream_handler(
                         segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
-    image_chunks = {str: any}  # A temporary in-memory cache for image chunks
+    # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
+    # Using OrderedDict for O(1) oldest removal (insertion order preserved)
+    image_chunks: OrderedDict[str, dict] = OrderedDict()
+    last_image_chunk_cleanup = 0.0
 
-    async def process_photo(
-        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list[ConversationPhoto]
-    ):
+    def _cleanup_expired_image_chunks():
+        """Remove image chunks that have exceeded TTL."""
+        nonlocal last_image_chunk_cleanup
+        now = time.time()
+        if now - last_image_chunk_cleanup < IMAGE_CHUNK_CLEANUP_INTERVAL:
+            return
+        if image_chunks and len(image_chunks) < IMAGE_CHUNK_CLEANUP_MIN_SIZE:
+            oldest_created_at = next(iter(image_chunks.values()))['created_at']
+            if now - oldest_created_at <= IMAGE_CHUNK_TTL:
+                last_image_chunk_cleanup = now
+                return
+        last_image_chunk_cleanup = now
+        expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
+        for tid in expired:
+            del image_chunks[tid]
+            print(f"Expired incomplete image upload: {tid}", uid, session_id)
+
+    async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer):
         from utils.llm.openglass import describe_image
 
         photo_id = str(uuid.uuid4())
@@ -1615,9 +1684,7 @@ async def _stream_handler(
         photo_buffer.append(final_photo)
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
-    async def handle_image_chunk(
-        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list[ConversationPhoto]
-    ):
+    async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
         total = chunk_data.get('total')
@@ -1627,18 +1694,27 @@ async def _stream_handler(
             print(f"Invalid image chunk received: {chunk_data}", uid, session_id)
             return
 
+        # Cleanup expired chunks periodically
+        _cleanup_expired_image_chunks()
+
         if temp_id not in image_chunks_cache:
             if total <= 0:
                 return
-            image_chunks_cache[temp_id] = [None] * total
+            # Enforce max concurrent uploads - O(1) with OrderedDict
+            if len(image_chunks_cache) >= MAX_IMAGE_CHUNKS:
+                # Remove oldest entry (first inserted)
+                oldest_id, _ = image_chunks_cache.popitem(last=False)
+                print(f"Dropped oldest image upload to make room: {oldest_id}", uid, session_id)
+            image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
-        if index < total and image_chunks_cache[temp_id][index] is None:
-            image_chunks_cache[temp_id][index] = data
+        chunks_data = image_chunks_cache[temp_id]['chunks']
+        if index < total and chunks_data[index] is None:
+            chunks_data[index] = data
 
-        if all(chunk is not None for chunk in image_chunks_cache[temp_id]):
-            b64_image_data = "".join(image_chunks_cache[temp_id])
+        if all(chunk is not None for chunk in chunks_data):
+            b64_image_data = "".join(chunks_data)
             del image_chunks_cache[temp_id]
-            safe_create_task(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
+            spawn(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
     # Initialize decoders based on codec
     opus_decoder = None
@@ -1692,7 +1768,7 @@ async def _stream_handler(
                             socket_to_close.finish()
                             print('Closed deepgram_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_dg_profile())
+                        spawn(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
 
@@ -1709,7 +1785,7 @@ async def _stream_handler(
                             await socket_to_close.close()
                             print('Closed soniox_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_soniox_profile())
+                        spawn(close_soniox_profile())
                 else:
                     await soniox_profile_socket.send(chunk)
 
@@ -1847,7 +1923,7 @@ async def _stream_handler(
                                     and send_speaker_sample_request is not None
                                     and current_conversation_id
                                 ):
-                                    asyncio.create_task(
+                                    spawn(
                                         send_speaker_sample_request(
                                             person_id=person_id,
                                             conv_id=current_conversation_id,
@@ -1984,6 +2060,15 @@ async def _stream_handler(
         # Clean up onboarding handler
         if onboarding_handler:
             onboarding_handler.cleanup()
+
+        # Cancel all tracked background tasks to prevent memory leaks
+        # Snapshot to avoid mutation during iteration
+        tasks_to_cancel = list(bg_tasks)
+        for task in tasks_to_cancel:
+            task.cancel()
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        bg_tasks.clear()
 
         # Clean up collections to aid garbage collection
         try:
