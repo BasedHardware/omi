@@ -59,6 +59,40 @@ def test_set_usage_context_manual_reset():
     assert usage_tracker.get_current_context() is None
 
 
+def test_get_usage_callback_singleton_uses_record_llm_usage():
+    original_instance = usage_tracker._callback_instance
+    original_record = usage_tracker.record_llm_usage
+    usage_tracker._callback_instance = None
+    record_mock = MagicMock()
+    usage_tracker.record_llm_usage = record_mock
+
+    try:
+        callback1 = usage_tracker.get_usage_callback()
+        callback2 = usage_tracker.get_usage_callback()
+        assert callback1 is callback2
+
+        token = usage_tracker.set_usage_context("user-2b", usage_tracker.Features.CHAT)
+        try:
+            result = LLMResult(
+                generations=[[Generation(text="ok")]],
+                llm_output={
+                    "token_usage": {
+                        "prompt_tokens": 7,
+                        "completion_tokens": 11,
+                        "model_name": "gpt-4.1-mini",
+                    }
+                },
+            )
+            callback1.on_llm_end(result)
+        finally:
+            usage_tracker.reset_usage_context(token)
+
+        record_mock.assert_called_once_with("user-2b", "chat", "gpt-4.1-mini", 7, 11)
+    finally:
+        usage_tracker._callback_instance = original_instance
+        usage_tracker.record_llm_usage = original_record
+
+
 def test_llm_callback_flushes_immediately_skips_buffer():
     """When flush_fn is set, usage is written immediately and buffer is skipped."""
     usage_tracker.get_and_clear_buffer()
