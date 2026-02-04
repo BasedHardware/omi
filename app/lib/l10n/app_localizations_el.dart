@@ -429,7 +429,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
-  String get chatTools => 'Εργαλεία Συνομιλίας';
+  String get integrations => 'Ενσωματώσεις';
 
   @override
   String get feedbackBug => 'Σχόλια / Σφάλμα';
@@ -589,7 +589,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get starOngoing => 'Αγαπημένη Τρέχουσα Συνομιλία';
 
   @override
-  String get off => 'Off';
+  String get off => 'Απενεργ.';
 
   @override
   String get max => 'Μέγιστο';
@@ -1019,13 +1019,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Σύνδεση';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Σύντομα Διαθέσιμο';
 
   @override
-  String get chatToolsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
+  String get integrationsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1666,7 +1666,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get whatShouldWeMake => 'Τι να φτιάξουμε;';
 
   @override
-  String get appName => 'Όνομα Εφαρμογής';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Περιγραφή';
@@ -2285,7 +2285,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get folderName => 'Όνομα φακέλου';
 
   @override
-  String get descriptionOptional => 'Περιγραφή (προαιρετικό)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Αποτυχία διαγραφής φακέλου';
@@ -7845,47 +7845,275 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Η συσκευή δεν υποστηρίζει συγχρονισμό WiFi, μετάβαση σε Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Το Apple Health δεν είναι διαθέσιμο σε αυτήν τη συσκευή';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Λήψη ήχου';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Ο ήχος λήφθηκε επιτυχώς';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Αποτυχία λήψης ήχου';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Λήψη ήχου...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Κοινοποίηση ήχου';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Προετοιμασία ήχου';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Λήψη αρχείων ήχου...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Λήψη ήχου';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Επεξεργασία ήχου';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Συνδυασμός αρχείων ήχου...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Ο ήχος είναι έτοιμος';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Άνοιγμα φύλλου κοινοποίησης...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Η κοινοποίηση απέτυχε';
+
+  @override
+  String get dailyRecaps => 'Ημερήσιες Περιλήψεις';
+
+  @override
+  String get removeFilter => 'Κατάργηση Φίλτρου';
+
+  @override
+  String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
+
+  @override
+  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
+
+  @override
+  String get categoryHealth => 'Υγεία';
+
+  @override
+  String get categoryEducation => 'Εκπαίδευση';
+
+  @override
+  String get categoryCommunication => 'Επικοινωνία';
+
+  @override
+  String get categoryEmotionalSupport => 'Συναισθηματική υποστήριξη';
+
+  @override
+  String get categoryProductivity => 'Παραγωγικότητα';
+
+  @override
+  String get categoryEntertainment => 'Ψυχαγωγία';
+
+  @override
+  String get categoryFinancial => 'Οικονομικά';
+
+  @override
+  String get categoryTravel => 'Ταξίδια';
+
+  @override
+  String get categorySafety => 'Ασφάλεια';
+
+  @override
+  String get categoryShopping => 'Αγορές';
+
+  @override
+  String get categorySocial => 'Κοινωνικά';
+
+  @override
+  String get categoryNews => 'Ειδήσεις';
+
+  @override
+  String get categoryUtilities => 'Εργαλεία';
+
+  @override
+  String get categoryOther => 'Άλλα';
+
+  @override
+  String get capabilityChat => 'Συνομιλία';
+
+  @override
+  String get capabilityConversations => 'Συνομιλίες';
+
+  @override
+  String get capabilityExternalIntegration => 'Εξωτερική ενσωμάτωση';
+
+  @override
+  String get capabilityNotification => 'Ειδοποίηση';
+
+  @override
+  String get triggerAudioBytes => 'Bytes ήχου';
+
+  @override
+  String get triggerConversationCreation => 'Δημιουργία συνομιλίας';
+
+  @override
+  String get triggerTranscriptProcessed => 'Απομαγνητοφώνηση επεξεργάστηκε';
+
+  @override
+  String get actionCreateConversations => 'Δημιουργία συνομιλιών';
+
+  @override
+  String get actionCreateMemories => 'Δημιουργία αναμνήσεων';
+
+  @override
+  String get actionReadConversations => 'Ανάγνωση συνομιλιών';
+
+  @override
+  String get actionReadMemories => 'Ανάγνωση αναμνήσεων';
+
+  @override
+  String get actionReadTasks => 'Ανάγνωση εργασιών';
+
+  @override
+  String get scopeUserName => 'Όνομα χρήστη';
+
+  @override
+  String get scopeUserFacts => 'Στοιχεία χρήστη';
+
+  @override
+  String get scopeUserConversations => 'Συνομιλίες χρήστη';
+
+  @override
+  String get scopeUserChat => 'Συνομιλία χρήστη';
+
+  @override
+  String get capabilitySummary => 'Περίληψη';
+
+  @override
+  String get capabilityFeatured => 'Προτεινόμενα';
+
+  @override
+  String get capabilityTasks => 'Εργασίες';
+
+  @override
+  String get capabilityIntegrations => 'Ενσωματώσεις';
+
+  @override
+  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
+
+  @override
+  String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';
+
+  @override
+  String get categorySocialEntertainment => 'Κοινωνικά & Ψυχαγωγία';
+
+  @override
+  String get categoryProductivityTools => 'Εργαλεία παραγωγικότητας';
+
+  @override
+  String get categoryPersonalWellness => 'Προσωπική ευεξία';
+
+  @override
+  String get rating => 'Βαθμολογία';
+
+  @override
+  String get categories => 'Κατηγορίες';
+
+  @override
+  String get sortBy => 'Ταξινόμηση';
+
+  @override
+  String get highestRating => 'Υψηλότερη βαθμολογία';
+
+  @override
+  String get lowestRating => 'Χαμηλότερη βαθμολογία';
+
+  @override
+  String get resetFilters => 'Επαναφορά φίλτρων';
+
+  @override
+  String get applyFilters => 'Εφαρμογή φίλτρων';
+
+  @override
+  String get mostInstalls => 'Περισσότερες εγκαταστάσεις';
+
+  @override
+  String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

@@ -12,6 +12,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AppMetadataWidget extends StatelessWidget {
@@ -263,7 +264,7 @@ class AppMetadataWidget extends StatelessWidget {
                                                         children: [
                                                           const SizedBox(width: 6),
                                                           Text(
-                                                            categories[index].title,
+                                                            categories[index].getLocalizedTitle(context),
                                                             style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                                                           ),
                                                           const Spacer(),
@@ -302,7 +303,8 @@ class AppMetadataWidget extends StatelessWidget {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ?? '${context.l10n.categoryLabel}*',
+                                        (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ??
+                                            '${context.l10n.categoryLabel}*',
                                         style: TextStyle(
                                             color: category != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                             fontSize: 16),
@@ -490,7 +492,8 @@ class AppMetadataWidget extends StatelessWidget {
                                   width: 12,
                                 ),
                                 Text(
-                                  (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ?? context.l10n.noneSelected,
+                                  (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ??
+                                      context.l10n.noneSelected,
                                   style: TextStyle(
                                       color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                       fontSize: 16),

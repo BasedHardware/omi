@@ -426,7 +426,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceSettings => 'Налаштування пристрою';
 
   @override
-  String get chatTools => 'Інструменти чату';
+  String get integrations => 'Інтеграції';
 
   @override
   String get feedbackBug => 'Відгук / Помилка';
@@ -1015,13 +1015,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Підключити';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Незабаром';
 
   @override
-  String get chatToolsFooter => 'Підключіть свої додатки для перегляду даних та метрик у чаті.';
+  String get integrationsFooter => 'Підключіть свої додатки для перегляду даних та метрик у чаті.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1655,7 +1655,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get whatShouldWeMake => 'Що ми повинні створити?';
 
   @override
-  String get appName => 'Назва додатка';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Опис';
@@ -2270,7 +2270,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get folderName => 'Назва папки';
 
   @override
-  String get descriptionOptional => 'Опис (необов\'язково)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Не вдалося видалити папку';
@@ -7800,47 +7800,275 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Пристрій не підтримує синхронізацію WiFi, перемикання на Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health недоступний на цьому пристрої';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Завантажити аудіо';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Аудіо успішно завантажено';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Не вдалося завантажити аудіо';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Завантаження аудіо...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Поділитися аудіо';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Підготовка аудіо';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Отримання аудіофайлів...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Завантаження аудіо';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Обробка аудіо';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Об\'єднання аудіофайлів...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Аудіо готове';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Відкриття аркушу спільного доступу...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Не вдалося поділитися';
+
+  @override
+  String get dailyRecaps => 'Щоденні підсумки';
+
+  @override
+  String get removeFilter => 'Видалити фільтр';
+
+  @override
+  String get categoryConversationAnalysis => 'Аналіз розмов';
+
+  @override
+  String get categoryPersonalityClone => 'Клон особистості';
+
+  @override
+  String get categoryHealth => 'Здоров\'я';
+
+  @override
+  String get categoryEducation => 'Освіта';
+
+  @override
+  String get categoryCommunication => 'Комунікація';
+
+  @override
+  String get categoryEmotionalSupport => 'Емоційна підтримка';
+
+  @override
+  String get categoryProductivity => 'Продуктивність';
+
+  @override
+  String get categoryEntertainment => 'Розваги';
+
+  @override
+  String get categoryFinancial => 'Фінанси';
+
+  @override
+  String get categoryTravel => 'Подорожі';
+
+  @override
+  String get categorySafety => 'Безпека';
+
+  @override
+  String get categoryShopping => 'Покупки';
+
+  @override
+  String get categorySocial => 'Соціальне';
+
+  @override
+  String get categoryNews => 'Новини';
+
+  @override
+  String get categoryUtilities => 'Інструменти';
+
+  @override
+  String get categoryOther => 'Інше';
+
+  @override
+  String get capabilityChat => 'Чат';
+
+  @override
+  String get capabilityConversations => 'Розмови';
+
+  @override
+  String get capabilityExternalIntegration => 'Зовнішня інтеграція';
+
+  @override
+  String get capabilityNotification => 'Сповіщення';
+
+  @override
+  String get triggerAudioBytes => 'Аудіо байти';
+
+  @override
+  String get triggerConversationCreation => 'Створення розмови';
+
+  @override
+  String get triggerTranscriptProcessed => 'Транскрипт оброблено';
+
+  @override
+  String get actionCreateConversations => 'Створити розмови';
+
+  @override
+  String get actionCreateMemories => 'Створити спогади';
+
+  @override
+  String get actionReadConversations => 'Читати розмови';
+
+  @override
+  String get actionReadMemories => 'Читати спогади';
+
+  @override
+  String get actionReadTasks => 'Читати завдання';
+
+  @override
+  String get scopeUserName => 'Ім\'я користувача';
+
+  @override
+  String get scopeUserFacts => 'Дані користувача';
+
+  @override
+  String get scopeUserConversations => 'Розмови користувача';
+
+  @override
+  String get scopeUserChat => 'Чат користувача';
+
+  @override
+  String get capabilitySummary => 'Підсумок';
+
+  @override
+  String get capabilityFeatured => 'Рекомендовані';
+
+  @override
+  String get capabilityTasks => 'Завдання';
+
+  @override
+  String get capabilityIntegrations => 'Інтеграції';
+
+  @override
+  String get categoryPersonalityClones => 'Клони особистості';
+
+  @override
+  String get categoryProductivityLifestyle => 'Продуктивність та спосіб життя';
+
+  @override
+  String get categorySocialEntertainment => 'Соціальне та розваги';
+
+  @override
+  String get categoryProductivityTools => 'Інструменти продуктивності';
+
+  @override
+  String get categoryPersonalWellness => 'Особисте благополуччя';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категорії';
+
+  @override
+  String get sortBy => 'Сортування';
+
+  @override
+  String get highestRating => 'Найвищий рейтинг';
+
+  @override
+  String get lowestRating => 'Найнижчий рейтинг';
+
+  @override
+  String get resetFilters => 'Скинути фільтри';
+
+  @override
+  String get applyFilters => 'Застосувати фільтри';
+
+  @override
+  String get mostInstalls => 'Найбільше встановлень';
+
+  @override
+  String get couldNotOpenUrl => 'Не вдалося відкрити URL. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

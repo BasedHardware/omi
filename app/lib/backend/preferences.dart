@@ -181,10 +181,10 @@ class SharedPreferencesUtil {
 
   bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
 
-  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 3 (balanced)
+  // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 
-  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 3);
+  int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
 
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }
@@ -199,6 +199,24 @@ class SharedPreferencesUtil {
     try {
       final decoded = jsonDecode(encoded) as Map<String, dynamic>;
       return decoded.map((key, value) => MapEntry(key, (value as List).cast<String>()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // Task -> goal mapping (local UI state)
+  // Format: { "taskId": "goalId" }
+  set taskGoalLinks(Map<String, String> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskGoalLinks', encoded);
+  }
+
+  Map<String, String> get taskGoalLinks {
+    final encoded = getString('taskGoalLinks');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
     } catch (e) {
       return {};
     }
@@ -240,6 +258,12 @@ class SharedPreferencesUtil {
   bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog', defaultValue: true);
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
+
+  String get otaWifiSsid => getString('otaWifiSsid', defaultValue: '');
+  set otaWifiSsid(String value) => saveString('otaWifiSsid', value);
+
+  String get otaWifiPassword => getString('otaWifiPassword', defaultValue: '');
+  set otaWifiPassword(String value) => saveString('otaWifiPassword', value);
 
   int get conversationSilenceDuration => getInt('conversationSilenceDuration', defaultValue: 120);
 
@@ -559,6 +583,10 @@ class SharedPreferencesUtil {
   set familyName(String value) => saveString('familyName', value);
 
   String get fullName => '$givenName $familyName'.trim();
+
+  String get foundOmiSource => getString('foundOmiSource');
+
+  set foundOmiSource(String value) => saveString('foundOmiSource', value);
 
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -33,6 +34,7 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
 
   const TranscriptWidget({
     super.key,
@@ -51,6 +53,7 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
   });
 
   @override
@@ -471,7 +474,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
-    final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
@@ -524,30 +526,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       MixpanelManager().tagSheetOpened();
                                     },
                               child: Text(
-                                data.speakerId == omiSpeakerId
-                                    ? 'omi'
-                                    : (suggestion != null && person == null
-                                        ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                data.speakerId == omiSpeakerId ? 'omi' : (person?.name ?? 'Speaker ${data.speakerId}'),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
-                                      : (isTagging ? Colors.grey.shade300 : Colors.grey.shade400),
+                                      : Colors.grey.shade400,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                            if (!data.speechProfileProcessed &&
-                                (data.personId ?? "").isEmpty &&
-                                data.speakerId != omiSpeakerId) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.help_outline,
-                                color: Colors.orange,
-                                size: 12,
-                              ),
-                            ],
                             if (isTagging) ...[
                               const SizedBox(width: 6),
                               const SizedBox(
@@ -556,20 +544,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ] else if (suggestion != null && person == null) ...[
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: Colors.white,
-                                  ),
                                 ),
                               )
                             ],
@@ -656,8 +630,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp and provider
-                                  if (widget.canDisplaySeconds || data.sttProvider != null) ...[
+                                  // Timestamp, provider, and play button
+                                  if (widget.canDisplaySeconds ||
+                                      data.sttProvider != null ||
+                                      widget.onSegmentTap != null) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -682,6 +658,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                               ),
                                             ),
                                           ],
+                                        ],
+                                        // Play button for tap-to-seek
+                                        if (widget.onSegmentTap != null) ...[
+                                          GestureDetector(
+                                            onTap: () {
+                                              HapticFeedback.lightImpact();
+                                              widget.onSegmentTap?.call(data);
+                                            },
+                                            child: Icon(
+                                              Icons.play_circle_outline,
+                                              size: 16,
+                                              color:
+                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
                                         ],
                                         if (widget.canDisplaySeconds)
                                           Text(

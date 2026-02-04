@@ -113,6 +113,7 @@ class GraphState(TypedDict):
 
     chat_session: Optional[ChatSession]
     context: Optional[PageContext]
+    chart_data: Optional[dict]
 
 
 def determine_conversation(state: GraphState):
@@ -129,11 +130,7 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
     state: GraphState,
-) -> Literal[
-    "no_context_conversation",
-    "agentic_context_dependent_conversation",
-    "persona_question",
-]:
+) -> Literal["no_context_conversation", "agentic_context_dependent_conversation", "persona_question",]:
     print("determine_conversation_type")
 
     # persona
@@ -253,8 +250,12 @@ def agentic_context_dependent_conversation(state: GraphState):
         answer = callback_data.get('answer', '')
         memories_found = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        chart_data = callback_data.get('chart_data')
 
-        return {"answer": answer, "memories_found": memories_found, "ask_for_nps": ask_for_nps}
+        result = {"answer": answer, "memories_found": memories_found, "ask_for_nps": ask_for_nps}
+        if chart_data:
+            result["chart_data"] = chart_data
+        return result
 
     # no streaming - not yet implemented
     return {"answer": "Streaming required for agentic mode", "ask_for_nps": False}
@@ -603,6 +604,9 @@ async def execute_graph_chat_stream(
     callback_data['answer'] = result.get("answer")
     callback_data['memories_found'] = result.get("memories_found", [])
     callback_data['ask_for_nps'] = result.get('ask_for_nps', False)
+    chart_data = result.get('chart_data')
+    if chart_data:
+        callback_data['chart_data'] = chart_data
 
     yield None
     return

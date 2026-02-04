@@ -430,7 +430,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get deviceSettings => 'Geräteeinstellungen';
 
   @override
-  String get chatTools => 'Chat-Tools';
+  String get integrations => 'Integrationen';
 
   @override
   String get feedbackBug => 'Feedback / Fehler';
@@ -590,7 +590,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get starOngoing => 'Laufende Unterhaltung favorisieren';
 
   @override
-  String get off => 'Off';
+  String get off => 'Aus';
 
   @override
   String get max => 'Max';
@@ -1020,13 +1020,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Verbinden';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Demnächst';
 
   @override
-  String get chatToolsFooter => 'Verbinden Sie Ihre Apps, um Daten und Metriken im Chat anzuzeigen.';
+  String get integrationsFooter => 'Verbinden Sie Ihre Apps, um Daten und Metriken im Chat anzuzeigen.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1667,7 +1667,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get whatShouldWeMake => 'Was sollen wir machen?';
 
   @override
-  String get appName => 'App-Name';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beschreibung';
@@ -2287,7 +2287,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get folderName => 'Ordnername';
 
   @override
-  String get descriptionOptional => 'Beschreibung (optional)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Ordner konnte nicht gelöscht werden';
@@ -7854,47 +7854,275 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Gerät unterstützt keine WiFi-Synchronisierung, Wechsel zu Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health ist auf diesem Gerät nicht verfügbar';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Audio herunterladen';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Audio erfolgreich heruntergeladen';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Audio-Download fehlgeschlagen';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Lade Audio herunter...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Audio teilen';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Bereite Audio vor';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Hole Audiodateien...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Lade Audio herunter';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Verarbeite Audio';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombiniere Audiodateien...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Audio bereit';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Öffne Freigabeblatt...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Teilen fehlgeschlagen';
+
+  @override
+  String get dailyRecaps => 'Tägliche Zusammenfassungen';
+
+  @override
+  String get removeFilter => 'Filter Entfernen';
+
+  @override
+  String get categoryConversationAnalysis => 'Gesprächsanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Persönlichkeitsklon';
+
+  @override
+  String get categoryHealth => 'Gesundheit';
+
+  @override
+  String get categoryEducation => 'Bildung';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionale Unterstützung';
+
+  @override
+  String get categoryProductivity => 'Produktivität';
+
+  @override
+  String get categoryEntertainment => 'Unterhaltung';
+
+  @override
+  String get categoryFinancial => 'Finanzen';
+
+  @override
+  String get categoryTravel => 'Reisen';
+
+  @override
+  String get categorySafety => 'Sicherheit';
+
+  @override
+  String get categoryShopping => 'Einkaufen';
+
+  @override
+  String get categorySocial => 'Soziales';
+
+  @override
+  String get categoryNews => 'Nachrichten';
+
+  @override
+  String get categoryUtilities => 'Werkzeuge';
+
+  @override
+  String get categoryOther => 'Sonstiges';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Gespräche';
+
+  @override
+  String get capabilityExternalIntegration => 'Externe Integration';
+
+  @override
+  String get capabilityNotification => 'Benachrichtigung';
+
+  @override
+  String get triggerAudioBytes => 'Audio-Bytes';
+
+  @override
+  String get triggerConversationCreation => 'Gesprächserstellung';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkript verarbeitet';
+
+  @override
+  String get actionCreateConversations => 'Gespräche erstellen';
+
+  @override
+  String get actionCreateMemories => 'Erinnerungen erstellen';
+
+  @override
+  String get actionReadConversations => 'Gespräche lesen';
+
+  @override
+  String get actionReadMemories => 'Erinnerungen lesen';
+
+  @override
+  String get actionReadTasks => 'Aufgaben lesen';
+
+  @override
+  String get scopeUserName => 'Benutzername';
+
+  @override
+  String get scopeUserFacts => 'Benutzerfakten';
+
+  @override
+  String get scopeUserConversations => 'Benutzergespräche';
+
+  @override
+  String get scopeUserChat => 'Benutzer-Chat';
+
+  @override
+  String get capabilitySummary => 'Zusammenfassung';
+
+  @override
+  String get capabilityFeatured => 'Empfohlen';
+
+  @override
+  String get capabilityTasks => 'Aufgaben';
+
+  @override
+  String get capabilityIntegrations => 'Integrationen';
+
+  @override
+  String get categoryPersonalityClones => 'Persönlichkeitsklone';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivität & Lebensstil';
+
+  @override
+  String get categorySocialEntertainment => 'Soziales & Unterhaltung';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitätswerkzeuge';
+
+  @override
+  String get categoryPersonalWellness => 'Persönliches Wohlbefinden';
+
+  @override
+  String get rating => 'Bewertung';
+
+  @override
+  String get categories => 'Kategorien';
+
+  @override
+  String get sortBy => 'Sortieren';
+
+  @override
+  String get highestRating => 'Höchste Bewertung';
+
+  @override
+  String get lowestRating => 'Niedrigste Bewertung';
+
+  @override
+  String get resetFilters => 'Filter zurücksetzen';
+
+  @override
+  String get applyFilters => 'Filter anwenden';
+
+  @override
+  String get mostInstalls => 'Meiste Installationen';
+
+  @override
+  String get couldNotOpenUrl => 'Die URL konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

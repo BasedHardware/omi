@@ -131,11 +131,45 @@ After scoring, issues are assigned a lane.
 - Needs Info: Missing repro steps, logs, versions, or clarity
 - Park: Out of scope or low leverage
 
-Labels such as needs-context, good first issue, and help wanted are used to reflect lanes.
+---
+
+## 8. GitHub Labels
+
+Issues are labeled with exactly one label from each category.
+
+### Layer Labels (cool blues)
+
+| Label | Color | Description |
+|-------|-------|-------------|
+| `capture` | `#0ea5e9` | Audio recording, device pairing, BLE |
+| `understand` | `#38bdf8` | Speech-to-text, language detection |
+| `memory` | `#06b6d4` | Memory creation, syncing, storage |
+| `intelligence` | `#2563eb` | Summaries, insights, action items |
+| `retrieval-action` | `#1d4ed8` | Search, questions, tasks, exports |
+| `ux-polish` | `#60a5fa` | UI layout, animations, wording |
+| `docs-tooling` | `#93c5fd` | Documentation, examples, dev tools |
+
+### Priority Labels (warm reds/oranges)
+
+| Label | Color | Score Range |
+|-------|-------|-------------|
+| `p0` | `#7f1d1d` | ≥30 (Existential) |
+| `p1` | `#dc2626` | 22-29 (Critical) |
+| `p2` | `#f97316` | 14-21 (Important) |
+| `p3` | `#f59e0b` | <14 (Backlog) |
+
+### Lane Labels (greens/neutral)
+
+| Label | Color | Description |
+|-------|-------|-------------|
+| `maintainer` | `#14532d` | High-risk, cross-system changes |
+| `help-wanted` | `#22c55e` | Open to contributors |
+| `needs-info` | `#64748b` | Missing repro, logs, versions |
+| `parked` | `#9ca3af` | Out of scope, low leverage |
 
 ---
 
-## 8. Triage Rules
+## 9. Triage Rules
 
 - Issues are signals, not commands. Community input is invaluable, but maintainers decide priority.
 - Popularity does not determine urgency. Reactions and comments do not outweigh core system health.
@@ -144,31 +178,29 @@ Labels such as needs-context, good first issue, and help wanted are used to refl
 
 ---
 
-## 9. Examples
+## 10. Examples
 
 Example: Recording stops unexpectedly
-- Layer: Capture (5)
+- Layer: `capture` (weight 5)
 - Severity: 5
 - Trust Impact: 5
 - Frequency: 4
 - Leverage: 4
 - Cost: 3
-
-Score: 35 -> P0
+- **Score: 35 → `p0` + `maintainer`**
 
 Example: Improve summary phrasing
-- Layer: Intelligence (3)
+- Layer: `intelligence` (weight 3)
 - Severity: 2
 - Trust Impact: 1
 - Frequency: 3
 - Leverage: 2
 - Cost: 2
-
-Score: 10 -> P3
+- **Score: 10 → `p3` + `help-wanted`**
 
 ---
 
-## 10. Final Principle
+## 11. Final Principle
 
 Omi exists to remember life. Anything that threatens memory reliability takes precedence over everything else.
 

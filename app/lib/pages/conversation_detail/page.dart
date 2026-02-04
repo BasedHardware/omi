@@ -14,6 +14,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
@@ -69,6 +70,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   TabController? _controller;
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
+
+  // Callback to seek audio to transcript segment
+  Future<void> Function(double)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
@@ -482,8 +486,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Audio: ${provider.conversation.structured.title}',
+          [XFile(file.path, mimeType: 'audio/wav')],
         );
 
         // Track successful completion
@@ -950,6 +953,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     });
                                   }
                                 },
+                                onSegmentTap: (segment) async {
+                                  if (selectedTab != ConversationTab.transcript) {
+                                    setState(() {
+                                      selectedTab = ConversationTab.transcript;
+                                    });
+                                    _controller!.animateTo(0);
+                                  }
+
+                                  // Seek to segment using callback
+                                  if (_seekToSegmentCallback != null) {
+                                    await _seekToSegmentCallback!(segment.start);
+                                    HapticFeedback.lightImpact();
+                                  }
+                                },
                               ),
                               SummaryTab(
                                 searchQuery: _searchQuery,
@@ -992,6 +1009,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
                       hasActionItems: hasActionItems,
+                      onSeekFunctionReady: (seekFunction) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            setState(() {
+                              _seekToSegmentCallback = seekFunction;
+                            });
+                          }
+                        });
+                      },
                       onTabSelected: (tab) {
                         int index;
                         switch (tab) {
@@ -1336,12 +1362,14 @@ class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
 
   const TranscriptWidgets({
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
   });
 
   @override
@@ -1405,6 +1433,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 searchQuery: widget.searchQuery,
                 currentResultIndex: widget.currentResultIndex,
                 onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+                onSegmentTap: widget.onSegmentTap,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {

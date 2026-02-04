@@ -426,7 +426,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
-  String get chatTools => 'Chatværktøjer';
+  String get integrations => 'Integrationer';
 
   @override
   String get feedbackBug => 'Feedback / Fejl';
@@ -1014,13 +1014,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get vocabularyHint => 'Ordforråd';
 
   @override
-  String get connect => 'Forbind';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Forbind dine apps for at se data og målinger i chat.';
+  String get integrationsFooter => 'Forbind dine apps for at se data og målinger i chat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1656,7 +1656,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get whatShouldWeMake => 'Hvad skal vi lave?';
 
   @override
-  String get appName => 'App-navn';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beskrivelse';
@@ -2248,7 +2248,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get folderName => 'Mappenavn';
 
   @override
-  String get descriptionOptional => 'Beskrivelse (valgfrit)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kunne ikke slette mappe';
@@ -7772,47 +7772,275 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Enheden understøtter ikke WiFi-synkronisering, skifter til Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health er ikke tilgængelig på denne enhed';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Download lyd';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Lyd downloadet succesfuldt';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Kunne ikke downloade lyd';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Downloader lyd...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Del lyd';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Forbereder lyd';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Henter lydfiler...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Downloader lyd';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Behandler lyd';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombinerer lydfiler...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Lyd klar';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Åbner delingsark...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Deling mislykkedes';
+
+  @override
+  String get dailyRecaps => 'Daglige Opsummeringer';
+
+  @override
+  String get removeFilter => 'Fjern Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtaleanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighedsklon';
+
+  @override
+  String get categoryHealth => 'Sundhed';
+
+  @override
+  String get categoryEducation => 'Uddannelse';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Følelsesmæssig støtte';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underholdning';
+
+  @override
+  String get categoryFinancial => 'Økonomi';
+
+  @override
+  String get categoryTravel => 'Rejser';
+
+  @override
+  String get categorySafety => 'Sikkerhed';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Socialt';
+
+  @override
+  String get categoryNews => 'Nyheder';
+
+  @override
+  String get categoryUtilities => 'Værktøjer';
+
+  @override
+  String get categoryOther => 'Andet';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Samtaler';
+
+  @override
+  String get capabilityExternalIntegration => 'Ekstern integration';
+
+  @override
+  String get capabilityNotification => 'Notifikation';
+
+  @override
+  String get triggerAudioBytes => 'Lyd-bytes';
+
+  @override
+  String get triggerConversationCreation => 'Samtaleoprettelse';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transskription behandlet';
+
+  @override
+  String get actionCreateConversations => 'Opret samtaler';
+
+  @override
+  String get actionCreateMemories => 'Opret minder';
+
+  @override
+  String get actionReadConversations => 'Læs samtaler';
+
+  @override
+  String get actionReadMemories => 'Læs minder';
+
+  @override
+  String get actionReadTasks => 'Læs opgaver';
+
+  @override
+  String get scopeUserName => 'Brugernavn';
+
+  @override
+  String get scopeUserFacts => 'Brugerfakta';
+
+  @override
+  String get scopeUserConversations => 'Brugersamtaler';
+
+  @override
+  String get scopeUserChat => 'Brugerchat';
+
+  @override
+  String get capabilitySummary => 'Resumé';
+
+  @override
+  String get capabilityFeatured => 'Udvalgte';
+
+  @override
+  String get capabilityTasks => 'Opgaver';
+
+  @override
+  String get capabilityIntegrations => 'Integrationer';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighedskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Socialt og underholdning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsværktøjer';
+
+  @override
+  String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Bedømmelse';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Højeste bedømmelse';
+
+  @override
+  String get lowestRating => 'Laveste bedømmelse';
+
+  @override
+  String get resetFilters => 'Nulstil filtre';
+
+  @override
+  String get applyFilters => 'Anvend filtre';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
+
+  @override
+  String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

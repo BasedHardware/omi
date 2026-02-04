@@ -427,7 +427,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override
-  String get chatTools => 'Nástroje chatu';
+  String get integrations => 'Integrácie';
 
   @override
   String get feedbackBug => 'Spätná väzba / chyba';
@@ -451,7 +451,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikácii a zariadení boli skopírované';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Zhrnutie 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše súkromie, vaša kontrola';
@@ -1017,13 +1017,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Pripojiť';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Čoskoro';
 
   @override
-  String get chatToolsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
+  String get integrationsFooter => 'Pripojte svoje aplikácie na zobrazenie údajov a metrík v chate.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1658,7 +1658,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get whatShouldWeMake => 'Čo by sme mali vytvoriť?';
 
   @override
-  String get appName => 'Názov aplikácie';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Popis';
@@ -2272,7 +2272,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get folderName => 'Názov priečinka';
 
   @override
-  String get descriptionOptional => 'Popis (voliteľné)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Odstránenie priečinka zlyhalo';
@@ -7778,47 +7778,275 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zariadenie nepodporuje WiFi synchronizáciu, prepínanie na Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nie je na tomto zariadení k dispozícii';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Stiahnuť zvuk';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Zvuk bol úspešne stiahnutý';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Sťahovanie zvuku zlyhalo';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Sťahovanie zvuku...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Zdieľať zvuk';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Príprava zvuku';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Získavanie zvukových súborov...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Sťahovanie zvuku';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Spracovanie zvuku';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Kombinovanie zvukových súborov...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Zvuk je pripravený';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Otváranie listu zdieľania...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Zdieľanie zlyhalo';
+
+  @override
+  String get dailyRecaps => 'Denné Súhrny';
+
+  @override
+  String get removeFilter => 'Odstrániť Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Analýza konverzácií';
+
+  @override
+  String get categoryPersonalityClone => 'Klon osobnosti';
+
+  @override
+  String get categoryHealth => 'Zdravie';
+
+  @override
+  String get categoryEducation => 'Vzdelávanie';
+
+  @override
+  String get categoryCommunication => 'Komunikácia';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocionálna podpora';
+
+  @override
+  String get categoryProductivity => 'Produktivita';
+
+  @override
+  String get categoryEntertainment => 'Zábava';
+
+  @override
+  String get categoryFinancial => 'Financie';
+
+  @override
+  String get categoryTravel => 'Cestovanie';
+
+  @override
+  String get categorySafety => 'Bezpečnosť';
+
+  @override
+  String get categoryShopping => 'Nakupovanie';
+
+  @override
+  String get categorySocial => 'Sociálne';
+
+  @override
+  String get categoryNews => 'Správy';
+
+  @override
+  String get categoryUtilities => 'Nástroje';
+
+  @override
+  String get categoryOther => 'Ostatné';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Konverzácie';
+
+  @override
+  String get capabilityExternalIntegration => 'Externá integrácia';
+
+  @override
+  String get capabilityNotification => 'Oznámenie';
+
+  @override
+  String get triggerAudioBytes => 'Audio bajty';
+
+  @override
+  String get triggerConversationCreation => 'Vytvorenie konverzácie';
+
+  @override
+  String get triggerTranscriptProcessed => 'Prepis spracovaný';
+
+  @override
+  String get actionCreateConversations => 'Vytvoriť konverzácie';
+
+  @override
+  String get actionCreateMemories => 'Vytvoriť spomienky';
+
+  @override
+  String get actionReadConversations => 'Čítať konverzácie';
+
+  @override
+  String get actionReadMemories => 'Čítať spomienky';
+
+  @override
+  String get actionReadTasks => 'Čítať úlohy';
+
+  @override
+  String get scopeUserName => 'Používateľské meno';
+
+  @override
+  String get scopeUserFacts => 'Fakty o používateľovi';
+
+  @override
+  String get scopeUserConversations => 'Konverzácie používateľa';
+
+  @override
+  String get scopeUserChat => 'Chat používateľa';
+
+  @override
+  String get capabilitySummary => 'Súhrn';
+
+  @override
+  String get capabilityFeatured => 'Odporúčané';
+
+  @override
+  String get capabilityTasks => 'Úlohy';
+
+  @override
+  String get capabilityIntegrations => 'Integrácie';
+
+  @override
+  String get categoryPersonalityClones => 'Klony osobností';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivita a životný štýl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociálne a zábava';
+
+  @override
+  String get categoryProductivityTools => 'Nástroje produktivity';
+
+  @override
+  String get categoryPersonalWellness => 'Osobná pohoda';
+
+  @override
+  String get rating => 'Hodnotenie';
+
+  @override
+  String get categories => 'Kategórie';
+
+  @override
+  String get sortBy => 'Zoradiť';
+
+  @override
+  String get highestRating => 'Najvyššie hodnotenie';
+
+  @override
+  String get lowestRating => 'Najnižšie hodnotenie';
+
+  @override
+  String get resetFilters => 'Resetovať filtre';
+
+  @override
+  String get applyFilters => 'Použiť filtre';
+
+  @override
+  String get mostInstalls => 'Najviac inštalácií';
+
+  @override
+  String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

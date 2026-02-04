@@ -42,22 +42,14 @@ from utils.retrieval.tools import (
     update_calendar_event_tool,
     delete_calendar_event_tool,
     get_gmail_messages_tool,
-    get_whoop_sleep_tool,
-    get_whoop_recovery_tool,
-    get_whoop_workout_tool,
     get_apple_health_steps_tool,
     get_apple_health_sleep_tool,
     get_apple_health_heart_rate_tool,
     get_apple_health_workouts_tool,
     get_apple_health_summary_tool,
-    search_notion_pages_tool,
-    get_twitter_tweets_tool,
-    get_github_pull_requests_tool,
-    get_github_issues_tool,
-    create_github_issue_tool,
-    close_github_issue_tool,
     search_files_tool,
     manage_daily_summary_tool,
+    create_chart_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -88,15 +80,6 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
     if tool_obj and hasattr(tool_obj, 'status_message') and tool_obj.status_message:
         return tool_obj.status_message
     tool_display_map = {
-        'search_notion_pages_tool': 'Searching Notion',
-        'get_whoop_sleep_tool': 'Checking Whoop sleep data',
-        'get_whoop_recovery_tool': 'Checking Whoop recovery data',
-        'get_whoop_workout_tool': 'Checking Whoop workout data',
-        'get_twitter_tweets_tool': 'Checking Twitter',
-        'get_github_pull_requests_tool': 'Checking GitHub pull requests',
-        'get_github_issues_tool': 'Checking GitHub issues',
-        'create_github_issue_tool': 'Creating GitHub issue',
-        'close_github_issue_tool': 'Closing GitHub issue',
         'get_calendar_events_tool': 'Checking calendar',
         'create_calendar_event_tool': 'Creating calendar event',
         'update_calendar_event_tool': 'Updating calendar event',
@@ -112,6 +95,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_action_item_tool': 'Updating action item',
         'get_omi_product_info_tool': 'Looking up product info',
         'manage_daily_summary_tool': 'Updating notification settings',
+        'create_chart_tool': 'Creating chart',
     }
 
     # Try exact match first
@@ -119,15 +103,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         return tool_display_map[tool_name]
 
     # Try partial matches for common patterns
-    if 'notion' in tool_name.lower():
-        return 'Searching Notion'
-    elif 'whoop' in tool_name.lower():
-        return 'Checking Whoop data'
-    elif 'twitter' in tool_name.lower():
-        return 'Checking Twitter'
-    elif 'github' in tool_name.lower():
-        return 'Checking GitHub'
-    elif 'calendar' in tool_name.lower():
+    if 'calendar' in tool_name.lower():
         return 'Checking calendar'
     elif 'perplexity' in tool_name.lower() or 'search' in tool_name.lower():
         return 'Searching the web'
@@ -250,22 +226,14 @@ def execute_agentic_chat(
         update_calendar_event_tool,
         delete_calendar_event_tool,
         get_gmail_messages_tool,
-        get_whoop_sleep_tool,
-        get_whoop_recovery_tool,
-        get_whoop_workout_tool,
         get_apple_health_steps_tool,
         get_apple_health_sleep_tool,
         get_apple_health_heart_rate_tool,
         get_apple_health_workouts_tool,
         get_apple_health_summary_tool,
-        search_notion_pages_tool,
-        get_twitter_tweets_tool,
-        get_github_pull_requests_tool,
-        get_github_issues_tool,
-        create_github_issue_tool,
-        close_github_issue_tool,
         search_files_tool,
         manage_daily_summary_tool,
+        create_chart_tool,
     ]
 
     # Load tools from enabled apps
@@ -392,22 +360,14 @@ async def execute_agentic_chat_stream(
         update_calendar_event_tool,
         delete_calendar_event_tool,
         get_gmail_messages_tool,
-        get_whoop_sleep_tool,
-        get_whoop_recovery_tool,
-        get_whoop_workout_tool,
         get_apple_health_steps_tool,
         get_apple_health_sleep_tool,
         get_apple_health_heart_rate_tool,
         get_apple_health_workouts_tool,
         get_apple_health_summary_tool,
-        search_notion_pages_tool,
-        get_twitter_tweets_tool,
-        get_github_pull_requests_tool,
-        get_github_issues_tool,
-        create_github_issue_tool,
-        close_github_issue_tool,
         search_files_tool,
         manage_daily_summary_tool,
+        create_chart_tool,
     ]
 
     # Load tools from enabled apps
@@ -534,6 +494,10 @@ async def execute_agentic_chat_stream(
             # Extract conversations collected by tools
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
             callback_data['ask_for_nps'] = tool_usage_count > 0
+            # Extract chart data if a chart tool was used
+            chart_data_from_config = config.get('configurable', {}).get('chart_data')
+            if chart_data_from_config:
+                callback_data['chart_data'] = chart_data_from_config
             print(f"📚 Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.CancelledError:
@@ -614,16 +578,8 @@ async def _run_agent_stream(
                     'update_calendar_event_tool',
                     'delete_calendar_event_tool',
                     'get_gmail_messages_tool',
-                    'get_whoop_sleep_tool',
-                    'get_whoop_recovery_tool',
-                    'get_whoop_workout_tool',
-                    'search_notion_pages_tool',
-                    'get_twitter_tweets_tool',
-                    'get_github_pull_requests_tool',
-                    'get_github_issues_tool',
-                    'create_github_issue_tool',
-                    'close_github_issue_tool',
                     'search_files_tool',
+                    'create_chart_tool',
                 }
 
                 # If tool name is not a standard tool and contains underscore, it's likely an app tool

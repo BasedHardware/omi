@@ -10,6 +10,7 @@ import 'package:upgrader/upgrader.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/settings/desktop_settings_modal.dart';
@@ -38,7 +39,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import '../../pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'apps/desktop_apps_page.dart';
@@ -169,6 +170,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void initState() {
     super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
     _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize shortcut service to listen for native navigation requests

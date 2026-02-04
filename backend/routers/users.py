@@ -15,6 +15,7 @@ from database import (
     user_usage as user_usage_db,
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
+    llm_usage as llm_usage_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -206,6 +207,33 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 
 
 # *************************************************
+# ************* ONBOARDING STATE ******************
+# *************************************************
+
+
+@router.get('/v1/users/onboarding', tags=['v1'])
+def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's onboarding state (completed status, acquisition source, etc.)."""
+    state = get_user_onboarding_state(uid)
+    return {
+        'completed': state.get('completed', False),
+        'acquisition_source': state.get('acquisition_source', ''),
+    }
+
+
+@router.patch('/v1/users/onboarding', tags=['v1'])
+def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """Update the user's onboarding state."""
+    current_state = get_user_onboarding_state(uid)
+    if 'completed' in data:
+        current_state['completed'] = data['completed']
+    if 'acquisition_source' in data:
+        current_state['acquisition_source'] = data['acquisition_source']
+    set_user_onboarding_state(uid, current_state)
+    return {'status': 'ok'}
+
+
+# *************************************************
 # ************* PRIVATE CLOUD SYNC ****************
 # *************************************************
 
@@ -228,14 +256,25 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 
 # TODO: consider adding person photo.
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
-def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
-    data = {
+def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a new person or return existing one with same name (idempotent by name).
+
+    This enables backward compatibility: old apps can call this API and get the
+    same person that backend already created, preventing duplicates.
+    """
+    # Check if person with same name already exists
+    existing_person = get_person_by_name(uid, data.name)
+    if existing_person:
+        return existing_person
+
+    # Create new person
+    person_data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    result = create_person(uid, data)
+    result = create_person(uid, person_data)
     return result
 
 
@@ -1003,3 +1042,91 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+# ***********************************
+# *** Mentor Notification Settings ***
+# ***********************************
+
+
+class MentorNotificationSettingsResponse(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+class MentorNotificationSettingsUpdate(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+@router.get('/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse)
+def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's mentor notification frequency preference.
+
+    Returns:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    frequency = notification_db.get_mentor_notification_frequency(uid)
+    return MentorNotificationSettingsResponse(frequency=frequency)
+
+
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+def update_mentor_notification_settings(
+    data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's mentor notification frequency preference.
+
+    Parameters:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    try:
+        notification_db.set_mentor_notification_frequency(uid, data.frequency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}
+
+
+# LLM Usage Tracking Endpoints
+
+
+@router.get('/v1/users/me/llm-usage', tags=['users'])
+def get_llm_usage(
+    days: int = Query(default=30, ge=1, le=365),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get LLM token usage summary for the current user.
+
+    Returns usage breakdown by feature for the specified time period.
+    """
+    summary = llm_usage_db.get_usage_summary(uid, days=days)
+    top_features = llm_usage_db.get_top_features(uid, days=days, limit=5)
+
+    return {
+        'summary': summary,
+        'top_features': top_features,
+        'period_days': days,
+    }
+
+
+@router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
+def get_llm_top_features(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=3, ge=1, le=10),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get top features by LLM token usage for the current user.
+
+    Returns the top N features sorted by total token consumption.
+    """
+    return llm_usage_db.get_top_features(uid, days=days, limit=limit)

@@ -3,10 +3,11 @@ import time
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import List, AsyncGenerator
+from typing import AsyncGenerator, List, Optional, Tuple
 
 import database.chat as chat_db
 import database.notifications as notification_db
+import database.users as user_db
 from database.apps import record_app_usage
 from models.chat import ChatSession, Message, ResponseMessage, MessageConversation
 from models.conversation import Conversation
@@ -16,10 +17,41 @@ from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
+from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 
 
-def transcribe_voice_message_segment(path: str):
+def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
+    """
+    Determine language selection for voice message transcription.
+
+    Returns a single language string: either a specific language code (e.g., 'en', 'es')
+    or 'multi' for auto-detection mode.
+    """
+    if request_language:
+        normalized = request_language.strip()
+        if normalized:
+            request_lower = normalized.lower()
+            if request_lower == 'auto' or request_lower == 'multi':
+                return 'multi'
+            return normalized
+
+    user_language = user_db.get_user_language_preference(uid)
+    if user_language:
+        transcription_prefs = user_db.get_user_transcription_preferences(uid)
+        single_language_mode = transcription_prefs.get('single_language_mode', False)
+        if single_language_mode:
+            return user_language
+        return 'multi'
+
+    return 'multi'
+
+
+def transcribe_voice_message_segment(
+    path: str,
+    uid: str,
+    language: str = 'multi',
+) -> Tuple[Optional[str], Optional[str]]:
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -28,24 +60,43 @@ def transcribe_voice_message_segment(path: str):
 
     threading.Thread(target=delete_file).start()
 
-    words = deepgram_prerecorded(url, diarize=False)
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    is_multi = stt_language == 'multi'
+    if is_multi:
+        words, detected_language = deepgram_prerecorded(
+            url, diarize=False, language=stt_language, return_language=True, model=stt_model
+        )
+    else:
+        words = deepgram_prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
+        detected_language = stt_language
     if not words:
         print('no words')
-        return None
+        return None, detected_language
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    del words
     if not transcript_segments:
         print('failed to get deepgram segments')
-        return None
+        return None, detected_language
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
+    transcript_segments.clear()
     if len(text) == 0:
         print('voice message text is empty')
-        return None
+        return None, detected_language
 
-    return text
+    return text, detected_language
 
 
-def process_voice_message_segment(path: str, uid: str):
+def process_voice_message_segment(
+    path: str,
+    uid: str,
+    language: str = 'multi',
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -54,13 +105,21 @@ def process_voice_message_segment(path: str, uid: str):
 
     threading.Thread(target=delete_file).start()
 
-    words = deepgram_prerecorded(url, diarize=False)
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    del words
     if not transcript_segments:
         print('failed to get deepgram segments')
         return []
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
+    transcript_segments.clear()
     if len(text) == 0:
         print('voice message text is empty')
         return []
@@ -76,7 +135,8 @@ def process_voice_message_segment(path: str, uid: str):
     app_id = None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
+    with track_usage(uid, Features.CHAT):
+        response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
     memories_id = []
     # check if the items in the conversations list are dict
     if memories:
@@ -111,7 +171,11 @@ def process_voice_message_segment(path: str, uid: str):
     return [message.dict(), ai_message_resp]
 
 
-async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGenerator[str, None]:
+async def process_voice_message_segment_stream(
+    path: str,
+    uid: str,
+    language: str = 'multi',
+) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -120,13 +184,21 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     threading.Thread(target=delete_file).start()
 
-    words = deepgram_prerecorded(url, diarize=False)
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+
+    # Get the appropriate Deepgram model for this language
+    stt_language, stt_model = get_deepgram_model_for_language(language)
+
+    words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    del words
     if not transcript_segments:
         print('failed to get deepgram segments')
         return
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
+    transcript_segments.clear()
     if len(text) == 0:
         print('voice message text is empty')
         return
@@ -199,23 +271,28 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
     callback_data = {}
-    async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
-        if chunk:
-            data = chunk.replace("\n", "__CRLF__")
-            yield f'{data}\n\n'
+    # Set usage context for streaming (can't use 'with' across yields)
+    usage_token = set_usage_context(uid, Features.CHAT)
+    try:
+        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
+            if chunk:
+                data = chunk.replace("\n", "__CRLF__")
+                yield f'{data}\n\n'
 
-        else:
-            response = callback_data.get('answer')
-            if response:
-                ai_message, ask_for_nps = process_message(response, callback_data)
-                ai_message_dict = ai_message.dict()
-                response_message = ResponseMessage(**ai_message_dict)
-                response_message.ask_for_nps = ask_for_nps
-                data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                yield f"done: {data}\n\n"
+            else:
+                response = callback_data.get('answer')
+                if response:
+                    ai_message, ask_for_nps = process_message(response, callback_data)
+                    ai_message_dict = ai_message.dict()
+                    response_message = ResponseMessage(**ai_message_dict)
+                    response_message.ask_for_nps = ask_for_nps
+                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {data}\n\n"
 
-                # send notification
-                send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+                    # send notification
+                    send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+    finally:
+        reset_usage_context(usage_token)
 
     return
 

@@ -6,6 +6,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
@@ -49,6 +50,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       }
     });
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
   }
 
   @override

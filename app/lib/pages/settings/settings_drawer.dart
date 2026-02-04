@@ -26,8 +26,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -420,7 +421,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: context.l10n.chatTools,
+                title: context.l10n.integrations,
                 icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
@@ -474,6 +475,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: "What's New",
                 icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
+                  MixpanelManager().whatsNewOpened();
                   ChangelogSheet.showWithLoading(
                     context,
                     () => getAppChangelogs(limit: 5),

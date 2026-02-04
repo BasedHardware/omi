@@ -268,9 +268,11 @@ void wifi_turn_off(void)
 	atomic_set(&stop_tcp_traffic, 1);
 	current_wifi_state = WIFI_STATE_SHUTDOWN;
 
-	// wait for wifi to turn off
-	while (current_wifi_state != WIFI_STATE_OFF) {
+	// wait for wifi to turn off (max 10s)
+	int timeout_count = 0;
+	while (current_wifi_state != WIFI_STATE_OFF && timeout_count < 100) {
 		k_msleep(100);
+		timeout_count++;
 	}
 
     // Ensure WiFi power is off

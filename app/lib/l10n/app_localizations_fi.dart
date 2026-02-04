@@ -423,7 +423,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
-  String get chatTools => 'Chat-työkalut';
+  String get integrations => 'Integraatiot';
 
   @override
   String get feedbackBug => 'Palaute / Virhe';
@@ -447,7 +447,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appAndDeviceCopied => 'Sovelluksen ja laitteen tiedot kopioitu';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Katsaus 2025';
 
   @override
   String get yourPrivacyYourControl => 'Yksityisyytesi, sinun hallinnassasi';
@@ -582,7 +582,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get starOngoing => 'Merkitse käynnissä oleva keskustelu tähdellä';
 
   @override
-  String get off => 'Off';
+  String get off => 'Pois';
 
   @override
   String get max => 'Maks.';
@@ -1011,13 +1011,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Yhdistä';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Tulossa pian';
 
   @override
-  String get chatToolsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
+  String get integrationsFooter => 'Yhdistä sovelluksesi nähdäksesi tiedot ja mittarit chatissa.';
 
   @override
   String get completeAuthInBrowser => 'Viimeistele todennus selaimessasi. Kun olet valmis, palaa sovellukseen.';
@@ -1652,7 +1652,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get whatShouldWeMake => 'Mitä meidän pitäisi tehdä?';
 
   @override
-  String get appName => 'Sovelluksen nimi';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Kuvaus';
@@ -2264,7 +2264,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get folderName => 'Kansion nimi';
 
   @override
-  String get descriptionOptional => 'Kuvaus (valinnainen)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kansion poistaminen epäonnistui';
@@ -6819,7 +6819,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceIdLabel => 'Laitteen tunnus';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Tila';
 
   @override
   String get statusProcessed => 'Käsitelty';
@@ -7787,47 +7787,274 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Laite ei tue WiFi-synkronointia, vaihdetaan Bluetoothiin';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health ei ole käytettävissä tässä laitteessa';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Lataa ääni';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Ääni ladattu onnistuneesti';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Äänen lataus epäonnistui';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Ladataan ääntä...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Jaa ääni';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Valmistellaan ääntä';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Haetaan äänitiedostoja...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Ladataan ääntä';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Käsitellään ääntä';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Yhdistetään äänitiedostoja...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Ääni valmis';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Avataan jakamisnäyttöä...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Jakaminen epäonnistui';
+
+  @override
+  String get dailyRecaps => 'Päivittäiset Yhteenvedot';
+
+  @override
+  String get removeFilter => 'Poista Suodatin';
+
+  @override
+  String get categoryConversationAnalysis => 'Keskusteluanalyysi';
+
+  @override
+  String get categoryPersonalityClone => 'Persoonallisuusklooni';
+
+  @override
+  String get categoryHealth => 'Terveys';
+
+  @override
+  String get categoryEducation => 'Koulutus';
+
+  @override
+  String get categoryCommunication => 'Viestintä';
+
+  @override
+  String get categoryEmotionalSupport => 'Tunnetuki';
+
+  @override
+  String get categoryProductivity => 'Tuottavuus';
+
+  @override
+  String get categoryEntertainment => 'Viihde';
+
+  @override
+  String get categoryFinancial => 'Talous';
+
+  @override
+  String get categoryTravel => 'Matkailu';
+
+  @override
+  String get categorySafety => 'Turvallisuus';
+
+  @override
+  String get categoryShopping => 'Ostokset';
+
+  @override
+  String get categorySocial => 'Sosiaalinen';
+
+  @override
+  String get categoryNews => 'Uutiset';
+
+  @override
+  String get categoryUtilities => 'Työkalut';
+
+  @override
+  String get categoryOther => 'Muut';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Keskustelut';
+
+  @override
+  String get capabilityExternalIntegration => 'Ulkoinen integraatio';
+
+  @override
+  String get capabilityNotification => 'Ilmoitus';
+
+  @override
+  String get triggerAudioBytes => 'Äänitavut';
+
+  @override
+  String get triggerConversationCreation => 'Keskustelun luominen';
+
+  @override
+  String get triggerTranscriptProcessed => 'Litterointi käsitelty';
+
+  @override
+  String get actionCreateConversations => 'Luo keskusteluja';
+
+  @override
+  String get actionCreateMemories => 'Luo muistoja';
+
+  @override
+  String get actionReadConversations => 'Lue keskusteluja';
+
+  @override
+  String get actionReadMemories => 'Lue muistoja';
+
+  @override
+  String get actionReadTasks => 'Lue tehtäviä';
+
+  @override
+  String get scopeUserName => 'Käyttäjänimi';
+
+  @override
+  String get scopeUserFacts => 'Käyttäjän tiedot';
+
+  @override
+  String get scopeUserConversations => 'Käyttäjän keskustelut';
+
+  @override
+  String get scopeUserChat => 'Käyttäjän chat';
+
+  @override
+  String get capabilitySummary => 'Yhteenveto';
+
+  @override
+  String get capabilityFeatured => 'Suositellut';
+
+  @override
+  String get capabilityTasks => 'Tehtävät';
+
+  @override
+  String get capabilityIntegrations => 'Integraatiot';
+
+  @override
+  String get categoryPersonalityClones => 'Persoonallisuuskloonit';
+
+  @override
+  String get categoryProductivityLifestyle => 'Tuottavuus ja elämäntapa';
+
+  @override
+  String get categorySocialEntertainment => 'Sosiaalinen ja viihde';
+
+  @override
+  String get categoryProductivityTools => 'Tuottavuustyökalut';
+
+  @override
+  String get categoryPersonalWellness => 'Henkilökohtainen hyvinvointi';
+
+  @override
+  String get rating => 'Arvio';
+
+  @override
+  String get categories => 'Kategoriat';
+
+  @override
+  String get sortBy => 'Lajittele';
+
+  @override
+  String get highestRating => 'Korkein arvio';
+
+  @override
+  String get lowestRating => 'Matalin arvio';
+
+  @override
+  String get resetFilters => 'Nollaa suodattimet';
+
+  @override
+  String get applyFilters => 'Käytä suodattimia';
+
+  @override
+  String get mostInstalls => 'Eniten asennuksia';
+
+  @override
+  String get couldNotOpenUrl => 'URL-osoitetta ei voitu avata. Yritä uudelleen.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

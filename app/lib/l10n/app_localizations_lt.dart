@@ -425,7 +425,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override
-  String get chatTools => 'Pokalbių įrankiai';
+  String get integrations => 'Integracijos';
 
   @override
   String get feedbackBug => 'Atsiliepimai / Klaida';
@@ -449,7 +449,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appAndDeviceCopied => 'Programėlės ir įrenginio informacija nukopijuota';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 apžvalga';
 
   @override
   String get yourPrivacyYourControl => 'Jūsų privatumas, jūsų kontrolė';
@@ -1013,13 +1013,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Prisijungti';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Greitai';
 
   @override
-  String get chatToolsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
+  String get integrationsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
 
   @override
   String get completeAuthInBrowser => 'Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.';
@@ -1651,7 +1651,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get whatShouldWeMake => 'Ką turėtume sukurti?';
 
   @override
-  String get appName => 'Programėlės pavadinimas';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Aprašymas';
@@ -2265,7 +2265,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get folderName => 'Aplanko pavadinimas';
 
   @override
-  String get descriptionOptional => 'Aprašymas (neprivaloma)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Nepavyko ištrinti aplanko';
@@ -7793,47 +7793,275 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth';
 
   @override
-  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+  String get appleHealthNotAvailable => 'Apple Health nepasiekiama šiame įrenginyje';
 
   @override
-  String get downloadAudio => 'Download Audio';
+  String get downloadAudio => 'Atsisiųsti garsą';
 
   @override
-  String get audioDownloadSuccess => 'Audio downloaded successfully';
+  String get audioDownloadSuccess => 'Garsas sėkmingai atsisiųstas';
 
   @override
-  String get audioDownloadFailed => 'Failed to download audio';
+  String get audioDownloadFailed => 'Nepavyko atsisiųsti garso';
 
   @override
-  String get downloadingAudio => 'Downloading audio...';
+  String get downloadingAudio => 'Atsisiunčiamas garsas...';
 
   @override
-  String get shareAudio => 'Share Audio';
+  String get shareAudio => 'Bendrinti garsą';
 
   @override
-  String get preparingAudio => 'Preparing Audio';
+  String get preparingAudio => 'Ruošiamas garsas';
 
   @override
-  String get gettingAudioFiles => 'Getting audio files...';
+  String get gettingAudioFiles => 'Gaunami garso failai...';
 
   @override
-  String get downloadingAudioProgress => 'Downloading Audio';
+  String get downloadingAudioProgress => 'Atsisiunčiamas garsas';
 
   @override
-  String get processingAudio => 'Processing Audio';
+  String get processingAudio => 'Apdorojamas garsas';
 
   @override
-  String get combiningAudioFiles => 'Combining audio files...';
+  String get combiningAudioFiles => 'Sujungiami garso failai...';
 
   @override
-  String get audioReady => 'Audio Ready';
+  String get audioReady => 'Garsas paruoštas';
 
   @override
-  String get openingShareSheet => 'Opening share sheet...';
+  String get openingShareSheet => 'Atidaromas bendrinimo lapas...';
 
   @override
-  String get audioShareFailed => 'Share Failed';
+  String get audioShareFailed => 'Bendrinimas nepavyko';
+
+  @override
+  String get dailyRecaps => 'Dienos Apžvalgos';
+
+  @override
+  String get removeFilter => 'Pašalinti Filtrą';
+
+  @override
+  String get categoryConversationAnalysis => 'Pokalbių analizė';
+
+  @override
+  String get categoryPersonalityClone => 'Asmenybės klonas';
+
+  @override
+  String get categoryHealth => 'Sveikata';
+
+  @override
+  String get categoryEducation => 'Švietimas';
+
+  @override
+  String get categoryCommunication => 'Komunikacija';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocinė parama';
+
+  @override
+  String get categoryProductivity => 'Produktyvumas';
+
+  @override
+  String get categoryEntertainment => 'Pramogos';
+
+  @override
+  String get categoryFinancial => 'Finansai';
+
+  @override
+  String get categoryTravel => 'Kelionės';
+
+  @override
+  String get categorySafety => 'Saugumas';
+
+  @override
+  String get categoryShopping => 'Apsipirkimas';
+
+  @override
+  String get categorySocial => 'Socialinis';
+
+  @override
+  String get categoryNews => 'Naujienos';
+
+  @override
+  String get categoryUtilities => 'Įrankiai';
+
+  @override
+  String get categoryOther => 'Kita';
+
+  @override
+  String get capabilityChat => 'Pokalbis';
+
+  @override
+  String get capabilityConversations => 'Pokalbiai';
+
+  @override
+  String get capabilityExternalIntegration => 'Išorinė integracija';
+
+  @override
+  String get capabilityNotification => 'Pranešimas';
+
+  @override
+  String get triggerAudioBytes => 'Garso baitai';
+
+  @override
+  String get triggerConversationCreation => 'Pokalbio kūrimas';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripcija apdorota';
+
+  @override
+  String get actionCreateConversations => 'Kurti pokalbius';
+
+  @override
+  String get actionCreateMemories => 'Kurti prisiminimus';
+
+  @override
+  String get actionReadConversations => 'Skaityti pokalbius';
+
+  @override
+  String get actionReadMemories => 'Skaityti prisiminimus';
+
+  @override
+  String get actionReadTasks => 'Skaityti užduotis';
+
+  @override
+  String get scopeUserName => 'Vartotojo vardas';
+
+  @override
+  String get scopeUserFacts => 'Vartotojo faktai';
+
+  @override
+  String get scopeUserConversations => 'Vartotojo pokalbiai';
+
+  @override
+  String get scopeUserChat => 'Vartotojo pokalbis';
+
+  @override
+  String get capabilitySummary => 'Santrauka';
+
+  @override
+  String get capabilityFeatured => 'Rekomenduojami';
+
+  @override
+  String get capabilityTasks => 'Užduotys';
+
+  @override
+  String get capabilityIntegrations => 'Integracijos';
+
+  @override
+  String get categoryPersonalityClones => 'Asmenybių klonai';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktyvumas ir gyvenimo būdas';
+
+  @override
+  String get categorySocialEntertainment => 'Socialinis ir pramogos';
+
+  @override
+  String get categoryProductivityTools => 'Produktyvumo įrankiai';
+
+  @override
+  String get categoryPersonalWellness => 'Asmeninė gerovė';
+
+  @override
+  String get rating => 'Įvertinimas';
+
+  @override
+  String get categories => 'Kategorijos';
+
+  @override
+  String get sortBy => 'Rūšiuoti';
+
+  @override
+  String get highestRating => 'Aukščiausias įvertinimas';
+
+  @override
+  String get lowestRating => 'Žemiausias įvertinimas';
+
+  @override
+  String get resetFilters => 'Atstatyti filtrus';
+
+  @override
+  String get applyFilters => 'Taikyti filtrus';
+
+  @override
+  String get mostInstalls => 'Daugiausia įdiegimų';
+
+  @override
+  String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

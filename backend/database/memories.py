@@ -91,7 +91,7 @@ def get_memories(
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     print("get_memories", len(memories))
-    result = [memory for memory in memories if memory['user_review'] is not False]
+    result = [memory for memory in memories if memory.get('user_review') is not False]
     return result
 
 

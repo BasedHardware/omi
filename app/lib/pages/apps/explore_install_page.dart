@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -17,11 +17,12 @@ import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'add_app.dart';
+import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -170,8 +171,27 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               final groupId = groupMap != null ? (groupMap['id'] as String? ?? '') : '';
               final groupApps = group['data'] as List<App>? ?? <App>[];
 
+              // Get localized section title
+              String localizedSectionTitle;
+              if (capabilityMap != null) {
+                final capability = AppCapability(
+                  title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                  id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '_') : groupId,
+                );
+                localizedSectionTitle = capability.getLocalizedTitle(context);
+              } else {
+                final category = context.read<AddAppProvider>().categories.firstWhere(
+                      (cat) => cat.id == groupId || cat.title == groupTitle,
+                      orElse: () => Category(
+                        title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                        id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
+                      ),
+                    );
+                localizedSectionTitle = category.getLocalizedTitle(context);
+              }
+
               return CategorySection(
-                categoryName: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                categoryName: localizedSectionTitle,
                 apps: groupApps,
                 showViewAll: groupApps.length > 9,
                 onViewAll: () {
@@ -215,7 +235,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerCreateButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -275,7 +295,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerSearchBar() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -325,7 +345,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerCategorySection() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -458,7 +478,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildShimmerListItem() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -581,8 +601,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                         ? _buildShimmerCreateButton()
                         : GestureDetector(
                             onTap: () {
-                              MixpanelManager().pageOpened('Submit App');
-                              routeToPage(context, const AddAppPage());
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (context) => const CreateOptionsSheet(),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                ),
+                              );
                             },
                             child: Container(
                               padding: const EdgeInsets.all(20),

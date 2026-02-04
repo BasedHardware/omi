@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -81,7 +81,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       child: CustomPaint(
                         painter: AudioWavePainter(
                           levels: provider.audioLevels,
-                          timestamp: DateTime.now(),
                         ),
                       ),
                     ),
@@ -116,7 +115,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Color(0xFF35343B),
                     highlightColor: Colors.white,
                     child: Text(
@@ -184,7 +183,6 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       child: CustomPaint(
                         painter: AudioWavePainter(
                           levels: provider.audioLevels,
-                          timestamp: DateTime.now(),
                         ),
                       ),
                     ),
@@ -233,16 +231,16 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
 
 class AudioWavePainter extends CustomPainter {
   final List<double> levels;
-  // Add timestamp to control repaint frequency
-  final DateTime timestamp;
 
   AudioWavePainter({
-    required this.levels,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
+    required List<double> levels,
+  }) : levels = List<double>.from(levels);
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Guard against empty levels to prevent divide-by-zero
+    if (levels.isEmpty) return;
+
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 4 // Slightly thicker for better visibility
@@ -273,6 +271,11 @@ class AudioWavePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant AudioWavePainter oldDelegate) {
-    return true;
+    // Only repaint if the audio levels have actually changed
+    if (levels.length != oldDelegate.levels.length) return true;
+    for (int i = 0; i < levels.length; i++) {
+      if ((levels[i] - oldDelegate.levels[i]).abs() > 0.01) return true;
+    }
+    return false;
   }
 }

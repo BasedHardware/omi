@@ -425,7 +425,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceSettings => 'Device Settings';
 
   @override
-  String get chatTools => 'Chat Tools';
+  String get integrations => 'Integrations';
 
   @override
   String get feedbackBug => 'Feedback / Bug';
@@ -1018,7 +1018,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get comingSoon => 'Coming Soon';
 
   @override
-  String get chatToolsFooter => 'Connect your apps to view data and metrics in chat.';
+  String get integrationsFooter => 'Connect your apps to view data and metrics in chat.';
 
   @override
   String get completeAuthInBrowser => 'Please complete authentication in your browser. Once done, return to the app.';
@@ -2674,7 +2674,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getInsightsInstantly => 'Get insights and summaries instantly';
 
   @override
-  String get showAll => 'Show all →';
+  String get showAll => 'Show All';
 
   @override
   String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
@@ -7829,4 +7829,231 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Daily Recaps';
+
+  @override
+  String get removeFilter => 'Remove Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Conversation Analysis';
+
+  @override
+  String get categoryPersonalityClone => 'Personality Clone';
+
+  @override
+  String get categoryHealth => 'Health';
+
+  @override
+  String get categoryEducation => 'Education';
+
+  @override
+  String get categoryCommunication => 'Communication';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotional Support';
+
+  @override
+  String get categoryProductivity => 'Productivity';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryFinancial => 'Financial';
+
+  @override
+  String get categoryTravel => 'Travel';
+
+  @override
+  String get categorySafety => 'Safety';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'News';
+
+  @override
+  String get categoryUtilities => 'Utilities';
+
+  @override
+  String get categoryOther => 'Other';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversations';
+
+  @override
+  String get capabilityExternalIntegration => 'External Integration';
+
+  @override
+  String get capabilityNotification => 'Notification';
+
+  @override
+  String get triggerAudioBytes => 'Audio Bytes';
+
+  @override
+  String get triggerConversationCreation => 'Conversation Creation';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcript Processed';
+
+  @override
+  String get actionCreateConversations => 'Create conversations';
+
+  @override
+  String get actionCreateMemories => 'Create memories';
+
+  @override
+  String get actionReadConversations => 'Read conversations';
+
+  @override
+  String get actionReadMemories => 'Read memories';
+
+  @override
+  String get actionReadTasks => 'Read tasks';
+
+  @override
+  String get scopeUserName => 'User Name';
+
+  @override
+  String get scopeUserFacts => 'User Facts';
+
+  @override
+  String get scopeUserConversations => 'User Conversations';
+
+  @override
+  String get scopeUserChat => 'User Chat';
+
+  @override
+  String get capabilitySummary => 'Summary';
+
+  @override
+  String get capabilityFeatured => 'Featured';
+
+  @override
+  String get capabilityTasks => 'Tasks';
+
+  @override
+  String get capabilityIntegrations => 'Integrations';
+
+  @override
+  String get categoryPersonalityClones => 'Personality Clones';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+
+  @override
+  String get categorySocialEntertainment => 'Social & Entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productivity & Tools';
+
+  @override
+  String get categoryPersonalWellness => 'Personal & Lifestyle';
+
+  @override
+  String get rating => 'Rating';
+
+  @override
+  String get categories => 'Categories';
+
+  @override
+  String get sortBy => 'Sort';
+
+  @override
+  String get highestRating => 'Highest Rating';
+
+  @override
+  String get lowestRating => 'Lowest Rating';
+
+  @override
+  String get resetFilters => 'Reset filters';
+
+  @override
+  String get applyFilters => 'Apply filters';
+
+  @override
+  String get mostInstalls => 'Most Installs';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
 }

@@ -50,6 +50,7 @@ from utils.llm.conversation_processing import (
     assign_conversation_to_folder,
 )
 from utils.analytics import record_usage
+from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
@@ -72,6 +73,17 @@ from utils.other.storage import precache_conversation_audio
 
 
 def _get_structured(
+    uid: str,
+    language_code: str,
+    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
+    force_process: bool = False,
+    people: List[Person] = None,
+) -> Tuple[Structured, bool]:
+    with track_usage(uid, Features.CONVERSATION_PROCESSING):
+        return _get_structured_inner(uid, language_code, conversation, force_process, people)
+
+
+def _get_structured_inner(
     uid: str,
     language_code: str,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
@@ -382,7 +394,6 @@ def _extract_memories(uid: str, conversation: Conversation):
                 )
 
         if similar_memories:
-
             resolution = resolve_memory_conflict(memory.content, similar_memories)
 
             if resolution.action == 'keep_existing':

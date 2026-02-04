@@ -190,7 +190,9 @@ class BleTransport extends DeviceTransport {
     }
 
     try {
-      await characteristic.write(data);
+      // Use allowLongWrite when data exceeds the current MTU payload size.
+      final needsLongWrite = data.length > (_bleDevice.mtuNow - 3);
+      await characteristic.write(data, allowLongWrite: needsLongWrite);
     } catch (e) {
       Logger.debug('BLE Transport: Failed to write characteristic: $e');
       rethrow;

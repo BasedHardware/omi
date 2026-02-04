@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -212,7 +212,7 @@ class _AppsListState extends State<_AppsList> {
   }
 
   Widget _buildShimmerListItem() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: const Color(0xFF1F1F25),
       highlightColor: const Color(0xFF35343B),
       child: Padding(

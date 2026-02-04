@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.521+633
+version: 1.0.522+661
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -141,6 +141,7 @@ dependencies:
   disk_space_2: ^1.0.11
   desktop_drop: ^0.7.0
   pasteboard: ^0.4.0
+  vector_math: ^2.2.0
 
 dependency_overrides:
   js: ^0.7.1

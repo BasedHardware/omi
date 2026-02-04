@@ -6,13 +6,11 @@ import os
 
 import requests
 from langchain_core.tools import tool
-from langchain_core.runnables import RunnableConfig
 
 
 @tool
 def perplexity_web_search_tool(
     query: str,
-    config: RunnableConfig = None,
 ) -> str:
     """
     Search the web for current information using Perplexity AI's search capabilities.
@@ -53,7 +51,7 @@ def perplexity_web_search_tool(
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         payload = {
-            "model": "sonar",
+            "model": "sonar-pro",
             "messages": [{"role": "user", "content": query}],
             "temperature": 0.2,
             "max_tokens": 1000,

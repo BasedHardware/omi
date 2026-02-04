@@ -15,6 +15,7 @@ import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/main.dart';
@@ -51,10 +52,23 @@ class DeviceConnectionFactory {
     }
 
     // Create device connection with transport
+    // Use name-based detection as fallback for OmiGlass devices
+    final deviceName = device.name.toLowerCase();
+    final isOmiGlass = device.type == DeviceType.openglass ||
+        deviceName.contains('openglass') ||
+        deviceName.contains('omiglass') ||
+        deviceName.contains('glass');
+
     switch (device.type) {
       case DeviceType.omi:
-      case DeviceType.openglass:
+        // Check if this is actually an OmiGlass device by name
+        if (isOmiGlass) {
+          Logger.debug('DeviceConnectionFactory: Device name suggests OmiGlass, creating OmiGlassConnection');
+          return OmiGlassConnection(device, transport);
+        }
         return OmiDeviceConnection(device, transport);
+      case DeviceType.openglass:
+        return OmiGlassConnection(device, transport);
       case DeviceType.bee:
         return BeeDeviceConnection(device, transport);
       case DeviceType.plaud:

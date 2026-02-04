@@ -265,18 +265,18 @@ class _FoundDevicesState extends State<FoundDevices> {
                   color: Color(0xCCFFFFFF),
                 ),
               ),
-            if (provider.isConnected)
+            if (provider.isConnected && provider.batteryPercentage > 0)
               Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Text(
-                    '🔋 ${provider.batteryPercentage.toString()}%',
+                    '🔋 ${provider.batteryPercentage}%',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 18,
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
-                          : provider.batteryPercentage > 25 && provider.batteryPercentage <= 50
+                          : provider.batteryPercentage <= 50
                               ? Colors.orange
                               : Colors.green,
                     ),
