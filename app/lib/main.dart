@@ -161,17 +161,17 @@ Future _init() async {
   await SharedPreferencesUtil.init();
 
   // DEBUG: Log Firebase Auth state before getIdToken
-  Logger.debug('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  Logger.debug('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
     PlatformManager.instance.mixpanel.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      Logger.debug('DEBUG main: Restoring onboarding state from server...');
+      print('DEBUG main: Restoring onboarding state from server...');
       await AuthService.instance.restoreOnboardingState();
-      Logger.debug('DEBUG main: onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
     }
   }
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
