@@ -252,7 +252,7 @@ def get_conversations_without_photos(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [{'id': doc.id, **doc.to_dict()} for doc in conversations_ref.stream()]
     return conversations
 
 
@@ -513,7 +513,7 @@ def get_conversations_by_id(uid, conversation_ids):
     conversations = []
     for doc in docs:
         if doc.exists:
-            data = doc.to_dict()
+            data = {'id': doc.id, **doc.to_dict()}
             if data.get('discarded'):
                 continue
             conversations.append(data)
@@ -670,7 +670,7 @@ def get_processing_conversations(uid: str):
     conversations_ref = user_ref.collection(conversations_collection).where(
         filter=FieldFilter('status', '==', 'processing')
     )
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [{'id': doc.id, **doc.to_dict()} for doc in conversations_ref.stream()]
     return conversations
 
 
@@ -1011,7 +1011,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
-    conversations = [doc.to_dict() for doc in query.stream()]
+    conversations = [{'id': doc.id, **doc.to_dict()} for doc in query.stream()]
     print('get_closest_conversation_to_timestamps len(conversations)', len(conversations))
     if not conversations:
         return None
@@ -1047,6 +1047,6 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
-    conversations = [doc.to_dict() for doc in query.stream()]
+    conversations = [{'id': doc.id, **doc.to_dict()} for doc in query.stream()]
     conversation = conversations[0] if conversations else None
     return conversation
