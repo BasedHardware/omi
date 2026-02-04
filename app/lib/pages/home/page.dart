@@ -999,6 +999,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
+                            MixpanelManager().exportTasksBannerClicked();
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) => const TaskIntegrationsPage(),
