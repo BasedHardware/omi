@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import random
 import time
@@ -195,6 +196,27 @@ deepgram_nova3_languages = {
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+
+
+def get_speechmatics_min_confidence() -> float:
+    """Get minimum confidence threshold for Speechmatics transcription.
+
+    Returns the value of SPEECHMATICS_MIN_CONFIDENCE env var, clamped to [0.0, 1.0].
+    Default is 0.4 for backwards compatibility. Set to 0.2-0.3 for far-field audio.
+    """
+    raw = os.getenv("SPEECHMATICS_MIN_CONFIDENCE", "0.4")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logging.warning("Invalid SPEECHMATICS_MIN_CONFIDENCE=%r; using 0.4", raw)
+        return 0.4
+    if value < 0.0 or value > 1.0:
+        logging.warning(
+            "SPEECHMATICS_MIN_CONFIDENCE=%r out of range; clamping to [0.0, 1.0]",
+            raw,
+        )
+        value = min(max(value, 0.0), 1.0)
+    return value
 
 
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
@@ -698,9 +720,21 @@ async def process_audio_speechmatics(stream_transcript, sample_rate: int, langua
 
                             r_content = r_data['content']
                             r_confidence = r_data['confidence']
-                            if r_confidence < 0.4:
-                                print('Low confidence:', r)
-                                continue
+                            # Bypass confidence filtering for punctuation to preserve sentence boundaries
+                            # If enable_partials is ever turned on, only apply to final results
+                            if r_type != 'punctuation':
+                                min_confidence = get_speechmatics_min_confidence()
+                                if r_confidence < min_confidence:
+                                    logging.warning(
+                                        "Low confidence drop: %.3f < %.3f",
+                                        r_confidence,
+                                        min_confidence,
+                                    )
+                                    logging.debug(
+                                        "Dropped content (first 50 chars): %r",
+                                        r_content[:50],
+                                    )
+                                    continue
                             r_speaker = r_data['speaker'][1:] if r_data['speaker'] != 'UU' else '1'
                             speaker = f"SPEAKER_0{r_speaker}"
 
