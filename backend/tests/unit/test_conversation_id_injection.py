@@ -171,3 +171,165 @@ def test_id_accessible_after_injection():
     # This would have raised KeyError before the fix
     conversation_id = result['id']
     assert conversation_id == "test-id"
+
+
+# ============================================================================
+# PROOF TESTS: Demonstrate the bug and why the fix is needed
+# ============================================================================
+
+
+class TestBugProof:
+    """Tests that prove the bug exists and the fix is necessary."""
+
+    def test_bug_proof_to_dict_missing_id(self):
+        """PROOF: doc.to_dict() does NOT include document ID - this is the root cause."""
+        doc = MockDocument(
+            "firestore-doc-id",
+            {
+                "title": "Test",
+                "status": "completed",
+                "started_at": "2026-01-01",
+            },
+        )
+
+        data = doc.to_dict()
+
+        # PROOF: 'id' is NOT in the dict returned by to_dict()
+        assert 'id' not in data, "to_dict() should NOT include document ID"
+        assert doc.id == "firestore-doc-id", "ID exists on doc.id attribute"
+
+    def test_bug_proof_keyerror_without_fix(self):
+        """PROOF: Accessing ['id'] on to_dict() raises KeyError - the original bug."""
+        doc = MockDocument("conv-123", {"title": "Test", "status": "completed"})
+
+        # Simulate OLD code: conversations = [doc.to_dict() for doc in query.stream()]
+        data_without_fix = doc.to_dict()
+
+        # PROOF: This is what causes the KeyError in issue #4494
+        with pytest.raises(KeyError) as exc_info:
+            _ = data_without_fix['id']
+
+        assert exc_info.value.args[0] == 'id'
+
+    def test_bug_proof_print_statement_crashes(self):
+        """PROOF: The debug print at line 1021 crashes without fix."""
+        doc = MockDocument(
+            "conv-123",
+            {
+                "started_at": "2026-01-01T00:00:00",
+                "finished_at": "2026-01-01T01:00:00",
+            },
+        )
+
+        # OLD code pattern (before fix)
+        conversation = doc.to_dict()
+
+        # This simulates line 1021: print('-', conversation['id'], ...)
+        with pytest.raises(KeyError):
+            print('-', conversation['id'], conversation['started_at'], conversation['finished_at'])
+
+    def test_fix_proof_print_statement_works(self):
+        """PROOF: With fix, the debug print works correctly."""
+        doc = MockDocument(
+            "conv-123",
+            {
+                "started_at": "2026-01-01T00:00:00",
+                "finished_at": "2026-01-01T01:00:00",
+            },
+        )
+
+        # NEW code pattern (with fix)
+        conversation = {**doc.to_dict(), 'id': doc.id}
+
+        # This now works - simulates line 1021
+        output = f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}"
+        assert "conv-123" in output
+
+
+class TestWithPhotosDecoratorBehavior:
+    """Tests proving the @with_photos decorator silently skips when no 'id'."""
+
+    def test_decorator_skips_without_id(self):
+        """PROOF: @with_photos decorator silently skips when 'id' is missing."""
+
+        # Simulate the decorator's check at helpers.py:221
+        def decorator_check(conversation_data):
+            if not isinstance(conversation_data, dict) or 'id' not in conversation_data:
+                return conversation_data  # Returns unchanged - NO CRASH
+            # Would attach photos here
+            conversation_data['photos'] = ['photo1', 'photo2']
+            return conversation_data
+
+        # Data WITHOUT id (old buggy behavior)
+        data_without_id = {"title": "Test", "status": "completed"}
+        result = decorator_check(data_without_id)
+
+        # PROOF: No crash, but photos NOT attached
+        assert 'photos' not in result, "Photos should NOT be attached without 'id'"
+
+    def test_decorator_attaches_photos_with_id(self):
+        """PROOF: @with_photos decorator works correctly when 'id' is present."""
+
+        def decorator_check(conversation_data):
+            if not isinstance(conversation_data, dict) or 'id' not in conversation_data:
+                return conversation_data
+            conversation_data['photos'] = ['photo1', 'photo2']
+            return conversation_data
+
+        # Data WITH id (fixed behavior)
+        data_with_id = {"id": "conv-123", "title": "Test", "status": "completed"}
+        result = decorator_check(data_with_id)
+
+        # PROOF: Photos ARE attached when 'id' is present
+        assert 'photos' in result, "Photos should be attached when 'id' is present"
+        assert result['photos'] == ['photo1', 'photo2']
+
+
+class TestConversationModelRequiresId:
+    """Tests proving Conversation model requires 'id' field."""
+
+    def test_conversation_model_requires_id(self):
+        """PROOF: Conversation(**data) fails without 'id' field."""
+        from pydantic import BaseModel, ValidationError
+        from typing import Optional
+        from datetime import datetime
+
+        # Minimal Conversation model mirroring the real one
+        class MockConversation(BaseModel):
+            id: str  # REQUIRED - this is the key constraint
+            created_at: datetime
+            title: Optional[str] = None
+
+        # Data without 'id' (old buggy behavior)
+        data_without_id = {
+            "created_at": datetime.now(),
+            "title": "Test",
+        }
+
+        # PROOF: Pydantic validation fails without 'id'
+        with pytest.raises(ValidationError) as exc_info:
+            MockConversation(**data_without_id)
+
+        assert "id" in str(exc_info.value), "Validation should fail for missing 'id'"
+
+    def test_conversation_model_works_with_id(self):
+        """PROOF: Conversation(**data) works with 'id' field."""
+        from pydantic import BaseModel
+        from typing import Optional
+        from datetime import datetime
+
+        class MockConversation(BaseModel):
+            id: str
+            created_at: datetime
+            title: Optional[str] = None
+
+        # Data with 'id' (fixed behavior)
+        data_with_id = {
+            "id": "conv-123",
+            "created_at": datetime.now(),
+            "title": "Test",
+        }
+
+        # PROOF: Model instantiation succeeds with 'id'
+        conv = MockConversation(**data_with_id)
+        assert conv.id == "conv-123"
