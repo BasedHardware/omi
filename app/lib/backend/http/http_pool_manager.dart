@@ -71,6 +71,8 @@ class HttpPoolManager {
         lastError = TimeoutException('Request timeout');
       } on SocketException catch (e) {
         lastError = e;
+      } on HandshakeException catch (e) {
+        lastError = e;
       } on http.ClientException catch (e) {
         lastError = e;
       } catch (e) {

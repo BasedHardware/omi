@@ -30,6 +30,7 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   late AnimationController _questionAnimationController;
   late Animation<double> _questionFadeAnimation;
+  SpeechProfileProvider? _speechProvider;
 
   @override
   void initState() {
@@ -54,12 +55,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
   }
 
   @override
-  void dispose() {
-    final speechProvider = context.read<SpeechProfileProvider>();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _speechProvider ??= context.read<SpeechProfileProvider>();
+  }
 
-    speechProvider.forceCompletionTimer?.cancel();
-    speechProvider.forceCompletionTimer = null;
-    speechProvider.close();
+  @override
+  void dispose() {
+    _speechProvider?.forceCompletionTimer?.cancel();
+    _speechProvider?.forceCompletionTimer = null;
 
     _scrollController.dispose();
     _questionAnimationController.dispose();
