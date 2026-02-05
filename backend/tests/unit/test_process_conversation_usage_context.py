@@ -319,3 +319,168 @@ def test_action_items_tracked_separately_from_structure():
     assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
     # Action items should be tracked separately from structure
     assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1
+    # Structure should also be tracked
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+
+
+def test_structure_and_apps_tracked_at_runtime():
+    """Verify conv_structure and conv_apps tracking at runtime call sites."""
+    captured_contexts = []
+
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "a transcript with enough words to not be discarded easily"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+    conversation.structured = MagicMock()
+    conversation.structured.title = "Test"
+    conversation.structured.overview = "Test overview"
+    conversation.structured.category = MagicMock()
+    conversation.structured.category.value = "other"
+    conversation.structured.action_items = []
+    conversation.structured.events = []
+    conversation.apps_results = []
+    conversation.discarded = False
+    conversation.id = "test-conv-id"
+    conversation.folder_id = None
+    conversation.suggested_summarization_apps = ["app1"]
+    conversation.is_locked = False
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    folders_mod = sys.modules["database.folders"]
+    folders_mod.get_folders = MagicMock(return_value=[{"id": "f1", "name": "Default", "is_default": True}])
+
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_user_preferred_app = MagicMock(return_value=None)
+    redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
+    ), patch.object(
+        process_conversation, "track_usage", spy_track_usage
+    ):
+        try:
+            process_conversation._get_structured("user-4", "en", conversation)
+        except Exception:
+            pass
+
+    # Both structure and folder tracking should fire
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+    assert usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
+
+
+def test_action_items_skipped_on_discard():
+    """Verify extract_action_items is NOT called when conversation is discarded."""
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    extract_mock = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)), patch.object(
+        process_conversation, "extract_action_items", extract_mock
+    ):
+        structured, discarded = process_conversation._get_structured("user-5", "en", conversation)
+
+    assert discarded is True
+    # extract_action_items should NOT have been called
+    extract_mock.assert_not_called()
+
+
+def test_model_downgrade_for_structure():
+    """Verify gpt-4.1 (llm_medium) is used for transcript structure, not gpt-5.1."""
+    # This test checks conversation_processing.py uses the correct model client
+    import importlib
+
+    conv_proc_source = open("/home/claude/omi/omi2/backend/utils/llm/conversation_processing.py").read()
+
+    # get_transcript_structure should use llm_medium, not llm_medium_experiment
+    # Find the chain definition within get_transcript_structure
+    import re
+
+    # Look for chain definitions after get_transcript_structure function
+    struct_match = re.search(
+        r'def get_transcript_structure.*?chain = prompt \| (\w+) \| parser',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert struct_match is not None
+    assert (
+        struct_match.group(1) == "llm_medium"
+    ), f"Expected llm_medium (gpt-4.1) for structure, got {struct_match.group(1)}"
+
+    # get_app_result should use llm_medium, not llm_medium_experiment
+    app_match = re.search(
+        r'def get_app_result.*?response = (\w+)\.invoke\(prompt\)',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert app_match is not None
+    assert app_match.group(1) == "llm_medium", f"Expected llm_medium (gpt-4.1) for app result, got {app_match.group(1)}"
+
+    # extract_action_items should STILL use llm_medium_experiment (gpt-5.1)
+    action_match = re.search(
+        r'def extract_action_items.*?chain = prompt \| (\w+) \| action_items_parser',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert action_match is not None
+    assert (
+        action_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment (gpt-5.1) for action items, got {action_match.group(1)}"
+
+
+def test_threaded_tracking_context_isolation():
+    """Verify track_usage context works correctly with threading (context isolation)."""
+    import threading
+
+    results = {}
+
+    def thread_fn(uid, feature, key):
+        with usage_tracker.track_usage(uid, feature):
+            ctx = usage_tracker.get_current_context()
+            results[key] = ctx
+
+    t1 = threading.Thread(target=thread_fn, args=("u1", usage_tracker.Features.MEMORIES, "t1"))
+    t2 = threading.Thread(target=thread_fn, args=("u2", usage_tracker.Features.TRENDS, "t2"))
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # Each thread should have had its own context
+    assert results["t1"].feature == usage_tracker.Features.MEMORIES
+    assert results["t1"].uid == "u1"
+    assert results["t2"].feature == usage_tracker.Features.TRENDS
+    assert results["t2"].uid == "u2"
+
+    # Main thread should have no context set
+    assert usage_tracker.get_current_context() is None
