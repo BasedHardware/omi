@@ -16,7 +16,6 @@ from models.conversation import (
     ActionItemsExtraction,
 )
 from .clients import llm_mini, llm_medium, parser, llm_high, llm_medium_experiment
-from .usage_tracker import track_usage, Features
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -388,7 +387,6 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> Structured:
     context_parts = []
@@ -493,12 +491,6 @@ CALENDAR MEETING CONTEXT:
             event.duration = 180
         event.created = False
 
-    # Extract action items separately
-    action_items = extract_action_items(
-        transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context
-    )
-    response.action_items = action_items
-
     return response
 
 
@@ -509,7 +501,6 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -581,10 +572,6 @@ def get_reprocess_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-
-    # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
-    response.action_items = action_items
 
     return response
 

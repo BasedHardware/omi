@@ -109,6 +109,7 @@ for attr in [
     "get_suggested_apps_for_conversation",
     "get_reprocess_transcript_structure",
     "assign_conversation_to_folder",
+    "extract_action_items",
 ]:
     setattr(llm_conv, attr, MagicMock())
 
@@ -276,3 +277,45 @@ def test_no_umbrella_conversation_processing_tracking():
         usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
         or usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
     )
+
+
+def test_action_items_tracked_separately_from_structure():
+    """Verify action items extraction uses CONVERSATION_ACTION_ITEMS, not CONVERSATION_STRUCTURE."""
+    captured_contexts = []
+
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "track_usage", spy_track_usage
+    ):
+        try:
+            process_conversation._get_structured("user-3", "en", conversation)
+        except Exception:
+            pass
+
+    assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
+    # Action items should be tracked separately from structure
+    assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1

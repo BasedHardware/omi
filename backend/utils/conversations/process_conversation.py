@@ -48,6 +48,7 @@ from utils.llm.conversation_processing import (
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
     assign_conversation_to_folder,
+    extract_action_items,
 )
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
@@ -108,6 +109,14 @@ def _get_structured(
                         conversation.started_at,
                         language_code,
                         tz,
+                        calendar_meeting_context=calendar_context,
+                    )
+                with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+                    structured.action_items = extract_action_items(
+                        conversation.text,
+                        conversation.started_at,
+                        language_code,
+                        tz,
                         existing_action_items=existing_action_items,
                         calendar_meeting_context=calendar_context,
                     )
@@ -141,6 +150,14 @@ def _get_structured(
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                )
+            with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+                structured.action_items = extract_action_items(
+                    transcript_text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    photos=conversation.photos,
                     existing_action_items=existing_action_items,
                 )
             return structured, False
@@ -154,6 +171,15 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = get_transcript_structure(
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                calendar_meeting_context=calendar_context,
+            )
+        with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+            structured.action_items = extract_action_items(
                 transcript_text,
                 conversation.started_at,
                 language_code,
