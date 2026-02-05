@@ -74,6 +74,7 @@ class PlaudDeviceConnection extends DeviceConnection {
     if (position == 0xFFFFFFFF) return null; // End marker
 
     final length = payload[8];
+    if (9 + length > payload.length) return null;
     return payload.sublist(9, 9 + length);
   }
 
