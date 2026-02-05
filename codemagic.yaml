@@ -1172,6 +1172,44 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
+      - name: Download Omi Computer app for bundling
+        script: |
+          # Get latest Omi Computer release (Swift app) to bundle into Flutter app
+          echo "Looking for latest Omi Computer release..."
+          LATEST_MACOS_TAG=$(gh release list --repo BasedHardware/omi --limit 50 | grep -E '\-macos\s' | head -1 | awk '{print $3}')
+
+          if [ -n "$LATEST_MACOS_TAG" ]; then
+            echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
+
+            # Create directory where bundle_helper.sh expects to find the app
+            # bundle_helper.sh looks at: $PROJECT_DIR/../../../omi-desktop/build/
+            # PROJECT_DIR = /path/clone/app/macos
+            # ../../../omi-desktop = /path/omi-desktop (sibling to clone dir)
+            # From working_directory (app/), that's ../../omi-desktop
+            mkdir -p ../../omi-desktop/build
+
+            # Download the signed app ZIP from GitHub releases
+            gh release download "$LATEST_MACOS_TAG" \
+              --repo BasedHardware/omi \
+              --pattern "Omi.zip" \
+              --dir /tmp
+
+            # Extract - the ZIP contains "Omi Computer.app"
+            unzip -o /tmp/Omi.zip -d ../../omi-desktop/build/
+
+            # Verify extraction
+            if [ -d "../../omi-desktop/build/Omi Computer.app" ]; then
+              echo "SUCCESS: Omi Computer app ready for bundling"
+              ls -la "../../omi-desktop/build/"
+            else
+              echo "WARNING: Extraction may have failed, checking contents..."
+              ls -la ../../omi-desktop/build/
+            fi
+          else
+            echo "WARNING: No Omi Computer release found with -macos tag"
+            echo "The Flutter app will be built without bundled Omi Computer"
+          fi
+
       - name: Verify Sparkle signing key
         script: |
           if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
