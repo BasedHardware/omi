@@ -9,7 +9,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
@@ -121,6 +121,36 @@ class _AppDetailPageState extends State<AppDetailPage> {
       return '$day $month';
     }
     return '$day $month ${date.year}';
+  }
+
+  /// Safely launches a URL with fallback from in-app browser to external browser.
+  /// Returns true if the URL was launched successfully, false otherwise.
+  Future<bool> _launchUrlSafely(Uri uri) async {
+    final supportsInAppBrowser = uri.scheme == 'http' || uri.scheme == 'https';
+
+    try {
+      if (supportsInAppBrowser) {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return true;
+    } catch (e) {
+      Logger.warning('Failed to launch URL with in-app browser: $e');
+      // Fall back to external browser
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return true;
+      } catch (e) {
+        Logger.warning('Failed to launch URL with external browser: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
+          );
+        }
+        return false;
+      }
+    }
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
@@ -923,7 +953,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   return;
                                                 }
                                                 _checkPaymentStatus(app.id);
-                                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                                await _launchUrlSafely(uri);
                                               } else {
                                                 await _toggleApp(app.id, true);
                                               }
@@ -1356,7 +1386,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                                 checkSetupCompleted(autoInstallIfCompleted: true);
                               },
                               child: Padding(
@@ -1446,7 +1476,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(
@@ -1520,7 +1550,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     fit: BoxFit.contain,
                                     placeholder: (context, url) => SizedBox(
                                       width: 150,
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.grey[900]!,
                                         highlightColor: Colors.grey[800]!,
                                         child: Container(
@@ -1732,7 +1762,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
         return;
       }
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      await _launchUrlSafely(uri);
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1750,7 +1780,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             }
             return;
           }
-          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+          await _launchUrlSafely(uri);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));

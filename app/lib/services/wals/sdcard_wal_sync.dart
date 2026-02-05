@@ -175,6 +175,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       var timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
 
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        Logger.debug("SDCard: Failed to establish connection for device info");
+        return wals;
+      }
       var pd = await _device!.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
@@ -810,7 +814,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       // Wait for device to set up its WiFi AP before phone tries to connect
       debugPrint("SDCardWalSync WiFi: Step 3 - Waiting for device AP to become available...");
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 8));
 
       debugPrint("SDCardWalSync WiFi: Step 4 - Connecting phone to device WiFi AP");
       final wifiResult = await wifiNetwork.connectToAp(ssid, password: password);

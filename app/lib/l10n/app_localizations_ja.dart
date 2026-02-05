@@ -1001,7 +1001,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => '接続';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => '近日公開';
@@ -1633,7 +1633,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get whatShouldWeMake => '何を作りましょうか？';
 
   @override
-  String get appName => 'アプリ名';
+  String get appName => 'App Name';
 
   @override
   String get description => '説明';
@@ -2225,7 +2225,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get folderName => 'フォルダ名';
 
   @override
-  String get descriptionOptional => '説明（任意）';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'フォルダの削除に失敗しました';
@@ -7851,4 +7851,84 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get mostInstalls => 'インストール数順';
+
+  @override
+  String get couldNotOpenUrl => 'URLを開けませんでした。もう一度お試しください。';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '音声ファイルは再生できません';
+
+  @override
+  String get audioPlaybackFailed => '音声を再生できません。ファイルが破損しているか見つかりません。';
 }

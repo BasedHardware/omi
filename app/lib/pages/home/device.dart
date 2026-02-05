@@ -14,13 +14,13 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'firmware_update.dart';
+import 'omiglass_ota_update.dart';
 
 class ConnectedDevice extends StatefulWidget {
   const ConnectedDevice({super.key});
@@ -50,10 +50,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await context.read<DeviceProvider>().getDeviceInfo();
-    });
     super.initState();
+    // Register as a metrics listener immediately to avoid race condition
+    // where widget unmounts before async getDeviceInfo completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CaptureProvider>().addMetricsListener();
+      context.read<DeviceProvider>().getDeviceInfo();
+    });
+  }
+
+  @override
+  void dispose() {
+    // Unregister as a metrics listener when widget is unmounted
+    context.read<CaptureProvider>().removeMetricsListener();
+    super.dispose();
   }
 
   IconData _getBatteryIcon(int batteryLevel) {
@@ -239,11 +250,34 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     : null,
             onTap: provider.connectedDevice != null
                 ? () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => FirmwareUpdate(device: provider.pairedDevice),
-                      ),
-                    );
+                    // Route to OmiGlass OTA page for openglass devices
+                    final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
+                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
+                        deviceName.contains('openglass') ||
+                        deviceName.contains('omiglass') ||
+                        deviceName.contains('glass');
+                    debugPrint('ProductUpdate: connectedDevice type: ${provider.connectedDevice?.type}');
+                    debugPrint('ProductUpdate: connectedDevice name: "${provider.connectedDevice?.name}"');
+                    debugPrint('ProductUpdate: deviceName lowercase: "$deviceName"');
+                    debugPrint('ProductUpdate: isOpenGlass: $isOpenGlass');
+                    if (isOpenGlass) {
+                      debugPrint('ProductUpdate: Routing to OmiGlassOtaUpdate');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => OmiGlassOtaUpdate(
+                            device: provider.pairedDevice,
+                            latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+                          ),
+                        ),
+                      );
+                    } else {
+                      debugPrint('ProductUpdate: Routing to FirmwareUpdate');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => FirmwareUpdate(device: provider.pairedDevice),
+                        ),
+                      );
+                    }
                   }
                 : null,
             showChevron: provider.connectedDevice != null,
@@ -436,8 +470,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     final manufacturer = provider.pairedDevice?.manufacturerName ?? context.l10n.unknown;
     final firmware = provider.pairedDevice?.firmwareRevision ?? context.l10n.unknown;
     final deviceId = provider.pairedDevice?.id ?? context.l10n.unknown;
-    final serialNumber =
-        provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ?? context.l10n.unknown;
+    final serialNumber = provider.pairedDevice?.serialNumber ??
+        provider.pairedDevice?.id.replaceAll(':', '').replaceAll('-', '').toUpperCase() ??
+        context.l10n.unknown;
 
     String truncateValue(String value) {
       if (value.length > 12) {
@@ -581,7 +616,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               const SizedBox(height: 24),
 
               // Battery Level Section
-              if (provider.connectedDevice != null) ...[
+              if (provider.connectedDevice != null && provider.batteryLevel > 0) ...[
                 _buildBatterySection(provider),
                 const SizedBox(height: 16),
               ],

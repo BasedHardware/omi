@@ -1009,7 +1009,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'เชื่อมต่อ';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'เร็วๆ นี้';
@@ -1645,7 +1645,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get whatShouldWeMake => 'เราควรสร้างอะไร?';
 
   @override
-  String get appName => 'ชื่อแอป';
+  String get appName => 'App Name';
 
   @override
   String get description => 'คำอธิบาย';
@@ -2253,7 +2253,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get folderName => 'ชื่อโฟลเดอร์';
 
   @override
-  String get descriptionOptional => 'คำอธิบาย (ตัวเลือก)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'ลบโฟลเดอร์ไม่สำเร็จ';
@@ -7947,4 +7947,84 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get mostInstalls => 'ติดตั้งมากที่สุด';
+
+  @override
+  String get couldNotOpenUrl => 'ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ไฟล์เสียงไม่พร้อมสำหรับการเล่น';
+
+  @override
+  String get audioPlaybackFailed => 'ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป';
 }

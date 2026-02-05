@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
@@ -39,9 +39,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  final GlobalKey<DailyScoreWidgetState> _dailyScoreWidgetKey = GlobalKey<DailyScoreWidgetState>();
 
   void _refreshGoals() {
-    _goalsWidgetKey.currentState?.refresh();
+    _dailyScoreWidgetKey.currentState?.reloadGoals();
+  }
+
+  // Public method to trigger goal creation from outside
+  void addGoal() {
+    _goalsWidgetKey.currentState?.addGoal();
   }
 
   @override
@@ -98,7 +104,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Date header shimmer
-          Shimmer.fromColors(
+          ShimmerWithTimeout(
             baseColor: AppStyles.backgroundSecondary,
             highlightColor: AppStyles.backgroundTertiary,
             child: Container(
@@ -116,7 +122,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               3,
               (index) => Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Shimmer.fromColors(
+                    child: ShimmerWithTimeout(
                       baseColor: AppStyles.backgroundSecondary,
                       highlightColor: AppStyles.backgroundTertiary,
                       child: Container(
@@ -145,7 +151,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget _buildLoadMoreShimmer() {
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
-      child: Shimmer.fromColors(
+      child: ShimmerWithTimeout(
         baseColor: AppStyles.backgroundSecondary,
         highlightColor: AppStyles.backgroundTertiary,
         child: Container(
@@ -170,6 +176,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
           // Refresh goals widget
+          _goalsWidgetKey.currentState?.refresh();
           _refreshGoals();
           await Future.wait([
             convoProvider.getInitialConversations(),
@@ -222,15 +229,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 return SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: DailyScoreWidget(),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
+                        child: DailyScoreWidget(key: _dailyScoreWidgetKey, goalsWidgetKey: _goalsWidgetKey),
                       ),
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8, bottom: 8),
-                        child: TodayTasksWidget(),
-                      ),
-                      GoalsWidget(key: _goalsWidgetKey),
+                      const TodayTasksWidget(),
+                      GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
                     ],
                   ),
                 );
@@ -241,12 +245,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             SliverToBoxAdapter(
               child: Builder(
                 builder: (context) => Padding(
-                  padding: const EdgeInsets.only(left: 16, top: 16, bottom: 8),
+                  padding: const EdgeInsets.only(left: 24, top: 16, bottom: 8),
                   child: Text(
                     convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

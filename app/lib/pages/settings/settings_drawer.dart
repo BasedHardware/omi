@@ -26,6 +26,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
 import 'phone_call_settings_page.dart';
 import '../conversations/sync_page.dart';
@@ -469,7 +470,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   onTap: () async {
                     final Uri url = Uri.parse('https://help.omi.me/en/');
                     if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      try {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      } catch (e) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
                     }
                   },
                 ),
@@ -487,6 +492,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: "What's New",
                 icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
+                  MixpanelManager().whatsNewOpened();
                   ChangelogSheet.showWithLoading(
                     context,
                     () => getAppChangelogs(limit: 5),

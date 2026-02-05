@@ -6,6 +6,7 @@ import struct
 import time
 import uuid
 import wave
+from collections import deque, OrderedDict
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Callable
@@ -23,6 +24,11 @@ from websockets.exceptions import ConnectionClosed
 
 from firebase_admin.auth import InvalidIdTokenError
 
+from utils.speaker_assignment import (
+    process_speaker_assigned_segments,
+    update_speaker_assignment_maps,
+    should_update_speaker_to_person_map,
+)
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -57,14 +63,13 @@ from models.message_event import (
 from models.transcript_segment import Translation
 from models.users import PlanType
 from utils.analytics import record_usage
-from utils.app_integrations import trigger_external_integrations
+from utils.app_integrations import trigger_external_integrations, trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
-from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
@@ -93,7 +98,6 @@ from utils.stt.speaker_embedding import (
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 
-
 router = APIRouter()
 
 
@@ -121,6 +125,7 @@ async def _stream_handler(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -142,6 +147,14 @@ async def _stream_handler(
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+
+    # Helper to gate person_id based on client capability (backward compatibility)
+    # OLD apps don't send speaker_auto_assign param -> receive empty person_id
+    # NEW apps send speaker_auto_assign=enabled -> receive populated person_id
+    def _person_id_for_client(person_id: str) -> str:
+        if speaker_auto_assign_enabled:
+            return person_id
+        return ""
 
     # Onboarding mode overrides: no speech profile (creating new one), single language
     if onboarding_mode:
@@ -209,9 +222,19 @@ async def _stream_handler(
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
 
+    # Buffer size limits to prevent memory leaks during outages/lag
+    MAX_SEGMENT_BUFFER_SIZE = 1000  # Max segments to buffer
+    MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
+    MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
+    MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
+    IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
+    IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
+    IMAGE_CHUNK_CLEANUP_MIN_SIZE = 5  # Skip scans for tiny caches unless oldest can expire
+
     # Initialize segment buffers early (before onboarding handler needs them)
-    realtime_segment_buffers = []
-    realtime_photo_buffers: list[ConversationPhoto] = []
+    realtime_segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
+    realtime_photo_buffers: deque[ConversationPhoto] = deque(maxlen=MAX_PHOTO_BUFFER_SIZE)
 
     # === Speaker Identification State ===
     RING_BUFFER_DURATION = 60.0  # seconds
@@ -222,6 +245,25 @@ async def _stream_handler(
     speaker_id_segment_queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=100)
     person_embeddings_cache: Dict[str, dict] = {}  # person_id -> {embedding, name}
     speaker_id_enabled = False  # Will be set after private_cloud_sync_enabled is known
+
+    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
+    bg_tasks: Set[asyncio.Task] = set()
+
+    def spawn(coro) -> asyncio.Task:
+        """Create a tracked background task that will be cancelled on cleanup."""
+        task = asyncio.create_task(coro)
+        bg_tasks.add(task)
+
+        def on_done(t):
+            bg_tasks.discard(t)
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc:
+                print(f"Unhandled exception in background task: {exc}", uid, session_id)
+
+        task.add_done_callback(on_done)
+        return task
 
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
@@ -240,7 +282,7 @@ async def _stream_handler(
             realtime_segment_buffers.extend(segments)
 
         onboarding_handler = OnboardingHandler(uid, send_onboarding_event, onboarding_stream_transcript)
-        asyncio.create_task(onboarding_handler.send_current_question())
+        spawn(onboarding_handler.send_current_question())
 
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
@@ -348,7 +390,7 @@ async def _stream_handler(
         nonlocal websocket_active
         if not websocket_active:
             return
-        return asyncio.create_task(_asend_message_event(msg))
+        return spawn(_asend_message_event(msg))
 
     # Heart beat
     started_at = time.time()
@@ -605,17 +647,6 @@ async def _stream_handler(
     )
     timed_out_conversation_id = await _prepare_in_progess_conversations()
 
-    def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
-        for segment in transcript_segments:
-            if segment.id in segment_person_assignment_map and not segment.is_user and not segment.person_id:
-                person_id = segment_person_assignment_map[segment.id]
-                if person_id == 'user':
-                    segment.is_user = True
-                    segment.person_id = None
-                else:
-                    segment.is_user = False
-                    segment.person_id = person_id
-
     def _update_in_progress_conversation(
         conversation: Conversation,
         segments: List[TranscriptSegment],
@@ -629,7 +660,11 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
-            _process_speaker_assigned_segments(updated_segments)
+            process_speaker_assigned_segments(
+                updated_segments,
+                segment_person_assignment_map,
+                speaker_to_person_map,
+            )
             conversations_db.update_conversation_segments(
                 uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
             )
@@ -834,13 +869,13 @@ async def _stream_handler(
         pusher_connect_lock = asyncio.Lock()
         pusher_connected = False
 
-        # Transcript
-        segment_buffers = []
+        # Transcript (bounded to prevent memory growth when pusher is down)
+        segment_buffers: deque = deque(maxlen=MAX_SEGMENT_BUFFER_SIZE)
 
         last_synced_conversation_id = None
 
         # Conversation processing
-        pending_conversation_requests = set()
+        pending_conversation_requests: Set[str] = set()
         pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
@@ -853,6 +888,10 @@ async def _stream_handler(
             if not pusher_connected or not pusher_ws:
                 print(f"Pusher not connected, falling back to local processing for {conversation_id}", uid, session_id)
                 return False
+            # Prevent unbounded growth of pending requests
+            if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
+                print(f"Too many pending requests, dropping one to add {conversation_id}", uid, session_id)
+                pending_conversation_requests.pop()  # Remove arbitrary element (set has no order)
             try:
                 pending_conversation_requests.add(conversation_id)
                 pending_request_event.set()  # Signal the receiver
@@ -868,7 +907,6 @@ async def _stream_handler(
                 return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
-            nonlocal segment_buffers
             nonlocal pusher_ws
             nonlocal pusher_connected
             if pusher_connected and pusher_ws and len(segment_buffers) > 0:
@@ -878,11 +916,11 @@ async def _stream_handler(
                     data.extend(struct.pack("I", 102))
                     data.extend(
                         bytes(
-                            json.dumps({"segments": segment_buffers, "memory_id": current_conversation_id}),
+                            json.dumps({"segments": list(segment_buffers), "memory_id": current_conversation_id}),
                             "utf-8",
                         )
                     )
-                    segment_buffers = []  # reset
+                    segment_buffers.clear()  # reset
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher transcripts Connection closed: {e}", uid, session_id)
@@ -894,26 +932,36 @@ async def _stream_handler(
 
         async def transcript_consume():
             nonlocal websocket_active
-            nonlocal segment_buffers
             while websocket_active:
                 await asyncio.sleep(1)
                 if len(segment_buffers) > 0:
                     await _transcript_flush(auto_reconnect=True)
 
-        # Audio bytes
-        audio_buffers = bytearray()
+        # Audio bytes (bounded to prevent memory growth when pusher is down)
+        # Using deque of chunks for O(1) trimming instead of O(n) bytearray slice
+        audio_chunks: deque = deque()  # deque of bytes objects
+        audio_total_size = 0  # Track total size for O(1) limit check
         audio_buffer_last_received: float = None  # Track when last audio was received
         audio_bytes_enabled = (
             bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid) or private_cloud_sync_enabled
         )
 
         def audio_bytes_send(audio_bytes: bytes, received_at: float):
-            nonlocal audio_buffers, audio_buffer_last_received
-            audio_buffers.extend(audio_bytes)
+            nonlocal audio_chunks, audio_total_size, audio_buffer_last_received
+            chunk = audio_bytes
+            # Trim oversized incoming chunk
+            if len(chunk) > MAX_AUDIO_BUFFER_SIZE:
+                chunk = chunk[-MAX_AUDIO_BUFFER_SIZE:]
+            # Drop oldest chunks to make room - O(1) per chunk
+            while audio_total_size + len(chunk) > MAX_AUDIO_BUFFER_SIZE and audio_chunks:
+                old = audio_chunks.popleft()
+                audio_total_size -= len(old)
+            audio_chunks.append(chunk)
+            audio_total_size += len(chunk)
             audio_buffer_last_received = received_at
 
         async def _audio_bytes_flush(auto_reconnect: bool = True):
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal audio_buffer_last_received
             nonlocal pusher_ws
             nonlocal pusher_connected
@@ -939,20 +987,26 @@ async def _stream_handler(
                     print(f"Failed to send conversation_id to pusher: {e}", uid, session_id)
 
             # Send audio bytes
-            if pusher_connected and pusher_ws and len(audio_buffers) > 0:
+            if pusher_connected and pusher_ws and audio_total_size > 0:
                 try:
                     # Calculate buffer start time:
                     # buffer_start = last_received_time - buffer_duration
                     # buffer_duration = buffer_length_bytes / (sample_rate * 2 bytes per sample)
-                    buffer_duration_seconds = len(audio_buffers) / (sample_rate * 2)
+                    buffer_duration_seconds = audio_total_size / (sample_rate * 2)
                     buffer_start_time = (audio_buffer_last_received or time.time()) - buffer_duration_seconds
+
+                    # Join chunks into contiguous bytes for sending
+                    audio_data = b''.join(audio_chunks)
 
                     # 101|timestamp(8 bytes double)|audio_data
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
                     data.extend(struct.pack("d", buffer_start_time))
-                    data.extend(audio_buffers.copy())
-                    audio_buffers = bytearray()  # reset
+                    data.extend(audio_data)
+                    # Reset buffer
+                    audio_chunks.clear()
+                    audio_total_size = 0
+                    del audio_data  # Free immediately
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
                     print(f"Pusher audio_bytes Connection closed: {e}", uid, session_id)
@@ -964,12 +1018,12 @@ async def _stream_handler(
 
         async def audio_bytes_consume():
             nonlocal websocket_active
-            nonlocal audio_buffers
+            nonlocal audio_chunks, audio_total_size
             nonlocal pusher_ws
             nonlocal pusher_connected
             while websocket_active:
                 await asyncio.sleep(1)
-                if len(audio_buffers) > 0:
+                if audio_total_size > 0:
                     await _audio_bytes_flush(auto_reconnect=True)
 
         async def pusher_receive():
@@ -1286,7 +1340,7 @@ async def _stream_handler(
 
             duration = seg['duration']
             if duration >= SPEAKER_ID_MIN_AUDIO:
-                asyncio.create_task(_match_speaker_embedding(speaker_id, seg))
+                spawn(_match_speaker_embedding(speaker_id, seg))
 
         print("Speaker ID task ended", uid, session_id)
 
@@ -1391,11 +1445,11 @@ async def _stream_handler(
                 # Auto-assign processed segment
                 segment_person_assignment_map[segment['id']] = person_id
 
-                # Notify client
+                # Notify client (gated for backward compatibility)
                 _send_message_event(
                     SpeakerLabelSuggestionEvent(
                         speaker_id=speaker_id,
-                        person_id=person_id,
+                        person_id=_person_id_for_client(person_id),
                         person_name=person_name,
                         segment_id=segment['id'],
                     )
@@ -1413,14 +1467,17 @@ async def _stream_handler(
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
             await asyncio.sleep(0.6)
 
+            # Periodic cleanup of expired image chunks (enforces TTL even when uploads stop)
+            _cleanup_expired_image_chunks()
+
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = realtime_segment_buffers.copy()
-            realtime_segment_buffers = []
+            segments_to_process = list(realtime_segment_buffers)
+            realtime_segment_buffers.clear()
 
-            photos_to_process = realtime_photo_buffers.copy()
-            realtime_photo_buffers = []
+            photos_to_process = list(realtime_photo_buffers)
+            realtime_photo_buffers.clear()
 
             finished_at = datetime.now(timezone.utc)
 
@@ -1492,13 +1549,14 @@ async def _stream_handler(
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
-
-                # Trigger realtime integrations (including mentor notifications)
-                from utils.app_integrations import trigger_realtime_integrations
-                try:
-                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
-                except Exception as e:
-                    print(f"Error triggering realtime integrations: {e}", uid, session_id)
+                elif not PUSHER_ENABLED and user_has_credits:
+                    # Fallback: trigger realtime integrations directly when pusher is disabled
+                    try:
+                        await trigger_realtime_integrations(
+                            uid, [s.dict() for s in transcript_segments], current_conversation_id
+                        )
+                    except Exception as e:
+                        print(f"Error triggering realtime integrations: {e}", uid, session_id)
 
                 # Onboarding: pass segments to handler for answer detection
                 if onboarding_handler and not onboarding_handler.completed:
@@ -1519,7 +1577,7 @@ async def _stream_handler(
                             _send_message_event(
                                 SpeakerLabelSuggestionEvent(
                                     speaker_id=segment.speaker_id,
-                                    person_id=person_id,
+                                    person_id=_person_id_for_client(person_id),
                                     person_name=person_name,
                                     segment_id=segment.id,
                                 )
@@ -1556,22 +1614,59 @@ async def _stream_handler(
                     detected_name = detect_speaker_from_text(segment.text)
                     if detected_name:
                         person = user_db.get_person_by_name(uid, detected_name)
-                        person_id = person['id'] if person else ''
+                        if person:
+                            person_id = person['id']
+                        else:
+                            # Backend creates person if missing
+                            person_id = str(uuid.uuid4())
+                            user_db.create_person(
+                                uid,
+                                {
+                                    'id': person_id,
+                                    'name': detected_name,
+                                    'created_at': datetime.now(timezone.utc),
+                                    'updated_at': datetime.now(timezone.utc),
+                                },
+                            )
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
-                                person_id=person_id,
+                                person_id=_person_id_for_client(person_id),
                                 person_name=detected_name,
                                 segment_id=segment.id,
                             )
                         )
+                        # Set maps for future segments, but only if diarization is active
+                        # (speaker_id > 0 means diarization assigned a real speaker)
+                        # Set maps for future segments using helper function
+                        if should_update_speaker_to_person_map(segment.speaker_id):
+                            speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+                        segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
-    image_chunks = {str: any}  # A temporary in-memory cache for image chunks
+    # Image chunks cache with TTL tracking: {temp_id: {'chunks': [...], 'created_at': float}}
+    # Using OrderedDict for O(1) oldest removal (insertion order preserved)
+    image_chunks: OrderedDict[str, dict] = OrderedDict()
+    last_image_chunk_cleanup = 0.0
 
-    async def process_photo(
-        uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer: list[ConversationPhoto]
-    ):
+    def _cleanup_expired_image_chunks():
+        """Remove image chunks that have exceeded TTL."""
+        nonlocal last_image_chunk_cleanup
+        now = time.time()
+        if now - last_image_chunk_cleanup < IMAGE_CHUNK_CLEANUP_INTERVAL:
+            return
+        if image_chunks and len(image_chunks) < IMAGE_CHUNK_CLEANUP_MIN_SIZE:
+            oldest_created_at = next(iter(image_chunks.values()))['created_at']
+            if now - oldest_created_at <= IMAGE_CHUNK_TTL:
+                last_image_chunk_cleanup = now
+                return
+        last_image_chunk_cleanup = now
+        expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
+        for tid in expired:
+            del image_chunks[tid]
+            print(f"Expired incomplete image upload: {tid}", uid, session_id)
+
+    async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer):
         from utils.llm.openglass import describe_image
 
         photo_id = str(uuid.uuid4())
@@ -1589,9 +1684,7 @@ async def _stream_handler(
         photo_buffer.append(final_photo)
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
-    async def handle_image_chunk(
-        uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer: list[ConversationPhoto]
-    ):
+    async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer):
         temp_id = chunk_data.get('id')
         index = chunk_data.get('index')
         total = chunk_data.get('total')
@@ -1601,18 +1694,27 @@ async def _stream_handler(
             print(f"Invalid image chunk received: {chunk_data}", uid, session_id)
             return
 
+        # Cleanup expired chunks periodically
+        _cleanup_expired_image_chunks()
+
         if temp_id not in image_chunks_cache:
             if total <= 0:
                 return
-            image_chunks_cache[temp_id] = [None] * total
+            # Enforce max concurrent uploads - O(1) with OrderedDict
+            if len(image_chunks_cache) >= MAX_IMAGE_CHUNKS:
+                # Remove oldest entry (first inserted)
+                oldest_id, _ = image_chunks_cache.popitem(last=False)
+                print(f"Dropped oldest image upload to make room: {oldest_id}", uid, session_id)
+            image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
-        if index < total and image_chunks_cache[temp_id][index] is None:
-            image_chunks_cache[temp_id][index] = data
+        chunks_data = image_chunks_cache[temp_id]['chunks']
+        if index < total and chunks_data[index] is None:
+            chunks_data[index] = data
 
-        if all(chunk is not None for chunk in image_chunks_cache[temp_id]):
-            b64_image_data = "".join(image_chunks_cache[temp_id])
+        if all(chunk is not None for chunk in chunks_data):
+            b64_image_data = "".join(chunks_data)
             del image_chunks_cache[temp_id]
-            safe_create_task(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
+            spawn(process_photo(uid, b64_image_data, temp_id, send_event_func, photo_buffer))
 
     # Initialize decoders based on codec
     opus_decoder = None
@@ -1666,7 +1768,7 @@ async def _stream_handler(
                             socket_to_close.finish()
                             print('Closed deepgram_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_dg_profile())
+                        spawn(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
 
@@ -1683,7 +1785,7 @@ async def _stream_handler(
                             await socket_to_close.close()
                             print('Closed soniox_profile_socket after 5s delay', uid, session_id)
 
-                        asyncio.create_task(close_soniox_profile())
+                        spawn(close_soniox_profile())
                 else:
                     await soniox_profile_socket.send(chunk)
 
@@ -1708,7 +1810,6 @@ async def _stream_handler(
                     break
 
                 if message.get("bytes") is not None:
-
                     data = message.get("bytes")
                     if len(data) <= 2:  # Ping/keepalive, 0x8a 0x00
                         continue
@@ -1795,37 +1896,42 @@ async def _stream_handler(
                                         can_assign = True
                                         break
 
-                            if can_assign:
-                                speaker_id = json_data.get('speaker_id')
-                                person_id = json_data.get('person_id')
-                                person_name = json_data.get('person_name')
-                                if speaker_id is not None and person_id is not None and person_name is not None:
-                                    speaker_to_person_map[speaker_id] = (person_id, person_name)
-                                    for sid in segment_ids:
-                                        segment_person_assignment_map[sid] = person_id
-                                    print(
-                                        f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
-                                    )
+                            # Always set maps regardless of can_assign (fixes latest segments missed)
+                            speaker_id = json_data.get('speaker_id')
+                            person_id = json_data.get('person_id')
+                            person_name = json_data.get('person_name')
+                            maps_updated = update_speaker_assignment_maps(
+                                speaker_id,
+                                person_id,
+                                person_name,
+                                segment_ids,
+                                speaker_to_person_map,
+                                segment_person_assignment_map,
+                            )
+                            if maps_updated:
+                                print(f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id)
 
-                                    # Forward to pusher for speech sample extraction (non-blocking)
-                                    # Only for real people (not 'user') and when private cloud sync is enabled
-                                    if (
-                                        person_id
-                                        and person_id != 'user'
-                                        and private_cloud_sync_enabled
-                                        and send_speaker_sample_request is not None
-                                        and current_conversation_id
-                                    ):
-                                        asyncio.create_task(
-                                            send_speaker_sample_request(
-                                                person_id=person_id,
-                                                conv_id=current_conversation_id,
-                                                segment_ids=segment_ids,
-                                            )
+                                # Forward to pusher for speech sample extraction (non-blocking)
+                                # Only for real people (not 'user') and when private cloud sync is enabled
+                                # Only when can_assign is true (has speech_profile_processed segment)
+                                if (
+                                    can_assign
+                                    and person_id
+                                    and person_id != 'user'
+                                    and private_cloud_sync_enabled
+                                    and send_speaker_sample_request is not None
+                                    and current_conversation_id
+                                ):
+                                    spawn(
+                                        send_speaker_sample_request(
+                                            person_id=person_id,
+                                            conv_id=current_conversation_id,
+                                            segment_ids=segment_ids,
                                         )
+                                    )
                             else:
                                 print(
-                                    "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
+                                    "Speaker assignment ignored: missing speaker_id/person_id/person_name.",
                                     uid,
                                     session_id,
                                 )
@@ -1954,6 +2060,15 @@ async def _stream_handler(
         if onboarding_handler:
             onboarding_handler.cleanup()
 
+        # Cancel all tracked background tasks to prevent memory leaks
+        # Snapshot to avoid mutation during iteration
+        tasks_to_cancel = list(bg_tasks)
+        for task in tasks_to_cancel:
+            task.cancel()
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        bg_tasks.clear()
+
         # Clean up collections to aid garbage collection
         try:
             locked_conversation_ids.clear()
@@ -1985,6 +2100,7 @@ async def _listen(
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
+    speaker_auto_assign_enabled: bool = False,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2009,6 +2125,7 @@ async def _listen(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
     print("_listen ended", uid)
 
@@ -2027,9 +2144,11 @@ async def listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
+    speaker_auto_assign: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
+    speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -2043,6 +2162,7 @@ async def listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
     )
 
 

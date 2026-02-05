@@ -93,17 +93,21 @@ class _FCMNotificationService implements NotificationInterface {
     if (!allowed) {
       return;
     }
-    _awesomeNotifications.createNotification(
-      content: NotificationContent(
-        id: id,
-        channelKey: channel.channelKey!,
-        actionType: ActionType.Default,
-        title: title,
-        body: body,
-        payload: payload,
-        notificationLayout: layout,
-      ),
-    );
+    try {
+      await _awesomeNotifications.createNotification(
+        content: NotificationContent(
+          id: id,
+          channelKey: channel.channelKey!,
+          actionType: ActionType.Default,
+          title: title,
+          body: body,
+          payload: payload,
+          notificationLayout: layout,
+        ),
+      );
+    } catch (e) {
+      Logger.debug('Failed to create notification (channel may be disabled): $e');
+    }
   }
 
   @override
@@ -155,24 +159,28 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
-    if (Platform.isIOS || Platform.isMacOS) {
-      String? apnsToken;
-      for (int i = 0; i < 10; i++) {
-        apnsToken = await _firebaseMessaging.getAPNSToken();
-        if (apnsToken != null) break;
-        await Future.delayed(const Duration(seconds: 1));
+    try {
+      if (Platform.isIOS || Platform.isMacOS) {
+        String? apnsToken;
+        for (int i = 0; i < 10; i++) {
+          apnsToken = await _firebaseMessaging.getAPNSToken();
+          if (apnsToken != null) break;
+          await Future.delayed(const Duration(seconds: 1));
+        }
+
+        if (apnsToken == null) {
+          Logger.debug('APNS token not available yet, will retry on refresh');
+          return;
+        }
       }
 
-      if (apnsToken == null) {
-        Logger.debug('APNS token not available yet, will retry on refresh');
-        _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
-        return;
-      }
+      String? token = await _firebaseMessaging.getToken();
+      await saveFcmToken(token);
+    } catch (e) {
+      Logger.debug('Failed to save notification token: $e');
+    } finally {
+      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     }
-
-    String? token = await _firebaseMessaging.getToken();
-    await saveFcmToken(token);
-    _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
   @override
@@ -271,6 +279,7 @@ class _FCMNotificationService implements NotificationInterface {
       {required RemoteNotification noti,
       NotificationLayout layout = NotificationLayout.Default,
       Map<String, String?>? payload}) async {
+    if (noti.title == null || noti.body == null) return;
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }

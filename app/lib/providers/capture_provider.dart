@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -67,6 +68,9 @@ class CaptureProvider extends ChangeNotifier
   UsageProvider? usageProvider;
   CalendarProvider? calendarProvider;
 
+  // Cache refresh for backend-created persons
+  Future<void>? _peopleRefreshFuture;
+
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
@@ -130,9 +134,39 @@ class CaptureProvider extends ChangeNotifier
   double _wsSendRateKbps = 0.0;
   DateTime? _metricsLastCalculated;
   Timer? _metricsTimer;
+  // Reference count for metrics listeners to handle multiple consumers safely.
+  // Each widget that needs metrics calls addMetricsListener() in initState
+  // and removeMetricsListener() in dispose. This prevents one widget's dispose
+  // from disabling metrics for other widgets that still need them.
+  int _metricsListenersCount = 0;
 
   double get bleReceiveRateKbps => _bleReceiveRateKbps;
   double get wsSendRateKbps => _wsSendRateKbps;
+
+  /// Call this in initState of a widget that needs BLE/WS metrics
+  void addMetricsListener() {
+    _metricsListenersCount++;
+    if (_metricsListenersCount == 1) {
+      notifyListeners(); // Initial update for the first listener
+    }
+  }
+
+  /// Call this in dispose of a widget that uses BLE/WS metrics
+  void removeMetricsListener() {
+    if (_metricsListenersCount > 0) {
+      _metricsListenersCount--;
+    }
+  }
+
+  bool get _metricsNotifyEnabled => _metricsListenersCount > 0;
+
+  /// Check if any segment has a personId not in local cache.
+  /// Uses Set difference for O(N+M) complexity instead of O(N*M).
+  bool _hasMissingPerson(List<TranscriptSegment> segments) {
+    final cachedIds = SharedPreferencesUtil().cachedPeople.map((p) => p.id).toSet();
+    final segmentPersonIds = segments.map((s) => s.personId).whereType<String>().toSet();
+    return segmentPersonIds.difference(cachedIds).isNotEmpty;
+  }
 
   CaptureProvider() {
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
@@ -233,6 +267,11 @@ class CaptureProvider extends ChangeNotifier
   ServerConversation? _conversation;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
+  // Version counter for segments/photos content changes. Incremented on in-place mutations
+  // (e.g., translation updates, photo description changes) to signal UI rebuilds when
+  // list length and last-text remain unchanged.
+  int _segmentsPhotosVersion = 0;
+  int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
   List<String> taggingSegmentIds = [];
 
@@ -438,6 +477,11 @@ class CaptureProvider extends ChangeNotifier
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
     if (data.isEmpty) {
       Logger.debug("voice frames is empty");
+      return;
+    }
+
+    if (_recordingDevice == null) {
+      Logger.debug("Recording device is null, cannot process voice command");
       return;
     }
 
@@ -816,7 +860,10 @@ class CaptureProvider extends ChangeNotifier
       _wsSocketBytesSent = 0;
       _metricsLastCalculated = now;
 
-      notifyListeners();
+      // Only notify listeners when UI actually needs these metrics to reduce battery drain
+      if (_metricsNotifyEnabled) {
+        notifyListeners();
+      }
     }
   }
 
@@ -829,6 +876,15 @@ class CaptureProvider extends ChangeNotifier
     _wsSendRateKbps = 0.0;
     _metricsLastCalculated = null;
     notifyListeners();
+  }
+
+  /// Triggers a metrics calculation for testing.
+  /// This allows verifying that notifyListeners is gated by _metricsNotifyEnabled.
+  @visibleForTesting
+  void calculateMetricsForTesting() {
+    // Initialize metrics tracking state if not already done
+    _metricsLastCalculated ??= DateTime.now().subtract(const Duration(seconds: 10));
+    _calculateMetricsRates();
   }
 
   Future _closeBleStream() async {
@@ -853,6 +909,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener?.cancel();
     _recordingTimer?.cancel();
     _metricsTimer?.cancel();
+    _peopleRefreshFuture = null; // Clear in-flight tracker
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
@@ -1332,11 +1389,24 @@ class CaptureProvider extends ChangeNotifier
     _conversation = convos.isNotEmpty ? convos.first : null;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
-      photos = _conversation!.photos;
+      // Merge server photos with locally-captured temp photos to avoid losing
+      // photos that haven't been processed server-side yet.
+      final serverPhotos = _conversation!.photos;
+      final localTempPhotos = photos.where((p) => p.id.startsWith('temp_img_')).toList();
+      final serverPhotoIds = serverPhotos.map((p) => p.id).toSet();
+      // Keep local temp photos that aren't already on the server
+      final mergedPhotos = List<ConversationPhoto>.from(serverPhotos);
+      for (final local in localTempPhotos) {
+        if (!serverPhotoIds.contains(local.id)) {
+          mergedPhotos.add(local);
+        }
+      }
+      photos = mergedPhotos;
     } else {
       segments = [];
       photos = [];
     }
+    _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     setHasTranscripts(segments.isNotEmpty);
     notifyListeners();
   }
@@ -1404,6 +1474,7 @@ class CaptureProvider extends ChangeNotifier
       final photoIndex = photos.indexWhere((p) => p.id == tempId);
       if (photoIndex != -1) {
         photos[photoIndex].id = permanentId;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1417,6 +1488,7 @@ class CaptureProvider extends ChangeNotifier
       if (photoIndex != -1) {
         photos[photoIndex].description = description;
         photos[photoIndex].discarded = discarded;
+        _segmentsPhotosVersion++;
         notifyListeners();
       }
       return;
@@ -1485,6 +1557,7 @@ class CaptureProvider extends ChangeNotifier
         Logger.debug("Adding ${remainSegments.length} new translated segments");
       }
 
+      _segmentsPhotosVersion++;
       notifyListeners();
     } catch (e) {
       Logger.debug("Error handling translation event: $e");
@@ -1498,6 +1571,7 @@ class CaptureProvider extends ChangeNotifier
     suggestionsBySegmentId.removeWhere((key, value) => event.segmentIds.contains(key));
     taggingSegmentIds.removeWhere((id) => event.segmentIds.contains(id));
     hasTranscripts = segments.isNotEmpty;
+    _segmentsPhotosVersion++;
     notifyListeners();
   }
 
@@ -1512,14 +1586,30 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Auto-accept if enabled for new person suggestions
-    if (SharedPreferencesUtil().autoCreateSpeakersEnabled) {
-      assignSpeakerToConversation(event.speakerId, event.personId, event.personName, [event.segmentId]);
-    } else {
-      // Otherwise, store suggestion to be displayed.
-      suggestionsBySegmentId[event.segmentId] = event;
-      notifyListeners();
+    // Add backend-created person to local cache for UI display (backward compatibility)
+    final isUser = event.personId == 'user';
+    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+      SharedPreferencesUtil().addCachedPerson(
+        Person(
+          id: event.personId,
+          name: event.personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
     }
+
+    // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
+    if (event.personId.isNotEmpty) {
+      for (var seg in segments) {
+        if (seg.speakerId == event.speakerId) {
+          seg.isUser = isUser;
+          seg.personId = isUser ? null : event.personId;
+        }
+      }
+      _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
+    }
+    notifyListeners();
   }
 
   Future<void> assignSpeakerToConversation(
@@ -1532,12 +1622,26 @@ class CaptureProvider extends ChangeNotifier
     try {
       String finalPersonId = personId;
 
-      // Create person if new
+      // Create person if new (old app path - calls idempotent API)
       if (finalPersonId.isEmpty) {
         Person? newPerson = await peopleProvider?.createPersonProvider(personName);
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+
+      // Add person to local cache if not exists (backward compatibility for old apps)
+      if (finalPersonId.isNotEmpty &&
+          finalPersonId != 'user' &&
+          SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
+        SharedPreferencesUtil().addCachedPerson(
+          Person(
+            id: finalPersonId,
+            name: personName,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
       }
 
       // Find conversation id
@@ -1552,6 +1656,7 @@ class CaptureProvider extends ChangeNotifier
           segment.personId = isAssigningToUser ? null : finalPersonId;
         }
       }
+      _segmentsPhotosVersion++; // Bump version so Selector rebuilds
 
       // Persist change
       await assignBulkConversationTranscriptSegments(
@@ -1603,6 +1708,16 @@ class CaptureProvider extends ChangeNotifier
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
+
+    // Refresh people cache if we see unknown personIds (backend-created persons)
+    // Check all newSegments, not just remainSegments, to catch updates to existing segments
+    if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
+      _peopleRefreshFuture = peopleProvider?.setPeople().whenComplete(() {
+        _peopleRefreshFuture = null;
+      });
+    }
+
+    _segmentsPhotosVersion++; // Bump version so Selector rebuilds
     hasTranscripts = true;
     notifyListeners();
   }

@@ -4,6 +4,10 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/announcement.dart';
 
+/// Get app changelogs.
+///
+/// If [fromVersion] and [toVersion] are provided, returns changelogs between those versions.
+/// Otherwise returns the most recent [limit] changelogs (for "What's New" in settings).
 Future<List<Announcement>> getAppChangelogs({
   String? fromVersion,
   String? toVersion,
@@ -12,9 +16,9 @@ Future<List<Announcement>> getAppChangelogs({
 }) async {
   String url;
   if (fromVersion != null && toVersion != null) {
-    final encodedFromVersion = Uri.encodeComponent(fromVersion);
-    final encodedToVersion = Uri.encodeComponent(toVersion);
-    url = "${Env.apiBaseUrl}v1/announcements/changelogs?from_version=$encodedFromVersion&to_version=$encodedToVersion";
+    final encodedFrom = Uri.encodeComponent(fromVersion);
+    final encodedTo = Uri.encodeComponent(toVersion);
+    url = "${Env.apiBaseUrl}v1/announcements/changelogs?from_version=$encodedFrom&to_version=$encodedTo";
   } else {
     url = "${Env.apiBaseUrl}v1/announcements/changelogs?limit=$limit";
     if (maxVersion != null) {
@@ -37,16 +41,29 @@ Future<List<Announcement>> getAppChangelogs({
   return data.map((json) => Announcement.fromJson(json)).toList();
 }
 
-/// Get feature announcements for a specific version.
-/// For firmware updates: returns features explaining new device behavior.
-/// For app updates: returns features explaining major new app functionality.
-Future<List<Announcement>> getFeatureAnnouncements({
-  required String version,
-  required String versionType, // 'app' or 'firmware'
+/// Get all pending announcements for the current user.
+/// This endpoint supports flexible targeting and per-user dismissal tracking.
+///
+/// [trigger] should be one of:
+/// - 'app_launch': Check every app launch (for immediate announcements)
+/// - 'version_upgrade': Check only when app version changed
+/// - 'firmware_upgrade': Check only when firmware version changed
+Future<List<Announcement>> getPendingAnnouncements({
+  required String appVersion,
+  required String platform,
+  required String trigger,
+  String? firmwareVersion,
   String? deviceModel,
 }) async {
-  final encodedVersion = Uri.encodeComponent(version);
-  var url = "${Env.apiBaseUrl}v1/announcements/features?version=$encodedVersion&version_type=$versionType";
+  final encodedAppVersion = Uri.encodeComponent(appVersion);
+  var url = "${Env.apiBaseUrl}v1/announcements/pending"
+      "?app_version=$encodedAppVersion"
+      "&platform=$platform"
+      "&trigger=$trigger";
+
+  if (firmwareVersion != null) {
+    url += "&firmware_version=${Uri.encodeComponent(firmwareVersion)}";
+  }
   if (deviceModel != null) {
     url += "&device_model=${Uri.encodeComponent(deviceModel)}";
   }
@@ -66,27 +83,17 @@ Future<List<Announcement>> getFeatureAnnouncements({
   return data.map((json) => Announcement.fromJson(json)).toList();
 }
 
-/// Get active, non-expired general announcements.
-/// If lastCheckedAt is provided, only returns announcements created after that time.
-Future<List<Announcement>> getGeneralAnnouncements({
-  DateTime? lastCheckedAt,
-}) async {
-  var url = "${Env.apiBaseUrl}v1/announcements/general";
-  if (lastCheckedAt != null) {
-    url += "?last_checked_at=${Uri.encodeComponent(lastCheckedAt.toUtc().toIso8601String())}";
-  }
+/// Dismiss an announcement for the current user.
+/// This prevents the announcement from being shown again if show_once is true.
+Future<bool> dismissAnnouncement(String announcementId, {bool ctaClicked = false}) async {
+  final url = "${Env.apiBaseUrl}v1/announcements/$announcementId/dismiss";
 
   var res = await makeApiCall(
     url: url,
-    headers: {},
-    body: '',
-    method: 'GET',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'cta_clicked': ctaClicked}),
+    method: 'POST',
   );
 
-  if (res == null || res.statusCode != 200) {
-    return [];
-  }
-
-  final List<dynamic> data = jsonDecode(res.body);
-  return data.map((json) => Announcement.fromJson(json)).toList();
+  return res != null && res.statusCode == 200;
 }

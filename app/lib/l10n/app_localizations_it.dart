@@ -1017,7 +1017,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connetti';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Prossimamente';
@@ -1660,7 +1660,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatShouldWeMake => 'Cosa dovremmo creare?';
 
   @override
-  String get appName => 'Nome App';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Descrizione';
@@ -2276,7 +2276,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get folderName => 'Nome cartella';
 
   @override
-  String get descriptionOptional => 'Descrizione (facoltativo)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Impossibile eliminare la cartella';
@@ -8034,4 +8034,84 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Più installazioni';
+
+  @override
+  String get couldNotOpenUrl => 'Impossibile aprire l\'URL. Riprova.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Il file audio non è disponibile per la riproduzione';
+
+  @override
+  String get audioPlaybackFailed => 'Impossibile riprodurre l\'audio. Il file potrebbe essere danneggiato o mancante.';
 }

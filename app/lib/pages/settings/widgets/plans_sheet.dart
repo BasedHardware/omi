@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -1967,7 +1967,7 @@ class _PlansSheetState extends State<PlansSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Shimmer.fromColors(
+                    ShimmerWithTimeout(
                       baseColor: Colors.white.withOpacity(0.1),
                       highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
@@ -1980,7 +1980,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Shimmer.fromColors(
+                    ShimmerWithTimeout(
                       baseColor: Colors.white.withOpacity(0.1),
                       highlightColor: Colors.white.withOpacity(0.3),
                       child: Container(
@@ -1998,7 +1998,7 @@ class _PlansSheetState extends State<PlansSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(
@@ -2011,7 +2011,7 @@ class _PlansSheetState extends State<PlansSheet> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Shimmer.fromColors(
+                  ShimmerWithTimeout(
                     baseColor: Colors.white.withOpacity(0.1),
                     highlightColor: Colors.white.withOpacity(0.3),
                     child: Container(

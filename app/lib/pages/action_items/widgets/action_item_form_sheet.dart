@@ -237,9 +237,26 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
   String _formatDueDateWithTime(DateTime date) {
     final locale = Localizations.localeOf(context).toString();
-    // Using DateFormat for localized output
-    final dateStr = DateFormat.yMMMMEEEEd(locale).format(date);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
     final timeStr = DateFormat.jm(locale).format(date);
+
+    String dateStr;
+    if (dateOnly == today) {
+      dateStr = context.l10n.today;
+    } else if (dateOnly == tomorrow) {
+      dateStr = context.l10n.tomorrow;
+    } else {
+      // Show short form: "Sat, Jan 31" or "Sat, Jan 31, 2027" if different year
+      if (date.year == now.year) {
+        dateStr = DateFormat.E(locale).format(date) + ', ' + DateFormat.MMMd(locale).format(date);
+      } else {
+        dateStr = DateFormat.E(locale).format(date) + ', ' + DateFormat.yMMMd(locale).format(date);
+      }
+    }
+
     return '$dateStr - $timeStr';
   }
 

@@ -17,7 +17,6 @@ from models.conversation import (
 )
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
-
 # =============================================
 #            FOLDER ASSIGNMENT
 # =============================================
@@ -415,7 +414,7 @@ CALENDAR MEETING CONTEXT:
        - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
        - "Today I will X" → EXTRACT (daily goal, needs tracking)
        - "This week/month I want to X" → EXTRACT (time-bound goal)
-       
+
        Only skip if user is ACTIVELY doing something RIGHT NOW:
        - "I am currently in the middle of X" → Skip (actively doing it this moment)
        - "Right now I'm doing X" → Skip (immediate present action)
@@ -562,7 +561,6 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> Structured:
     context_parts = []
@@ -650,7 +648,7 @@ CALENDAR MEETING CONTEXT:
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser
 
     response = chain.invoke(
         {
@@ -667,12 +665,6 @@ CALENDAR MEETING CONTEXT:
             event.duration = 180
         event.created = False
 
-    # Extract action items separately
-    action_items = extract_action_items(
-        transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context
-    )
-    response.action_items = action_items
-
     return response
 
 
@@ -683,7 +675,6 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -738,7 +729,7 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
+    chain = prompt | llm_medium_experiment | parser
 
     response = chain.invoke(
         {
@@ -755,10 +746,6 @@ def get_reprocess_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-
-    # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
-    response.action_items = action_items
 
     return response
 

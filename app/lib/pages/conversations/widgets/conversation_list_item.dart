@@ -289,7 +289,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             ? widget.conversation.getTranscript(maxCount: 100)
                             : widget.conversation.structured.title.decodeString,
                         style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),

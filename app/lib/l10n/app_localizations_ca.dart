@@ -1018,7 +1018,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connectar';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Properament';
@@ -1664,7 +1664,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get whatShouldWeMake => 'Què hauríem de fer?';
 
   @override
-  String get appName => 'Nom de l\'aplicació';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Descripció';
@@ -2279,7 +2279,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get folderName => 'Nom de la carpeta';
 
   @override
-  String get descriptionOptional => 'Descripció (opcional)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'No s\'ha pogut eliminar la carpeta';
@@ -8033,4 +8033,84 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Més instal·lacions';
+
+  @override
+  String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'El fitxer d\'àudio no està disponible per a la reproducció';
+
+  @override
+  String get audioPlaybackFailed => 'No s\'ha pogut reproduir l\'àudio. El fitxer pot estar malmès o no existir.';
 }

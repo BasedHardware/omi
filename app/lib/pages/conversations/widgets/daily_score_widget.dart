@@ -5,22 +5,53 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Daily Score Widget - Shows task completion rate as a 0-5 score
 class DailyScoreWidget extends StatefulWidget {
-  const DailyScoreWidget({super.key});
+  final GlobalKey<GoalsWidgetState>? goalsWidgetKey;
+
+  const DailyScoreWidget({super.key, this.goalsWidgetKey});
 
   @override
-  State<DailyScoreWidget> createState() => _DailyScoreWidgetState();
+  State<DailyScoreWidget> createState() => DailyScoreWidgetState();
 }
 
-class _DailyScoreWidgetState extends State<DailyScoreWidget> {
+class DailyScoreWidgetState extends State<DailyScoreWidget> {
+  // Public method to reload goals when they change (now a no-op since provider handles it)
+  void reloadGoals() {
+    // Goals are now managed by GoalsProvider, no need to reload manually
+  }
+
+  void _addGoal() {
+    widget.goalsWidgetKey?.currentState?.addGoal();
+  }
+
+  void _showCreateTaskSheet(BuildContext context) {
+    final now = DateTime.now();
+    final defaultDueDate = DateTime(now.year, now.month, now.day, 23, 59);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ActionItemFormSheet(
+        defaultDueDate: defaultDueDate,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, provider, child) {
+    return Consumer2<ActionItemsProvider, GoalsProvider>(
+      builder: (context, provider, goalsProvider, child) {
+        final goals = goalsProvider.goals;
+        final isLoadingGoals = goalsProvider.isLoading;
+
         // Calculate today's tasks - only tasks due today
         final now = DateTime.now();
         final todayStart = DateTime(now.year, now.month, now.day);
@@ -50,111 +81,142 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
 
         final statusColor = _getStatusColor(score);
 
-        return GestureDetector(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            _showScoreDetails(context, score, completedTasks, totalTasks);
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1C),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Left side: Text content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.dailyScore,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.2,
-                          color: Colors.white.withOpacity(0.5),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Stack(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Left side: Text content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.dailyScore,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                            color: Colors.white.withOpacity(0.5),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        context.l10n.dailyScoreDescription,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withOpacity(0.5),
-                          height: 1.4,
+                        const SizedBox(height: 6),
+                        Text(
+                          context.l10n.dailyScoreDescription,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.5),
+                            height: 1.4,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      // "your score >" link
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              context.l10n.yourScore,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.8),
+                        const SizedBox(height: 14),
+                        // "Add Goals" or "New Task" button
+                        if (!isLoadingGoals)
+                          GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              MixpanelManager().dailyScoreCtaTapped(ctaType: goals.isEmpty ? 'add_goal' : 'new_task');
+                              if (goals.isEmpty) {
+                                _addGoal();
+                              } else {
+                                _showCreateTaskSheet(context);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    goals.isEmpty ? context.l10n.addGoal : context.l10n.newTask,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white.withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    goals.isEmpty ? Icons.chevron_right : Icons.add,
+                                    size: 16,
+                                    color: Colors.white.withOpacity(0.5),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right,
-                              size: 16,
-                              color: Colors.white.withOpacity(0.5),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Right side: Semicircular gauge
+                  SizedBox(
+                    width: 130,
+                    height: 85,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Gauge arc
+                        Positioned(
+                          top: 0,
+                          child: CustomPaint(
+                            size: const Size(130, 75),
+                            painter: _SemicircleGaugePainter(
+                              score: score,
+                              color: statusColor,
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Right side: Semicircular gauge
-                SizedBox(
-                  width: 130,
-                  height: 85,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Gauge arc
-                      Positioned(
-                        top: 0,
-                        child: CustomPaint(
-                          size: const Size(130, 75),
-                          painter: _SemicircleGaugePainter(
-                            score: score,
-                            color: statusColor,
                           ),
                         ),
-                      ),
-                      // Score text positioned inside the arc - aligned with arch start
-                      Positioned(
-                        top: 38,
-                        child: Text(
-                          _formatScore(score),
-                          style: TextStyle(
-                            fontSize: 44,
-                            fontWeight: FontWeight.w500,
-                            color: statusColor,
-                            height: 1,
+                        // Score text positioned inside the arc - aligned with arch start
+                        Positioned(
+                          top: 38,
+                          child: Text(
+                            _formatScore(score),
+                            style: TextStyle(
+                              fontSize: 44,
+                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                              height: 1,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // Question mark icon in top right (always visible)
+              if (!isLoadingGoals)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      MixpanelManager().dailyScoreHelpTapped();
+                      _showScoreDetails(context, score, completedTasks, totalTasks);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 16,
+                        color: Colors.white.withOpacity(0.3),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         );
       },

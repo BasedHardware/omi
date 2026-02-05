@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/apple_health_service.dart';
 import 'package:omi/services/google_calendar_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -101,6 +102,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   @override
   void initState() {
     super.initState();
+    MixpanelManager().integrationsPageOpened();
     WidgetsBinding.instance.addObserver(this);
     // Schedule loading for after the first frame to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -132,6 +134,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (!app.isAvailable) {
       return;
     }
+    MixpanelManager().integrationConnectAttempted(integrationName: app.displayName);
 
     if (app == IntegrationApp.googleCalendar) {
       final service = GoogleCalendarService();
@@ -169,6 +172,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
       final result = await service.connect();
       if (result.isSuccess) {
+        MixpanelManager().integrationConnectSucceeded(integrationName: 'Apple Health');
         // Sync health data to the backend
         final synced = await service.syncHealthDataToBackend(days: 7);
         if (synced) {
@@ -189,6 +193,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         }
         await _loadFromBackend();
       } else {
+        MixpanelManager().integrationConnectFailed(integrationName: 'Apple Health');
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -213,6 +218,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
       final success = await authenticate();
       if (success) {
+        MixpanelManager().integrationConnectSucceeded(integrationName: app.displayName);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -224,6 +230,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         await _loadFromBackend();
         Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       } else {
+        MixpanelManager().integrationConnectFailed(integrationName: app.displayName);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -287,6 +294,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
         final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
         if (success) {
+          MixpanelManager().integrationDisconnected(integrationName: 'Apple Health');
           if (mounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(
@@ -317,6 +325,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final success = await disconnect();
     if (success) {
+      MixpanelManager().integrationDisconnected(integrationName: app.displayName);
       if (mounted) {
         await integrationProvider.deleteConnection(app.key);
       }
@@ -385,7 +394,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(

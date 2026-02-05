@@ -1014,7 +1014,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Ühenda';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Tulekul';
@@ -1653,7 +1653,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get whatShouldWeMake => 'Mida me peaksime tegema?';
 
   @override
-  String get appName => 'Rakenduse nimi';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Kirjeldus';
@@ -2267,7 +2267,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get folderName => 'Kausta nimi';
 
   @override
-  String get descriptionOptional => 'Kirjeldus (valikuline)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kausta kustutamine ebaõnnestus';
@@ -7984,4 +7984,84 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get mostInstalls => 'Enim paigaldusi';
+
+  @override
+  String get couldNotOpenUrl => 'URL-i avamine ebaõnnestus. Palun proovige uuesti.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Helifail ei ole esitamiseks saadaval';
+
+  @override
+  String get audioPlaybackFailed => 'Heli esitamine ebaõnnestus. Fail võib olla rikutud või puududa.';
 }
