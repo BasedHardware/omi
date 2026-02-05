@@ -13,7 +13,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 class LocalWalSyncImpl implements LocalWalSync {
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
 
   List<List<int>> _frames = [];
   List<bool> _frameSynced = [];
@@ -206,24 +206,33 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (wal.storage == WalStorage.mem) {
         String? filePath = await Wal.getFilePath(wal.getFileName());
         if (filePath == null) {
-          throw Exception('Flushing to storage failed. Cannot get file path.');
+          Logger.debug('Flushing to storage failed. Cannot get file path.');
+          continue;
         }
 
-        List<int> data = [];
-        for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i].sublist(3);
-
-          final byteFrame = ByteData(frame.length);
-          for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i, frame[i]);
-          }
-          data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-          data.addAll(byteFrame.buffer.asUint8List());
-        }
+        // Write frames to file incrementally to avoid OOM on large WALs
         final file = File(filePath);
-        await file.writeAsBytes(data);
+        final sink = file.openWrite();
+        try {
+          for (int j = 0; j < wal.data.length; j++) {
+            var frame = wal.data[j].sublist(3);
+
+            final byteFrame = ByteData(frame.length);
+            for (int k = 0; k < frame.length; k++) {
+              byteFrame.setUint8(k, frame[k]);
+            }
+            sink.add(Uint32List.fromList([frame.length]).buffer.asUint8List());
+            sink.add(byteFrame.buffer.asUint8List());
+          }
+          await sink.flush();
+        } finally {
+          await sink.close();
+        }
         wal.filePath = wal.getFileName();
         wal.storage = WalStorage.disk;
+
+        // Free the in-memory data after flushing to disk
+        wal.data = [];
 
         Logger.debug("_flush file ${wal.filePath}");
 
