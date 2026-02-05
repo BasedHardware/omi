@@ -147,17 +147,14 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
         )
 
     # Determine target chat based on manifest config
-    target = data.get('target', app.external_integration.chat_messages_target)
-    if target not in ('main', 'app'):
-        target = 'app'
+    target = app.external_integration.chat_messages_target
 
     # Add message to chat
     chat_app_id = None if target == 'main' else app.id
     add_app_message(data['message'], chat_app_id, uid)
 
     # Send push notification based on manifest config
-    should_notify = data.get('notify', app.external_integration.chat_messages_notify)
-    if should_notify:
+    if app.external_integration.chat_messages_notify:
         send_app_notification(uid, app.name, app.id, data['message'])
 
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
