@@ -19,6 +19,7 @@ from utils.apps import get_available_apps
 from utils.notifications import send_notification
 from utils.llm.clients import generate_embedding
 from utils.llm.proactive_notification import get_proactive_message
+from utils.llm.usage_tracker import track_usage, Features
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 
@@ -316,7 +317,8 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             enabled=True,
             proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat'],
         )
-        mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
+        with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+            mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             print(f"Sent mentor notification to user {uid}")
@@ -381,7 +383,8 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             noti = response_data.get('notification', None)
             # print('Plugin', plugin.id, 'response notification:', noti)
             if app.has_capability("proactive_notification"):
-                message = _process_proactive_notification(uid, app, noti)
+                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                    message = _process_proactive_notification(uid, app, noti)
                 if message:
                     results[app.id] = message
 
