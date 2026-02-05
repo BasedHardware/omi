@@ -8099,8 +8099,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => 'Fișierul audio nu este disponibil pentru redare';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => 'Nu se poate reda audio. Fișierul poate fi corupt sau lipsă.';
 }

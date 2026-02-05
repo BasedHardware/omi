@@ -8093,8 +8093,8 @@ class AppLocalizationsBg extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => 'Аудио файлът не е наличен за възпроизвеждане';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => 'Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ.';
 }

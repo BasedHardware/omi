@@ -8023,8 +8023,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => 'ไฟล์เสียงไม่พร้อมสำหรับการเล่น';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => 'ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป';
 }

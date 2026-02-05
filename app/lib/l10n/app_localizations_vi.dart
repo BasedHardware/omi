@@ -8063,8 +8063,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => 'Tệp âm thanh không khả dụng để phát';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => 'Không thể phát âm thanh. Tệp có thể bị hỏng hoặc bị thiếu.';
 }

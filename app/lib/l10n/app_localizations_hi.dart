@@ -8041,8 +8041,8 @@ class AppLocalizationsHi extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => 'ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => 'ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।';
 }

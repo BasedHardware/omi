@@ -7917,8 +7917,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => '音频文件无法播放';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => '无法播放音频。文件可能已损坏或丢失。';
 }

@@ -7927,8 +7927,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get googleSearch => 'Google Search';
 
   @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+  String get audioPlaybackUnavailable => '音声ファイルは再生できません';
 
   @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+  String get audioPlaybackFailed => '音声を再生できません。ファイルが破損しているか見つかりません。';
 }
