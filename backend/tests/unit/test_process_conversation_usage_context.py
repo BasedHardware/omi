@@ -417,8 +417,11 @@ def test_action_items_skipped_on_discard():
 def test_models_unchanged_for_llm_calls():
     """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
     import re
+    from pathlib import Path
 
-    conv_proc_source = open("/home/claude/omi/omi2/backend/utils/llm/conversation_processing.py").read()
+    # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py
+    conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
+    conv_proc_source = conv_proc_path.read_text()
 
     # get_transcript_structure should use llm_medium_experiment
     struct_match = re.search(
