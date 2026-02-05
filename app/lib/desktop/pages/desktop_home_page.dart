@@ -920,25 +920,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
 
       Logger.debug('Launching Rewind app from: $bundledAppPath');
 
-      // Check if bundled app exists
-      if (await Directory(bundledAppPath).exists()) {
-        await Process.run('open', [bundledAppPath, '--args', '--mode=rewind']);
-      } else {
-        // Fallback: try launching by app name (if installed separately)
-        Logger.debug('Bundled app not found, trying by name');
-        await Process.run('open', ['-a', 'Omi Computer', '--args', '--mode=rewind']);
-      }
+      await Process.run('open', [bundledAppPath, '--args', '--mode=rewind']);
     } catch (e) {
       Logger.error('Failed to launch Rewind app: $e');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Could not open Rewind. Please try again.'),
-            action: SnackBarAction(
-              label: 'Download',
-              onPressed: () => launchUrl(Uri.parse('https://omi.me/download')),
-            ),
+          const SnackBar(
+            content: Text('Could not open Rewind. Please try again.'),
           ),
         );
       }
