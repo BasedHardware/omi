@@ -177,4 +177,5 @@ class Features:
     PERSONA = "persona"
     MEMORIES = "memories"
     TRANSCRIBE = "transcribe"
+    REALTIME_INTEGRATIONS = "realtime_integrations"
     OTHER = "other"
