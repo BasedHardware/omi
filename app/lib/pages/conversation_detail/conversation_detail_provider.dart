@@ -54,8 +54,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     return conversation.structured;
   }
 
+  bool get hasConversation => conversationOrNull != null;
+
   ServerConversation? _cachedConversation;
-  ServerConversation get conversation {
+
+  ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
 
@@ -77,6 +80,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return _cachedConversation = result;
     }
 
+    return null;
+  }
+
+  ServerConversation get conversation {
+    final result = conversationOrNull;
+    if (result != null) return result;
     throw StateError("No valid conversation found");
   }
 
