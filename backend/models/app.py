@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Set
+from typing import List, Literal, Optional, Set
 
 from pydantic import BaseModel, field_validator
 
@@ -74,7 +74,7 @@ class ExternalIntegration(BaseModel):
     chat_tools_manifest_url: Optional[str] = None
     # Chat messages configuration from manifest (enabled, target, notify)
     chat_messages_enabled: bool = False
-    chat_messages_target: str = 'app'  # 'main' or 'app'
+    chat_messages_target: Literal['main', 'app'] = 'app'
     chat_messages_notify: bool = True
     # MCP server URL (e.g., https://mcp.example.com/mcp)
     mcp_server_url: Optional[str] = None
