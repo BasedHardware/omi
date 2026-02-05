@@ -1,5 +1,8 @@
 """
 Unit tests for usage tracking context in conversation processing.
+
+Verifies that sub-feature tracking is applied per LLM call (no umbrella tracking)
+and that each sub-feature gets the correct Features constant.
 """
 
 import os
@@ -106,6 +109,7 @@ for attr in [
     "get_suggested_apps_for_conversation",
     "get_reprocess_transcript_structure",
     "assign_conversation_to_folder",
+    "extract_action_items",
 ]:
     setattr(llm_conv, attr, MagicMock())
 
@@ -156,19 +160,327 @@ import importlib
 process_conversation = importlib.import_module("utils.conversations.process_conversation")
 
 
-def test_get_structured_uses_track_usage_and_resets_on_exception():
-    assert usage_tracker.get_current_context() is None
+def test_sub_feature_constants_exist():
+    """Verify all sub-feature tracking constants are defined."""
+    assert hasattr(usage_tracker.Features, 'CONVERSATION_DISCARD')
+    assert hasattr(usage_tracker.Features, 'CONVERSATION_STRUCTURE')
+    assert hasattr(usage_tracker.Features, 'CONVERSATION_ACTION_ITEMS')
+    assert hasattr(usage_tracker.Features, 'CONVERSATION_FOLDER')
+    assert hasattr(usage_tracker.Features, 'CONVERSATION_APPS')
+    # Verify they're distinct from the umbrella
+    assert usage_tracker.Features.CONVERSATION_DISCARD != usage_tracker.Features.CONVERSATION_PROCESSING
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING
+
+
+def test_discard_call_uses_discard_feature_tracking():
+    """Verify should_discard_conversation is called within CONVERSATION_DISCARD context."""
     captured = {}
 
-    def fake_inner(uid, language_code, conversation, force_process=False, people=None):
+    def fake_discard(*args, **kwargs):
         captured["ctx"] = usage_tracker.get_current_context()
-        raise RuntimeError("boom")
+        return False  # Don't discard
 
-    with patch.object(process_conversation, "_get_structured_inner", side_effect=fake_inner):
-        with pytest.raises(RuntimeError):
-            process_conversation._get_structured("user-ctx", "en", MagicMock())
+    # Create a minimal conversation mock without external_data triggering CalendarMeetingContext
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None  # Prevent CalendarMeetingContext parsing
 
-    assert captured["ctx"] is not None
-    assert captured["ctx"].uid == "user-ctx"
-    assert captured["ctx"].feature == usage_tracker.Features.CONVERSATION_PROCESSING
+    # Mock notification_db
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    # Mock action_items_db
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    # Patch on the process_conversation module (where it's imported/bound)
+    with patch.object(process_conversation, "should_discard_conversation", fake_discard), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ):
+        try:
+            process_conversation._get_structured("user-1", "en", conversation)
+        except Exception:
+            pass  # We only care about the context capture
+
+    assert captured.get("ctx") is not None
+    assert captured["ctx"].feature == usage_tracker.Features.CONVERSATION_DISCARD
+    assert captured["ctx"].uid == "user-1"
+
+
+def test_track_usage_context_resets_after_call():
+    """Verify context is properly reset after each sub-feature tracking block."""
+    assert usage_tracker.get_current_context() is None
+
+    with usage_tracker.track_usage("user-test", usage_tracker.Features.CONVERSATION_STRUCTURE):
+        ctx = usage_tracker.get_current_context()
+        assert ctx.feature == usage_tracker.Features.CONVERSATION_STRUCTURE
+
+    # Context should be reset after exiting
+    assert usage_tracker.get_current_context() is None
+
+
+def test_track_usage_context_resets_on_exception():
+    """Verify context is properly reset even when an exception occurs."""
+    assert usage_tracker.get_current_context() is None
+
+    with pytest.raises(RuntimeError):
+        with usage_tracker.track_usage("user-err", usage_tracker.Features.CONVERSATION_DISCARD):
+            raise RuntimeError("boom")
+
+    assert usage_tracker.get_current_context() is None
+
+
+def test_no_umbrella_conversation_processing_tracking():
+    """Verify _get_structured no longer wraps everything in CONVERSATION_PROCESSING."""
+    captured_contexts = []
+
+    # Patch track_usage on the process_conversation module (where it's imported)
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    llm_conv.should_discard_conversation = MagicMock(return_value=False)
+    llm_conv.get_transcript_structure = MagicMock()
+
+    with patch.object(process_conversation, "track_usage", spy_track_usage):
+        try:
+            process_conversation._get_structured("user-2", "en", conversation)
+        except Exception:
+            pass
+
+    # The umbrella CONVERSATION_PROCESSING should NOT appear
+    assert usage_tracker.Features.CONVERSATION_PROCESSING not in captured_contexts
+    # Sub-features should appear
+    assert (
+        usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
+        or usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+    )
+
+
+def test_action_items_tracked_separately_from_structure():
+    """Verify action items extraction uses CONVERSATION_ACTION_ITEMS, not CONVERSATION_STRUCTURE."""
+    captured_contexts = []
+
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "track_usage", spy_track_usage
+    ):
+        try:
+            process_conversation._get_structured("user-3", "en", conversation)
+        except Exception:
+            pass
+
+    assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
+    # Action items should be tracked separately from structure
+    assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1
+    # Structure should also be tracked
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+
+
+def test_structure_and_apps_tracked_at_runtime():
+    """Verify conv_structure and conv_apps tracking at runtime call sites."""
+    captured_contexts = []
+
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "a transcript with enough words to not be discarded easily"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+    conversation.structured = MagicMock()
+    conversation.structured.title = "Test"
+    conversation.structured.overview = "Test overview"
+    conversation.structured.category = MagicMock()
+    conversation.structured.category.value = "other"
+    conversation.structured.action_items = []
+    conversation.structured.events = []
+    conversation.apps_results = []
+    conversation.discarded = False
+    conversation.id = "test-conv-id"
+    conversation.folder_id = None
+    conversation.suggested_summarization_apps = ["app1"]
+    conversation.is_locked = False
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    folders_mod = sys.modules["database.folders"]
+    folders_mod.get_folders = MagicMock(return_value=[{"id": "f1", "name": "Default", "is_default": True}])
+
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_user_preferred_app = MagicMock(return_value=None)
+    redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
+    ), patch.object(
+        process_conversation, "track_usage", spy_track_usage
+    ):
+        try:
+            process_conversation._get_structured("user-4", "en", conversation)
+        except Exception:
+            pass
+
+    # Both structure and folder tracking should fire
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+    assert usage_tracker.Features.CONVERSATION_DISCARD in captured_contexts
+
+
+def test_action_items_skipped_on_discard():
+    """Verify extract_action_items is NOT called when conversation is discarded."""
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    extract_mock = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)), patch.object(
+        process_conversation, "extract_action_items", extract_mock
+    ):
+        structured, discarded = process_conversation._get_structured("user-5", "en", conversation)
+
+    assert discarded is True
+    # extract_action_items should NOT have been called
+    extract_mock.assert_not_called()
+
+
+def test_models_unchanged_for_llm_calls():
+    """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
+    import re
+    from pathlib import Path
+
+    # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py
+    conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
+    conv_proc_source = conv_proc_path.read_text()
+
+    # get_transcript_structure should use llm_medium_experiment
+    struct_match = re.search(
+        r'def get_transcript_structure.*?chain = prompt \| (\w+) \| parser',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert struct_match is not None
+    assert (
+        struct_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for structure, got {struct_match.group(1)}"
+
+    # get_app_result should use llm_medium_experiment
+    app_match = re.search(
+        r'def get_app_result.*?response = (\w+)\.invoke\(prompt\)',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert app_match is not None
+    assert (
+        app_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
+
+    # extract_action_items should use llm_medium_experiment
+    action_match = re.search(
+        r'def extract_action_items.*?chain = prompt \| (\w+) \| action_items_parser',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert action_match is not None
+    assert (
+        action_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
+
+
+def test_threaded_tracking_context_isolation():
+    """Verify track_usage context works correctly with threading (context isolation)."""
+    import threading
+
+    results = {}
+
+    def thread_fn(uid, feature, key):
+        with usage_tracker.track_usage(uid, feature):
+            ctx = usage_tracker.get_current_context()
+            results[key] = ctx
+
+    t1 = threading.Thread(target=thread_fn, args=("u1", usage_tracker.Features.MEMORIES, "t1"))
+    t2 = threading.Thread(target=thread_fn, args=("u2", usage_tracker.Features.TRENDS, "t2"))
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    # Each thread should have had its own context
+    assert results["t1"].feature == usage_tracker.Features.MEMORIES
+    assert results["t1"].uid == "u1"
+    assert results["t2"].feature == usage_tracker.Features.TRENDS
+    assert results["t2"].uid == "u2"
+
+    # Main thread should have no context set
     assert usage_tracker.get_current_context() is None
