@@ -480,6 +480,11 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    if (_recordingDevice == null) {
+      Logger.debug("Recording device is null, cannot process voice command");
+      return;
+    }
+
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     if (messageProvider != null) {
       await messageProvider?.sendVoiceMessageStreamToServer(
