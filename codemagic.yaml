@@ -1176,7 +1176,7 @@ workflows:
         script: |
           # Get latest Omi Computer release (Swift app) to bundle into Flutter app
           echo "Looking for latest Omi Computer release..."
-          LATEST_MACOS_TAG=$(gh release list --repo BasedHardware/omi --limit 50 | grep -E '\-macos\s' | head -1 | awk '{print $3}')
+          LATEST_MACOS_TAG=$(gh release list --repo BasedHardware/omi --limit 50 | grep -E '\-macos\s' | head -1 | awk -F'\t' '{print $3}')
 
           if [ -n "$LATEST_MACOS_TAG" ]; then
             echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
@@ -1376,6 +1376,27 @@ workflows:
               --sign "$DEVELOPER_ID_CERT" \
               "$dylib"
           done
+
+          # Sign bundled Omi Computer.app (if present)
+          # The bundled app was signed with a different cert, must re-sign with our Developer ID
+          BUNDLED_APP="$APP_PATH/Contents/MacOS/Omi Computer.app"
+          if [ -d "$BUNDLED_APP" ]; then
+            echo "Signing bundled Omi Computer.app..."
+            # Sign all nested code first
+            find "$BUNDLED_APP" -name "*.framework" -type d | while read fw; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$fw"
+            done
+            find "$BUNDLED_APP" -name "*.dylib" -type f | while read lib; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$lib"
+            done
+            # Sign the bundled app itself
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$BUNDLED_APP"
+            echo "Bundled Omi Computer.app signed"
+          fi
 
           # Sign Sparkle framework and its components first
           SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
