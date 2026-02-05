@@ -8,7 +8,7 @@ import pytz
 import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
-from database.redis_db import set_daily_summary_sent, has_daily_summary_been_sent
+from database.redis_db import set_daily_summary_sent, try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
 from utils.llm.external_integrations import get_conversation_summary
@@ -115,8 +115,9 @@ def _send_summary_notification(user_data: tuple):
             display_date = now_utc.date()
         date_str = display_date.strftime('%Y-%m-%d')
 
-    # Check if summary already sent for this date
-    if has_daily_summary_been_sent(uid, date_str):
+    # Atomically acquire lock BEFORE expensive LLM work to prevent duplicate sends.
+    # Uses SETNX so only one cron instance proceeds per user+date.
+    if not try_acquire_daily_summary_lock(uid, date_str):
         return
 
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
