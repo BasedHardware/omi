@@ -2605,6 +2605,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "音频文件无法播放",
+  "audioPlaybackFailed": "无法播放音频。文件可能已损坏或丢失。"
 }

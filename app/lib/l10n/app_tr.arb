@@ -2618,6 +2618,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "Ses dosyası oynatma için mevcut değil",
+  "audioPlaybackFailed": "Ses oynatılamıyor. Dosya bozuk veya eksik olabilir."
 }

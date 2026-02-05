@@ -2583,6 +2583,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή",
+  "audioPlaybackFailed": "Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει."
 }

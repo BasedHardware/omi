@@ -2552,6 +2552,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "El fitxer d'àudio no està disponible per a la reproducció",
+  "audioPlaybackFailed": "No s'ha pogut reproduir l'àudio. El fitxer pot estar malmès o no existir."
 }

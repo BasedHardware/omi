@@ -2679,6 +2679,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "A hangfájl nem érhető el lejátszásra",
+  "audioPlaybackFailed": "Nem sikerült lejátszani a hangot. A fájl sérült vagy hiányzik."
 }

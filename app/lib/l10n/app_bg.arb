@@ -2552,6 +2552,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "Аудио файлът не е наличен за възпроизвеждане",
+  "audioPlaybackFailed": "Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ."
 }

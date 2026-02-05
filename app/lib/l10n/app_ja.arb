@@ -2584,6 +2584,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "音声ファイルは再生できません",
+  "audioPlaybackFailed": "音声を再生できません。ファイルが破損しているか見つかりません。"
 }

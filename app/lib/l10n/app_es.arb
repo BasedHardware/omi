@@ -2584,6 +2584,6 @@
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
   "googleSearch": "Google Search",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackUnavailable": "El archivo de audio no está disponible para reproducción",
+  "audioPlaybackFailed": "No se puede reproducir el audio. El archivo puede estar dañado o no existir."
 }
