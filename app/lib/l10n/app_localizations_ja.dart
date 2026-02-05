@@ -7925,4 +7925,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '音声ファイルは再生できません';
+
+  @override
+  String get audioPlaybackFailed => '音声を再生できません。ファイルが破損しているか見つかりません。';
 }

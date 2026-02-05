@@ -8057,4 +8057,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Äänitiedosto ei ole saatavilla toistettavaksi';
+
+  @override
+  String get audioPlaybackFailed => 'Ääntä ei voi toistaa. Tiedosto saattaa olla vioittunut tai puuttua.';
 }

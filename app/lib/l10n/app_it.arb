@@ -2582,5 +2582,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Il file audio non è disponibile per la riproduzione",
+  "audioPlaybackFailed": "Impossibile riprodurre l'audio. Il file potrebbe essere danneggiato o mancante."
 }

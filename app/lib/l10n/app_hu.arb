@@ -2678,5 +2678,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "A hangfájl nem érhető el lejátszásra",
+  "audioPlaybackFailed": "Nem sikerült lejátszani a hangot. A fájl sérült vagy hiányzik."
 }

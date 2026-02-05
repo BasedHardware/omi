@@ -8116,4 +8116,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή';
+
+  @override
+  String get audioPlaybackFailed =>
+      'Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει.';
 }

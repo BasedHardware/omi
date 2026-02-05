@@ -8021,4 +8021,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ไฟล์เสียงไม่พร้อมสำหรับการเล่น';
+
+  @override
+  String get audioPlaybackFailed => 'ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป';
 }

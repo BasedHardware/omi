@@ -8132,4 +8132,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Le fichier audio n\'est pas disponible pour la lecture';
+
+  @override
+  String get audioPlaybackFailed => 'Impossible de lire l\'audio. Le fichier est peut-être corrompu ou manquant.';
 }

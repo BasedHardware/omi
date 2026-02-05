@@ -8054,4 +8054,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Lydfilen er ikke tilgjengelig for avspilling';
+
+  @override
+  String get audioPlaybackFailed => 'Kan ikke spille av lyd. Filen kan være skadet eller mangler.';
 }

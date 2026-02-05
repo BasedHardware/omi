@@ -2617,5 +2617,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Plik audio nie jest dostępny do odtwarzania",
+  "audioPlaybackFailed": "Nie można odtworzyć dźwięku. Plik może być uszkodzony lub brakujący."
 }

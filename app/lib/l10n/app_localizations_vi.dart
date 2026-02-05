@@ -8061,4 +8061,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Tệp âm thanh không khả dụng để phát';
+
+  @override
+  String get audioPlaybackFailed => 'Không thể phát âm thanh. Tệp có thể bị hỏng hoặc bị thiếu.';
 }

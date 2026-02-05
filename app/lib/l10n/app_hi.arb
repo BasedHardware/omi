@@ -2583,5 +2583,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है",
+  "audioPlaybackFailed": "ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।"
 }

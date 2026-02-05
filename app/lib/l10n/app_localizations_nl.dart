@@ -8084,4 +8084,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audiobestand is niet beschikbaar voor afspelen';
+
+  @override
+  String get audioPlaybackFailed => 'Kan audio niet afspelen. Het bestand is mogelijk beschadigd of ontbreekt.';
 }

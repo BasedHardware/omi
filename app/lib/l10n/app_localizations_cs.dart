@@ -8054,4 +8054,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Zvukový soubor není k dispozici pro přehrávání';
+
+  @override
+  String get audioPlaybackFailed => 'Nelze přehrát zvuk. Soubor může být poškozený nebo chybět.';
 }

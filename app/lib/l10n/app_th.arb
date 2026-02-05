@@ -2582,5 +2582,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "ไฟล์เสียงไม่พร้อมสำหรับการเล่น",
+  "audioPlaybackFailed": "ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป"
 }

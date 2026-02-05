@@ -2617,5 +2617,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Le fichier audio n'est pas disponible pour la lecture",
+  "audioPlaybackFailed": "Impossible de lire l'audio. Le fichier est peut-être corrompu ou manquant."
 }

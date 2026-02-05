@@ -8097,4 +8097,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Fișierul audio nu este disponibil pentru redare';
+
+  @override
+  String get audioPlaybackFailed => 'Nu se poate reda audio. Fișierul poate fi corupt sau lipsă.';
 }

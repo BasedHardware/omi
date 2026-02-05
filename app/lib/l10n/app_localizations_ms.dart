@@ -8082,4 +8082,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Fail audio tidak tersedia untuk dimainkan';
+
+  @override
+  String get audioPlaybackFailed => 'Tidak dapat memainkan audio. Fail mungkin rosak atau hilang.';
 }

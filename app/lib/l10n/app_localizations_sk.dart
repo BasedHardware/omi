@@ -8049,4 +8049,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Zvukový súbor nie je k dispozícii na prehrávanie';
+
+  @override
+  String get audioPlaybackFailed => 'Nie je možné prehrať zvuk. Súbor môže byť poškodený alebo chýba.';
 }

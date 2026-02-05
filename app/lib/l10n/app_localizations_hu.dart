@@ -8096,4 +8096,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'A hangfájl nem érhető el lejátszásra';
+
+  @override
+  String get audioPlaybackFailed => 'Nem sikerült lejátszani a hangot. A fájl sérült vagy hiányzik.';
 }

@@ -8003,4 +8003,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ملف الصوت غير متاح للتشغيل';
+
+  @override
+  String get audioPlaybackFailed => 'تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا.';
 }

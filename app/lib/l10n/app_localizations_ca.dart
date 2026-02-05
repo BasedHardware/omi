@@ -8107,4 +8107,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'El fitxer d\'àudio no està disponible per a la reproducció';
+
+  @override
+  String get audioPlaybackFailed => 'No s\'ha pogut reproduir l\'àudio. El fitxer pot estar malmès o no existir.';
 }

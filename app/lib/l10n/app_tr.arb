@@ -2617,5 +2617,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Ses dosyası oynatma için mevcut değil",
+  "audioPlaybackFailed": "Ses oynatılamıyor. Dosya bozuk veya eksik olabilir."
 }
