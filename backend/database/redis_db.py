@@ -791,6 +791,14 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
+def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
+    """Atomically acquire daily summary lock BEFORE expensive LLM work.
+    Uses SETNX to prevent race conditions when multiple cron instances run concurrently.
+    Returns True if acquired (this instance should proceed), False if already locked."""
+    result = r.set(f'users:{uid}:daily_summary_sent:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
 def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 2):
     """
     Mark that a daily summary was sent to user for a specific date.
