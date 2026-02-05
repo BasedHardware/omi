@@ -114,6 +114,29 @@ EOF
     flutter pub run build_runner build --delete-conflicting-outputs > /dev/null 2>&1
 fi
 
+# Set up Custom.xcconfig for local development signing
+CUSTOM_XCCONFIG="$APP_DIR/macos/Runner/Configs/Custom.xcconfig"
+if [ ! -f "$CUSTOM_XCCONFIG" ] || ! grep -q "^APP_BUNDLE_IDENTIFIER=" "$CUSTOM_XCCONFIG" 2>/dev/null; then
+    echo "Setting up Custom.xcconfig for local development..."
+
+    # Try to detect development team from existing certificates
+    DEV_TEAM=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+    if [ -z "$DEV_TEAM" ]; then
+        DEV_TEAM="S6DP5HF77G"  # Default team ID
+    fi
+
+    cat > "$CUSTOM_XCCONFIG" << EOF
+// This is a generated file; do not edit or check into version control.
+APP_BUNDLE_IDENTIFIER=com.omi.computer-macos
+
+// Local development signing
+DEVELOPMENT_TEAM=$DEV_TEAM
+CODE_SIGN_STYLE=Automatic
+CODE_SIGN_IDENTITY=Apple Development
+EOF
+    echo "Created Custom.xcconfig with development team: $DEV_TEAM"
+fi
+
 # Clean build if requested
 if [ "$CLEAN" = true ]; then
     echo "Cleaning Flutter build..."
