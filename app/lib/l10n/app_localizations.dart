@@ -15056,6 +15056,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Google Search'**
   String get googleSearch;
+
+  /// No description provided for @audioPlaybackUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file is not available for playback'**
+  String get audioPlaybackUnavailable;
+
+  /// No description provided for @audioPlaybackFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to play audio. The file may be corrupted or missing.'**
+  String get audioPlaybackFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
