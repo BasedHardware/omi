@@ -314,7 +314,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             image='https://raw.githubusercontent.com/BasedHardware/Omi/main/assets/images/app_logo.png',
             capabilities={'proactive_notification'},
             enabled=True,
-            proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat']
+            proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat'],
         )
         mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
         if mentor_message:

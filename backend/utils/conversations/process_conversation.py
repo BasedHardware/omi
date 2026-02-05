@@ -394,7 +394,6 @@ def _extract_memories(uid: str, conversation: Conversation):
                 )
 
         if similar_memories:
-
             resolution = resolve_memory_conflict(memory.content, similar_memories)
 
             if resolution.action == 'keep_existing':

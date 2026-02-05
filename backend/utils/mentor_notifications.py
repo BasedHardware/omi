@@ -52,7 +52,7 @@ class MessageBuffer:
                     'last_analysis_time': time.time(),
                     'last_activity': current_time,
                     'words_after_silence': 0,
-                    'silence_detected': False
+                    'silence_detected': False,
                 }
             else:
                 # Check for silence period
@@ -71,7 +71,8 @@ class MessageBuffer:
         current_time = time.time()
         with self.lock:
             expired_sessions = [
-                session_id for session_id, data in self.buffers.items()
+                session_id
+                for session_id, data in self.buffers.items()
                 if current_time - data['last_activity'] > 3600  # Remove sessions older than 1 hour
             ]
             for session_id in expired_sessions:
@@ -99,15 +100,12 @@ def extract_topics(discussion_text: str) -> List[str]:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]"
+                    "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]",
                 },
-                {
-                    "role": "user",
-                    "content": f"Extract all topics from this conversation:\n{discussion_text}"
-                }
+                {"role": "user", "content": f"Extract all topics from this conversation:\n{discussion_text}"},
             ],
             temperature=0.3,
-            max_tokens=150
+            max_tokens=150,
         )
 
         # Parse the response text as JSON
@@ -228,7 +226,9 @@ Previous discussions and context: {{user_context}}
 
 Chat history: {{user_chat}}
 
-Remember: First evaluate silently, then either respond with empty string OR give experience-backed advice.""".format(text=discussion_text)
+Remember: First evaluate silently, then either respond with empty string OR give experience-backed advice.""".format(
+        text=discussion_text
+    )
 
     # Adjust prompt based on frequency level
     adjusted_prompt = adjust_prompt_for_frequency(base_system_prompt, frequency)
@@ -236,13 +236,7 @@ Remember: First evaluate silently, then either respond with empty string OR give
     return {
         "prompt": adjusted_prompt,
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
-        "context": {
-            "filters": {
-                "people": [],
-                "entities": [],
-                "topics": topics
-            }
-        }
+        "context": {"filters": {"people": [], "entities": [], "topics": topics}},
     }
 
 
@@ -291,25 +285,21 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
                     logger.info(f"Silence period ended for user {uid}, starting fresh conversation")
 
             can_append = (
-                buffer_data['messages'] and
-                abs(buffer_data['messages'][-1]['timestamp'] - timestamp) < 2.0 and
-                buffer_data['messages'][-1].get('is_user') == is_user
+                buffer_data['messages']
+                and abs(buffer_data['messages'][-1]['timestamp'] - timestamp) < 2.0
+                and buffer_data['messages'][-1].get('is_user') == is_user
             )
 
             if can_append:
                 buffer_data['messages'][-1]['text'] += ' ' + text
             else:
-                buffer_data['messages'].append({
-                    'text': text,
-                    'timestamp': timestamp,
-                    'is_user': is_user
-                })
+                buffer_data['messages'].append({'text': text, 'timestamp': timestamp, 'is_user': is_user})
 
     # Real-time analysis: Process immediately when we have enough segments
     # Rate limiting is handled by app_integrations.py (1 notification per 300s)
-    if (len(buffer_data['messages']) >= MIN_SEGMENTS_FOR_ANALYSIS and
-        not buffer_data['silence_detected']):  # Only analyze if not in silence period
-
+    if (
+        len(buffer_data['messages']) >= MIN_SEGMENTS_FOR_ANALYSIS and not buffer_data['silence_detected']
+    ):  # Only analyze if not in silence period
         # Sort messages by timestamp
         sorted_messages = sorted(buffer_data['messages'], key=lambda x: x['timestamp'])
 

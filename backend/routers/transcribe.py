@@ -1810,7 +1810,6 @@ async def _stream_handler(
                     break
 
                 if message.get("bytes") is not None:
-
                     data = message.get("bytes")
                     if len(data) <= 2:  # Ping/keepalive, 0x8a 0x00
                         continue

@@ -130,11 +130,7 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
     state: GraphState,
-) -> Literal[
-    "no_context_conversation",
-    "agentic_context_dependent_conversation",
-    "persona_question",
-]:
+) -> Literal["no_context_conversation", "agentic_context_dependent_conversation", "persona_question",]:
     print("determine_conversation_type")
 
     # persona

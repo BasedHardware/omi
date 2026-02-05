@@ -171,7 +171,13 @@ def send_message(
         try:
             # Using the new agentic system via graph routing
             async for chunk in execute_graph_chat_stream(
-                uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session, context=data.context
+                uid,
+                messages,
+                app,
+                cited=True,
+                callback_data=callback_data,
+                chat_session=chat_session,
+                context=data.context,
             ):
                 if chunk:
                     msg = chunk.replace("\n", "__CRLF__")

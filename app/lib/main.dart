@@ -60,7 +60,6 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
-import 'package:omi/providers/focus_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -162,10 +161,19 @@ Future _init() async {
   await SharedPreferencesUtil.init();
 
   // DEBUG: Log Firebase Auth state before getIdToken
-  Logger.debug('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  Logger.debug('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
-  if (isAuth) PlatformManager.instance.mixpanel.identify();
+  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  if (isAuth) {
+    PlatformManager.instance.mixpanel.identify();
+    // Restore onboarding state from server if not already set locally
+    // This handles the case where cached credentials are used on startup
+    if (!SharedPreferencesUtil().onboardingCompleted) {
+      print('DEBUG main: Restoring onboarding state from server...');
+      await AuthService.instance.restoreOnboardingState();
+      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+    }
+  }
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -376,7 +384,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
           ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
           ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
-          ChangeNotifierProvider(create: (context) => FocusProvider()..initialize()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

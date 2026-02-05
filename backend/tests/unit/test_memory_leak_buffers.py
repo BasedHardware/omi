@@ -4,6 +4,7 @@ Covers: audio buffer capping (deque), deque maxlen behavior, image chunk TTL (Or
 """
 import time
 from collections import OrderedDict, deque
+
 # Constants matching transcribe.py
 MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB
 MAX_SEGMENT_BUFFER_SIZE = 1000
