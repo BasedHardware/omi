@@ -155,24 +155,28 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
-    if (Platform.isIOS || Platform.isMacOS) {
-      String? apnsToken;
-      for (int i = 0; i < 10; i++) {
-        apnsToken = await _firebaseMessaging.getAPNSToken();
-        if (apnsToken != null) break;
-        await Future.delayed(const Duration(seconds: 1));
+    try {
+      if (Platform.isIOS || Platform.isMacOS) {
+        String? apnsToken;
+        for (int i = 0; i < 10; i++) {
+          apnsToken = await _firebaseMessaging.getAPNSToken();
+          if (apnsToken != null) break;
+          await Future.delayed(const Duration(seconds: 1));
+        }
+
+        if (apnsToken == null) {
+          Logger.debug('APNS token not available yet, will retry on refresh');
+          return;
+        }
       }
 
-      if (apnsToken == null) {
-        Logger.debug('APNS token not available yet, will retry on refresh');
-        _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
-        return;
-      }
+      String? token = await _firebaseMessaging.getToken();
+      await saveFcmToken(token);
+    } catch (e) {
+      Logger.debug('Failed to save notification token: $e');
+    } finally {
+      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     }
-
-    String? token = await _firebaseMessaging.getToken();
-    await saveFcmToken(token);
-    _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
   @override
