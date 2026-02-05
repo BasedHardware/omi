@@ -459,9 +459,12 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
+      print('DEBUG _restoreOnboardingState: fetching from server...');
       final state = await getUserOnboardingState();
+      print('DEBUG _restoreOnboardingState: got state=$state');
       if (state != null) {
         if (state['completed'] == true) {
+          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
@@ -474,10 +477,11 @@ class AuthService {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
-        Logger.debug('Restored onboarding state from server: completed=${state['completed']}');
+        print(
+            'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
       }
     } catch (e) {
-      Logger.debug('Error restoring onboarding state: $e');
+      print('DEBUG _restoreOnboardingState: error=$e');
     }
   }
 
