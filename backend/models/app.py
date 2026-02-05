@@ -75,7 +75,7 @@ class ExternalIntegration(BaseModel):
     # Chat messages configuration from manifest (enabled, target, notify)
     chat_messages_enabled: bool = False
     chat_messages_target: Literal['main', 'app'] = 'app'
-    chat_messages_notify: bool = True
+    chat_messages_notify: bool = False
     # MCP server URL (e.g., https://mcp.example.com/mcp)
     mcp_server_url: Optional[str] = None
     # OAuth tokens for MCP server authentication

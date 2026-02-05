@@ -158,10 +158,12 @@ def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> 
     if chat_messages:
         app_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
         app_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
-        app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', True)
+        app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', False)
     else:
-        # For updates, explicitly disable if no chat_messages in manifest
+        # Reset all chat_messages fields to defaults when not in manifest
         app_dict['external_integration']['chat_messages_enabled'] = False
+        app_dict['external_integration']['chat_messages_target'] = 'app'
+        app_dict['external_integration']['chat_messages_notify'] = False
 
     return app_dict
 
