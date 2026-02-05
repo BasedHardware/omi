@@ -414,18 +414,13 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
-def test_model_downgrade_for_structure():
-    """Verify gpt-4.1 (llm_medium) is used for transcript structure, not gpt-5.1."""
-    # This test checks conversation_processing.py uses the correct model client
-    import importlib
+def test_models_unchanged_for_llm_calls():
+    """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
+    import re
 
     conv_proc_source = open("/home/claude/omi/omi2/backend/utils/llm/conversation_processing.py").read()
 
-    # get_transcript_structure should use llm_medium, not llm_medium_experiment
-    # Find the chain definition within get_transcript_structure
-    import re
-
-    # Look for chain definitions after get_transcript_structure function
+    # get_transcript_structure should use llm_medium_experiment
     struct_match = re.search(
         r'def get_transcript_structure.*?chain = prompt \| (\w+) \| parser',
         conv_proc_source,
@@ -433,19 +428,21 @@ def test_model_downgrade_for_structure():
     )
     assert struct_match is not None
     assert (
-        struct_match.group(1) == "llm_medium"
-    ), f"Expected llm_medium (gpt-4.1) for structure, got {struct_match.group(1)}"
+        struct_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use llm_medium, not llm_medium_experiment
+    # get_app_result should use llm_medium_experiment
     app_match = re.search(
         r'def get_app_result.*?response = (\w+)\.invoke\(prompt\)',
         conv_proc_source,
         re.DOTALL,
     )
     assert app_match is not None
-    assert app_match.group(1) == "llm_medium", f"Expected llm_medium (gpt-4.1) for app result, got {app_match.group(1)}"
+    assert (
+        app_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
 
-    # extract_action_items should STILL use llm_medium_experiment (gpt-5.1)
+    # extract_action_items should use llm_medium_experiment
     action_match = re.search(
         r'def extract_action_items.*?chain = prompt \| (\w+) \| action_items_parser',
         conv_proc_source,
@@ -454,7 +451,7 @@ def test_model_downgrade_for_structure():
     assert action_match is not None
     assert (
         action_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment (gpt-5.1) for action items, got {action_match.group(1)}"
+    ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
 
 
 def test_threaded_tracking_context_isolation():
