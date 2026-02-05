@@ -457,7 +457,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   onTap: () async {
                     final Uri url = Uri.parse('https://help.omi.me/en/');
                     if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      try {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      } catch (e) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
                     }
                   },
                 ),
