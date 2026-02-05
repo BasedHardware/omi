@@ -99,6 +99,10 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 [//]: # "- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol/)"
 [//]: # "- [Plugins](https://docs.omi.me/doc/developer/Plugins/)"
 
+---
+
+**Test change**: This is a test commit to verify GitHub integration end-to-end.
+
 ## Licensing
 
 Omi is available under <a href="https://github.com/BasedHardware/omi/blob/main/LICENSE">MIT License</a>
