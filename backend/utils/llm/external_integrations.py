@@ -6,6 +6,7 @@ import database.users as users_db
 from models.conversation import Structured, Conversation
 from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
+from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 
 
@@ -25,9 +26,7 @@ def get_message_structure(
     Message Content: ```{text}```
     Message Source: {text_source_spec}
 
-    {format_instructions}'''.replace(
-        '    ', ''
-    ).strip()
+    {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | llm_mini | parser
@@ -66,9 +65,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
-      '''.replace(
-        '    ', ''
-    ).strip()
+      '''.replace('    ', '').strip()
 
     response = llm_mini.with_structured_output(Structured).invoke(prompt)
 
@@ -108,11 +105,10 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     ```
     ${conversation_history}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
     # print(prompt)
-    return llm_mini.invoke(prompt).content
+    with track_usage(uid, Features.DAILY_SUMMARY):
+        return llm_mini.invoke(prompt).content
 
 
 def generate_comprehensive_daily_summary(
@@ -251,7 +247,8 @@ RULES:
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
     try:
-        response = llm_medium_experiment.invoke(prompt).content
+        with track_usage(uid, Features.DAILY_SUMMARY):
+            response = llm_medium_experiment.invoke(prompt).content
         # Clean up response - remove markdown if present
         response = response.strip()
         if response.startswith('```'):
