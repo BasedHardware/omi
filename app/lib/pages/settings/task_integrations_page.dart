@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
@@ -235,6 +235,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         if (granted) {
           // Update the provider's cached permission status with the granted result
           await provider.updateAppleRemindersPermission(granted: true);
+          // Save connected status to backend so auto-sync works
+          await provider.saveConnectionDetails(app.key, {'connected': true});
           await provider.setSelectedApp(app);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
@@ -250,6 +252,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         }
         return;
       }
+      // Permission already granted - ensure backend knows it's connected
+      await provider.saveConnectionDetails(app.key, {'connected': true});
       await provider.setSelectedApp(app);
       return;
     }
@@ -509,7 +513,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: Colors.grey.shade800,
       highlightColor: Colors.grey.shade600,
       child: Container(

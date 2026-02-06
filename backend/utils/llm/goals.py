@@ -2,6 +2,7 @@
 LLM utilities for goal tracking.
 Handles AI-powered goal suggestions, advice generation, and progress extraction.
 """
+
 import json
 import re
 import traceback
@@ -14,6 +15,7 @@ import database.conversations as conversations_db
 import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import llm_mini, llm_medium
+from utils.llm.usage_tracker import track_usage, Features
 
 
 def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
@@ -23,12 +25,12 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     2. Recent conversations (last 7 days)
     3. Recent chat messages
     4. User memories/facts
-    
+
     Returns dict with conversation_context, chat_context, memory_context
     """
     conv_summaries = []
     seen_ids = set()
-    
+
     # 1. Vector search: Find conversations semantically related to the goal
     try:
         relevant_ids = vector_search(query=goal_title, uid=uid, k=10)
@@ -43,15 +45,12 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                         conv_summaries.append(f"[Relevant] {overview[:300]}")
     except Exception as e:
         print(f"[GOAL-ADVICE] Vector search error: {e}")
-    
+
     # 2. Recent conversations (last 7 days) - for current context
     try:
         week_ago = datetime.now(timezone.utc) - timedelta(days=7)
         recent_convs = conversations_db.get_conversations(
-            uid=uid, 
-            limit=20, 
-            statuses=['completed'],
-            include_discarded=False
+            uid=uid, limit=20, statuses=['completed'], include_discarded=False
         )
         for conv in recent_convs:
             conv_id = conv.get('id')
@@ -67,7 +66,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                             break
     except Exception as e:
         print(f"[GOAL-ADVICE] Recent conversations error: {e}")
-    
+
     # 3. Recent chat messages
     chat_context = ""
     try:
@@ -82,7 +81,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
             chat_context = '\n'.join(chat_lines[-10:])  # Last 10 messages
     except Exception as e:
         print(f"[GOAL-ADVICE] Chat messages error: {e}")
-    
+
     # 4. User memories/facts
     memory_context = ""
     try:
@@ -91,11 +90,11 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
         memory_context = '\n'.join(memory_texts)
     except Exception as e:
         print(f"[GOAL-ADVICE] Memories error: {e}")
-    
+
     return {
         'conversation_context': '\n'.join(conv_summaries),
         'chat_context': chat_context,
-        'memory_context': memory_context
+        'memory_context': memory_context,
     }
 
 
@@ -104,7 +103,7 @@ def suggest_goal(uid: str) -> Dict:
     try:
         # Get user's memories for context
         memories = memories_db.get_memories(uid, limit=100, offset=0)
-        
+
         if not memories:
             # Default suggestion when no memories
             return {
@@ -113,13 +112,13 @@ def suggest_goal(uid: str) -> Dict:
                 'suggested_target': 10,
                 'suggested_min': 0,
                 'suggested_max': 10,
-                'reasoning': 'Start tracking your daily learning progress!'
+                'reasoning': 'Start tracking your daily learning progress!',
             }
-        
+
         # Prepare memory context for AI
         memory_texts = [m.get('content', '') for m in memories[:50] if m.get('content')]
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
-        
+
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
 
 User's recent memories/learnings:
@@ -142,8 +141,9 @@ Choose a goal type:
 
 Make the goal specific, measurable, and relevant to their interests."""
 
-        response = llm_mini.invoke(prompt).content
-        
+        with track_usage(uid, Features.GOALS):
+            response = llm_mini.invoke(prompt).content
+
         # Find JSON in response
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
@@ -152,7 +152,7 @@ Make the goal specific, measurable, and relevant to their interests."""
             suggestion['suggested_min'] = suggestion.get('suggested_min', 0)
             suggestion['suggested_max'] = suggestion.get('suggested_max', suggestion.get('suggested_target', 10))
             return suggestion
-        
+
         # Fallback if parsing fails
         return {
             'suggested_title': 'Track your daily progress',
@@ -160,18 +160,18 @@ Make the goal specific, measurable, and relevant to their interests."""
             'suggested_target': 10,
             'suggested_min': 0,
             'suggested_max': 10,
-            'reasoning': 'A simple goal to get you started!'
+            'reasoning': 'A simple goal to get you started!',
         }
-        
+
     except Exception as e:
         print(f"Error generating goal suggestion: {e}")
         return {
             'suggested_title': 'Make progress every day',
-            'suggested_type': 'scale', 
+            'suggested_type': 'scale',
             'suggested_target': 10,
             'suggested_min': 0,
             'suggested_max': 10,
-            'reasoning': 'Start with a simple daily progress goal!'
+            'reasoning': 'Start with a simple daily progress goal!',
         }
 
 
@@ -185,19 +185,19 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         goal = goals_db.get_user_goal(uid)
         if not goal or goal.get('id') != goal_id:
             raise ValueError("Goal not found")
-        
+
         goal_title = goal.get('title', 'Unknown')
         current_value = goal.get('current_value', 0)
         target_value = goal.get('target_value', 10)
-        
+
         # Calculate progress
         progress_pct = 0
         if target_value > 0:
             progress_pct = (current_value / target_value) * 100
-        
+
         # Get rich context using hybrid retrieval
         context = _get_goal_context(uid, goal_title)
-        
+
         # Build the prompt with full context
         prompt = f"""You are a strategic advisor. Based on the user's goal and their context, give ONE specific actionable step they should take THIS WEEK.
 
@@ -215,16 +215,19 @@ USER FACTS:
 
 Give ONE specific action in 1-2 sentences. Be concise but complete. No generic advice."""
 
-        print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
-        
+        print(
+            f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat"
+        )
+
         # Use the better model for high-quality advice
-        advice = llm_medium.invoke(prompt).content
-        
+        with track_usage(uid, Features.GOALS):
+            advice = llm_medium.invoke(prompt).content
+
         # Clean up quotes but keep full text
         advice = advice.strip().strip('"').strip("'")
-        
+
         return advice
-        
+
     except Exception as e:
         print(f"[GOAL-ADVICE] Error: {e}")
         traceback.print_exc()
@@ -240,12 +243,12 @@ def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
         goal = goals_db.get_user_goal(uid)
         if not goal or not text or len(text) < 5:
             return None
-        
+
         goal_title = goal.get('title', '')
         current_value = goal.get('current_value', 0)
         target_value = goal.get('target_value', 10)
         goal_type = goal.get('goal_type', 'numeric')
-        
+
         prompt = f"""Analyze this message to see if it mentions progress toward this goal:
 
 Goal: "{goal_title}"
@@ -265,8 +268,9 @@ Handle formats like:
 Return JSON only: {{"found": true/false, "value": number_or_null, "reasoning": "brief explanation"}}
 Only return found=true if you're confident this is about the SPECIFIC goal mentioned above."""
 
-        response = llm_mini.invoke(prompt).content
-        
+        with track_usage(uid, Features.GOALS):
+            response = llm_mini.invoke(prompt).content
+
         # Extract JSON from response
         match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
         if match:
@@ -276,15 +280,16 @@ Only return found=true if you're confident this is about the SPECIFIC goal menti
                 old_value = current_value
                 if new_value != old_value:
                     goals_db.update_goal_progress(uid, goal['id'], new_value)
-                    print(f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})")
+                    print(
+                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                    )
                     return {
                         "status": "updated",
                         "old_value": old_value,
                         "new_value": new_value,
-                        "reasoning": result.get('reasoning')
+                        "reasoning": result.get('reasoning'),
                     }
         return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
     except Exception as e:
         print(f"Error in extract_and_update_goal_progress: {e}")
         return {"status": "error", "message": str(e)}
-

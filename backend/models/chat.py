@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Literal, Optional, Union
 
 from pydantic import BaseModel, model_validator
 
@@ -43,6 +43,25 @@ class FileChat(BaseModel):
         return super().dict(exclude=exclude_fields, **kwargs)
 
 
+class ChartDataPoint(BaseModel):
+    label: str
+    value: float
+
+
+class ChartDataset(BaseModel):
+    label: str
+    data_points: List[ChartDataPoint]
+    color: Optional[str] = None  # hex color, e.g. "#4CAF50"
+
+
+class ChartData(BaseModel):
+    chart_type: Literal['line', 'bar']
+    title: str
+    x_label: Optional[str] = None
+    y_label: Optional[str] = None
+    datasets: List[ChartDataset]
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -65,6 +84,7 @@ class Message(BaseModel):
     prompt_name: Optional[str] = None  # LangSmith prompt name for versioning
     prompt_commit: Optional[str] = None  # LangSmith prompt commit/version for traceability
     rating: Optional[int] = None  # User feedback: 1 = thumbs up, -1 = thumbs down, None = no rating
+    chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
 
     @model_validator(mode='before')
     @classmethod

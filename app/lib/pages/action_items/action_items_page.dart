@@ -3,18 +3,25 @@ import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/action_item_form_sheet.dart';
 
+// Re-export Goal from goals.dart for use in this file
+export 'package:omi/backend/http/api/goals.dart' show Goal;
+
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class ActionItemsPage extends StatefulWidget {
-  const ActionItemsPage({super.key});
+  final VoidCallback? onAddGoal;
+
+  const ActionItemsPage({super.key, this.onAddGoal});
 
   @override
   State<ActionItemsPage> createState() => _ActionItemsPageState();
@@ -26,6 +33,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Track indent levels for each task (task id -> indent level 0-3)
   final Map<String, int> _indentLevels = {};
+
+  // Task -> goal mapping
+  final Map<String, String> _taskGoalLinks = {};
 
   // Track custom order for each category (category -> list of item ids)
   final Map<TaskCategory, List<String>> _categoryOrder = {};
@@ -52,6 +62,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadCategoryOrder();
+    _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -75,6 +86,50 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         } catch (_) {}
       }
     });
+  }
+
+  void _loadTaskGoalLinks() {
+    final savedLinks = SharedPreferencesUtil().taskGoalLinks;
+    setState(() {
+      _taskGoalLinks
+        ..clear()
+        ..addAll(savedLinks);
+    });
+    // Prune orphaned links after loading
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pruneTaskGoalLinks();
+    });
+  }
+
+  /// Remove task-goal links where the goal no longer exists
+  void _pruneTaskGoalLinks() {
+    final goals = Provider.of<GoalsProvider>(context, listen: false).goals;
+    if (goals.isEmpty) return;
+    final goalIds = goals.map((goal) => goal.id).toSet();
+    final removed = _taskGoalLinks.keys.where((taskId) => !goalIds.contains(_taskGoalLinks[taskId])).toList();
+    if (removed.isEmpty) return;
+    for (final taskId in removed) {
+      _taskGoalLinks.remove(taskId);
+    }
+    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
+  }
+
+  void _attachTaskToGoal(String taskId, String goalId) {
+    setState(() {
+      _taskGoalLinks[taskId] = goalId;
+    });
+    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
+    HapticFeedback.lightImpact();
+  }
+
+  String? _getGoalTitleForTask(ActionItemWithMetadata item) {
+    final goalId = _taskGoalLinks[item.id];
+    if (goalId == null) return null;
+    final goals = Provider.of<GoalsProvider>(context, listen: false).goals;
+    for (final goal in goals) {
+      if (goal.id == goalId) return goal.title;
+    }
+    return null;
   }
 
   void _saveCategoryOrder() {
@@ -121,6 +176,47 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(defaultDueDate: defaultDueDate),
+    );
+  }
+
+  void _showCreateGoalSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _GoalCreateSheet(
+        onSave: (title, current, target) async {
+          // Create goal via provider
+          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+          final created = await goalsProvider.createGoal(
+            title: title,
+            goalType: 'numeric',
+            targetValue: target,
+            currentValue: current,
+          );
+          if (created != null) {
+            MixpanelManager()
+                .goalCreated(goalId: created.id, titleLength: title.length, targetValue: target, source: 'tasks_page');
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildFab() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 48.0),
+      child: FloatingActionButton(
+        heroTag: 'action_items_fab',
+        onPressed: () {
+          HapticFeedback.lightImpact();
+          _showCreateActionItemSheet(
+            defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+          );
+        },
+        backgroundColor: Colors.deepPurple,
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
     );
   }
 
@@ -313,27 +409,22 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: Padding(
-            padding: const EdgeInsets.only(bottom: 100.0),
-            child: FloatingActionButton(
-              heroTag: 'action_items_fab',
-              onPressed: () => _showCreateActionItemSheet(),
-              backgroundColor: Colors.deepPurpleAccent,
-              child: const Icon(Icons.add, color: Colors.white),
+          floatingActionButton: _buildFab(),
+          body: GestureDetector(
+            onTap: () {},
+            child: RefreshIndicator(
+              onRefresh: () async {
+                HapticFeedback.mediumImpact();
+                return provider.forceRefreshActionItems();
+              },
+              color: Colors.deepPurple,
+              backgroundColor: Colors.white,
+              child: provider.isLoading && provider.actionItems.isEmpty
+                  ? _buildLoadingState()
+                  : categorizedItems.values.every((l) => l.isEmpty)
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
             ),
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              HapticFeedback.mediumImpact();
-              return provider.forceRefreshActionItems();
-            },
-            color: Colors.deepPurpleAccent,
-            backgroundColor: Colors.white,
-            child: provider.isLoading && provider.actionItems.isEmpty
-                ? _buildLoadingState()
-                : categorizedItems.values.every((l) => l.isEmpty)
-                    ? _buildEmptyState()
-                    : _buildTasksList(categorizedItems, provider),
           ),
         );
       },
@@ -342,52 +433,66 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildLoadingState() {
     return const Center(
-      child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
+      child: CircularProgressIndicator(color: Colors.deepPurple),
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.deepPurpleAccent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Icon(
-                Icons.check_circle_outline,
-                size: 40,
-                color: Colors.deepPurpleAccent.withOpacity(0.6),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              context.l10n.noTasksYet,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              context.l10n.tasksEmptyStateMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 16,
-                height: 1.5,
-              ),
-            ),
-          ],
+  Widget _buildEmptyTasksList() {
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        SliverToBoxAdapter(
+          child: _buildGoalsRow(),
         ),
-      ),
+        const SliverPadding(padding: EdgeInsets.only(top: 24)),
+        SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      size: 40,
+                      color: Colors.deepPurple.withOpacity(0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    context.l10n.noTasksYet,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.l10n.tasksEmptyStateMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
     );
   }
 
@@ -400,6 +505,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        SliverToBoxAdapter(
+          child: _buildGoalsRow(),
+        ),
+        const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
         // Build each category section (skip empty ones)
         for (final category in TaskCategory.values)
@@ -415,6 +524,114 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+    );
+  }
+
+  Widget _buildGoalsRow() {
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        if (goalsProvider.isLoading) {
+          return const SizedBox.shrink();
+        }
+
+        final goals = goalsProvider.goals;
+
+        // If no goals, don't show anything
+        if (goals.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      context.l10n.goals,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (goals.length < 3)
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          MixpanelManager().track('Add Goal Clicked from Tasks Page');
+                          _showCreateGoalSheet();
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.add,
+                            size: 18,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Goal items
+              ...goals.map((goal) => _buildGoalItem(goal)),
+              // Spacing after section
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGoalDropTile(Goal? goal) {
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) => goal != null,
+      onAcceptWithDetails: (details) {
+        if (goal == null) return;
+        MixpanelManager().taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
+        _attachTaskToGoal(details.data.id, goal.id);
+      },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty && goal != null;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(goal == null ? 0.04 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isHovering ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.08),
+              width: 1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              goal?.title ?? '',
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              style: TextStyle(
+                color: goal == null ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.9),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -543,7 +760,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
+            color: showIndicator ? Colors.deepPurple : Colors.transparent,
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -639,7 +856,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: Colors.deepPurple,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -650,7 +867,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: Colors.deepPurple,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -668,13 +885,24 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
-    // If at indent 0, use Dismissible for swipe-to-delete with animation
+    // If at indent 0, allow swipe-right to indent and swipe-left to delete.
     if (indentLevel == 0) {
       return Dismissible(
         key: Key('dismiss_${item.id}'),
-        direction: DismissDirection.endToStart,
-        dismissThresholds: const {DismissDirection.endToStart: 0.3},
-        background: Container(
+        direction: DismissDirection.horizontal,
+        dismissThresholds: const {
+          DismissDirection.startToEnd: 0.25,
+          DismissDirection.endToStart: 0.3,
+        },
+        confirmDismiss: (direction) async {
+          if (direction == DismissDirection.startToEnd) {
+            _incrementIndent(item.id);
+            return false;
+          }
+          return true;
+        },
+        background: Container(color: Colors.transparent),
+        secondaryBackground: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20.0),
           decoration: BoxDecoration(
@@ -684,7 +912,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           child: const Icon(Icons.delete, color: Colors.white),
         ),
         onDismissed: (direction) {
-          _deleteTask(item);
+          if (direction == DismissDirection.endToStart) {
+            _deleteTask(item);
+          }
         },
         child: LongPressDraggable<ActionItemWithMetadata>(
           data: item,
@@ -827,6 +1057,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     double indentWidth,
   ) {
     final indentLevel = _getIndentLevel(item.id);
+    final goalTitle = _getGoalTitleForTask(item);
 
     return GestureDetector(
       onTap: () => _showEditSheet(item),
@@ -865,13 +1096,28 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 const SizedBox(width: 12),
                 // Task text
                 Expanded(
-                  child: Text(
-                    item.description,
-                    style: TextStyle(
-                      color: item.completed ? Colors.grey[600] : Colors.white,
-                      fontSize: 15,
-                      decoration: item.completed ? TextDecoration.lineThrough : null,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.description,
+                        style: TextStyle(
+                          color: item.completed ? Colors.grey[600] : Colors.white,
+                          fontSize: 15,
+                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      if (goalTitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          goalTitle,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -898,6 +1144,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  Future<void> _deleteGoal(Goal goal) async {
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.deleteGoal(goal.id);
+  }
+
   void _showEditSheet(ActionItemWithMetadata item) {
     showModalBottomSheet(
       context: context,
@@ -905,5 +1156,610 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(actionItem: item),
     );
+  }
+
+  Widget _buildGoalItem(Goal goal) {
+    final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
+    final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
+    final displayTitle = '${goal.title} $progressText';
+
+    return Dismissible(
+      key: Key('goal_${goal.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        HapticFeedback.mediumImpact();
+        return await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1F1F25),
+                title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      },
+      onDismissed: (direction) async {
+        MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
+        await _deleteGoal(goal);
+      },
+      background: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      child: GestureDetector(
+        onTap: () {
+          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
+          _showEditGoalSheet(goal);
+        },
+        child: Container(
+          color: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          margin: const EdgeInsets.only(left: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Circular progress indicator
+              Container(
+                width: 22,
+                height: 22,
+                child: CustomPaint(
+                  painter: _CircularProgressPainter(
+                    progress: progress.clamp(0.0, 1.0),
+                    color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Goal title with progress
+              Expanded(
+                child: Text(
+                  displayTitle,
+                  style: TextStyle(
+                    color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
+                    fontSize: 15,
+                    decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditGoalSheet(Goal goal) {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _GoalEditSheet(
+        goal: goal,
+        onSave: (title, current, target) async {
+          // Update goal via provider
+          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+          await goalsProvider.updateGoal(
+            goal.id,
+            title: title,
+            currentValue: current,
+            targetValue: target,
+          );
+          MixpanelManager().goalUpdated(goalId: goal.id, source: 'tasks_page');
+        },
+        onDelete: () {
+          MixpanelManager().goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+          _deleteGoal(goal);
+        },
+      ),
+    );
+  }
+}
+
+/// Stateful widget for goal creation sheet that properly manages TextEditingController lifecycle
+class _GoalCreateSheet extends StatefulWidget {
+  final Function(String title, double current, double target) onSave;
+
+  const _GoalCreateSheet({required this.onSave});
+
+  @override
+  State<_GoalCreateSheet> createState() => _GoalCreateSheetState();
+}
+
+class _GoalCreateSheetState extends State<_GoalCreateSheet> {
+  late final TextEditingController titleController;
+  late final TextEditingController currentController;
+  late final TextEditingController targetController;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController();
+    currentController = TextEditingController(text: '0');
+    targetController = TextEditingController(text: '100');
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    currentController.dispose();
+    targetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                context.l10n.addGoal,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Title field
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.08),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Current & Target fields
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.current,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: currentController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: targetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final title = titleController.text.trim();
+                    if (title.isEmpty) {
+                      Navigator.pop(context);
+                      return;
+                    }
+
+                    final current = double.tryParse(currentController.text) ?? 0;
+                    final target = double.tryParse(targetController.text) ?? 100;
+
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+
+                    widget.onSave(title, current, target);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(context.l10n.addGoal),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Stateful widget for goal edit sheet that properly manages TextEditingController lifecycle
+class _GoalEditSheet extends StatefulWidget {
+  final Goal goal;
+  final Function(String title, double current, double target) onSave;
+  final Function() onDelete;
+
+  const _GoalEditSheet({
+    required this.goal,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  State<_GoalEditSheet> createState() => _GoalEditSheetState();
+}
+
+class _GoalEditSheetState extends State<_GoalEditSheet> {
+  late final TextEditingController titleController;
+  late final TextEditingController currentController;
+  late final TextEditingController targetController;
+
+  @override
+  void initState() {
+    super.initState();
+    titleController = TextEditingController(text: widget.goal.title);
+    currentController = TextEditingController(text: widget.goal.currentValue.toInt().toString());
+    targetController = TextEditingController(text: widget.goal.targetValue.toInt().toString());
+  }
+
+  @override
+  void dispose() {
+    titleController.dispose();
+    currentController.dispose();
+    targetController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade700,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                context.l10n.editGoal,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Title field
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.goalTitle,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.08),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Current & Target fields
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.current,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: currentController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          context.l10n.target,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: targetController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withOpacity(0.08),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  // Delete button
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        // Confirm and delete
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: const Color(0xFF1F1F25),
+                            title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                            content:
+                                Text('Delete "${widget.goal.title}"?', style: const TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          widget.onDelete();
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(context.l10n.delete),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Save button
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final title = titleController.text.trim();
+                        if (title.isEmpty) {
+                          Navigator.pop(context);
+                          return;
+                        }
+
+                        final current = double.tryParse(currentController.text) ?? widget.goal.currentValue;
+                        final target = double.tryParse(targetController.text) ?? widget.goal.targetValue;
+
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+
+                        widget.onSave(title, current, target);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(context.l10n.save),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom painter for circular progress indicator (pie chart style)
+class _CircularProgressPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _CircularProgressPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw background circle (empty part)
+    final bgPaint = Paint()
+      ..color = color.withOpacity(0.2)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Draw progress arc (filled part)
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      const startAngle = -90 * 3.14159 / 180; // Start from top
+      final sweepAngle = progress * 2 * 3.14159; // Full circle is 2π
+
+      canvas.drawArc(rect, startAngle, sweepAngle, true, progressPaint);
+    }
+
+    // Draw border circle
+    final borderPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawCircle(center, radius - 1, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(_CircularProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }

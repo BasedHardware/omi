@@ -221,7 +221,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
+    value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omi.me"
   - name: RAPID_API_HOST

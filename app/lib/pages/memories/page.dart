@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -155,14 +155,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
             floatingActionButton: Padding(
-              padding: const EdgeInsets.only(bottom: 100.0),
+              padding: const EdgeInsets.only(bottom: 48.0),
               child: FloatingActionButton(
                 heroTag: 'memories_fab',
                 onPressed: () {
                   showMemoryDialog(context, provider);
                   MixpanelManager().memoriesPageCreateMemoryBtn();
                 },
-                backgroundColor: Colors.deepPurpleAccent,
+                backgroundColor: Colors.deepPurple,
                 tooltip: context.l10n.createMemoryTooltip,
                 child: const Icon(
                   Icons.add,
@@ -416,7 +416,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   Widget _buildShimmerButton() {
-    return Shimmer.fromColors(
+    return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
@@ -434,7 +434,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       child: ListView.builder(
         itemCount: 8, // Show 8 shimmer items
         itemBuilder: (context, index) {
-          return Shimmer.fromColors(
+          return ShimmerWithTimeout(
             baseColor: AppStyles.backgroundSecondary,
             highlightColor: AppStyles.backgroundTertiary,
             child: Container(

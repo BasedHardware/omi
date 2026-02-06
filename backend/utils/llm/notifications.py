@@ -1,6 +1,7 @@
 import random
 from typing import Tuple, List
 from .clients import llm_medium
+from .usage_tracker import track_usage, Features
 from database.memories import get_memories
 
 
@@ -61,7 +62,8 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
     Return only the notification body text - make it personal, warm and engaging."""
 
     try:
-        response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
+        with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
+            response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
         body = response.content
         # Return placeholder title and generated body
         return "omi", body.strip()
@@ -118,7 +120,8 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     Return only the notification body text."""
 
     try:
-        response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
+        with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
+            response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
         body = response.content
         return "omi", body.strip()
 

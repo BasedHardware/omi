@@ -11,7 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -102,7 +102,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
         _handlePaste();
         return KeyEventResult.handled;
       }
-      
+
       return KeyEventResult.ignored;
     });
 
@@ -165,6 +165,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       if (provider.messages.isEmpty) {
         provider.refreshMessages();
       }
+      provider.fetchChatApps();
 
       _fadeController.forward();
       _slideController.forward();
@@ -969,7 +970,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                Shimmer.fromColors(
+                                ShimmerWithTimeout(
                                   baseColor: Colors.white,
                                   highlightColor: Colors.grey,
                                   child: Text(
@@ -1002,8 +1003,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       ],
     );
   }
-
-
 
   Widget _buildFloatingInputArea(
     MessageProvider provider,
@@ -1549,8 +1548,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     final selectedApp = appProvider.selectedChatAppId.isEmpty || appProvider.selectedChatAppId == 'no_selected'
         ? null
         : appProvider.getSelectedApp();
-    final availableApps = appProvider.apps.where((app) => app.worksWithChat() && app.enabled).toList();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1586,7 +1583,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
               child: Row(
                 children: [
                   Builder(
-                    builder: (context) => OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
+                    builder: (context) =>
+                        OmiSectionHeader(icon: FontAwesomeIcons.robot, title: context.l10n.selectChatAssistant),
                   ),
                   const Spacer(),
                   OmiIconButton(
@@ -1604,83 +1602,96 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
             // Apps list
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  // Default Omi option
-                  _buildAppSelectionItem(
-                    app: null,
-                    isSelected: selectedApp == null,
-                    onTap: () => _handleAppSelection(context, appProvider, null),
-                  ),
+              child: Consumer<MessageProvider>(
+                builder: (context, messageProvider, child) {
+                  final availableApps = messageProvider.chatApps;
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    children: [
+                      // Default Omi option
+                      _buildAppSelectionItem(
+                        app: null,
+                        isSelected: selectedApp == null,
+                        onTap: () => _handleAppSelection(context, appProvider, null),
+                      ),
 
-                  const SizedBox(height: 8),
+                      const SizedBox(height: 8),
 
-                  // Available chat apps
-                  ...availableApps.map((app) => _buildAppSelectionItem(
-                        app: app,
-                        isSelected: selectedApp?.id == app.id,
-                        onTap: () => _handleAppSelection(context, appProvider, app),
-                      )),
-
-                  const SizedBox(height: 16),
-
-                  // Enable more apps option
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.pop(context);
-                          final homeProvider = context.read<HomeProvider>();
-                          homeProvider.setIndex(4);
-                          homeProvider.onSelectedIndexChanged?.call(4);
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                              width: 1,
-                            ),
+                      // Available chat apps
+                      if (availableApps.isEmpty && messageProvider.isLoadingChatApps)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                           ),
-                          child: Builder(
-                            builder: (context) => Row(
-                              children: [
-                                const Icon(
-                                  FontAwesomeIcons.store,
-                                  color: ResponsiveHelper.purplePrimary,
-                                  size: 16,
+                        )
+                      else
+                        ...availableApps.map((app) => _buildAppSelectionItem(
+                              app: app,
+                              isSelected: selectedApp?.id == app.id,
+                              onTap: () => _handleAppSelection(context, appProvider, app),
+                            )),
+
+                      const SizedBox(height: 16),
+
+                      // Enable more apps option
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              final homeProvider = context.read<HomeProvider>();
+                              homeProvider.setIndex(4);
+                              homeProvider.onSelectedIndexChanged?.call(4);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                                  width: 1,
                                 ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  context.l10n.enableMoreApps,
-                                  style: const TextStyle(
-                                    color: ResponsiveHelper.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              ),
+                              child: Builder(
+                                builder: (context) => Row(
+                                  children: [
+                                    const Icon(
+                                      FontAwesomeIcons.store,
+                                      color: ResponsiveHelper.purplePrimary,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      context.l10n.enableMoreApps,
+                                      style: const TextStyle(
+                                        color: ResponsiveHelper.textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Icon(
+                                      FontAwesomeIcons.chevronRight,
+                                      color: ResponsiveHelper.textTertiary,
+                                      size: 12,
+                                    ),
+                                  ],
                                 ),
-                                const Spacer(),
-                                const Icon(
-                                  FontAwesomeIcons.chevronRight,
-                                  color: ResponsiveHelper.textTertiary,
-                                  size: 12,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
 
-                  const SizedBox(height: 20),
-                ],
+                      const SizedBox(height: 20),
+                    ],
+                  );
+                },
               ),
             ),
           ],

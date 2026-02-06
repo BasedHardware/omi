@@ -13,6 +13,7 @@ from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
 from models.app import ChatTool
+from utils.mcp_client import call_mcp_tool
 
 # Import agent_config_context for accessing user context
 try:
@@ -74,7 +75,13 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     return create_model(model_name, **field_definitions)
 
 
-def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
+def create_app_tool(
+    app_tool: ChatTool,
+    app_id: str,
+    app_name: str,
+    mcp_server_url: Optional[str] = None,
+    mcp_oauth_tokens: Optional[Dict] = None,
+) -> Callable:
     """
     Dynamically create a LangChain tool from an app tool definition.
 
@@ -85,6 +92,8 @@ def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
         app_tool: ChatTool definition from the app
         app_id: ID of the app providing this tool
         app_name: Name of the app (for display purposes)
+        mcp_server_url: MCP server URL (for MCP tools)
+        mcp_oauth_tokens: OAuth tokens dict (for MCP tools requiring auth)
 
     Returns:
         A LangChain StructuredTool
@@ -103,7 +112,27 @@ def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
         model_name = f"{app_tool.name.replace('-', '_').replace('.', '_')}Input"
         args_schema = create_model(model_name)
 
-    # Create the async function that will be called
+    if app_tool.is_mcp and mcp_server_url:
+        # MCP tool — call via JSON-RPC instead of HTTP endpoint
+        _mcp_url = mcp_server_url
+        _mcp_tokens = mcp_oauth_tokens
+        _access_token = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
+        _transport = app_tool.transport
+
+        async def mcp_tool_function(**kwargs) -> str:
+            """MCP tool dynamically created from MCP server."""
+            kwargs.pop('config', None)
+            return await call_mcp_tool(_mcp_url, app_tool.name, kwargs, _access_token, _mcp_tokens, _transport)
+
+        return StructuredTool(
+            name=tool_name,
+            description=f"{app_tool.description} (from {app_name} app)",
+            func=lambda **kwargs: None,
+            coroutine=mcp_tool_function,
+            args_schema=args_schema,
+        )
+
+    # Standard HTTP tool
     async def tool_function(**kwargs) -> str:
         """Tool dynamically created from app definition."""
         config_param = kwargs.pop('config', None)
@@ -245,9 +274,22 @@ def load_app_tools(uid: str) -> List[Callable]:
 
         # Only load tools if app has chat_tools defined
         if app.chat_tools and len(app.chat_tools) > 0:
+            # Extract MCP config from external_integration if present
+            mcp_server_url = None
+            mcp_oauth_tokens = None
+            if app.external_integration:
+                mcp_server_url = app.external_integration.mcp_server_url
+                mcp_oauth_tokens = app.external_integration.mcp_oauth_tokens
+
             for app_tool in app.chat_tools:
                 try:
-                    tool_func = create_app_tool(app_tool, app.id, app.name)
+                    tool_func = create_app_tool(
+                        app_tool,
+                        app.id,
+                        app.name,
+                        mcp_server_url=mcp_server_url,
+                        mcp_oauth_tokens=mcp_oauth_tokens,
+                    )
                     tools.append(tool_func)
                     print(f"✅ Loaded tool '{app_tool.name}' from app '{app.name}' ({app_id})")
                 except Exception as e:

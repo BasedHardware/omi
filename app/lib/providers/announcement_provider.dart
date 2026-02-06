@@ -1,203 +1,66 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/http/api/announcements.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/providers/base_provider.dart';
 
 class AnnouncementProvider extends BaseProvider {
-  List<Announcement> _changelogs = [];
-  List<Announcement> _features = [];
-  List<Announcement> _generalAnnouncements = [];
+  List<Announcement> _pendingAnnouncements = [];
+  List<Announcement> get pendingAnnouncements => _pendingAnnouncements;
 
-  List<Announcement> get changelogs => _changelogs;
-  List<Announcement> get features => _features;
-  List<Announcement> get generalAnnouncements => _generalAnnouncements;
-
-  bool _hasAppUpgrade = false;
-  bool get hasAppUpgrade => _hasAppUpgrade;
-
-  String _previousAppVersion = '';
-  String _currentAppVersion = '';
-  String get previousAppVersion => _previousAppVersion;
-  String get currentAppVersion => _currentAppVersion;
-
-  /// Check if the app was upgraded and load changelogs if needed.
-  /// Returns true if there are changelogs to show.
-  Future<bool> checkForAppUpgrade() async {
+  /// Fetch pending announcements using the unified endpoint.
+  /// This supports flexible targeting and per-user dismissal tracking.
+  ///
+  /// [trigger] should be one of:
+  /// - 'app_launch': Check every app launch (for immediate announcements)
+  /// - 'version_upgrade': Check only when app version changed
+  /// - 'firmware_upgrade': Check only when firmware version changed
+  Future<bool> fetchPendingAnnouncements({
+    required String trigger,
+    String? firmwareVersion,
+    String? deviceModel,
+  }) async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      // Combine version and build number (e.g., "1.0.510+240")
-      _currentAppVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
-      _previousAppVersion = SharedPreferencesUtil().lastKnownAppVersion;
+      final appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final platform = defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
 
-      if (_previousAppVersion.isEmpty) {
-        final isExistingUser = SharedPreferencesUtil().onboardingCompleted;
-
-        if (!isExistingUser) {
-          SharedPreferencesUtil().lastKnownAppVersion = _currentAppVersion;
-          _hasAppUpgrade = false;
-          return false;
-        }
-
-        _previousAppVersion = '1.0.520+598';
-      }
-
-      // Check if upgrade occurred
-      if (_isNewerVersion(_currentAppVersion, _previousAppVersion)) {
-        _hasAppUpgrade = true;
-
-        _changelogs = await getAppChangelogs(
-          limit: 8,
-          maxVersion: _currentAppVersion,
-        );
-
-        final appFeatures = await getFeatureAnnouncements(
-          version: _currentAppVersion,
-          versionType: 'app',
-        );
-        _features = [..._features, ...appFeatures];
-
-        // Update last known version
-        SharedPreferencesUtil().lastKnownAppVersion = _currentAppVersion;
-        notifyListeners();
-
-        return _changelogs.isNotEmpty || appFeatures.isNotEmpty;
-      }
-
-      _hasAppUpgrade = false;
-      return false;
-    } catch (e) {
-      debugPrint('Error checking for app upgrade: $e');
-      return false;
-    }
-  }
-
-  /// Check for firmware upgrade and load feature announcements.
-  Future<bool> checkForFirmwareUpgrade(String currentFirmwareVersion, String deviceModel) async {
-    try {
-      if (currentFirmwareVersion.isEmpty || currentFirmwareVersion == 'Unknown') {
-        return false;
-      }
-
-      final lastKnownFirmware = SharedPreferencesUtil().lastKnownFirmwareVersion;
-
-      if (lastKnownFirmware.isEmpty) {
-        SharedPreferencesUtil().lastKnownFirmwareVersion = currentFirmwareVersion;
-        return false;
-      }
-
-      if (currentFirmwareVersion == lastKnownFirmware) {
-        return false;
-      }
-
-      debugPrint('Firmware upgraded from $lastKnownFirmware to $currentFirmwareVersion');
-
-      // Update stored version
-      SharedPreferencesUtil().lastKnownFirmwareVersion = currentFirmwareVersion;
-
-      // Fetch feature announcements for the new firmware version
-      final firmwareFeatures = await getFeatureAnnouncements(
-        version: currentFirmwareVersion,
-        versionType: 'firmware',
+      _pendingAnnouncements = await getPendingAnnouncements(
+        appVersion: appVersion,
+        platform: platform,
+        trigger: trigger,
+        firmwareVersion: firmwareVersion,
         deviceModel: deviceModel,
       );
 
-      if (firmwareFeatures.isNotEmpty) {
-        _features = [..._features, ...firmwareFeatures];
+      notifyListeners();
+      return _pendingAnnouncements.isNotEmpty;
+    } catch (e) {
+      debugPrint('Error fetching pending announcements: $e');
+      return false;
+    }
+  }
+
+  /// Mark an announcement as dismissed via the API.
+  /// This persists the dismissal on the server for per-user tracking.
+  Future<bool> markAnnouncementDismissed(String announcementId, {bool ctaClicked = false}) async {
+    try {
+      final success = await dismissAnnouncement(announcementId, ctaClicked: ctaClicked);
+      if (success) {
+        _pendingAnnouncements.removeWhere((a) => a.id == announcementId);
         notifyListeners();
       }
-
-      return firmwareFeatures.isNotEmpty;
+      return success;
     } catch (e) {
-      debugPrint('Error checking for firmware upgrade: $e');
+      debugPrint('Error dismissing announcement: $e');
       return false;
     }
   }
 
-  /// Check for general announcements (time-based, not version-gated).
-  Future<bool> checkForGeneralAnnouncements() async {
-    try {
-      final lastChecked = SharedPreferencesUtil().lastAnnouncementCheckTime;
-      _generalAnnouncements = await getGeneralAnnouncements(lastCheckedAt: lastChecked);
-      notifyListeners();
-      return _generalAnnouncements.isNotEmpty;
-    } catch (e) {
-      debugPrint('Error checking for general announcements: $e');
-      return false;
-    }
-  }
-
-  void markAnnouncementsAsSeen() {
-    SharedPreferencesUtil().lastAnnouncementCheckTime = DateTime.now().toUtc();
-    _generalAnnouncements.clear();
+  /// Clear all pending announcements from local state.
+  void clearPendingAnnouncements() {
+    _pendingAnnouncements = [];
     notifyListeners();
-  }
-
-  /// Clear changelogs after user has viewed them.
-  void clearChangelogs() {
-    _changelogs = [];
-    _hasAppUpgrade = false;
-    notifyListeners();
-  }
-
-  /// Clear features after user has viewed them.
-  void clearFeatures() {
-    _features = [];
-    notifyListeners();
-  }
-
-  /// Compare two version strings.
-  /// Returns true if v1 is newer than v2.
-  bool _isNewerVersion(String v1, String v2) {
-    final t1 = _versionTuple(v1);
-    final t2 = _versionTuple(v2);
-
-    for (int i = 0; i < t1.length && i < t2.length; i++) {
-      if (t1[i] > t2[i]) return true;
-      if (t1[i] < t2[i]) return false;
-    }
-
-    return t1.length > t2.length;
-  }
-
-  /// Convert version string to list of integers.
-  /// Supports formats:
-  /// - "1.0.10" -> [1, 0, 10, 0]
-  /// - "v1.0.10" -> [1, 0, 10, 0]
-  /// - "1.0.510+240" -> [1, 0, 510, 240]
-  List<int> _versionTuple(String version) {
-    if (version.isEmpty) return [0, 0, 0, 0];
-
-    // Remove 'v' prefix if present
-    version = version.toLowerCase();
-    if (version.startsWith('v')) {
-      version = version.substring(1);
-    }
-
-    // Extract build number if present (e.g., '1.0.510+240')
-    int buildNumber = 0;
-    if (version.contains('+')) {
-      final parts = version.split('+');
-      version = parts[0];
-      try {
-        buildNumber = int.parse(parts[1]);
-      } catch (e) {
-        buildNumber = 0;
-      }
-    }
-
-    try {
-      final versionParts = version.split('.').map((p) => int.parse(p)).toList();
-      // Pad to 3 components and add build number as 4th
-      while (versionParts.length < 3) {
-        versionParts.add(0);
-      }
-      versionParts.add(buildNumber);
-      return versionParts;
-    } catch (e) {
-      return [0, 0, 0, 0];
-    }
   }
 }

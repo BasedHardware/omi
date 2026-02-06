@@ -251,13 +251,13 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         print('get_app_cache_by_id from cache')
-        if cached_app['private'] and cached_app['uid'] != uid:
+        if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid and not is_tester(uid):
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     set_app_cache_by_id(app_id, app)
     return app
@@ -267,7 +267,7 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
@@ -313,10 +313,7 @@ def invalidate_approved_apps_cache():
     pubsub_manager = get_pubsub_manager()
 
     # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [
-        'get_public_approved_apps_data:reviews=0',
-        'get_public_approved_apps_data:reviews=1'
-    ]
+    cache_keys = ['get_public_approved_apps_data:reviews=0', 'get_public_approved_apps_data:reviews=1']
 
     # Clear local memory cache
     for key in cache_keys:

@@ -474,7 +474,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
-    final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
@@ -527,30 +526,16 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       MixpanelManager().tagSheetOpened();
                                     },
                               child: Text(
-                                data.speakerId == omiSpeakerId
-                                    ? 'omi'
-                                    : (suggestion != null && person == null
-                                        ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                data.speakerId == omiSpeakerId ? 'omi' : (person?.name ?? 'Speaker ${data.speakerId}'),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
-                                      : (isTagging ? Colors.grey.shade300 : Colors.grey.shade400),
+                                      : Colors.grey.shade400,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                            if (!data.speechProfileProcessed &&
-                                (data.personId ?? "").isEmpty &&
-                                data.speakerId != omiSpeakerId) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.help_outline,
-                                color: Colors.orange,
-                                size: 12,
-                              ),
-                            ],
                             if (isTagging) ...[
                               const SizedBox(width: 6),
                               const SizedBox(
@@ -559,20 +544,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ] else if (suggestion != null && person == null) ...[
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: Colors.white,
-                                  ),
                                 ),
                               )
                             ],

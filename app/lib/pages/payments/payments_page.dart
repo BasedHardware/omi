@@ -23,6 +23,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
   @override
   void initState() {
     super.initState();
+    MixpanelManager().paymentsPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<PaymentMethodProvider>().getPaymentMethodsStatus();
     });
@@ -139,6 +140,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             title: context.l10n.paymentMethodStripe,
             subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
             onManageTap: () {
+              MixpanelManager().paymentMethodSelected(methodName: 'Stripe');
               routeToPage(context, const StripeConnectSetup());
             },
             isActive: true,
@@ -148,6 +150,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
             title: context.l10n.paymentMethodPayPal,
             subtitle: _getPaymentSubtitle(isActive: true, isConnected: true),
             onManageTap: () {
+              MixpanelManager().paymentMethodSelected(methodName: 'PayPal');
               routeToPage(context, const PaypalSetupPage());
             },
             isActive: true,

@@ -7,6 +7,7 @@
 #   --clean       Force clean build (removes build cache)
 #   --debug       Build in debug mode (default: release)
 #   --no-run      Build only, don't run the app
+#   --no-backend  Don't start the local Python backend
 #   --help        Show this help message
 #
 
@@ -14,11 +15,24 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
+BACKEND_DIR="$(dirname "$APP_DIR")/backend"
+BACKEND_PORT=8001
+BACKEND_PID=""
+
+# Cleanup function to stop backend on exit
+cleanup() {
+    if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
+        echo "Stopping backend (PID: $BACKEND_PID)..."
+        kill "$BACKEND_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
 
 # Defaults
 CLEAN=false
 BUILD_MODE="release"
 RUN_APP=true
+RUN_BACKEND=true
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -35,8 +49,12 @@ while [[ $# -gt 0 ]]; do
             RUN_APP=false
             shift
             ;;
+        --no-backend)
+            RUN_BACKEND=false
+            shift
+            ;;
         --help)
-            head -15 "$0" | tail -13
+            head -17 "$0" | tail -15
             exit 0
             ;;
         *)
@@ -48,6 +66,76 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$APP_DIR"
+
+# Start Python backend if requested
+if [ "$RUN_BACKEND" = true ]; then
+    echo "Killing any existing backend on port $BACKEND_PORT..."
+    lsof -ti:$BACKEND_PORT | xargs kill -9 2>/dev/null || true
+
+    echo "Starting Python backend on port $BACKEND_PORT..."
+    cd "$BACKEND_DIR"
+    if [ ! -d "venv" ]; then
+        echo "Creating Python virtual environment..."
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+    else
+        source venv/bin/activate
+    fi
+    uvicorn main:app --reload --env-file .env --port $BACKEND_PORT &
+    BACKEND_PID=$!
+    cd "$APP_DIR"
+
+    # Wait for backend to be ready
+    echo "Waiting for backend to start..."
+    for i in {1..30}; do
+        if curl -s "http://localhost:$BACKEND_PORT/health" > /dev/null 2>&1; then
+            echo "Backend is ready!"
+            break
+        fi
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "Backend failed to start"
+            exit 1
+        fi
+        sleep 0.5
+    done
+
+    # Update .dev.env to point to local backend
+    echo "Configuring app to use local backend (localhost:$BACKEND_PORT)..."
+    cat > "$APP_DIR/.dev.env" << EOF
+API_BASE_URL=http://localhost:$BACKEND_PORT/
+USE_WEB_AUTH=true
+USE_AUTH_CUSTOM_TOKEN=true
+EOF
+
+    # Regenerate env files
+    echo "Regenerating env files..."
+    rm -f "$APP_DIR/lib/env/dev_env.g.dart"
+    flutter pub run build_runner build --delete-conflicting-outputs > /dev/null 2>&1
+fi
+
+# Set up Custom.xcconfig for local development signing
+CUSTOM_XCCONFIG="$APP_DIR/macos/Runner/Configs/Custom.xcconfig"
+if [ ! -f "$CUSTOM_XCCONFIG" ] || ! grep -q "^APP_BUNDLE_IDENTIFIER=" "$CUSTOM_XCCONFIG" 2>/dev/null; then
+    echo "Setting up Custom.xcconfig for local development..."
+
+    # Try to detect development team from existing certificates
+    DEV_TEAM=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+    if [ -z "$DEV_TEAM" ]; then
+        DEV_TEAM="S6DP5HF77G"  # Default team ID
+    fi
+
+    cat > "$CUSTOM_XCCONFIG" << EOF
+// This is a generated file; do not edit or check into version control.
+APP_BUNDLE_IDENTIFIER=com.omi.computer-macos
+
+// Local development signing
+DEVELOPMENT_TEAM=$DEV_TEAM
+CODE_SIGN_STYLE=Automatic
+CODE_SIGN_IDENTITY=Apple Development
+EOF
+    echo "Created Custom.xcconfig with development team: $DEV_TEAM"
+fi
 
 # Clean build if requested
 if [ "$CLEAN" = true ]; then
@@ -172,4 +260,19 @@ if [ "$RUN_APP" = true ]; then
     open /Applications/Omi.app
 fi
 
-echo "Done!"
+echo ""
+echo "=== Development Environment ==="
+if [ -n "$BACKEND_PID" ]; then
+    echo "Backend:  http://localhost:$BACKEND_PORT (PID: $BACKEND_PID)"
+fi
+echo "App:      /Applications/Omi.app"
+echo "==============================="
+echo ""
+
+# If backend is running, wait for it (keeps script running)
+if [ -n "$BACKEND_PID" ]; then
+    echo "Press Ctrl+C to stop all services..."
+    wait "$BACKEND_PID"
+else
+    echo "Done!"
+fi

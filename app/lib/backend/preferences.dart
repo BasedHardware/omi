@@ -204,6 +204,24 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Task -> goal mapping (local UI state)
+  // Format: { "taskId": "goalId" }
+  set taskGoalLinks(Map<String, String> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskGoalLinks', encoded);
+  }
+
+  Map<String, String> get taskGoalLinks {
+    final encoded = getString('taskGoalLinks');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, value.toString()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
@@ -240,6 +258,12 @@ class SharedPreferencesUtil {
   bool get showFirmwareUpdateDialog => getBool('v2/showFirmwareUpdateDialog', defaultValue: true);
 
   set showFirmwareUpdateDialog(bool value) => saveBool('v2/showFirmwareUpdateDialog', value);
+
+  String get otaWifiSsid => getString('otaWifiSsid', defaultValue: '');
+  set otaWifiSsid(String value) => saveString('otaWifiSsid', value);
+
+  String get otaWifiPassword => getString('otaWifiPassword', defaultValue: '');
+  set otaWifiPassword(String value) => saveString('otaWifiPassword', value);
 
   int get conversationSilenceDuration => getInt('conversationSilenceDuration', defaultValue: 120);
 
@@ -559,6 +583,10 @@ class SharedPreferencesUtil {
   set familyName(String value) => saveString('familyName', value);
 
   String get fullName => '$givenName $familyName'.trim();
+
+  String get foundOmiSource => getString('foundOmiSource');
+
+  set foundOmiSource(String value) => saveString('foundOmiSource', value);
 
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 

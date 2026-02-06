@@ -291,35 +291,40 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void initState() {
-    initDeepLinks();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
-        try {
-          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
-        } catch (e) {
-          Logger.debug('Failed to login to Intercom: $e');
-        }
-
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-        context.read<UsageProvider>().fetchSubscription();
-        context.read<TaskIntegrationProvider>().loadFromBackend();
-
-        NotificationService.instance.saveNotificationToken();
-      } else {
-        if (!PlatformManager.instance.isAnalyticsSupported) {
-          await PlatformManager.instance.intercom.loginUnidentifiedUser();
-        }
-      }
-      PlatformManager.instance.intercom.setUserAttributes();
-    });
     super.initState();
+    initDeepLinks();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeProviders());
+  }
+
+  Future<void> _initializeProviders() async {
+    if (!mounted) return;
+    final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
+    if (isSignedIn) {
+      context.read<HomeProvider>().setupHasSpeakerProfile();
+      context.read<HomeProvider>().setupUserPrimaryLanguage();
+      context.read<UserProvider>().initialize();
+      context.read<PeopleProvider>().initialize();
+      try {
+        await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
+      } catch (e) {
+        Logger.debug('Failed to login to Intercom: $e');
+      }
+
+      if (!mounted) return;
+      context.read<MessageProvider>().setMessagesFromCache();
+      context.read<AppProvider>().setAppsFromCache();
+      context.read<MessageProvider>().refreshMessages();
+      context.read<UsageProvider>().fetchSubscription();
+      context.read<TaskIntegrationProvider>().loadFromBackend();
+
+      NotificationService.instance.saveNotificationToken();
+    } else {
+      if (!PlatformManager.instance.isAnalyticsSupported) {
+        await PlatformManager.instance.intercom.loginUnidentifiedUser();
+      }
+      if (!mounted) return;
+    }
+    PlatformManager.instance.intercom.setUserAttributes();
   }
 
   @override

@@ -4,10 +4,9 @@ from typing import List, Dict, Any
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
-from database import users as users_db
+from database.auth import get_user_name
 from utils.llm.knowledge_graph import extract_knowledge_from_memory, rebuild_knowledge_graph
 from utils.other import endpoints as auth
-
 
 router = APIRouter()
 
@@ -42,10 +41,8 @@ class RebuildResponse(BaseModel):
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     graph = kg_db.get_knowledge_graph(uid)
-    return KnowledgeGraphResponse(
-        nodes=graph.get('nodes', []),
-        edges=graph.get('edges', [])
-    )
+    return KnowledgeGraphResponse(nodes=graph.get('nodes', []), edges=graph.get('edges', []))
+
 
 def _rebuild_graph_task(uid: str, user_name: str):
     memories = memories_db.get_memories(uid, limit=500)
@@ -53,24 +50,14 @@ def _rebuild_graph_task(uid: str, user_name: str):
 
 
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
-def rebuild_graph(
-    background_tasks: BackgroundTasks,
-    uid: str = Depends(auth.get_current_user_uid)
-):
-    user = users_db.get_user_profile(uid)
-    user_name = user.get('name', 'User') if isinstance(user, dict) else 'User'
-    
+def rebuild_graph(background_tasks: BackgroundTasks, uid: str = Depends(auth.get_current_user_uid)):
+    user_name = get_user_name(uid)
+
     kg_db.delete_knowledge_graph(uid)
-    
+
     background_tasks.add_task(_rebuild_graph_task, uid, user_name)
-    
-    return RebuildResponse(
-        status="rebuilding",
-        nodes_count=0,
-        edges_count=0
-    )
 
-
+    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'])

@@ -1010,7 +1010,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get vocabularyHint => 'शब्दावली (अल्पविराम से अलग)';
 
   @override
-  String get connect => 'कनेक्ट करें';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'जल्द आ रहा है';
@@ -1647,7 +1647,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get whatShouldWeMake => 'हमें क्या बनाना चाहिए?';
 
   @override
-  String get appName => 'ऐप का नाम';
+  String get appName => 'App Name';
 
   @override
   String get description => 'विवरण';
@@ -2240,7 +2240,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get folderName => 'फ़ोल्डर नाम';
 
   @override
-  String get descriptionOptional => 'विवरण (वैकल्पिक)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'फ़ोल्डर हटाने में विफल';
@@ -7968,4 +7968,81 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'URL खोला नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है';
+
+  @override
+  String get audioPlaybackFailed => 'ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।';
 }

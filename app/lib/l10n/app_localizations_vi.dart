@@ -1015,7 +1015,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Kết nối';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Sắp ra mắt';
@@ -1659,7 +1659,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get whatShouldWeMake => 'Chúng ta nên tạo gì?';
 
   @override
-  String get appName => 'Tên ứng dụng';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Mô tả';
@@ -2270,7 +2270,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get folderName => 'Tên thư mục';
 
   @override
-  String get descriptionOptional => 'Mô tả (tùy chọn)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Xóa thư mục thất bại';
@@ -7990,4 +7990,81 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get couldNotOpenUrl => 'Không thể mở URL. Vui lòng thử lại.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Tệp âm thanh không khả dụng để phát';
+
+  @override
+  String get audioPlaybackFailed => 'Không thể phát âm thanh. Tệp có thể bị hỏng hoặc bị thiếu.';
 }

@@ -430,6 +430,10 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Sync enabled state from local cache to fix install state mismatch bug
+      _syncEnabledStateFromCache();
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
@@ -588,6 +592,10 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Sync enabled state from local cache to fix install state mismatch bug
+      _syncEnabledStateFromCache();
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too
@@ -615,6 +623,26 @@ class AppProvider extends BaseProvider {
       apps = SharedPreferencesUtil().appsList;
       filterApps();
       notifyListeners();
+    }
+  }
+
+  /// Syncs the enabled state from the cached apps list to the current apps list.
+  /// This fixes the bug where the install state is incorrect after restarting the app.
+  void _syncEnabledStateFromCache() {
+    final cachedApps = SharedPreferencesUtil().appsList;
+    if (cachedApps.isEmpty) return;
+
+    // Create a map of app ID to enabled state from cache
+    final Map<String, bool> cachedEnabledStates = {};
+    for (final cachedApp in cachedApps) {
+      cachedEnabledStates[cachedApp.id] = cachedApp.enabled;
+    }
+
+    // Update enabled state for each app based on cache
+    for (int i = 0; i < apps.length; i++) {
+      if (cachedEnabledStates.containsKey(apps[i].id)) {
+        apps[i].enabled = cachedEnabledStates[apps[i].id]!;
+      }
     }
   }
 
