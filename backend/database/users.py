@@ -7,6 +7,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
+from utils.other.storage import delete_all_user_private_cloud_sync_data
 
 
 def is_exists_user(uid: str):
@@ -437,6 +438,10 @@ def delete_user_data(uid: str):
             if len(docs) < batch_size:
                 print(f"Processed all documents in {collection_ref.path}")
                 break
+
+    # delete private cloud sync recordings from GCS
+    print(f"Deleting private cloud sync data for user: {uid}")
+    delete_all_user_private_cloud_sync_data(uid)
 
     # delete the user document itself
     print(f"Deleting user document: {uid}")
