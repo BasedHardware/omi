@@ -3,7 +3,9 @@ Tests for issue #4626: AttributeError in knowledge graph extraction.
 
 get_user_store_recording_permission() returns a bool, but the KG extraction
 code treated it as a user dict and called .get('name', 'User') on it.
-Fix: use get_user_profile() which returns a dict.
+
+Fix: use get_user_name() from database/auth.py which reads display_name
+from Firebase Auth — the canonical way to get user names in this codebase.
 """
 
 import os
@@ -45,6 +47,7 @@ for submodule in [
     "apps",
     "llm_usage",
     "_client",
+    "auth",
     "chat",
 ]:
     mod = _stub_module(f"database.{submodule}")
@@ -70,9 +73,14 @@ llm_usage_mod.record_llm_usage = MagicMock()
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
-users_mod = sys.modules["database.users"]
-users_mod.get_user_store_recording_permission = MagicMock(return_value=True)
-users_mod.get_user_profile = MagicMock(return_value={"name": "Alice", "store_recording_permission": True})
+# Stub database.auth with get_user_name (the canonical user name function)
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="The User")
+auth_mod.get_user_from_uid = MagicMock()
+# Redis stubs needed by database.auth
+redis_mod = sys.modules["database.redis_db"]
+redis_mod.cache_user_name = MagicMock()
+redis_mod.get_cached_user_name = MagicMock(return_value=None)
 
 memories_mod = sys.modules["database.memories"]
 memories_mod.set_memory_kg_extracted = MagicMock()
@@ -211,20 +219,34 @@ def _setup_extract_memories(memory_mock):
 
 
 class TestKnowledgeGraphUserLookup:
-    """Tests for #4626: KG extraction must use get_user_profile, not get_user_store_recording_permission."""
+    """Tests for #4626: KG extraction must use get_user_name from database.auth."""
 
-    def test_kg_extraction_calls_get_user_profile_not_permission(self):
-        """The KG extraction path must call get_user_profile() to get user name."""
+    def test_kg_extraction_calls_get_user_name_not_permission(self):
+        """The KG extraction path must call get_user_name(), not get_user_store_recording_permission."""
         import inspect
 
         source = inspect.getsource(process_conversation._extract_memories_inner)
-        # Must NOT call the bool-returning function for user lookup
-        assert "get_user_store_recording_permission" not in source, (
-            "KG extraction still calls get_user_store_recording_permission (returns bool); "
-            "should use get_user_profile (returns dict)"
-        )
-        # Must call get_user_profile
-        assert "get_user_profile" in source
+        # Must NOT call the bool-returning function
+        assert (
+            "get_user_store_recording_permission" not in source
+        ), "KG extraction still calls get_user_store_recording_permission (returns bool)"
+        # Must NOT call get_user_profile (Firestore has no 'name' field)
+        assert (
+            "get_user_profile" not in source
+        ), "KG extraction calls get_user_profile but Firestore users have no 'name' field"
+        # Must call get_user_name from database.auth
+        assert "get_user_name" in source
+
+    def test_kg_router_uses_get_user_name(self):
+        """Verify knowledge_graph router also uses get_user_name, not get_user_profile."""
+        from pathlib import Path
+
+        router_path = Path(__file__).resolve().parent.parent.parent / "routers" / "knowledge_graph.py"
+        source = router_path.read_text()
+        assert "get_user_name" in source, "Router should use get_user_name from database.auth"
+        assert (
+            "get_user_profile" not in source
+        ), "Router should NOT use get_user_profile (Firestore has no 'name' field)"
 
     @patch("models.memories.MemoryDB.from_memory")
     def test_kg_extraction_no_attribute_error_when_permission_true(self, mock_from_memory):
@@ -235,69 +257,52 @@ class TestKnowledgeGraphUserLookup:
         mock_from_memory.return_value = mem_db
 
         _setup_extract_memories(mem_db)
-        users_mod.get_user_profile.reset_mock()
-        users_mod.get_user_profile.return_value = {"name": "Alice", "store_recording_permission": True}
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "Alice"
         llm_kg.extract_knowledge_from_memory.reset_mock()
         memories_mod.set_memory_kg_extracted.reset_mock()
 
         # This would raise AttributeError before the fix (True.get('name'))
         process_conversation._extract_memories_inner(uid, conv)
 
-        # Verify get_user_profile was called (not get_user_store_recording_permission)
-        users_mod.get_user_profile.assert_called_once_with(uid)
+        # Verify get_user_name was called
+        auth_mod.get_user_name.assert_called_once_with(uid)
         # Verify KG extraction was called with the user's name
         llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Test memory content", "mem-1", "Alice")
 
     @patch("models.memories.MemoryDB.from_memory")
-    def test_kg_extraction_falls_back_to_user_when_no_name(self, mock_from_memory):
-        """When user profile has no name field, should default to 'User'."""
+    def test_kg_extraction_default_name_when_user_not_found(self, mock_from_memory):
+        """When get_user_name returns default 'The User', KG extraction uses it."""
         uid = "uid-2"
         conv = _make_conversation_mock()
         mem_db = _make_memory_mock("mem-2", "Another memory")
         mock_from_memory.return_value = mem_db
 
         _setup_extract_memories(mem_db)
-        users_mod.get_user_profile.reset_mock()
-        users_mod.get_user_profile.return_value = {"store_recording_permission": True}
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "The User"
         llm_kg.extract_knowledge_from_memory.reset_mock()
 
         process_conversation._extract_memories_inner(uid, conv)
 
-        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Another memory", "mem-2", "User")
+        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Another memory", "mem-2", "The User")
 
     @patch("models.memories.MemoryDB.from_memory")
-    def test_kg_extraction_handles_empty_profile(self, mock_from_memory):
-        """When get_user_profile returns empty dict, should default to 'User'."""
-        uid = "uid-3"
-        conv = _make_conversation_mock()
-        mem_db = _make_memory_mock("mem-3", "Memory three")
-        mock_from_memory.return_value = mem_db
-
-        _setup_extract_memories(mem_db)
-        users_mod.get_user_profile.reset_mock()
-        users_mod.get_user_profile.return_value = {}
-        llm_kg.extract_knowledge_from_memory.reset_mock()
-
-        process_conversation._extract_memories_inner(uid, conv)
-
-        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Memory three", "mem-3", "User")
-
-    @patch("models.memories.MemoryDB.from_memory")
-    def test_kg_extraction_handles_none_profile(self, mock_from_memory):
-        """When get_user_profile returns None (user not found), should default to 'User'."""
+    def test_kg_extraction_handles_none_name(self, mock_from_memory):
+        """When get_user_name returns None, KG extraction still works."""
         uid = "uid-none"
         conv = _make_conversation_mock()
         mem_db = _make_memory_mock("mem-4", "Memory four")
         mock_from_memory.return_value = mem_db
 
         _setup_extract_memories(mem_db)
-        users_mod.get_user_profile.reset_mock()
-        users_mod.get_user_profile.return_value = None
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = None
         llm_kg.extract_knowledge_from_memory.reset_mock()
 
         process_conversation._extract_memories_inner(uid, conv)
 
-        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Memory four", "mem-4", "User")
+        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Memory four", "mem-4", None)
 
     @patch("models.memories.MemoryDB.from_memory")
     def test_kg_extraction_multiple_memories(self, mock_from_memory):
@@ -315,8 +320,8 @@ class TestKnowledgeGraphUserLookup:
         memories_mod.save_memories.reset_mock()
         utils_analytics.record_usage.reset_mock()
 
-        users_mod.get_user_profile.reset_mock()
-        users_mod.get_user_profile.return_value = {"name": "Bob"}
+        auth_mod.get_user_name.reset_mock()
+        auth_mod.get_user_name.return_value = "Bob"
         llm_kg.extract_knowledge_from_memory.reset_mock()
         memories_mod.set_memory_kg_extracted.reset_mock()
 

@@ -456,10 +456,9 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database import users as users_db
+            from database.auth import get_user_name
 
-            user = users_db.get_user_profile(uid)
-            user_name = user.get('name', 'User') if user else 'User'
+            user_name = get_user_name(uid)
 
             from database.memories import set_memory_kg_extracted
 
