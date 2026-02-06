@@ -1,8 +1,8 @@
 import os
 import shutil
 import uuid
+import wave
 
-import torchaudio
 import torch
 from fastapi import HTTPException, UploadFile
 from pyannote.audio import Model, Inference
@@ -10,6 +10,34 @@ from pyannote.audio import Model, Inference
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes wespeaker fbank (see issue #4572).
 MIN_EMBEDDING_AUDIO_DURATION = float(os.getenv("MIN_EMBEDDING_AUDIO_DURATION", "0.5"))
+
+
+def _get_wav_duration_from_file(file_path: str) -> float:
+    """Get duration in seconds from a WAV file on disk. Returns 0.0 on failure.
+    Uses stdlib wave (header-only read) instead of torchaudio to avoid extra I/O."""
+    try:
+        with wave.open(file_path, "rb") as wf:
+            framerate = wf.getframerate()
+            if framerate <= 0:
+                return 0.0
+            return wf.getnframes() / framerate
+    except (wave.Error, EOFError, OSError):
+        return 0.0
+
+
+def _validate_audio_duration(file_path: str):
+    """Validate audio duration is above the minimum threshold. Raises HTTPException if too short."""
+    duration = _get_wav_duration_from_file(file_path)
+    if duration < MIN_EMBEDDING_AUDIO_DURATION:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "audio_too_short",
+                "min_duration": MIN_EMBEDDING_AUDIO_DURATION,
+                "actual_duration": round(duration, 3),
+            },
+        )
+
 
 # Instantiate pretrained speaker embedding model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,6 +75,9 @@ def embedding_endpoint(file: UploadFile):
         with open(file_path, 'wb') as f:
             shutil.copyfileobj(file.file, f)
 
+        # Validate audio duration before inference (issue #4572)
+        _validate_audio_duration(file_path)
+
         # Extract embedding
         embedding = embedding_inference(file_path)
 
@@ -80,20 +111,7 @@ def embedding_endpoint_v2(file: UploadFile):
             shutil.copyfileobj(file.file, f)
 
         # Validate audio duration before inference (issue #4572)
-        try:
-            info = torchaudio.info(file_path)
-            duration = info.num_frames / info.sample_rate if info.sample_rate > 0 else 0.0
-        except Exception:
-            duration = 0.0
-        if duration < MIN_EMBEDDING_AUDIO_DURATION:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "audio_too_short",
-                    "min_duration": MIN_EMBEDDING_AUDIO_DURATION,
-                    "actual_duration": round(duration, 3),
-                },
-            )
+        _validate_audio_duration(file_path)
 
         # Extract embedding using v2 model
         embedding = embedding_inference_v2(file_path)
