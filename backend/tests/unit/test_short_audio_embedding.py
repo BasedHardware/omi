@@ -11,6 +11,7 @@ import sys
 import wave
 
 import pytest
+import requests
 from unittest.mock import MagicMock
 
 # Mock modules that initialize GCP clients at import time
@@ -87,8 +88,6 @@ class TestExtractEmbeddingFromBytesValidation:
         mock_response = MagicMock()
         mock_response.json.return_value = [0.1] * 512
         mock_response.raise_for_status = MagicMock()
-
-        import requests
 
         monkeypatch.setattr(requests, "post", MagicMock(return_value=mock_response))
 

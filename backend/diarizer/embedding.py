@@ -4,6 +4,7 @@ import uuid
 import wave
 
 import torch
+import torchaudio
 from fastapi import HTTPException, UploadFile
 from pyannote.audio import Model, Inference
 
@@ -12,9 +13,10 @@ from pyannote.audio import Model, Inference
 MIN_EMBEDDING_AUDIO_DURATION = float(os.getenv("MIN_EMBEDDING_AUDIO_DURATION", "0.5"))
 
 
-def _get_wav_duration_from_file(file_path: str) -> float:
-    """Get duration in seconds from a WAV file on disk. Returns 0.0 on failure.
-    Uses stdlib wave (header-only read) instead of torchaudio to avoid extra I/O."""
+def _get_audio_duration_from_file(file_path: str) -> float:
+    """Get duration in seconds from an audio file on disk. Returns 0.0 on failure.
+    Tries stdlib wave first (header-only, fast) then falls back to torchaudio.info()
+    for non-WAV formats (mp3, flac, ogg, etc.)."""
     try:
         with wave.open(file_path, "rb") as wf:
             framerate = wf.getframerate()
@@ -22,12 +24,19 @@ def _get_wav_duration_from_file(file_path: str) -> float:
                 return 0.0
             return wf.getnframes() / framerate
     except (wave.Error, EOFError, OSError):
+        pass
+    try:
+        info = torchaudio.info(file_path)
+        if info.sample_rate <= 0:
+            return 0.0
+        return info.num_frames / info.sample_rate
+    except Exception:
         return 0.0
 
 
 def _validate_audio_duration(file_path: str):
     """Validate audio duration is above the minimum threshold. Raises HTTPException if too short."""
-    duration = _get_wav_duration_from_file(file_path)
+    duration = _get_audio_duration_from_file(file_path)
     if duration < MIN_EMBEDDING_AUDIO_DURATION:
         raise HTTPException(
             status_code=422,
