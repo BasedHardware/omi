@@ -281,3 +281,51 @@ class TestKnowledgeGraphUserLookup:
         process_conversation._extract_memories_inner(uid, conv)
 
         llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Memory three", "mem-3", "User")
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extraction_handles_none_profile(self, mock_from_memory):
+        """When get_user_profile returns None (user not found), should default to 'User'."""
+        uid = "uid-none"
+        conv = _make_conversation_mock()
+        mem_db = _make_memory_mock("mem-4", "Memory four")
+        mock_from_memory.return_value = mem_db
+
+        _setup_extract_memories(mem_db)
+        users_mod.get_user_profile.reset_mock()
+        users_mod.get_user_profile.return_value = None
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Memory four", "mem-4", "User")
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_kg_extraction_multiple_memories(self, mock_from_memory):
+        """KG extraction runs for each non-extracted memory in a batch."""
+        uid = "uid-multi"
+        conv = _make_conversation_mock()
+        mem1 = _make_memory_mock("mem-a", "First memory", kg_extracted=False)
+        mem2 = _make_memory_mock("mem-b", "Second memory", kg_extracted=False)
+        mem3 = _make_memory_mock("mem-c", "Third memory", kg_extracted=True)  # already extracted
+
+        mock_from_memory.side_effect = [mem1, mem2, mem3]
+        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        vector_db_mod.find_similar_memories.return_value = []
+        memories_mod.get_memory_ids_for_conversation.return_value = []
+        memories_mod.save_memories.reset_mock()
+        utils_analytics.record_usage.reset_mock()
+
+        users_mod.get_user_profile.reset_mock()
+        users_mod.get_user_profile.return_value = {"name": "Bob"}
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        memories_mod.set_memory_kg_extracted.reset_mock()
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        # Should extract KG for mem-a and mem-b (not mem-c which is already extracted)
+        assert llm_kg.extract_knowledge_from_memory.call_count == 2
+        calls = llm_kg.extract_knowledge_from_memory.call_args_list
+        assert calls[0].args == (uid, "First memory", "mem-a", "Bob")
+        assert calls[1].args == (uid, "Second memory", "mem-b", "Bob")
+        # set_memory_kg_extracted called for the 2 extracted ones
+        assert memories_mod.set_memory_kg_extracted.call_count == 2
