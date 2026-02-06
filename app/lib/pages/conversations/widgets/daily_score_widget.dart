@@ -76,8 +76,8 @@ class DailyScoreWidgetState extends State<DailyScoreWidget> {
           score = (ratio * 5).clamp(0.0, 5.0);
         }
 
-        // Round to nearest 0.5
-        score = (score * 2).roundToDouble() / 2;
+        // Round to nearest 0.1
+        score = (score * 10).roundToDouble() / 10;
 
         final statusColor = _getStatusColor(score);
 
