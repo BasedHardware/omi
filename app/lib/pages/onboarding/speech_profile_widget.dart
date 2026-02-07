@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
-import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
@@ -266,152 +265,164 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const SizedBox(height: 8),
+
                         // Title section
                         if (!provider.startedRecording) ...[
                           Text(
                             context.l10n.speechProfileIntro,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.bold,
                               height: 1.2,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
                           Text(
                             'Help Omi learn your voice for a personalized experience',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 14,
+                              fontSize: 16,
                               height: 1.4,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
                         ] else if (provider.uploadingProfile) ...[
-                          const SizedBox(height: 8),
                           const SizedBox(
-                            height: 32,
-                            width: 32,
+                            height: 40,
+                            width: 40,
                             child: CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               strokeWidth: 3,
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
                           Text(
                             _getLoadingText(context, provider.loadingState),
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 20,
+                              fontSize: 24,
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
                         ] else if (provider.profileCompleted) ...[
-                          const SizedBox(height: 8),
                           Text(
                             context.l10n.youreAllSet,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.bold,
                               height: 1.2,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
                           Text(
                             'Your voice profile has been created successfully',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 14,
+                              fontSize: 16,
                               height: 1.4,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
                         ] else ...[
-                          // Recording in progress - show transcription
-                          SizedBox(
-                            height: 120,
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                return ShaderMask(
-                                  shaderCallback: (bounds) {
-                                    if (provider.text.split(' ').length < 10) {
-                                      return const LinearGradient(colors: [Colors.white, Colors.white])
-                                          .createShader(bounds);
-                                    }
-                                    return const LinearGradient(
-                                      colors: [Colors.transparent, Colors.white],
-                                      stops: [0.0, 0.5],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                    ).createShader(bounds);
-                                  },
-                                  blendMode: BlendMode.dstIn,
-                                  child: ListView(
-                                    controller: _scrollController,
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    children: [
-                                      Text(
-                                        provider.text.isEmpty ? 'Listening...' : provider.text,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w400,
-                                          height: 1.5,
-                                          fontFamily: 'Manrope',
-                                          fontStyle: provider.text.isEmpty ? FontStyle.italic : FontStyle.normal,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          FadeTransition(
-                            opacity: _questionFadeAnimation,
-                            child: Text(
-                              provider.currentQuestion,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                                height: 1.3,
-                                fontFamily: 'Manrope',
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: MediaQuery.sizeOf(context).width * 0.85,
-                            child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
-                          ),
-                          const SizedBox(height: 12),
+                          // Recording in progress
                           Text(
-                            context.l10n.keepGoing,
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
+                            provider.currentQuestion,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
                               height: 1.3,
                               fontFamily: 'Manrope',
                             ),
                             textAlign: TextAlign.center,
                           ),
+                          const SizedBox(height: 20),
+
+                          // Simple progress indicator
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.grey[700]!,
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${(provider.questionProgress * 100).toInt()}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Manrope',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: SizedBox(
+                                    width: 200,
+                                    height: 6,
+                                    child: LinearProgressIndicator(
+                                      value: provider.questionProgress,
+                                      backgroundColor: Colors.grey[800],
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Listening indicator
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.greenAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  provider.text.isEmpty ? 'Listening...' : 'Recording...',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: 14,
+                                    fontFamily: 'Manrope',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 24),
 
                         // Action buttons
                         if (!provider.startedRecording) ...[
