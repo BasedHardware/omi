@@ -363,10 +363,18 @@ class Conversation(BaseModel):
                 )
                 conversation_str += f"Finished: {formatted_finished}\n"
 
-            conversation_str += (
-                f"{str(conversation.structured.title).capitalize()}\n"
-                f"{str(conversation.structured.overview).capitalize()}\n"
+            conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
+
+            # Use app result as summary when available (richer than overview), fallback to overview
+            app_summary = (
+                conversation.apps_results[0].content.strip()
+                if conversation.apps_results and len(conversation.apps_results) > 0
+                else ""
             )
+            if app_summary:
+                conversation_str += f"{app_summary}\n"
+            else:
+                conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
 
             # attendees
             if people_map:
@@ -386,10 +394,6 @@ class Conversation(BaseModel):
                 conversation_str += "Events:\n"
                 for event in conversation.structured.events:
                     conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
-
-            if conversation.apps_results and len(conversation.apps_results) > 0:
-                conversation_str += "Summarization:\n"
-                conversation_str += f"{conversation.apps_results[0].content}"
 
             if use_transcript:
                 conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people)}\n"
