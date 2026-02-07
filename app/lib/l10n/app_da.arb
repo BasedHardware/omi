@@ -2591,5 +2591,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Lydfilen er ikke tilgængelig til afspilning",
+  "audioPlaybackFailed": "Kan ikke afspille lyd. Filen kan være beskadiget eller manglende."
 }

@@ -430,10 +430,10 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
-      
+
       // Sync enabled state from local cache to fix install state mismatch bug
       _syncEnabledStateFromCache();
-      
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
@@ -592,10 +592,10 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
-      
+
       // Sync enabled state from local cache to fix install state mismatch bug
       _syncEnabledStateFromCache();
-      
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too

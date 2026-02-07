@@ -327,9 +327,8 @@ def search_apps(
     category: str | None = Query(default=None, description='Filter by category id'),
     rating: float | None = Query(default=None, ge=0, le=5, description='Minimum rating filter'),
     capability: str | None = Query(default=None, description='Filter by capability id'),
-    sort: str | None = Query(
-        default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'
-    ),
+    sort: str
+    | None = Query(default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'),
     my_apps: bool | None = Query(default=None, description='Filter to show only user\'s apps'),
     installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
     offset: int = Query(default=0, ge=0),

@@ -8072,4 +8072,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Ses dosyası oynatma için mevcut değil';
+
+  @override
+  String get audioPlaybackFailed => 'Ses oynatılamıyor. Dosya bozuk veya eksik olabilir.';
 }

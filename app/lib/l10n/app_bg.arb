@@ -2551,5 +2551,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Аудио файлът не е наличен за възпроизвеждане",
+  "audioPlaybackFailed": "Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ."
 }

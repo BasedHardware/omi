@@ -8071,4 +8071,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Аудіофайл недоступний для відтворення';
+
+  @override
+  String get audioPlaybackFailed => 'Неможливо відтворити аудіо. Файл може бути пошкоджений або відсутній.';
 }

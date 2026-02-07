@@ -2549,5 +2549,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "ملف الصوت غير متاح للتشغيل",
+  "audioPlaybackFailed": "تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا."
 }

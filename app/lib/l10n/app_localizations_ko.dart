@@ -7927,4 +7927,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '오디오 파일을 재생할 수 없습니다';
+
+  @override
+  String get audioPlaybackFailed => '오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.';
 }

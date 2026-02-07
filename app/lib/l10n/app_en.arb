@@ -9871,5 +9871,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Audio file is not available for playback",
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
 }

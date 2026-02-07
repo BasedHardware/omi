@@ -1387,6 +1387,16 @@ async def _stream_handler(
                 print(f"Speaker ID: no audio to extract", uid, session_id)
                 return
 
+            # Reject clips too short for speaker embedding (issue #4572)
+            extracted_duration = extract_end - extract_start
+            if extracted_duration < SPEAKER_ID_MIN_AUDIO:
+                print(
+                    f"Speaker ID: extracted audio too short ({extracted_duration:.2f}s < {SPEAKER_ID_MIN_AUDIO}s) after buffer clamping",
+                    uid,
+                    session_id,
+                )
+                return
+
             # Extract only the needed bytes directly from ring buffer
             pcm_data = audio_ring_buffer.extract(extract_start, extract_end)
             if not pcm_data:
@@ -1810,7 +1820,6 @@ async def _stream_handler(
                     break
 
                 if message.get("bytes") is not None:
-
                     data = message.get("bytes")
                     if len(data) <= 2:  # Ping/keepalive, 0x8a 0x00
                         continue

@@ -126,16 +126,22 @@ class _AppDetailPageState extends State<AppDetailPage> {
   /// Safely launches a URL with fallback from in-app browser to external browser.
   /// Returns true if the URL was launched successfully, false otherwise.
   Future<bool> _launchUrlSafely(Uri uri) async {
+    final supportsInAppBrowser = uri.scheme == 'http' || uri.scheme == 'https';
+
     try {
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (supportsInAppBrowser) {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
       return true;
-    } on PlatformException catch (e) {
+    } catch (e) {
       Logger.warning('Failed to launch URL with in-app browser: $e');
       // Fall back to external browser
       try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return true;
-      } on PlatformException catch (e) {
+      } catch (e) {
         Logger.warning('Failed to launch URL with external browser: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

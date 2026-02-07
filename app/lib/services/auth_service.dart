@@ -186,8 +186,15 @@ class AuthService {
             SharedPreferencesUtil().familyName = '';
           }
         }
+        return newToken?.token;
       }
-      return newToken?.token;
+      // Fallback: use cached token if Firebase has no user (for dev builds)
+      final cachedToken = SharedPreferencesUtil().authToken;
+      if (cachedToken.isNotEmpty) {
+        print('DEBUG AuthService.getIdToken: Using cached token fallback');
+        return cachedToken;
+      }
+      return null;
     } catch (e) {
       Logger.debug(e.toString());
       return SharedPreferencesUtil().authToken;
@@ -445,11 +452,19 @@ class AuthService {
     }
   }
 
+  /// Restore onboarding state from server. Call this on app startup when using cached credentials.
+  Future<void> restoreOnboardingState() async {
+    return _restoreOnboardingState();
+  }
+
   Future<void> _restoreOnboardingState() async {
     try {
+      print('DEBUG _restoreOnboardingState: fetching from server...');
       final state = await getUserOnboardingState();
+      print('DEBUG _restoreOnboardingState: got state=$state');
       if (state != null) {
         if (state['completed'] == true) {
+          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
@@ -462,10 +477,11 @@ class AuthService {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
-        Logger.debug('Restored onboarding state from server: completed=${state['completed']}');
+        print(
+            'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
       }
     } catch (e) {
-      Logger.debug('Error restoring onboarding state: $e');
+      print('DEBUG _restoreOnboardingState: error=$e');
     }
   }
 

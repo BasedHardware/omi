@@ -8058,4 +8058,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Helifail ei ole esitamiseks saadaval';
+
+  @override
+  String get audioPlaybackFailed => 'Heli esitamine ebaõnnestus. Fail võib olla rikutud või puududa.';
 }

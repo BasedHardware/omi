@@ -177,4 +177,15 @@ class Features:
     PERSONA = "persona"
     MEMORIES = "memories"
     TRANSCRIBE = "transcribe"
+    REALTIME_INTEGRATIONS = "realtime_integrations"
+    DAILY_SUMMARY = "daily_summary"
+    SUBSCRIPTION_NOTIFICATION = "subscription_notification"
+    KNOWLEDGE_GRAPH = "knowledge_graph"
     OTHER = "other"
+
+    # Conversation processing sub-features (granular cost tracking)
+    CONVERSATION_DISCARD = "conv_discard"
+    CONVERSATION_STRUCTURE = "conv_structure"
+    CONVERSATION_ACTION_ITEMS = "conv_action_items"
+    CONVERSATION_FOLDER = "conv_folder"
+    CONVERSATION_APPS = "conv_apps"

@@ -593,14 +593,15 @@ Future<String?> generateDailySummary({String? date}) async {
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
+  print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/onboarding',
     headers: {},
     method: 'GET',
     body: '',
   );
+  print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
   if (response == null) return null;
-  Logger.debug('getUserOnboardingState response: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body);
   }

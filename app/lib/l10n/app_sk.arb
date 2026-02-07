@@ -2587,5 +2587,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Zvukový súbor nie je k dispozícii na prehrávanie",
+  "audioPlaybackFailed": "Nie je možné prehrať zvuk. Súbor môže byť poškodený alebo chýba."
 }

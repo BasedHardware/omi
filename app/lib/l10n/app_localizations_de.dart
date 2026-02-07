@@ -8125,4 +8125,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audiodatei ist nicht zur Wiedergabe verfügbar';
+
+  @override
+  String get audioPlaybackFailed =>
+      'Audio kann nicht abgespielt werden. Die Datei ist möglicherweise beschädigt oder fehlt.';
 }

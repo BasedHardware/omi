@@ -26,8 +26,7 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<HomeProvider, DeviceProvider>(
       builder: (context, home, deviceProvider, child) {
-        final isOmiDeviceConnected =
-            deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+        final isOmiDeviceConnected = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
 
         return Stack(
           children: [

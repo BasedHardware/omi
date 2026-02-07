@@ -2582,5 +2582,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή",
+  "audioPlaybackFailed": "Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει."
 }

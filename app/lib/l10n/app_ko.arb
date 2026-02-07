@@ -2582,5 +2582,7 @@
   "coworker": "Coworker",
   "linkedIn": "LinkedIn",
   "appStore": "App Store",
-  "googleSearch": "Google Search"
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "오디오 파일을 재생할 수 없습니다",
+  "audioPlaybackFailed": "오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다."
 }

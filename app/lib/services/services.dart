@@ -366,6 +366,7 @@ class MicRecorderService implements IMicRecorderService {
   @override
   void stop() {
     _recorder.stopRecorder();
+    _recorder.closeRecorder();
     _controller.close();
 
     // callback

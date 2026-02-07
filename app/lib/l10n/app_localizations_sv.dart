@@ -8064,4 +8064,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Ljudfilen är inte tillgänglig för uppspelning';
+
+  @override
+  String get audioPlaybackFailed => 'Kan inte spela upp ljud. Filen kan vara skadad eller saknas.';
 }
