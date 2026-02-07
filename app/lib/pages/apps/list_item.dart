@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
@@ -30,7 +31,15 @@ class AppListItem extends StatelessWidget {
           isLoading = provider.appLoading[index];
         }
 
-        return (enabled: app.enabled, isLoading: isLoading);
+        // Get the enabled state from the provider's apps list to ensure we have the latest state
+        // This fixes the bug where the install state is stale until the detail page is visited
+        bool enabled = app.enabled;
+        final providerApp = provider.apps.firstWhereOrNull((a) => a.id == app.id);
+        if (providerApp != null) {
+          enabled = providerApp.enabled;
+        }
+
+        return (enabled: enabled, isLoading: isLoading);
       },
       builder: (context, state, child) {
         return GestureDetector(
