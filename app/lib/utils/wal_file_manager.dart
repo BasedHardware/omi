@@ -78,8 +78,12 @@ class WalFileManager {
   }
 
   static Future<void> _createBackup() async {
-    if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
-      await _walFile!.copy(_walBackupFile!.path);
+    try {
+      if (_walFile != null && _walFile!.existsSync() && _walBackupFile != null) {
+        await _walFile!.copy(_walBackupFile!.path);
+      }
+    } on FileSystemException catch (e) {
+      Logger.debug('WalFileManager: Failed to create backup: $e');
     }
   }
 
