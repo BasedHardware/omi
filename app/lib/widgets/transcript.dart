@@ -526,7 +526,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       MixpanelManager().tagSheetOpened();
                                     },
                               child: Text(
-                                data.speakerId == omiSpeakerId ? 'omi' : (person?.name ?? 'Speaker ${data.speakerId}'),
+                                data.speakerId == omiSpeakerId
+                                    ? 'omi'
+                                    : (person?.name ??
+                                        'Speaker ${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}'),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
