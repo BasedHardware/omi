@@ -30,7 +30,13 @@ class AppListItem extends StatelessWidget {
           isLoading = provider.appLoading[index];
         }
 
-        return (enabled: app.enabled, isLoading: isLoading);
+        // Get the enabled state from the provider's apps list to ensure reactivity
+        bool enabled = app.enabled;
+        if (index >= 0 && index < provider.apps.length) {
+          enabled = provider.apps[index].enabled;
+        }
+
+        return (enabled: enabled, isLoading: isLoading);
       },
       builder: (context, state, child) {
         return GestureDetector(
