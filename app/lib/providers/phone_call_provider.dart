@@ -13,6 +13,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/services/phone_call_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 class PhoneCallProvider extends ChangeNotifier {
@@ -95,6 +96,8 @@ class PhoneCallProvider extends ChangeNotifier {
     _verificationStatus = null;
     notifyListeners();
 
+    MixpanelManager().phoneCallVerificationStarted();
+
     var result = await api.verifyPhoneNumber(phoneNumber);
     _isLoading = false;
 
@@ -122,6 +125,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
     bool verified = result['verified'] == true;
     if (verified) {
+      MixpanelManager().phoneCallVerificationCompleted();
       await loadVerifiedNumbers();
     }
     return verified;
@@ -195,11 +199,13 @@ class PhoneCallProvider extends ChangeNotifier {
     if (!callStarted) {
       _callState = PhoneCallState.failed;
       _error = 'Failed to start call';
+      MixpanelManager().phoneCallFailed(error: 'Failed to start call');
       _disconnectTranscriptionSocket();
       notifyListeners();
       return false;
     }
 
+    MixpanelManager().phoneCallStarted(contactName: _contactName);
     return true;
   }
 
@@ -239,6 +245,7 @@ class PhoneCallProvider extends ChangeNotifier {
       _callStartTime = DateTime.now();
       _startDurationTimer();
       _connectTranscriptionSocket();
+      MixpanelManager().phoneCallConnected();
     } else if (state == PhoneCallState.ended || state == PhoneCallState.failed) {
       _onCallEnded();
     }
@@ -260,6 +267,7 @@ class PhoneCallProvider extends ChangeNotifier {
   }
 
   void _onCallEnded() {
+    MixpanelManager().phoneCallEnded(durationSeconds: _callDuration.inSeconds);
     _callState = PhoneCallState.ended;
     _stopDurationTimer();
     _disconnectTranscriptionSocket();
