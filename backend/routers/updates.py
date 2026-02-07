@@ -208,7 +208,6 @@ def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
         html += f"<li>{icon} {message}</li>"
 
     html += "</ul>"
-    html += '<p style="margin-top:12px;font-size:12px;color:#888;">Having trouble updating? <a href="https://api.omi.me/v2/desktop/download/latest?platform=macos">Download the latest version manually</a></p>'
     return html
 
 
