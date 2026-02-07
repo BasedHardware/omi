@@ -8,12 +8,13 @@ import pytz
 import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
-from database.redis_db import set_daily_summary_sent, has_daily_summary_been_sent
+from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
-from utils.llm.external_integrations import get_conversation_summary
+from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
+import database.daily_summaries as daily_summaries_db
 
 
 def should_run_job():
@@ -115,8 +116,8 @@ def _send_summary_notification(user_data: tuple):
             display_date = now_utc.date()
         date_str = display_date.strftime('%Y-%m-%d')
 
-    # Check if summary already sent for this date
-    if has_daily_summary_been_sent(uid, date_str):
+    # Atomically acquire lock BEFORE expensive LLM work to prevent race condition
+    if not try_acquire_daily_summary_lock(uid, date_str):
         return
 
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
@@ -124,10 +125,6 @@ def _send_summary_notification(user_data: tuple):
         return
 
     conversations = [Conversation(**convo_data) for convo_data in conversations_data]
-
-    # Generate comprehensive daily summary
-    from utils.llm.external_integrations import generate_comprehensive_daily_summary
-    import database.daily_summaries as daily_summaries_db
 
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
@@ -157,9 +154,6 @@ def _send_summary_notification(user_data: tuple):
     send_notification(
         uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
     )
-
-    # Mark that summary was sent for this date
-    set_daily_summary_sent(uid, date_str)
 
 
 async def _send_bulk_summary_notification(users: list):
