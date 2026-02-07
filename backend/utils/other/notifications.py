@@ -7,11 +7,17 @@ import pytz
 
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.daily_summaries as daily_summaries_db
 import database.notifications as notification_db
-from database.redis_db import set_daily_summary_sent, has_daily_summary_been_sent
+from database.redis_db import (
+    has_daily_summary_been_sent,
+    release_daily_summary_lock,
+    set_daily_summary_sent,
+    try_acquire_daily_summary_lock,
+)
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
-from utils.llm.external_integrations import get_conversation_summary
+from utils.llm.external_integrations import generate_comprehensive_daily_summary, get_conversation_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 
@@ -115,7 +121,7 @@ def _send_summary_notification(user_data: tuple):
             display_date = now_utc.date()
         date_str = display_date.strftime('%Y-%m-%d')
 
-    # Check if summary already sent for this date
+    # Fast pre-check: skip if summary already sent for this date
     if has_daily_summary_been_sent(uid, date_str):
         return
 
@@ -123,43 +129,50 @@ def _send_summary_notification(user_data: tuple):
     if not conversations_data or len(conversations_data) == 0:
         return
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    # Atomic lock: prevent concurrent cron instances from generating duplicate summaries
+    if not try_acquire_daily_summary_lock(uid, date_str):
+        return
 
-    # Generate comprehensive daily summary
-    from utils.llm.external_integrations import generate_comprehensive_daily_summary
-    import database.daily_summaries as daily_summaries_db
+    try:
+        conversations = [Conversation(**convo_data) for convo_data in conversations_data]
 
-    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+        summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
-    # Store in database
-    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+        # Store in database
+        summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
-    # Create notification with deep link to summary page
-    daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
-    summary_body = summary_data.get('overview', 'Tap to see your daily summary')
+        # Create notification with deep link to summary page
+        daily_summary_title = (
+            f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
+        )
+        summary_body = summary_data.get('overview', 'Tap to see your daily summary')
 
-    # Truncate body for notification if too long
-    if len(summary_body) > 150:
-        summary_body = summary_body[:147] + "..."
+        # Truncate body for notification if too long
+        if len(summary_body) > 150:
+            summary_body = summary_body[:147] + "..."
 
-    ai_message = NotificationMessage(
-        text=summary_body,
-        from_integration='false',
-        type='day_summary',
-        notification_type='daily_summary',
-        navigate_to=f"/daily-summary/{summary_id}",
-    )
+        ai_message = NotificationMessage(
+            text=summary_body,
+            from_integration='false',
+            type='day_summary',
+            notification_type='daily_summary',
+            navigate_to=f"/daily-summary/{summary_id}",
+        )
 
-    # Also send webhook with the full summary data
-    threading.Thread(target=day_summary_webhook, args=(uid, str(summary_data))).start()
+        # Also send webhook with the full summary data
+        threading.Thread(target=day_summary_webhook, args=(uid, str(summary_data))).start()
 
-    tokens = user_data[1] if len(user_data) > 1 else None
-    send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
-    )
+        tokens = user_data[1] if len(user_data) > 1 else None
+        send_notification(
+            uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        )
 
-    # Mark that summary was sent for this date
-    set_daily_summary_sent(uid, date_str)
+        # Mark that summary was sent for this date (long TTL prevents re-sends)
+        set_daily_summary_sent(uid, date_str)
+    except Exception:
+        # Release lock on failure so a later cron run can retry
+        release_daily_summary_lock(uid, date_str)
+        raise
 
 
 async def _send_bulk_summary_notification(users: list):
