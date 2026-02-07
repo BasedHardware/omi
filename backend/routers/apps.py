@@ -158,6 +158,7 @@ def get_apps_v2(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
     include_reviews: bool = Query(default=False),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Public omi apps, paginated by capability groups.
 
@@ -170,20 +171,22 @@ def get_apps_v2(
 
     capabilities = get_capabilities_list()
 
-    if capability:
-        cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
-    else:
-        cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
-
-    cached = get_generic_cache(cache_key)
-    if cached:
-        return cached
+    # Don't cache when user-specific data (enabled field) is included
+    # Cache key would need to include uid which defeats the purpose of shared caching
+    # Instead, we'll fetch fresh data and set enabled status per user
 
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
     approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Get user's enabled apps to set the enabled field
+    user_enabled = set(get_enabled_apps(uid))
+
+    # Set enabled field for each app based on user's installed apps
+    for app in approved_apps:
+        app.enabled = app.id in user_enabled
 
     # Capability-specific response
     if capability:
@@ -201,7 +204,6 @@ def get_apps_v2(
                 ),
             },
         }
-        set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
     # Grouped response by capability
@@ -217,7 +219,6 @@ def get_apps_v2(
             'offset': offset,
         },
     }
-    set_generic_cache(cache_key, res, ttl=60 * 10)
     return res
 
 
@@ -225,6 +226,7 @@ def get_apps_v2(
 def get_capability_apps_grouped_by_category(
     capability_id: str,
     include_reviews: bool = Query(default=True),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get all apps for a specific capability, grouped by master category.
 
@@ -233,12 +235,6 @@ def get_capability_apps_grouped_by_category(
     - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
     """
 
-    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
-
-    cached = get_generic_cache(cache_key)
-    if cached:
-        return cached
-
     capabilities = get_capabilities_list()
 
     # Fetch and filter approved public apps
@@ -246,6 +242,13 @@ def get_capability_apps_grouped_by_category(
     approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Get user's enabled apps to set the enabled field
+    user_enabled = set(get_enabled_apps(uid))
+
+    # Set enabled field for each app based on user's installed apps
+    for app in approved_apps:
+        app.enabled = app.id in user_enabled
 
     # Filter apps by capability
     filtered_apps = filter_apps_by_capability(approved_apps, capability_id)
@@ -268,7 +271,6 @@ def get_capability_apps_grouped_by_category(
             'groupCount': len(groups),
         },
     }
-    set_generic_cache(cache_key, res, ttl=60 * 10)
     return res
 
 
