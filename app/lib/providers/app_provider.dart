@@ -419,8 +419,14 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -431,14 +437,17 @@ class AppProvider extends BaseProvider {
       }
       apps = flat;
 
-      // Sync enabled state from local cache to fix install state mismatch bug
-      _syncEnabledStateFromCache();
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
 
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
       await Future.delayed(const Duration(milliseconds: 50));
       filterApps();
+      updatePrefApps();
     } catch (e) {
       Logger.debug('Error loading apps: $e');
       // Fallback to cached data
@@ -581,8 +590,14 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       Logger.debug('Refreshing apps after installation/change...');
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -593,8 +608,10 @@ class AppProvider extends BaseProvider {
       }
       apps = flat;
 
-      // Sync enabled state from local cache to fix install state mismatch bug
-      _syncEnabledStateFromCache();
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
 
       appLoading = List.filled(apps.length, false, growable: true);
 
@@ -623,26 +640,6 @@ class AppProvider extends BaseProvider {
       apps = SharedPreferencesUtil().appsList;
       filterApps();
       notifyListeners();
-    }
-  }
-
-  /// Syncs the enabled state from the cached apps list to the current apps list.
-  /// This fixes the bug where the install state is incorrect after restarting the app.
-  void _syncEnabledStateFromCache() {
-    final cachedApps = SharedPreferencesUtil().appsList;
-    if (cachedApps.isEmpty) return;
-
-    // Create a map of app ID to enabled state from cache
-    final Map<String, bool> cachedEnabledStates = {};
-    for (final cachedApp in cachedApps) {
-      cachedEnabledStates[cachedApp.id] = cachedApp.enabled;
-    }
-
-    // Update enabled state for each app based on cache
-    for (int i = 0; i < apps.length; i++) {
-      if (cachedEnabledStates.containsKey(apps[i].id)) {
-        apps[i].enabled = cachedEnabledStates[apps[i].id]!;
-      }
     }
   }
 
