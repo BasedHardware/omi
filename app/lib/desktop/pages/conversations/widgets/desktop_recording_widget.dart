@@ -574,8 +574,10 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         final segment = entry.value;
         final isLatest = index == displaySegments.length - 1;
 
-        String speakerName =
-            segment.isUser ? context.l10n.you : context.l10n.speakerWithId((segment.speakerId + 1).toString());
+        String speakerName = segment.isUser
+            ? context.l10n.you
+            : context.l10n
+                .speakerWithId(TranscriptSegment.getDisplaySpeakerId(segment.speakerId, displaySegments).toString());
         if (segment.personId != null && !segment.isUser) {
           final person = people.firstWhereOrNull((p) => p.id == segment.personId);
           if (person != null) {

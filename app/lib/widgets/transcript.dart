@@ -528,7 +528,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               child: Text(
                                 data.speakerId == omiSpeakerId
                                     ? 'omi'
-                                    : (person?.name ?? 'Speaker ${data.speakerId + 1}'),
+                                    : (person?.name ??
+                                        'Speaker ${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}'),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
