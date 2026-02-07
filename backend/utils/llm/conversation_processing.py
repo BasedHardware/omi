@@ -230,6 +230,57 @@ Content:
         return False
 
 
+# =============================================
+#       SHARED CONVERSATION CONTEXT BUILDER
+# =============================================
+
+
+def _build_conversation_context(
+    transcript: str,
+    photos: Optional[List[ConversationPhoto]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+) -> str:
+    """Build the conversation context string shared across LLM prompts.
+
+    Produces a deterministic string from transcript, photos, and calendar context.
+    When used as the first system message in a prompt, enables OpenAI prompt caching
+    across sequential calls (e.g. structure + action items) that share the same content.
+
+    Returns:
+        Formatted context string, or empty string if no content provided.
+    """
+    context_parts = []
+
+    if calendar_meeting_context:
+        participants_str = ", ".join(
+            [
+                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
+                for p in calendar_meeting_context.participants
+            ]
+        )
+        calendar_context_str = f"""
+CALENDAR MEETING CONTEXT:
+- Meeting Title: {calendar_meeting_context.title}
+- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
+- Duration: {calendar_meeting_context.duration_minutes} minutes
+- Platform: {calendar_meeting_context.platform or 'Not specified'}
+- Participants: {participants_str or 'None listed'}
+{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
+{f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
+""".strip()
+        context_parts.append(calendar_context_str)
+
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    return "\n\n".join(context_parts)
+
+
 def extract_action_items(
     transcript: str,
     started_at: datetime,
@@ -253,39 +304,9 @@ def extract_action_items(
     Returns:
         List of extracted ActionItem objects
     """
-    context_parts = []
-    if transcript and transcript.strip():
-        context_parts.append(f"Transcript: ```{transcript.strip()}```")
-
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
-
-    # Add calendar meeting context if available
-    calendar_context_str = ""
-    if calendar_meeting_context:
-        participants_str = ", ".join(
-            [
-                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
-                for p in calendar_meeting_context.participants
-            ]
-        )
-        calendar_context_str = f"""
-CALENDAR MEETING CONTEXT:
-- Meeting Title: {calendar_meeting_context.title}
-- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
-- Duration: {calendar_meeting_context.duration_minutes} minutes
-- Platform: {calendar_meeting_context.platform or 'Not specified'}
-- Participants: {participants_str or 'None listed'}
-{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
-"""
-        context_parts.insert(0, calendar_context_str.strip())
-
-    if not context_parts:
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    if not conversation_context:
         return []
-
-    full_context = "\n\n".join(context_parts)
 
     existing_items_context = ""
     if existing_action_items:
@@ -301,7 +322,11 @@ CALENDAR MEETING CONTEXT:
             items_list
         )
 
-    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
+    # First system message: shared conversation context (enables OpenAI prompt caching)
+    context_message = 'Content:\n{conversation_context}'
+
+    # Second system message: task-specific instructions
+    instructions_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
 
     The content language is {language_code}. Use the same language {language_code} for your response.
 
@@ -519,21 +544,18 @@ CALENDAR MEETING CONTEXT:
     Reference time: {started_at}
     User timezone: {tz}
 
-    Content:
-    {full_context}
-
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = ChatPromptTemplate.from_messages([('system', context_message), ('system', instructions_text)])
     chain = prompt | llm_medium_experiment | action_items_parser
 
     try:
         response = chain.invoke(
             {
-                'full_context': full_context,
+                'conversation_context': conversation_context,
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
                 'started_at': started_at.isoformat(),
@@ -563,42 +585,15 @@ def get_transcript_structure(
     photos: List[ConversationPhoto] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> Structured:
-    context_parts = []
-    if transcript and transcript.strip():
-        context_parts.append(f"Transcript: ```{transcript.strip()}```")
-
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
-
-    # Add calendar meeting context if available
-    calendar_context_str = ""
-    if calendar_meeting_context:
-        participants_str = ", ".join(
-            [
-                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
-                for p in calendar_meeting_context.participants
-            ]
-        )
-        calendar_context_str = f"""
-CALENDAR MEETING CONTEXT:
-- Meeting Title: {calendar_meeting_context.title}
-- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
-- Duration: {calendar_meeting_context.duration_minutes} minutes
-- Platform: {calendar_meeting_context.platform or 'Not specified'}
-- Participants: {participants_str or 'None listed'}
-{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
-{f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
-"""
-        context_parts.insert(0, calendar_context_str.strip())
-
-    if not context_parts:
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
-    full_context = "\n\n".join(context_parts)
+    # First system message: shared conversation context (enables OpenAI prompt caching)
+    context_message = 'Content:\n{conversation_context}'
 
-    prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
+    # Second system message: task-specific instructions
+    instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. Use the same language {language_code} for your response.
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
@@ -622,37 +617,33 @@ CALENDAR MEETING CONTEXT:
     • **User involvement**: The user is expected to attend, participate, or take action
     • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
     • **Important/actionable**: Missing it would have real consequences or impact
-    
+
     INCLUDE these event types:
     • Meetings & appointments (business meetings, doctor visits, interviews)
     • Hard deadlines (project due dates, payment deadlines, submission dates)
     • Personal commitments (family events, social gatherings user committed to)
     • Travel & transportation (flights, trains, scheduled pickups)
     • Recurring obligations (classes, regular meetings, scheduled calls)
-    
+
     EXCLUDE these:
     • Casual mentions ("we should meet sometime", "maybe next week")
     • Historical references (past events being discussed)
     • Other people's events (events user isn't involved in)
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
-    
+
     For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
-
-
-    Content:
-    {full_context}
 
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = ChatPromptTemplate.from_messages([('system', context_message), ('system', instructions_text)])
     chain = prompt | llm_medium_experiment | parser
 
     response = chain.invoke(
         {
-            'full_context': full_context,
+            'conversation_context': conversation_context,
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'started_at': started_at.isoformat(),
