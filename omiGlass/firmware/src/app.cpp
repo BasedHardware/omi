@@ -698,6 +698,12 @@ void configure_ble()
 // -------------------------------------------------------------------------
 bool take_photo()
 {
+    // Safety check: Don't capture if currently uploading
+    if (photoDataUploading) {
+        Serial.println("Cannot capture photo: upload in progress");
+        return false;
+    }
+    
     // Release previous buffer
     if (fb) {
         Serial.println("Releasing previous camera buffer...");
