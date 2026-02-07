@@ -18,21 +18,19 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
         mainAxisAlignment: MainAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: EdgeInsets.only(left: widget.progressValue > 0.05 ? 15.0 : 20.0),
-            child: SizedBox(
-              height: 46,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: ((MediaQuery.sizeOf(context).width * 0.72) *
-                        (double.parse(widget.progressValue.toStringAsFixed(2)))),
-                    child: ProgressBubble(
-                      content: '${(widget.progressValue * 100).toInt()}%',
-                    ),
+          SizedBox(
+            height: 46,
+            width: MediaQuery.sizeOf(context).width * 0.72,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: ((MediaQuery.sizeOf(context).width * 0.72 - 50) *
+                      (double.parse(widget.progressValue.toStringAsFixed(2)))),
+                  child: ProgressBubble(
+                    content: '${(widget.progressValue * 100).toInt()}%',
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           SizedBox(
