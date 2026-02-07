@@ -279,12 +279,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
                           Text(
                             'Help Omi learn your voice for a personalized experience',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 16,
+                              fontSize: 14,
                               height: 1.4,
                               fontFamily: 'Manrope',
                             ),
@@ -324,12 +324,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
                           Text(
                             'Your voice profile has been created successfully',
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 16,
+                              fontSize: 14,
                               height: 1.4,
                               fontFamily: 'Manrope',
                             ),
@@ -411,7 +411,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           ),
                         ],
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
 
                         // Action buttons
                         if (!provider.startedRecording) ...[
@@ -477,7 +477,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                 ),
                               ),
                             ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           TextButton(
                             onPressed: () {
                               widget.onSkip();
