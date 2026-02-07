@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
@@ -142,16 +143,17 @@ class SectionAppItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Use Selector instead of Consumer to only rebuild when this specific app's enabled state changes
-    return Selector<AppProvider, bool>(
+    return Selector<AppProvider, ({bool enabled, int appListLength})>(
       selector: (context, provider) {
-        // Only select the enabled state of this specific app
-        final currentApp = provider.apps.firstWhere(
-          (a) => a.id == app.id,
-          orElse: () => app,
-        );
-        return currentApp.enabled;
+        // Find the app in provider.apps to get the most up-to-date enabled state
+        final currentApp = provider.apps.firstWhereOrNull((a) => a.id == app.id);
+        // If found in provider.apps, use that state; otherwise fall back to the app parameter
+        final isEnabled = currentApp?.enabled ?? app.enabled;
+        // Include app list length to ensure selector re-runs when apps list changes
+        return (enabled: isEnabled, appListLength: provider.apps.length);
       },
-      builder: (context, isEnabled, child) {
+      builder: (context, state, child) {
+        final isEnabled = state.enabled;
         return GestureDetector(
           onTap: () async {
             MixpanelManager().pageOpened('App Detail');
