@@ -17,7 +17,7 @@ from database.redis_db import (
 )
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
-from utils.llm.external_integrations import generate_comprehensive_daily_summary, get_conversation_summary
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 
@@ -130,7 +130,8 @@ def _send_summary_notification(user_data: tuple):
         return
 
     # Atomic lock: prevent concurrent cron instances from generating duplicate summaries
-    if not try_acquire_daily_summary_lock(uid, date_str):
+    lock_token = try_acquire_daily_summary_lock(uid, date_str)
+    if lock_token is None:
         return
 
     try:
@@ -170,8 +171,8 @@ def _send_summary_notification(user_data: tuple):
         # Mark that summary was sent for this date (long TTL prevents re-sends)
         set_daily_summary_sent(uid, date_str)
     except Exception:
-        # Release lock on failure so a later cron run can retry
-        release_daily_summary_lock(uid, date_str)
+        # Release lock on failure (only if we still own it) so a later cron run can retry
+        release_daily_summary_lock(uid, date_str, lock_token)
         raise
 
 
