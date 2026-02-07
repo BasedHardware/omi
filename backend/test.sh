@@ -21,3 +21,4 @@ pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
+pytest tests/unit/test_daily_summary_race_condition.py -v
