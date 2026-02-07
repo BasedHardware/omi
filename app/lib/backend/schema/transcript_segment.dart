@@ -200,7 +200,7 @@ class TranscriptSegment {
         if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
           speakerName = peopleMap[segment.personId]!;
         } else {
-          speakerName = 'Speaker ${segment.speakerId}';
+          speakerName = 'Speaker ${segment.speakerId + 1}';
         }
         transcript += '$timestampStr $speakerName: $segmentText ';
       }

@@ -74,11 +74,11 @@ void main() {
 
       // Should show person name
       expect(find.text('Alice'), findsOneWidget);
-      expect(find.text('Speaker 1'), findsNothing);
+      expect(find.text('Speaker 2'), findsNothing);
     });
 
     testWidgets('shows Speaker X when no person is assigned', (tester) async {
-      final segment = _segment('seg2', 1);
+      final segment = _segment('seg2', 0);
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
