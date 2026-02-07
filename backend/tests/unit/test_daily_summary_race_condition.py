@@ -57,7 +57,7 @@ for submodule in [
 
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.has_daily_summary_been_sent = MagicMock(return_value=False)
-redis_mod.try_acquire_daily_summary_lock = MagicMock(return_value=True)
+redis_mod.try_acquire_daily_summary_lock = MagicMock(return_value="fake-token-123")
 redis_mod.release_daily_summary_lock = MagicMock()
 redis_mod.set_daily_summary_sent = MagicMock()
 
@@ -138,17 +138,17 @@ from utils.other.notifications import _send_summary_notification
 
 
 class TestAtomicLockAcquisition:
-    """Test that try_acquire_daily_summary_lock returns True on first call, False on second."""
+    """Test that try_acquire_daily_summary_lock returns a token on first call, None on second."""
 
-    def test_lock_acquired_first_call(self):
-        redis_mod.try_acquire_daily_summary_lock.return_value = True
+    def test_lock_acquired_returns_token(self):
+        redis_mod.try_acquire_daily_summary_lock.return_value = "token-abc"
         result = redis_mod.try_acquire_daily_summary_lock("user1", "2026-02-07")
-        assert result is True
+        assert result == "token-abc"
 
-    def test_lock_rejected_second_call(self):
-        redis_mod.try_acquire_daily_summary_lock.return_value = False
+    def test_lock_rejected_returns_none(self):
+        redis_mod.try_acquire_daily_summary_lock.return_value = None
         result = redis_mod.try_acquire_daily_summary_lock("user1", "2026-02-07")
-        assert result is False
+        assert result is None
 
 
 class TestSendSummaryNotificationRaceCondition:
@@ -166,7 +166,7 @@ class TestSendSummaryNotificationRaceCondition:
 
         # Default: not sent, lock acquired, has conversations
         redis_mod.has_daily_summary_been_sent.return_value = False
-        redis_mod.try_acquire_daily_summary_lock.return_value = True
+        redis_mod.try_acquire_daily_summary_lock.return_value = "fake-token-123"
         conversations_mod.get_conversations.return_value = [{'id': 'conv1', 'title': 'Test'}]
         daily_summaries_mod.create_daily_summary.return_value = "summary-123"
         utils_llm_ext.generate_comprehensive_daily_summary.return_value = {
@@ -186,7 +186,7 @@ class TestSendSummaryNotificationRaceCondition:
 
     def test_lock_not_acquired_returns_early(self):
         """If lock not acquired (another job processing), skip LLM call."""
-        redis_mod.try_acquire_daily_summary_lock.return_value = False
+        redis_mod.try_acquire_daily_summary_lock.return_value = None
         user_data = ("uid1", ["token1"], "America/New_York")
         _send_summary_notification(user_data)
 
@@ -233,3 +233,17 @@ class TestSendSummaryNotificationRaceCondition:
             _send_summary_notification(user_data)
 
         redis_mod.set_daily_summary_sent.assert_not_called()
+
+    def test_llm_failure_releases_lock_with_token(self):
+        """On failure, release_daily_summary_lock is called with the same token from acquire."""
+        redis_mod.try_acquire_daily_summary_lock.return_value = "my-unique-token"
+        utils_llm_ext.generate_comprehensive_daily_summary.side_effect = RuntimeError("fail")
+        user_data = ("uid1", ["token1"], "America/New_York")
+
+        with pytest.raises(RuntimeError):
+            _send_summary_notification(user_data)
+
+        # Verify token is passed through to release (compare-and-delete)
+        call_args = redis_mod.release_daily_summary_lock.call_args
+        assert call_args is not None
+        assert call_args[0][2] == "my-unique-token" or call_args[1].get('token') == "my-unique-token"
