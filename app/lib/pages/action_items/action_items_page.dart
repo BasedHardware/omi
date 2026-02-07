@@ -72,7 +72,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.fetchActionItems(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
-      if (!taskIntegrationProvider.hasLoaded) {
+      if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
         taskIntegrationProvider.loadFromBackend();
       }
     });
