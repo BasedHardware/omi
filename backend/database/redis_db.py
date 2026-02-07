@@ -791,15 +791,26 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
-def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 2):
+def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 15) -> bool:
+    """Atomically acquire lock before daily summary generation. Returns True if acquired, False if another job is already processing."""
+    result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def release_daily_summary_lock(uid: str, date: str):
+    """Release the daily summary lock (e.g. after LLM failure to allow retry)."""
+    r.delete(f'users:{uid}:daily_summary_lock:{date}')
+
+
+def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 24):
     """
     Mark that a daily summary was sent to user for a specific date.
-    Default TTL is 2 hours to prevent duplicate sends within the same hour window.
+    Default TTL is 24 hours to prevent duplicate sends for the same date.
 
     Args:
         uid: User ID
         date: Date string in YYYY-MM-DD format
-        ttl: Time to live in seconds (default: 2 hours)
+        ttl: Time to live in seconds (default: 24 hours)
     """
     r.set(f'users:{uid}:daily_summary_sent:{date}', '1', ex=ttl)
 
