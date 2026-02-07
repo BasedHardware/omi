@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -69,6 +70,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
+      }
+      final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
+      if (!taskIntegrationProvider.hasLoaded) {
+        taskIntegrationProvider.loadFromBackend();
       }
     });
   }
