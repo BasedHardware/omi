@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import uuid
 from typing import List, Union, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -791,15 +792,24 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
-def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 15) -> bool:
-    """Atomically acquire lock before daily summary generation. Returns True if acquired, False if another job is already processing."""
-    result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
-    return result is not None
+def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 30) -> str | None:
+    """Atomically acquire lock before daily summary generation. Returns a unique token if acquired, None if another job is already processing."""
+    token = str(uuid.uuid4())
+    result = r.set(f'users:{uid}:daily_summary_lock:{date}', token, ex=ttl, nx=True)
+    return token if result is not None else None
 
 
-def release_daily_summary_lock(uid: str, date: str):
-    """Release the daily summary lock (e.g. after LLM failure to allow retry)."""
-    r.delete(f'users:{uid}:daily_summary_lock:{date}')
+_RELEASE_LOCK_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
+
+
+def release_daily_summary_lock(uid: str, date: str, token: str):
+    """Release the daily summary lock only if we still own it (compare-and-delete)."""
+    r.eval(_RELEASE_LOCK_SCRIPT, 1, f'users:{uid}:daily_summary_lock:{date}', token)
 
 
 def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 24):
