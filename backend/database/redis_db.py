@@ -791,28 +791,7 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
-def set_daily_summary_sent(uid: str, date: str, ttl: int = 60 * 60 * 2):
-    """
-    Mark that a daily summary was sent to user for a specific date.
-    Default TTL is 2 hours to prevent duplicate sends within the same hour window.
-
-    Args:
-        uid: User ID
-        date: Date string in YYYY-MM-DD format
-        ttl: Time to live in seconds (default: 2 hours)
-    """
-    r.set(f'users:{uid}:daily_summary_sent:{date}', '1', ex=ttl)
-
-
-def has_daily_summary_been_sent(uid: str, date: str) -> bool:
-    """
-    Check if daily summary was already sent to user for a specific date.
-
-    Args:
-        uid: User ID
-        date: Date string in YYYY-MM-DD format
-
-    Returns:
-        True if summary was already sent for this date, False otherwise
-    """
-    return r.exists(f'users:{uid}:daily_summary_sent:{date}')
+def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
+    """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
+    result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
