@@ -175,6 +175,18 @@ class TestRaceConditionPrevention:
         # Reset side_effect
         mock_r.set.side_effect = None
 
+    def test_redis_error_propagates_no_silent_swallow(self):
+        """Transient Redis failure must propagate — no state mutation should happen."""
+        mock_r.set.side_effect = ConnectionError("Redis unavailable")
+
+        try:
+            try_acquire_daily_summary_lock('uid1', '2026-02-07')
+            assert False, "Expected ConnectionError to propagate"
+        except ConnectionError:
+            pass  # Expected: error propagates, no silent swallow
+
+        mock_r.set.side_effect = None
+
 
 class TestSendSummaryNotificationLockIntegration:
     """Verify _send_summary_notification respects the lock."""
@@ -238,3 +250,22 @@ class TestSendSummaryNotificationLockIntegration:
         convos_db.get_conversations.assert_called_once()
         gen_mock.assert_not_called()
         send_mock.assert_not_called()
+
+    @patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=False)
+    def test_utc_fallback_still_acquires_lock(self, mock_lock):
+        """User data without timezone falls back to UTC; lock must still be called."""
+        convos_db = sys.modules["database.conversations"]
+        convos_db.get_conversations = MagicMock()
+        convos_db.get_conversations.reset_mock()
+
+        gen_mock = sys.modules["utils.llm.external_integrations"].generate_comprehensive_daily_summary
+        gen_mock.reset_mock()
+
+        # No timezone element in tuple — triggers UTC fallback
+        user_data = ('uid1', ['token1'])
+        _send_summary_notification(user_data)
+
+        mock_lock.assert_called_once()
+        # Lock denied, so no downstream work
+        convos_db.get_conversations.assert_not_called()
+        gen_mock.assert_not_called()
