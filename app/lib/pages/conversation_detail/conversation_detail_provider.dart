@@ -85,6 +85,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   TextEditingController? titleController;
   FocusNode? titleFocusNode;
 
+  TextEditingController? overviewController;
+  FocusNode? overviewFocusNode;
+
+  Map<String, TextEditingController> segmentControllers = {};
+  Map<String, FocusNode> segmentFocusNodes = {};
+
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
@@ -94,6 +100,89 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool editSegmentLoading = false;
 
   bool showUnassignedFloatingButton = true;
+
+  bool isEditingSummary = false;
+
+  void enterSummaryEdit() {
+    isEditingSummary = true;
+    overviewFocusNode?.requestFocus();
+    notifyListeners();
+  }
+
+  void exitSummaryEdit() {
+    isEditingSummary = false;
+    overviewFocusNode?.unfocus();
+    notifyListeners();
+  }
+
+  void toggleSummaryEdit() {
+    if (isEditingSummary) {
+      exitSummaryEdit();
+    } else {
+      enterSummaryEdit();
+    }
+  }
+
+  void refreshOverviewController() {
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null && overviewController != null) {
+      overviewController!.text = summarizedApp.content;
+    }
+  }
+
+  String? editingSegmentId;
+
+  void enterSegmentEdit(String segmentId) {
+    if (segmentControllers.containsKey(segmentId)) {
+      editingSegmentId = segmentId;
+      notifyListeners();
+      return;
+    }
+
+    final segmentIndex = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
+
+    if (segmentIndex == -1) {
+      debugPrint('Segment not found for edit: $segmentId');
+      return;
+    }
+
+    final segment = conversation.transcriptSegments[segmentIndex];
+    final controller = TextEditingController(text: segment.text);
+    final focusNode = FocusNode();
+
+    segmentControllers[segmentId] = controller;
+    segmentFocusNodes[segmentId] = focusNode;
+
+    focusNode.addListener(() async {
+      if (!focusNode.hasFocus) {
+        final updatedText = controller.text;
+        if (segment.text != updatedText) {
+          final oldText = segment.text;
+          segment.text = updatedText;
+
+          final success = await updateSegmentText(
+            conversation.id,
+            segment.id,
+            updatedText,
+          );
+
+          if (!success) {
+            segment.text = oldText;
+            controller.text = oldText;
+            notifyListeners();
+          }
+        }
+      }
+    });
+
+    editingSegmentId = segmentId;
+    notifyListeners();
+  }
+
+  void exitSegmentEdit() {
+    editingSegmentId = null;
+    notifyListeners();
+  }
 
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
@@ -207,27 +296,106 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     setShowRatingUi(false);
   }
 
-  Future initConversation() async {
-    // updateLoadingState(true);
+  void _disposeControllers() {
     titleController?.dispose();
     titleFocusNode?.dispose();
+    overviewController?.dispose();
+    overviewFocusNode?.dispose();
+
+    for (var controller in segmentControllers.values) {
+      controller.dispose();
+    }
+    for (var focusNode in segmentFocusNodes.values) {
+      focusNode.dispose();
+    }
+    segmentControllers.clear();
+    segmentFocusNodes.clear();
+  }
+
+  Future initConversation() async {
+    _disposeControllers();
+
     _ratingTimer?.cancel();
     showRatingUI = false;
     hasConversationSummaryRatingSet = false;
+    isEditingSummary = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
 
+    overviewController = TextEditingController();
+    overviewFocusNode = FocusNode();
+
     showUnassignedFloatingButton = true;
 
-    titleController!.text = conversation.structured.title;
-    titleFocusNode!.addListener(() {
-      print('titleFocusNode focus changed');
+    var lastSavedTitle = conversation.structured.title;
+    titleController!.text = lastSavedTitle;
+    titleFocusNode!.addListener(() async {
+      debugPrint('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
-        conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
+        final newTitle = titleController!.text;
+        if (lastSavedTitle != newTitle) {
+          final oldTitle = lastSavedTitle;
+          conversation.structured.title = newTitle;
+          lastSavedTitle = newTitle;
+          notifyListeners(); // Update UI immediately if needed
+
+          final success = await updateConversationTitle(conversation.id, newTitle);
+          if (!success) {
+             conversation.structured.title = oldTitle;
+             lastSavedTitle = oldTitle;
+             titleController!.text = oldTitle;
+             notifyListeners();
+          }
+        }
       }
     });
+
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null) {
+      overviewController!.text = summarizedApp.content;
+
+      String lastSavedOverview = summarizedApp.content;
+
+      overviewFocusNode!.addListener(() async {
+        if (!overviewFocusNode!.hasFocus) {
+          if (isEditingSummary) {
+            exitSummaryEdit();
+          }
+
+          final newOverview = overviewController!.text;
+          if (lastSavedOverview != newOverview) {
+            final oldOverview = lastSavedOverview;
+            // Update both the structured overview and the app result content
+            conversation.structured.overview = newOverview;
+            if (conversation.appResults.isNotEmpty) {
+              conversation.appResults[0] = AppResponse(
+                newOverview,
+                appId: conversation.appResults[0].appId,
+                id: conversation.appResults[0].id,
+              );
+            }
+            lastSavedOverview = newOverview;
+            notifyListeners();
+            
+            final success = await updateConversationOverview(conversation.id, newOverview);
+            if (!success) {
+               conversation.structured.overview = oldOverview;
+               lastSavedOverview = oldOverview;
+               overviewController!.text = oldOverview;
+               if (conversation.appResults.isNotEmpty) {
+                  conversation.appResults[0] = AppResponse(
+                    oldOverview,
+                    appId: conversation.appResults[0].appId,
+                    id: conversation.appResults[0].id,
+                  );
+               }
+               notifyListeners();
+            }
+          }
+        }
+      });
+    }
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
@@ -283,6 +451,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       // Update the cached conversation to ensure we have the latest data
       _cachedConversation = updatedConversation;
 
+      refreshOverviewController();
+
       // Check if the summarized app is in the apps list
       AppResponse? summaryApp = getSummarizedApp();
       if (summaryApp != null && summaryApp.appId != null && appProvider != null) {
@@ -323,14 +493,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Returns the first app result from the conversation if available
   /// This is typically the summary of the conversation
   AppResponse? getSummarizedApp() {
+    // First check appResults as this contains the properly formatted markdown summary
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
-    if (conversation.structured.overview.isNotEmpty) {
+    if (conversation.structured.overview.trim().isNotEmpty) {
       return AppResponse(
         conversation.structured.overview,
         appId: null,
+        id: 0,
       );
     }
     return null;
@@ -554,6 +725,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void dispose() {
     _isDisposed = true;
     _ratingTimer?.cancel();
+    _disposeControllers();
     super.dispose();
   }
 }

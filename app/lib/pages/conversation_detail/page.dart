@@ -84,47 +84,58 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final FocusNode _searchFocusNode = FocusNode();
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
-  List<int> _searchResultPositions = []; // Track positions of search results
 
   // TODO: use later for onboarding transcript segment edits
   // late AnimationController _animationController;
   // late Animation<double> _opacityAnimation;
 
+  void _closeSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+      _searchController.clear();
+      _totalSearchResults = 0;
+      _currentSearchIndex = 0;
+    });
+    _searchFocusNode.unfocus();
+  }
+
   void _updateSearchResults() {
     if (_searchQuery.isEmpty) {
       _totalSearchResults = 0;
       _currentSearchIndex = 0;
-      _searchResultPositions.clear();
       return;
     }
 
     final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
     int count = 0;
-    _searchResultPositions.clear();
 
     // Count matches in transcript
     if (selectedTab == ConversationTab.transcript) {
       for (var segment in provider.conversation.transcriptSegments) {
-        final text = segment.text.toLowerCase();
+        final controller = provider.segmentControllers[segment.id];
+        final text = (controller?.text ?? segment.text).toLowerCase();
         final query = _searchQuery.toLowerCase();
         int index = 0;
         while ((index = text.indexOf(query, index)) != -1) {
-          _searchResultPositions.add(count);
           count++;
           index += query.length;
         }
       }
     } else if (selectedTab == ConversationTab.summary) {
-      // Count matches in app summaries
-      final summarizedApp = provider.getSummarizedApp();
-      if (summarizedApp != null && summarizedApp.content.trim().isNotEmpty) {
-        final appContent = summarizedApp.content.trim().decodeString.toLowerCase();
-        final query = _searchQuery.toLowerCase();
-        int index = 0;
-        while ((index = appContent.indexOf(query, index)) != -1) {
-          _searchResultPositions.add(count);
-          count++;
-          index += query.length;
+      if (!provider.conversation.discarded) {
+        final appResponse = provider.getSummarizedApp();
+        if (appResponse != null) {
+          final content = appResponse.content.trim();
+          if (content.isNotEmpty) {
+            final text = content.decodeString.toLowerCase();
+            final query = _searchQuery.toLowerCase();
+            int index = 0;
+            while ((index = text.indexOf(query, index)) != -1) {
+              count++;
+              index += query.length;
+            }
+          }
         }
       }
     }
@@ -322,12 +333,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        // Use app-generated summary if available, otherwise fall back to structured summary
+        // Use user edited overview if available
         final conversation = provider.conversation;
-        final summaryContent =
-            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
+        final summaryContent = conversation.structured.overview.trim().isNotEmpty
+            ? conversation.structured.overview.trim()
+            : (conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
                 ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
+                : conversation.structured.toString());
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -584,6 +596,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   Widget build(BuildContext context) {
+    final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return PopScope(
       canPop: true,
       child: MessageListener<ConversationDetailProvider>(
@@ -805,17 +819,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             onPressed: () {
+                              final provider = context.read<ConversationDetailProvider>();
+
                               setState(() {
+                                // 1. If entering search, kill edit mode first
+                                if (!_isSearching && provider.isEditingSummary) {
+                                  provider.exitSummaryEdit();
+                                }
+
+                                // 2. Toggle search
                                 _isSearching = !_isSearching;
-                                if (!_isSearching) {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                  _searchFocusNode.unfocus();
-                                } else {
+
+                                if (_isSearching) {
                                   _searchFocusNode.requestFocus();
                                   MixpanelManager().conversationDetailSearchClicked(
                                     conversationId: provider.conversation.id,
                                   );
+                                } else {
+                                  _closeSearch();
                                 }
                               });
                               HapticFeedback.mediumImpact();
@@ -906,11 +927,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 onTap: () {
                   // Close search if search bar is empty and user taps on content
                   if (_isSearching && _searchQuery.isEmpty) {
-                    setState(() {
-                      _isSearching = false;
-                      _searchController.clear();
-                      _searchFocusNode.unfocus();
-                    });
+                    _closeSearch();
                   }
                 },
                 // Horizontal swipe to navigate between conversations (mobile only)
@@ -942,15 +959,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
                               TranscriptWidgets(
-                                searchQuery: _searchQuery,
-                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                searchQuery: selectedTab == ConversationTab.transcript ? _searchQuery : '',
+                                currentResultIndex:
+                                    selectedTab == ConversationTab.transcript ? getCurrentResultIndexForHighlighting() : -1,
                                 onTapWhenSearchEmpty: () {
                                   if (_isSearching && _searchQuery.isEmpty) {
-                                    setState(() {
-                                      _isSearching = false;
-                                      _searchController.clear();
-                                      _searchFocusNode.unfocus();
-                                    });
+                                    _closeSearch();
                                   }
                                 },
                                 onSegmentTap: (segment) async {
@@ -967,10 +981,25 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     HapticFeedback.lightImpact();
                                   }
                                 },
+                                onMatchCountChanged: (count) {
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted && selectedTab == ConversationTab.transcript) {
+                                      setState(() {
+                                        _totalSearchResults = count;
+                                        if (count > 0 && _currentSearchIndex == 0) {
+                                          _currentSearchIndex = 1;
+                                        } else if (count == 0) {
+                                          _currentSearchIndex = 0;
+                                        }
+                                      });
+                                    }
+                                  });
+                                },
                               ),
                               SummaryTab(
-                                searchQuery: _searchQuery,
-                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                searchQuery: selectedTab == ConversationTab.summary ? _searchQuery : '',
+                                currentResultIndex:
+                                    selectedTab == ConversationTab.summary ? getCurrentResultIndexForHighlighting() : -1,
                                 onTapWhenSearchEmpty: () {
                                   if (_isSearching && _searchQuery.isEmpty) {
                                     setState(() {
@@ -979,6 +1008,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _searchFocusNode.unfocus();
                                     });
                                   }
+                                },
+                                onMatchCountChanged: (count) {
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted && selectedTab == ConversationTab.summary) {
+                                      setState(() {
+                                        _totalSearchResults = count;
+                                        if (count > 0 && _currentSearchIndex == 0) {
+                                          _currentSearchIndex = 1;
+                                        } else if (count == 0) {
+                                          _currentSearchIndex = 0;
+                                        }
+                                      });
+                                    }
+                                  });
                                 },
                               ),
                               ActionItemsTab(),
@@ -991,53 +1034,56 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ),
               ),
 
-              // Floating bottom bar
+              // Floating bottom bar - always visible, but non-interactive when keyboard is open
               Positioned(
                 bottom: 32,
                 left: 0,
                 right: 0,
-                child: Consumer<ConversationDetailProvider>(
-                  builder: (context, provider, child) {
-                    final conversation = provider.conversation;
-                    final hasActionItems =
-                        conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
-                    return ConversationBottomBar(
-                      mode: ConversationBottomBarMode.detail,
-                      selectedTab: selectedTab,
-                      conversation: conversation,
-                      hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                          conversation.photos.isNotEmpty ||
-                          conversation.externalIntegration != null,
-                      hasActionItems: hasActionItems,
-                      onSeekFunctionReady: (seekFunction) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) {
-                            setState(() {
-                              _seekToSegmentCallback = seekFunction;
-                            });
+                child: IgnorePointer(
+                  ignoring: isKeyboardOpen,
+                  child: Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      final conversation = provider.conversation;
+                      final hasActionItems =
+                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      return ConversationBottomBar(
+                        mode: ConversationBottomBarMode.detail,
+                        selectedTab: selectedTab,
+                        conversation: conversation,
+                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                            conversation.photos.isNotEmpty ||
+                            conversation.externalIntegration != null,
+                        hasActionItems: hasActionItems,
+                        onSeekFunctionReady: (seekFunction) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _seekToSegmentCallback = seekFunction;
+                              });
+                            }
+                          });
+                        },
+                        onTabSelected: (tab) {
+                          int index;
+                          switch (tab) {
+                            case ConversationTab.transcript:
+                              index = 0;
+                              break;
+                            case ConversationTab.summary:
+                              index = 1;
+                              break;
+                            case ConversationTab.actionItems:
+                              index = 2;
+                              break;
                           }
-                        });
-                      },
-                      onTabSelected: (tab) {
-                        int index;
-                        switch (tab) {
-                          case ConversationTab.transcript:
-                            index = 0;
-                            break;
-                          case ConversationTab.summary:
-                            index = 1;
-                            break;
-                          case ConversationTab.actionItems:
-                            index = 2;
-                            break;
-                        }
-                        _controller!.animateTo(index);
-                      },
-                      onStopPressed: () {
-                        // Empty since we don't show the stop button in detail mode
-                      },
-                    );
-                  },
+                          _controller!.animateTo(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
+                      );
+                    },
+                  ),
                 ),
               ),
 
@@ -1297,12 +1343,14 @@ class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(int)? onMatchCountChanged;
 
   const SummaryTab({
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
+    this.onMatchCountChanged,
   });
 
   @override
@@ -1316,45 +1364,58 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Listener(
-        onPointerDown: (PointerDownEvent event) {
-          FocusScope.of(context).unfocus();
-          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-            widget.onTapWhenSearchEmpty!();
-          }
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            // If search is empty, call the callback to close search
-            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-              widget.onTapWhenSearchEmpty!();
-            }
-          },
-          child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-            selector: (context, provider) =>
-                Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
-            builder: (context, data, child) {
-              return Stack(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        final provider = context.read<ConversationDetailProvider>();
+        if (provider.isEditingSummary) {
+          provider.exitSummaryEdit();
+          return;
+        }
+
+        final isEditing = !FocusScope.of(context).hasPrimaryFocus;
+        FocusScope.of(context).unfocus();
+        // If search is empty and not editing, call the callback to close search
+        if (!isEditing && widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+          widget.onTapWhenSearchEmpty!();
+        }
+      },
+      onDoubleTap: () {
+        final provider = context.read<ConversationDetailProvider>();
+        final pageState = context.findAncestorStateOfType<_ConversationDetailPageState>();
+
+        // 1. Close search if open
+        pageState?._closeSearch();
+
+        // 2. Enter edit mode
+        provider.enterSummaryEdit();
+      },
+      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
+        selector: (context, provider) =>
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        builder: (context, data, child) {
+          return Stack(
+            children: [
+              ListView(
+                shrinkWrap: true,
                 children: [
-                  ListView(
-                    shrinkWrap: true,
-                    children: [
-                      const GetSummaryWidgets(),
-                      data.item1
-                          ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(
-                              searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
-                      const GetGeolocationWidgets(),
-                      const SizedBox(height: 150),
-                    ],
-                  ),
+                  const GetSummaryWidgets(),
+                  data.item1
+                      ? const ReprocessDiscardedWidget()
+                      : GetAppsWidgets(
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                          onMatchCountChanged: widget.onMatchCountChanged,
+                        ),
+                  const GetGeolocationWidgets(),
+                  const SizedBox(height: 150),
                 ],
-              );
-            },
-          ),
-        ));
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -1363,6 +1424,7 @@ class TranscriptWidgets extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
+  final Function(int)? onMatchCountChanged;
 
   const TranscriptWidgets({
     super.key,
@@ -1370,6 +1432,7 @@ class TranscriptWidgets extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
+    this.onMatchCountChanged,
   });
 
   @override
@@ -1383,28 +1446,24 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Listener(
-        onPointerDown: (PointerDownEvent event) {
-          FocusScope.of(context).unfocus();
-          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-            widget.onTapWhenSearchEmpty!();
-          }
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-              widget.onTapWhenSearchEmpty!();
-            }
-          },
-          child: Consumer<ConversationDetailProvider>(
-            builder: (context, provider, child) {
-              final conversation = provider.conversation;
-              final segments = conversation.transcriptSegments;
-              final photos = conversation.photos;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+          widget.onTapWhenSearchEmpty!();
+        }
+      },
+      onDoubleTap: () {
+        FocusScope.of(context).unfocus();
+      },
+      child: Consumer<ConversationDetailProvider>(
+        builder: (context, provider, child) {
+          final conversation = provider.conversation;
+          final segments = conversation.transcriptSegments;
+          final photos = conversation.photos;
 
-              if (segments.isEmpty && photos.isEmpty) {
+          if (segments.isEmpty && photos.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.only(top: 32),
                   child: ExpandableTextWidget(
@@ -1434,6 +1493,12 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 currentResultIndex: widget.currentResultIndex,
                 onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 onSegmentTap: widget.onSegmentTap,
+                segmentControllers: provider.segmentControllers,
+                segmentFocusNodes: provider.segmentFocusNodes,
+                onMatchCountChanged: widget.onMatchCountChanged,
+                onSegmentEdit: (segmentId) {
+                  provider.enterSegmentEdit(segmentId);
+                },
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
@@ -1492,7 +1557,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
               );
             },
           ),
-        ));
+        );
   }
 }
 
