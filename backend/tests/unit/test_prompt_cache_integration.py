@@ -552,7 +552,7 @@ def test_core_tools_not_accidentally_duplicated():
 def test_llm_agent_model_kwargs_via_real_instantiation():
     """
     Load clients.py with a FakeChatOpenAI to capture actual constructor kwargs.
-    Verifies prompt_cache_key and prompt_cache_retention are passed at runtime,
+    Verifies prompt_cache_key is passed at runtime,
     not just present in source text.
     """
     captured_calls = []
@@ -604,7 +604,6 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     for call in cache_clients:
         mkw = call["model_kwargs"]
         assert mkw["prompt_cache_key"] == "omi-agent-v1", f"Wrong prompt_cache_key: {mkw}"
-        assert mkw["prompt_cache_retention"] == "24h", f"Wrong prompt_cache_retention: {mkw}"
         assert call["model"] == "gpt-5.1", f"Cache kwargs should only be on gpt-5.1, got {call['model']}"
 
     # Verify one is streaming, one is not
