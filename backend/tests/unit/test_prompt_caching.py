@@ -233,3 +233,16 @@ class TestPromptMessageOrdering:
         context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
         assert context_match, "Could not find context_message definition"
         assert 'existing_items_context' in context_match.group(1), "existing_items_context should be in context_message"
+
+    def test_language_code_not_in_instructions(self):
+        """language_code must be in the context message, not the instructions prefix."""
+        source = inspect.getsource(extract_action_items)
+        instructions_match = re.search(r"instructions_text\s*=\s*'''(.*?)'''", source, re.DOTALL)
+        assert instructions_match, "Could not find instructions_text definition"
+        instructions_content = instructions_match.group(1)
+        assert (
+            '{language_code}' not in instructions_content
+        ), "language_code should not be in instructions_text (breaks static prefix caching for non-English)"
+        context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
+        assert context_match, "Could not find context_message definition"
+        assert 'language_code' in context_match.group(1), "language_code should be in context_message"
