@@ -45,11 +45,10 @@ llm_medium_stream = ChatOpenAI(
 llm_medium_experiment = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback])
 
 # Specialized models for agentic workflows
-# prompt_cache_key ensures consistent routing to the same cache machine;
-# prompt_cache_retention='24h' extends KV-cache lifetime from default 5-10 min.
+# prompt_cache_key ensures consistent routing to the same cache machine
+# for better prompt prefix cache hit rates.
 _agent_cache_kwargs = {
     "prompt_cache_key": "omi-agent-v1",
-    "prompt_cache_retention": "24h",
 }
 llm_agent = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback], model_kwargs=_agent_cache_kwargs)
 llm_agent_stream = ChatOpenAI(
