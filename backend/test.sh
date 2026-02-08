@@ -23,3 +23,4 @@ pytest tests/unit/test_llm_usage_endpoints.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
 pytest tests/unit/test_daily_summary_race_condition.py -v
 pytest tests/unit/test_chat_tools_messages.py -v
+pytest tests/unit/test_prompt_caching.py -v

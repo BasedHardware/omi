@@ -153,6 +153,7 @@ class AppBaseModel(BaseModel):
     is_popular: Optional[bool] = False
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
+    source_code_url: Optional[str] = None
 
 
 class App(AppBaseModel):
@@ -255,6 +256,7 @@ class AppCreate(BaseModel):
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     chat_tools: Optional[List[ChatTool]] = []
+    source_code_url: Optional[str] = None
 
 
 class AppUpdate(BaseModel):
@@ -283,6 +285,7 @@ class AppUpdate(BaseModel):
     thumbnails: Optional[List[str]] = None  # List of thumbnail IDs
     chat_tools: Optional[List[ChatTool]] = None
     updated_at: Optional[datetime] = None
+    source_code_url: Optional[str] = None
 
 
 class UsageHistoryType(str, Enum):
