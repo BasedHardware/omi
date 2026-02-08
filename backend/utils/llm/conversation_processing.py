@@ -323,9 +323,8 @@ def extract_action_items(
         )
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
+    # NOTE: {language_code} is in the context message, not here, to keep this prefix fully static across all languages.
     instructions_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
-
-    The content language is {language_code}. Use the same language {language_code} for your response.
 
     EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
 
@@ -547,7 +546,7 @@ def extract_action_items(
 
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
-    context_message = 'Content:\n{conversation_context}{existing_items_context}'
+    context_message = 'The content language is {language_code}. Use the same language {language_code} for your response.\n\nContent:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment | action_items_parser
 
