@@ -1268,7 +1268,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> Dict[str, Any] | None:
     """
     Fetch chat tools definitions from an app's manifest endpoint.
 
@@ -1280,7 +1280,7 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
         timeout: Request timeout in seconds
 
     Returns:
-        List of chat tool definitions, or None if fetch fails
+        Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
 
     Example manifest response:
     {
@@ -1300,7 +1300,10 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
                 "auth_required": true,
                 "status_message": "Adding to playlist..."
             }
-        ]
+        ],
+        "proactive_messages": {
+            "enabled": true
+        }
     }
     """
     import requests
@@ -1341,8 +1344,21 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
             else:
                 print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
 
-        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
-        return validated_tools if validated_tools else None
+        # Parse chat_messages configuration
+        chat_messages = data.get('chat_messages', {})
+        chat_messages_config = {}
+        if isinstance(chat_messages, dict) and chat_messages.get('enabled', False):
+            chat_messages_config = {
+                'enabled': True,
+                'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
+                'notify': chat_messages.get('notify', True),  # send push notification, default True
+            }
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})")
+        return {
+            'tools': validated_tools if validated_tools else None,
+            'chat_messages': chat_messages_config if chat_messages_config else None,
+        }
 
     except requests.Timeout:
         print(f"⚠️ Manifest fetch timed out: {manifest_url}")
