@@ -549,58 +549,76 @@ def test_core_tools_not_accidentally_duplicated():
 # ---------------------------------------------------------------------------
 
 
-def test_llm_agent_model_kwargs_at_runtime():
+def test_llm_agent_model_kwargs_via_real_instantiation():
     """
-    Verify llm_agent has the correct model_kwargs by loading the real clients.py.
+    Load clients.py with a FakeChatOpenAI to capture actual constructor kwargs.
+    Verifies prompt_cache_key and prompt_cache_retention are passed at runtime,
+    not just present in source text.
     """
-    # Load the real clients module
-    spec = importlib.util.spec_from_file_location(
-        "utils.llm.clients_real",
-        str(BACKEND_DIR / "utils" / "llm" / "clients.py"),
-    )
-    mod = importlib.util.module_from_spec(spec)
-
-    # Patch ChatOpenAI to capture constructor args
     captured_calls = []
-    original_init_args = {}
 
     class FakeChatOpenAI:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
             captured_calls.append(kwargs)
 
-    with patch.dict(sys.modules, {}):
-        # We need a fresh import with ChatOpenAI intercepted
-        import unittest.mock as um
+    class FakeOpenAIEmbeddings:
+        def __init__(self, **kwargs):
+            pass
 
-        with um.patch.dict("os.environ", {"OPENAI_API_KEY": "fake", "OPENROUTER_API_KEY": "fake"}):
-            # Read the source and check model_kwargs directly
-            source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
+    # Temporarily remove cached module so we get a fresh load
+    saved = sys.modules.pop("utils.llm.clients_real", None)
 
-            # Verify _agent_cache_kwargs is defined correctly
-            assert '"prompt_cache_key": "omi-agent-v1"' in source
-            assert '"prompt_cache_retention": "24h"' in source
+    # Stub the dependencies that clients.py imports
+    fake_langchain_openai = _stub_module("langchain_openai_fake")
+    fake_langchain_openai.ChatOpenAI = FakeChatOpenAI
+    fake_langchain_openai.OpenAIEmbeddings = FakeOpenAIEmbeddings
 
-            # Verify both agent clients use _agent_cache_kwargs
-            assert "llm_agent = ChatOpenAI(" in source
-            assert "model_kwargs=_agent_cache_kwargs" in source
+    fake_tiktoken = _stub_module("tiktoken_fake")
+    fake_tiktoken.encoding_for_model = MagicMock(return_value=MagicMock())
 
-            # Count that model_kwargs=_agent_cache_kwargs appears exactly twice (agent + agent_stream)
-            count = source.count("model_kwargs=_agent_cache_kwargs")
-            assert count == 2, f"Expected model_kwargs=_agent_cache_kwargs 2 times, found {count}"
-
-
-def test_non_agent_clients_have_no_cache_kwargs():
-    """
-    Only agent clients should have prompt_cache_key — mini/medium/large should not,
-    as they don't benefit from it (different prompt patterns per call).
-    """
+    # Read source, replace imports, exec in isolated namespace
     source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
+    source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
+    source = source.replace("import tiktoken", "")
+    source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
+    source = source.replace("from models.conversation import Structured", "")
+    source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
-    # Find llm_mini definition — should NOT have model_kwargs
-    mini_section = source[source.index("llm_mini = ") : source.index("llm_large = ")]
-    assert "prompt_cache_key" not in mini_section, "llm_mini should not have prompt_cache_key"
-    assert "prompt_cache_retention" not in mini_section, "llm_mini should not have prompt_cache_retention"
+    ns = {
+        "os": os,
+        "ChatOpenAI": FakeChatOpenAI,
+        "OpenAIEmbeddings": FakeOpenAIEmbeddings,
+        "tiktoken": fake_tiktoken,
+        "PydanticOutputParser": MagicMock(),
+        "Structured": MagicMock(),
+        "get_usage_callback": MagicMock(return_value=[]),
+        "List": list,
+    }
+    exec(source, ns)
+
+    # Find clients that have prompt cache kwargs (should be exactly the 2 agent clients)
+    cache_clients = [c for c in captured_calls if "prompt_cache_key" in c.get("model_kwargs", {})]
+    assert len(cache_clients) == 2, f"Expected exactly 2 clients with prompt_cache_key, found {len(cache_clients)}"
+
+    for call in cache_clients:
+        mkw = call["model_kwargs"]
+        assert mkw["prompt_cache_key"] == "omi-agent-v1", f"Wrong prompt_cache_key: {mkw}"
+        assert mkw["prompt_cache_retention"] == "24h", f"Wrong prompt_cache_retention: {mkw}"
+        assert call["model"] == "gpt-5.1", f"Cache kwargs should only be on gpt-5.1, got {call['model']}"
+
+    # Verify one is streaming, one is not
+    streaming_cache = [c for c in cache_clients if c.get("streaming")]
+    non_streaming_cache = [c for c in cache_clients if not c.get("streaming")]
+    assert len(streaming_cache) == 1, "Should have exactly 1 streaming agent with cache"
+    assert len(non_streaming_cache) == 1, "Should have exactly 1 non-streaming agent with cache"
+
+    # Verify non-cache clients do NOT have prompt_cache_key
+    non_cache_clients = [c for c in captured_calls if "prompt_cache_key" not in c.get("model_kwargs", {})]
+    assert len(non_cache_clients) > 0, "Should have some clients without cache kwargs"
+    for call in non_cache_clients:
+        mkw = call.get("model_kwargs", {})
+        assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
 
 
 # ---------------------------------------------------------------------------
@@ -608,43 +626,96 @@ def test_non_agent_clients_have_no_cache_kwargs():
 # ---------------------------------------------------------------------------
 
 
-def test_app_tools_appended_after_core_tools():
+def test_execute_agentic_chat_tool_order_via_create_react_agent():
     """
-    When load_app_tools returns tools, they must be appended AFTER
-    CORE_TOOLS so the serialized prefix stays stable.
+    Call execute_agentic_chat and intercept create_react_agent to capture
+    the actual tools list passed at runtime. Verifies core tools come first
+    and app tools are appended after.
     """
     agentic_mod = _get_agentic_module()
 
-    # Create mock app tools
-    mock_app_tool_1 = MagicMock()
-    mock_app_tool_1.name = "my_custom_app_tool"
-    mock_app_tool_2 = MagicMock()
-    mock_app_tool_2.name = "another_app_tool"
+    # Set up mock app tools — patch on the agentic module directly since
+    # it already imported load_app_tools at module load time
+    mock_app_tool = MagicMock()
+    mock_app_tool.name = "custom_weather_app"
+    agentic_mod.load_app_tools = MagicMock(return_value=[mock_app_tool])
 
-    # Simulate what execute_agentic_chat does
-    tools = list(agentic_mod.CORE_TOOLS)
-    app_tools = [mock_app_tool_1, mock_app_tool_2]
-    tools.extend(app_tools)
+    # Intercept create_react_agent to capture the tools argument
+    captured_tools = []
+    original_create = agentic_mod.create_react_agent
 
-    # Core tools should be first 22
-    assert len(tools) == 24
-    core_names = [t.name for t in tools[:22]]
-    app_names = [t.name for t in tools[22:]]
+    def fake_create_react_agent(**kwargs):
+        captured_tools.append(kwargs.get("tools", []))
+        # Return a mock agent that returns a valid result
+        mock_agent = MagicMock()
+        mock_result = {"messages": [MagicMock(content="test answer", tool_calls=[], additional_kwargs={})]}
+        mock_agent.invoke = MagicMock(return_value=mock_result)
+        return mock_agent
 
-    assert core_names == [t.name for t in agentic_mod.CORE_TOOLS], "Core tools order was disrupted"
-    assert app_names == ["my_custom_app_tool", "another_app_tool"], "App tools not at end"
+    agentic_mod.create_react_agent = fake_create_react_agent
+
+    # Patch _get_agentic_qa_prompt and tracer callbacks on the module
+    agentic_mod._get_agentic_qa_prompt = MagicMock(return_value="test system prompt")
+    agentic_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
+
+    try:
+        # Create a minimal message
+        msg = MagicMock()
+        msg.sender = "human"
+        msg.text = "hello"
+
+        agentic_mod.execute_agentic_chat("test_uid", [msg])
+
+        assert len(captured_tools) == 1, "create_react_agent should have been called once"
+        tools = captured_tools[0]
+
+        # First 22 should be CORE_TOOLS
+        assert len(tools) == 23, f"Expected 22 core + 1 app = 23 tools, got {len(tools)}"
+        core_names = [t.name for t in tools[:22]]
+        expected_core = [t.name for t in agentic_mod.CORE_TOOLS]
+        assert core_names == expected_core, "Core tools order was disrupted in execute path"
+        assert tools[22].name == "custom_weather_app", "App tool should be appended at end"
+    finally:
+        agentic_mod.create_react_agent = original_create
 
 
-def test_empty_app_tools_preserves_core_only():
-    """When user has no app tools, the list should be exactly CORE_TOOLS."""
+def test_execute_agentic_chat_no_app_tools_gives_core_only():
+    """
+    Call execute_agentic_chat with no app tools and verify only CORE_TOOLS
+    are passed to create_react_agent.
+    """
     agentic_mod = _get_agentic_module()
 
-    tools = list(agentic_mod.CORE_TOOLS)
-    app_tools = []  # No apps enabled
-    tools.extend(app_tools)
+    # No app tools — patch on the module directly
+    agentic_mod.load_app_tools = MagicMock(return_value=[])
 
-    assert len(tools) == 22
-    assert [t.name for t in tools] == [t.name for t in agentic_mod.CORE_TOOLS]
+    captured_tools = []
+    original_create = agentic_mod.create_react_agent
+
+    def fake_create_react_agent(**kwargs):
+        captured_tools.append(kwargs.get("tools", []))
+        mock_agent = MagicMock()
+        mock_result = {"messages": [MagicMock(content="test", tool_calls=[], additional_kwargs={})]}
+        mock_agent.invoke = MagicMock(return_value=mock_result)
+        return mock_agent
+
+    agentic_mod.create_react_agent = fake_create_react_agent
+    agentic_mod._get_agentic_qa_prompt = MagicMock(return_value="test system prompt")
+    agentic_mod.get_chat_tracer_callbacks = MagicMock(return_value=[])
+
+    try:
+        msg = MagicMock()
+        msg.sender = "human"
+        msg.text = "hello"
+
+        agentic_mod.execute_agentic_chat("test_uid", [msg])
+
+        assert len(captured_tools) == 1
+        tools = captured_tools[0]
+        assert len(tools) == 22, f"Expected exactly 22 core tools, got {len(tools)}"
+        assert [t.name for t in tools] == [t.name for t in agentic_mod.CORE_TOOLS]
+    finally:
+        agentic_mod.create_react_agent = original_create
 
 
 # ---------------------------------------------------------------------------
