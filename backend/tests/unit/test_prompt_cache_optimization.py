@@ -2,7 +2,7 @@
 Tests for prompt cache optimization (#4676).
 
 Verifies:
-1. llm_agent clients have prompt_cache_key and prompt_cache_retention configured
+1. llm_agent clients have prompt_cache_key configured
 2. System prompt static prefix is stable across different users
 3. CORE_TOOLS constant is fixed and not accidentally mutated
 """
@@ -130,11 +130,12 @@ def test_llm_agent_has_prompt_cache_key():
     assert "omi-agent-v1" in source, "prompt_cache_key should be 'omi-agent-v1'"
 
 
-def test_llm_agent_has_prompt_cache_retention():
-    """llm_agent clients should have 24h cache retention."""
+def test_llm_agent_has_no_unsupported_cache_kwargs():
+    """llm_agent clients should not have unsupported kwargs like prompt_cache_retention."""
     source = _read_clients_source()
-    assert "prompt_cache_retention" in source, "clients.py should configure prompt_cache_retention"
-    assert "24h" in source, "prompt_cache_retention should be '24h'"
+    assert (
+        "prompt_cache_retention" not in source
+    ), "prompt_cache_retention is not supported by the OpenAI SDK and must be removed"
 
 
 def test_core_tools_constant_exists():
