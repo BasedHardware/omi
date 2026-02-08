@@ -1,11 +1,8 @@
 """
 Integration eval: compare gpt-4 vs gpt-4.1-mini on topic extraction quality.
 
-Runs both models on 10 representative conversation snippets and compares:
-- JSON validity (both must return valid JSON arrays)
-- Topic count (similar coverage)
-- Topic overlap (semantic similarity)
-- Latency
+Uses gpt-5.1 as an impartial judge to score both outputs on relevance,
+completeness, and granularity.  No Jaccard — pure semantic evaluation.
 
 Usage:
     OPENAI_API_KEY=sk-... pytest backend/tests/integration/test_mentor_topics_eval.py -v -s
@@ -16,11 +13,10 @@ Requires: OPENAI_API_KEY env var set.
 import json
 import os
 import time
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import pytest
 
-# Skip entire module if no API key
 pytestmark = pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
     reason="OPENAI_API_KEY not set — skipping live eval",
@@ -35,7 +31,8 @@ SYSTEM_PROMPT = (
     'Return ONLY a JSON array of topic strings, nothing else. Example format: ["topic1", "topic2"]'
 )
 
-# 10 representative conversation snippets covering different domains
+JUDGE_MODEL = "gpt-5.1"
+
 EVAL_SAMPLES = [
     {
         "id": "business_meeting",
@@ -117,7 +114,7 @@ EVAL_SAMPLES = [
 
 
 def _call_model(model: str, text: str) -> Tuple[List[str], float, bool]:
-    """Call a model and return (topics, latency_ms, valid_json)."""
+    """Call a model for topic extraction, return (topics, latency_ms, valid_json)."""
     start = time.time()
     try:
         response = client.chat.completions.create(
@@ -142,21 +139,48 @@ def _call_model(model: str, text: str) -> Tuple[List[str], float, bool]:
         return [], latency, False
 
 
-def _topic_overlap(a: List[str], b: List[str]) -> float:
-    """Jaccard similarity between two topic lists (case-insensitive)."""
-    if not a and not b:
-        return 1.0
-    set_a = {t.lower().strip() for t in a}
-    set_b = {t.lower().strip() for t in b}
-    if not set_a and not set_b:
-        return 1.0
-    intersection = set_a & set_b
-    union = set_a | set_b
-    return len(intersection) / len(union) if union else 0.0
+def _judge(conversation: str, topics_a: List[str], topics_b: List[str]) -> Dict:
+    """Use gpt-5.1 to judge topic extraction quality. Model A vs Model B (blind)."""
+    prompt = f"""You are an impartial judge evaluating topic extraction quality.
+
+Given the original conversation and two candidate topic lists (A and B), score each on:
+
+1. **relevance** (1-5): Are the extracted topics actually discussed in the conversation? Penalise hallucinated topics.
+2. **completeness** (1-5): Does the list cover all key topics in the conversation? Penalise significant omissions.
+3. **granularity** (1-5): Are topics at a useful level of specificity? Too broad (e.g. "stuff") or too narrow (e.g. "the word hello at minute 2") should score lower.
+
+Then pick a **winner**: "A", "B", or "tie".
+
+Respond with ONLY valid JSON, no other text:
+{{"a_relevance": int, "a_completeness": int, "a_granularity": int, "b_relevance": int, "b_completeness": int, "b_granularity": int, "winner": "A"|"B"|"tie", "reason": "one sentence"}}
+
+---
+CONVERSATION:
+{conversation}
+
+MODEL A topics: {json.dumps(topics_a)}
+MODEL B topics: {json.dumps(topics_b)}"""
+
+    try:
+        response = client.chat.completions.create(
+            model=JUDGE_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_completion_tokens=300,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+        return json.loads(raw.strip())
+    except Exception as e:
+        print(f"  JUDGE ERROR: {e}")
+        return None
 
 
 class TestTopicExtractionEval:
-    """Side-by-side eval of gpt-4 vs gpt-4.1-mini on topic extraction."""
+    """Side-by-side eval of gpt-4 vs gpt-4.1-mini, judged by gpt-5.1."""
 
     def test_both_models_produce_valid_json(self):
         """Both models should return valid JSON arrays for all samples."""
@@ -175,66 +199,101 @@ class TestTopicExtractionEval:
         print(f"  gpt-4.1-mini JSON failures: {mini_failures or 'none'}")
         assert len(mini_failures) == 0, f"gpt-4.1-mini failed JSON on: {mini_failures}"
 
-    def test_comprehensive_quality_comparison(self):
-        """Run full eval across all samples, print comparison table."""
+    def test_llm_judge_quality_comparison(self):
+        """gpt-5.1 judges gpt-4 (A) vs gpt-4.1-mini (B) on each sample."""
         results = []
+        a_wins = 0
+        b_wins = 0
+        ties = 0
 
-        print("\n" + "=" * 90)
+        print("\n" + "=" * 100)
         print(
-            f"{'Sample':<20} {'gpt-4 topics':<25} {'gpt-4.1-mini topics':<25} {'Overlap':>8} {'4 ms':>6} {'mini ms':>7}"
+            f"  {'Sample':<20} {'Winner':>7} {'A_rel':>5} {'A_comp':>6} {'A_gran':>6} {'B_rel':>5} {'B_comp':>6} {'B_gran':>6}  Reason"
         )
-        print("-" * 90)
+        print("-" * 100)
 
         for sample in EVAL_SAMPLES:
-            gpt4_topics, gpt4_ms, gpt4_valid = _call_model("gpt-4", sample["text"])
-            mini_topics, mini_ms, mini_valid = _call_model("gpt-4.1-mini", sample["text"])
+            gpt4_topics, gpt4_ms, _ = _call_model("gpt-4", sample["text"])
+            mini_topics, mini_ms, _ = _call_model("gpt-4.1-mini", sample["text"])
 
-            overlap = _topic_overlap(gpt4_topics, mini_topics)
+            # A = gpt-4, B = gpt-4.1-mini (blind to judge)
+            verdict = _judge(sample["text"], gpt4_topics, mini_topics)
+            if not verdict:
+                print(f"  {sample['id']:<20} JUDGE FAILED")
+                continue
+
+            winner = verdict.get("winner", "tie")
+            if winner == "A":
+                a_wins += 1
+            elif winner == "B":
+                b_wins += 1
+            else:
+                ties += 1
+
             results.append(
                 {
                     "id": sample["id"],
                     "gpt4_topics": gpt4_topics,
                     "mini_topics": mini_topics,
-                    "gpt4_valid": gpt4_valid,
-                    "mini_valid": mini_valid,
-                    "overlap": overlap,
                     "gpt4_ms": gpt4_ms,
                     "mini_ms": mini_ms,
+                    "verdict": verdict,
                 }
             )
 
-            gpt4_str = ", ".join(gpt4_topics[:3]) + ("..." if len(gpt4_topics) > 3 else "")
-            mini_str = ", ".join(mini_topics[:3]) + ("..." if len(mini_topics) > 3 else "")
-            print(f"  {sample['id']:<20} {gpt4_str:<25} {mini_str:<25} {overlap:>7.0%} {gpt4_ms:>5.0f} {mini_ms:>6.0f}")
+            reason = verdict.get("reason", "")[:50]
+            print(
+                f"  {sample['id']:<20} {winner:>7}"
+                f" {verdict.get('a_relevance', '?'):>5} {verdict.get('a_completeness', '?'):>6} {verdict.get('a_granularity', '?'):>6}"
+                f" {verdict.get('b_relevance', '?'):>5} {verdict.get('b_completeness', '?'):>6} {verdict.get('b_granularity', '?'):>6}"
+                f"  {reason}"
+            )
 
-        print("-" * 90)
+        print("-" * 100)
 
-        # Aggregate stats
-        avg_overlap = sum(r["overlap"] for r in results) / len(results)
-        avg_gpt4_count = sum(len(r["gpt4_topics"]) for r in results) / len(results)
-        avg_mini_count = sum(len(r["mini_topics"]) for r in results) / len(results)
-        avg_gpt4_ms = sum(r["gpt4_ms"] for r in results) / len(results)
-        avg_mini_ms = sum(r["mini_ms"] for r in results) / len(results)
-        mini_valid_pct = sum(1 for r in results if r["mini_valid"]) / len(results)
+        # Aggregate scores
+        n = len(results)
+        if n == 0:
+            pytest.fail("No results — judge failed on all samples")
 
-        print(f"\n  SUMMARY:")
-        print(f"  Average topic overlap (Jaccard): {avg_overlap:.0%}")
-        print(f"  Average topic count — gpt-4: {avg_gpt4_count:.1f}, gpt-4.1-mini: {avg_mini_count:.1f}")
-        print(f"  Average latency — gpt-4: {avg_gpt4_ms:.0f}ms, gpt-4.1-mini: {avg_mini_ms:.0f}ms")
-        print(f"  gpt-4.1-mini JSON validity: {mini_valid_pct:.0%}")
-        print(f"  Speedup: {avg_gpt4_ms / avg_mini_ms:.1f}x faster" if avg_mini_ms > 0 else "")
-        print("=" * 90)
+        avg_a_rel = sum(r["verdict"]["a_relevance"] for r in results) / n
+        avg_a_comp = sum(r["verdict"]["a_completeness"] for r in results) / n
+        avg_a_gran = sum(r["verdict"]["a_granularity"] for r in results) / n
+        avg_b_rel = sum(r["verdict"]["b_relevance"] for r in results) / n
+        avg_b_comp = sum(r["verdict"]["b_completeness"] for r in results) / n
+        avg_b_gran = sum(r["verdict"]["b_granularity"] for r in results) / n
+        avg_a_total = (avg_a_rel + avg_a_comp + avg_a_gran) / 3
+        avg_b_total = (avg_b_rel + avg_b_comp + avg_b_gran) / 3
 
-        # Quality gate: mini should produce valid JSON 100% of the time
-        assert mini_valid_pct == 1.0, f"gpt-4.1-mini JSON validity only {mini_valid_pct:.0%}"
+        avg_gpt4_ms = sum(r["gpt4_ms"] for r in results) / n
+        avg_mini_ms = sum(r["mini_ms"] for r in results) / n
 
-        # Quality gate: average overlap should be >= 30% (topics won't match exactly but should be similar domain)
-        assert avg_overlap >= 0.30, f"Topic overlap too low: {avg_overlap:.0%} (expected >= 30%)"
+        print(f"\n  JUDGE SUMMARY (gpt-5.1):")
+        print(f"  Model A = gpt-4, Model B = gpt-4.1-mini")
+        print(f"")
+        print(f"  Wins:  gpt-4: {a_wins}  |  gpt-4.1-mini: {b_wins}  |  ties: {ties}")
+        print(f"")
+        print(f"  Avg scores (1-5):")
+        print(f"    {'':>20} {'Relevance':>10} {'Complete':>10} {'Granular':>10} {'Overall':>10}")
+        print(f"    {'gpt-4':>20} {avg_a_rel:>10.1f} {avg_a_comp:>10.1f} {avg_a_gran:>10.1f} {avg_a_total:>10.2f}")
+        print(
+            f"    {'gpt-4.1-mini':>20} {avg_b_rel:>10.1f} {avg_b_comp:>10.1f} {avg_b_gran:>10.1f} {avg_b_total:>10.2f}"
+        )
+        print(f"")
+        print(
+            f"  Latency:  gpt-4: {avg_gpt4_ms:.0f}ms  |  gpt-4.1-mini: {avg_mini_ms:.0f}ms  |  speedup: {avg_gpt4_ms / avg_mini_ms:.1f}x"
+        )
+        print("=" * 100)
 
-        # Quality gate: mini should extract at least as many topics on average
+        # Quality gate: gpt-4.1-mini overall score must be >= 80% of gpt-4
         assert (
-            avg_mini_count >= avg_gpt4_count * 0.5
-        ), f"gpt-4.1-mini extracts too few topics: {avg_mini_count:.1f} vs gpt-4: {avg_gpt4_count:.1f}"
+            avg_b_total >= avg_a_total * 0.80
+        ), f"gpt-4.1-mini overall {avg_b_total:.2f} is < 80% of gpt-4 {avg_a_total:.2f}"
+
+        # Quality gate: gpt-4.1-mini should not lose majority of head-to-head matchups
+        assert (
+            b_wins + ties >= a_wins
+        ), f"gpt-4.1-mini lost majority: {a_wins} wins for gpt-4 vs {b_wins} for mini ({ties} ties)"
 
     def test_mini_handles_edge_cases(self):
         """gpt-4.1-mini should handle edge cases gracefully."""
