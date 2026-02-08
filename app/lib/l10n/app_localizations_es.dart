@@ -8004,13 +8004,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get couldNotOpenUrl => 'No se pudo abrir la URL. Por favor, inténtalo de nuevo.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nueva tarea';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Ver todo';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Añadir tarea';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8079,4 +8079,85 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'No se puede reproducir el audio. El archivo puede estar dañado o no existir.';
+
+  @override
+  String get connectionGuide => 'Guía de conexión';
+
+  @override
+  String get iveDoneThis => 'Ya lo hice';
+
+  @override
+  String get pairNewDevice => 'Emparejar nuevo dispositivo';
+
+  @override
+  String get dontSeeYourDevice => '¿No ves tu dispositivo?';
+
+  @override
+  String get reportAnIssue => 'Reportar un problema';
+
+  @override
+  String get pairingTitleOmi => 'Enciende Omi';
+
+  @override
+  String get pairingDescOmi => 'Mantén presionado el dispositivo hasta que vibre para encenderlo.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Pon Omi DevKit en modo de emparejamiento';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Presiona el botón una vez para encender. El LED parpadeará en púrpura en modo de emparejamiento.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Enciende Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Mantén presionado el botón lateral durante 3 segundos para encender.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Pon Plaud Note en modo de emparejamiento';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Mantén presionado el botón lateral durante 2 segundos. El LED rojo parpadeará cuando esté listo para emparejar.';
+
+  @override
+  String get pairingTitleBee => 'Pon Bee en modo de emparejamiento';
+
+  @override
+  String get pairingDescBee => 'Presiona el botón 5 veces seguidas. La luz comenzará a parpadear en azul y verde.';
+
+  @override
+  String get pairingTitleLimitless => 'Pon Limitless en modo de emparejamiento';
+
+  @override
+  String get pairingDescLimitless =>
+      'Cuando cualquier luz sea visible, presiona una vez y luego mantén presionado hasta que el dispositivo muestre una luz rosa, luego suelta.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Pon Friend Pendant en modo de emparejamiento';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Presiona el botón del colgante para encenderlo. Entrará en modo de emparejamiento automáticamente.';
+
+  @override
+  String get pairingTitleFieldy => 'Pon Fieldy en modo de emparejamiento';
+
+  @override
+  String get pairingDescFieldy => 'Mantén presionado el dispositivo hasta que aparezca la luz para encenderlo.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Conectar Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instala y abre la aplicación Omi en tu Apple Watch, luego toca Conectar en la aplicación.';
+
+  @override
+  String get pairingTitleNeoOne => 'Pon Neo One en modo de emparejamiento';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Mantén presionado el botón de encendido hasta que el LED parpadee. El dispositivo será visible.';
 }

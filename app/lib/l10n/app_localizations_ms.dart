@@ -8013,13 +8013,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get couldNotOpenUrl => 'Tidak dapat membuka URL. Sila cuba lagi.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Tugas baru';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Lihat semua';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Tambah tugas';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8088,4 +8088,84 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Tidak dapat memainkan audio. Fail mungkin rosak atau hilang.';
+
+  @override
+  String get connectionGuide => 'Panduan Sambungan';
+
+  @override
+  String get iveDoneThis => 'Saya sudah buat ini';
+
+  @override
+  String get pairNewDevice => 'Pasangkan peranti baru';
+
+  @override
+  String get dontSeeYourDevice => 'Tidak nampak peranti anda?';
+
+  @override
+  String get reportAnIssue => 'Laporkan masalah';
+
+  @override
+  String get pairingTitleOmi => 'Hidupkan Omi';
+
+  @override
+  String get pairingDescOmi => 'Tekan dan tahan peranti sehingga ia bergetar untuk menghidupkannya.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Letakkan Omi DevKit dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Tekan butang sekali untuk menghidupkan. LED akan berkelip ungu dalam mod berpasangan.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Hidupkan Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tekan dan tahan butang sisi selama 3 saat untuk menghidupkan.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Letakkan Plaud Note dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tekan dan tahan butang sisi selama 2 saat. LED merah akan berkelip apabila sedia untuk berpasangan.';
+
+  @override
+  String get pairingTitleBee => 'Letakkan Bee dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescBee => 'Tekan butang 5 kali berturut-turut. Lampu akan mula berkelip biru dan hijau.';
+
+  @override
+  String get pairingTitleLimitless => 'Letakkan Limitless dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescLimitless =>
+      'Apabila sebarang lampu kelihatan, tekan sekali kemudian tekan dan tahan sehingga peranti menunjukkan lampu merah jambu, kemudian lepaskan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Letakkan Friend Pendant dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tekan butang pada loket untuk menghidupkannya. Ia akan memasuki mod berpasangan secara automatik.';
+
+  @override
+  String get pairingTitleFieldy => 'Letakkan Fieldy dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescFieldy => 'Tekan dan tahan peranti sehingga lampu muncul untuk menghidupkannya.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Sambungkan Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Pasang dan buka aplikasi Omi pada Apple Watch anda, kemudian ketik Sambung dalam aplikasi.';
+
+  @override
+  String get pairingTitleNeoOne => 'Letakkan Neo One dalam Mod Berpasangan';
+
+  @override
+  String get pairingDescNeoOne => 'Tekan dan tahan butang kuasa sehingga LED berkelip. Peranti akan boleh ditemui.';
 }

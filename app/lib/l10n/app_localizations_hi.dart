@@ -7970,13 +7970,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get couldNotOpenUrl => 'URL खोला नहीं जा सका। कृपया पुनः प्रयास करें।';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'नया कार्य';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'सभी देखें';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'कार्य जोड़ें';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8045,4 +8045,84 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।';
+
+  @override
+  String get connectionGuide => 'कनेक्शन गाइड';
+
+  @override
+  String get iveDoneThis => 'मैंने यह कर लिया';
+
+  @override
+  String get pairNewDevice => 'नया डिवाइस पेयर करें';
+
+  @override
+  String get dontSeeYourDevice => 'अपना डिवाइस नहीं दिख रहा?';
+
+  @override
+  String get reportAnIssue => 'समस्या की रिपोर्ट करें';
+
+  @override
+  String get pairingTitleOmi => 'Omi चालू करें';
+
+  @override
+  String get pairingDescOmi => 'डिवाइस को तब तक दबाकर रखें जब तक वह वाइब्रेट न करे।';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'चालू करने के लिए बटन एक बार दबाएं। पेयरिंग मोड में LED बैंगनी रंग में ब्लिंक करेगी।';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass चालू करें';
+
+  @override
+  String get pairingDescOmiGlass => 'चालू करने के लिए साइड बटन को 3 सेकंड तक दबाकर रखें।';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'साइड बटन को 2 सेकंड तक दबाकर रखें। पेयर करने के लिए तैयार होने पर लाल LED ब्लिंक करेगी।';
+
+  @override
+  String get pairingTitleBee => 'Bee को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescBee => 'बटन को लगातार 5 बार दबाएं। लाइट नीले और हरे रंग में ब्लिंक करने लगेगी।';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescLimitless =>
+      'जब कोई भी लाइट दिखाई दे, एक बार दबाएं और फिर दबाकर रखें जब तक डिवाइस गुलाबी लाइट न दिखाए, फिर छोड़ दें।';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'पेंडेंट पर बटन दबाकर इसे चालू करें। यह स्वचालित रूप से पेयरिंग मोड में प्रवेश करेगा।';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescFieldy => 'डिवाइस को तब तक दबाकर रखें जब तक लाइट न दिखे।';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch कनेक्ट करें';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'अपने Apple Watch पर Omi ऐप इंस्टॉल करें और खोलें, फिर ऐप में कनेक्ट पर टैप करें।';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescNeoOne => 'पावर बटन को तब तक दबाकर रखें जब तक LED ब्लिंक न करे। डिवाइस खोजने योग्य होगा।';
 }

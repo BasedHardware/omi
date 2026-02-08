@@ -7846,13 +7846,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get couldNotOpenUrl => '无法打开链接，请重试。';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => '新任务';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => '查看全部';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => '添加任务';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -7921,4 +7921,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '无法播放音频。文件可能已损坏或丢失。';
+
+  @override
+  String get connectionGuide => '连接指南';
+
+  @override
+  String get iveDoneThis => '我已完成';
+
+  @override
+  String get pairNewDevice => '配对新设备';
+
+  @override
+  String get dontSeeYourDevice => '看不到你的设备？';
+
+  @override
+  String get reportAnIssue => '报告问题';
+
+  @override
+  String get pairingTitleOmi => '开启Omi';
+
+  @override
+  String get pairingDescOmi => '按住设备直到振动以开机。';
+
+  @override
+  String get pairingTitleOmiDevkit => '将Omi DevKit设置为配对模式';
+
+  @override
+  String get pairingDescOmiDevkit => '按一次按钮开机。配对模式下LED将闪烁紫色。';
+
+  @override
+  String get pairingTitleOmiGlass => '开启Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => '按住侧面按钮3秒以开机。';
+
+  @override
+  String get pairingTitlePlaudNote => '将Plaud Note设置为配对模式';
+
+  @override
+  String get pairingDescPlaudNote => '按住侧面按钮2秒。准备好配对时红色LED将闪烁。';
+
+  @override
+  String get pairingTitleBee => '将Bee设置为配对模式';
+
+  @override
+  String get pairingDescBee => '连续按下按钮5次。指示灯将开始闪烁蓝色和绿色。';
+
+  @override
+  String get pairingTitleLimitless => '将Limitless设置为配对模式';
+
+  @override
+  String get pairingDescLimitless => '当有灯亮时，按一次然后按住直到设备显示粉色灯光，然后松开。';
+
+  @override
+  String get pairingTitleFriendPendant => '将Friend Pendant设置为配对模式';
+
+  @override
+  String get pairingDescFriendPendant => '按下吊坠上的按钮以开机。设备将自动进入配对模式。';
+
+  @override
+  String get pairingTitleFieldy => '将Fieldy设置为配对模式';
+
+  @override
+  String get pairingDescFieldy => '按住设备直到灯亮以开机。';
+
+  @override
+  String get pairingTitleAppleWatch => '连接Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => '在Apple Watch上安装并打开Omi应用，然后在应用中点击连接。';
+
+  @override
+  String get pairingTitleNeoOne => '将Neo One设置为配对模式';
+
+  @override
+  String get pairingDescNeoOne => '按住电源按钮直到LED闪烁。设备将变为可发现状态。';
 }

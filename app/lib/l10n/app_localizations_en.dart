@@ -8062,4 +8062,84 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+
+  @override
+  String get connectionGuide => 'Connection Guide';
+
+  @override
+  String get iveDoneThis => 'I\'ve done this';
+
+  @override
+  String get pairNewDevice => 'Pair new device';
+
+  @override
+  String get dontSeeYourDevice => 'Don\'t see your device?';
+
+  @override
+  String get reportAnIssue => 'Report an issue';
+
+  @override
+  String get pairingTitleOmi => 'Turn On Omi';
+
+  @override
+  String get pairingDescOmi => 'Press and hold the device until it vibrates to turn it on.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Put Omi DevKit in Pairing Mode';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Press the button once to turn on. The LED will blink purple when in pairing mode.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Turn On Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Power on by pressing the side button for 3 seconds.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Put Plaud Note in Pairing Mode';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.';
+
+  @override
+  String get pairingTitleBee => 'Put Bee in Pairing Mode';
+
+  @override
+  String get pairingDescBee => 'Press the button 5 times continuously. The light will start blinking blue and green.';
+
+  @override
+  String get pairingTitleLimitless => 'Put Limitless in Pairing Mode';
+
+  @override
+  String get pairingDescLimitless =>
+      'When any light is visible, press once and then press and hold until the device shows a pink light, then release.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Put Friend Pendant in Pairing Mode';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Press the button on the pendant to turn it on. It will enter pairing mode automatically.';
+
+  @override
+  String get pairingTitleFieldy => 'Put Fieldy in Pairing Mode';
+
+  @override
+  String get pairingDescFieldy => 'Press and hold the device until the light appears to turn it on.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Connect Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => 'Install and open the Omi app on your Apple Watch, then tap Connect in the app.';
+
+  @override
+  String get pairingTitleNeoOne => 'Put Neo One in Pairing Mode';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Press and hold the power button until the LED blinks. The device will be discoverable.';
 }

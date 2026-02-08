@@ -7995,13 +7995,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get couldNotOpenUrl => 'Det gick inte att öppna URL:en. Försök igen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Ny uppgift';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Visa alla';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Lägg till uppgift';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8070,4 +8070,83 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Kan inte spela upp ljud. Filen kan vara skadad eller saknas.';
+
+  @override
+  String get connectionGuide => 'Anslutningsguide';
+
+  @override
+  String get iveDoneThis => 'Jag har gjort detta';
+
+  @override
+  String get pairNewDevice => 'Parkoppla ny enhet';
+
+  @override
+  String get dontSeeYourDevice => 'Ser du inte din enhet?';
+
+  @override
+  String get reportAnIssue => 'Rapportera ett problem';
+
+  @override
+  String get pairingTitleOmi => 'Slå på Omi';
+
+  @override
+  String get pairingDescOmi => 'Tryck och håll enheten tills den vibrerar för att slå på den.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sätt Omi DevKit i parkopplingsläge';
+
+  @override
+  String get pairingDescOmiDevkit => 'Tryck på knappen en gång för att slå på. LED:en blinkar lila i parkopplingsläge.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Slå på Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tryck och håll sidoknappen i 3 sekunder för att slå på.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sätt Plaud Note i parkopplingsläge';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tryck och håll sidoknappen i 2 sekunder. Den röda LED:en blinkar när den är redo att parkoppla.';
+
+  @override
+  String get pairingTitleBee => 'Sätt Bee i parkopplingsläge';
+
+  @override
+  String get pairingDescBee => 'Tryck på knappen 5 gånger i rad. Ljuset börjar blinka blått och grönt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sätt Limitless i parkopplingsläge';
+
+  @override
+  String get pairingDescLimitless =>
+      'När en lampa lyser, tryck en gång och tryck sedan och håll tills enheten visar ett rosa ljus, släpp sedan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sätt Friend Pendant i parkopplingsläge';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tryck på knappen på hänget för att slå på det. Det går automatiskt till parkopplingsläge.';
+
+  @override
+  String get pairingTitleFieldy => 'Sätt Fieldy i parkopplingsläge';
+
+  @override
+  String get pairingDescFieldy => 'Tryck och håll enheten tills ljuset visas för att slå på den.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Anslut Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installera och öppna Omi-appen på din Apple Watch, tryck sedan på Anslut i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sätt Neo One i parkopplingsläge';
+
+  @override
+  String get pairingDescNeoOne => 'Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.';
 }
