@@ -2,8 +2,8 @@
 
 Verifies that:
 1. _build_conversation_context() produces deterministic, identical output for the same inputs
-2. get_transcript_structure() and extract_action_items() use a shared context prefix
-   as the first system message to enable OpenAI prompt caching
+2. get_transcript_structure() and extract_action_items() use conversation context
+   as the second system message (after static instructions) to enable OpenAI prompt caching
 3. Calendar context is unified (includes meeting_link in both functions)
 """
 
