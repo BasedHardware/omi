@@ -7,6 +7,8 @@ Verifies that:
 3. Calendar context is unified (includes meeting_link in both functions)
 """
 
+import inspect
+import re
 import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -17,7 +19,11 @@ _mock_clients = MagicMock()
 sys.modules.setdefault("utils.llm.clients", _mock_clients)
 
 from models.conversation import CalendarMeetingContext, MeetingParticipant, ConversationPhoto
-from utils.llm.conversation_processing import _build_conversation_context
+from utils.llm.conversation_processing import (
+    _build_conversation_context,
+    extract_action_items,
+    get_transcript_structure,
+)
 
 
 class TestBuildConversationContext:
@@ -170,3 +176,60 @@ class TestBuildConversationContext:
         )
         result = _build_conversation_context("test", None, calendar)
         assert "unknown@co.com" in result
+
+
+class TestPromptMessageOrdering:
+    """Tests that static instructions come before dynamic content in prompt templates.
+
+    OpenAI prompt caching requires static content as a prefix for cross-conversation
+    cache hits. These tests verify the message order is [instructions, context] not
+    [context, instructions].
+    """
+
+    def _get_from_messages_calls(self, func):
+        """Extract ChatPromptTemplate.from_messages call patterns from function source."""
+        source = inspect.getsource(func)
+        return re.findall(r'from_messages\(\[(.*?)\]\)', source, re.DOTALL)
+
+    def test_get_transcript_structure_instructions_first(self):
+        """Static instructions must be the first system message for cross-conversation caching."""
+        calls = self._get_from_messages_calls(get_transcript_structure)
+        assert len(calls) == 1, "Expected exactly one from_messages call"
+        args = calls[0].strip()
+        # instructions_text should come before context_message
+        instructions_pos = args.index('instructions_text')
+        context_pos = args.index('context_message')
+        assert instructions_pos < context_pos, "instructions_text must come before context_message"
+
+    def test_extract_action_items_instructions_first(self):
+        """Static instructions must be the first system message for cross-conversation caching."""
+        calls = self._get_from_messages_calls(extract_action_items)
+        assert len(calls) == 1, "Expected exactly one from_messages call"
+        args = calls[0].strip()
+        instructions_pos = args.index('instructions_text')
+        context_pos = args.index('context_message')
+        assert instructions_pos < context_pos, "instructions_text must come before context_message"
+
+    def test_both_functions_use_two_system_messages(self):
+        """Both functions must use exactly two system messages."""
+        for func in [get_transcript_structure, extract_action_items]:
+            calls = self._get_from_messages_calls(func)
+            assert len(calls) == 1, f"{func.__name__}: expected one from_messages call"
+            # Count 'system' occurrences in the call
+            system_count = calls[0].count("'system'")
+            assert system_count == 2, f"{func.__name__}: expected 2 system messages, got {system_count}"
+
+    def test_existing_items_context_not_in_instructions(self):
+        """existing_items_context must be in the context message, not the instructions."""
+        source = inspect.getsource(extract_action_items)
+        # Find the instructions_text definition
+        instructions_match = re.search(r"instructions_text\s*=\s*'''(.*?)'''", source, re.DOTALL)
+        assert instructions_match, "Could not find instructions_text definition"
+        instructions_content = instructions_match.group(1)
+        assert (
+            '{existing_items_context}' not in instructions_content
+        ), "existing_items_context should not be in instructions_text (breaks static prefix caching)"
+        # Verify it IS in the context_message
+        context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
+        assert context_match, "Could not find context_message definition"
+        assert 'existing_items_context' in context_match.group(1), "existing_items_context should be in context_message"
