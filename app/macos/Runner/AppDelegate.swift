@@ -9,6 +9,9 @@ import app_links
 class AppDelegate: FlutterAppDelegate {
     // Method channel for direct URL delivery to Flutter
     private var urlChannel: FlutterMethodChannel?
+    
+    // Method channel for update checking
+    private var updateChannel: FlutterMethodChannel?
 
     // Required for app_links plugin to register Apple Event handler for URL schemes
     override func applicationWillFinishLaunching(_ notification: Notification) {
@@ -104,6 +107,27 @@ class AppDelegate: FlutterAppDelegate {
         for url in urls {
             print("DEBUG: Received URL scheme callback: \(url.absoluteString)")
             AppLinks.shared.handleLink(link: url.absoluteString)
+        }
+    }
+    
+    // MARK: - Check for Updates
+    
+    @IBAction func checkForUpdates(_ sender: Any) {
+        setupUpdateChannel()
+        updateChannel?.invokeMethod("checkForUpdates", arguments: nil)
+        NSLog("DEBUG: Triggered check for updates via menu")
+    }
+    
+    private func setupUpdateChannel() {
+        guard updateChannel == nil else { return }
+        
+        if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
+           let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
+            updateChannel = FlutterMethodChannel(
+                name: "com.omi/updates",
+                binaryMessenger: flutterViewController.engine.binaryMessenger
+            )
+            NSLog("DEBUG: Created updates method channel")
         }
     }
 }

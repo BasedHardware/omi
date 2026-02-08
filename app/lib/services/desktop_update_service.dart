@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -11,6 +12,9 @@ class DesktopUpdateService {
   static final DesktopUpdateService _instance = DesktopUpdateService._internal();
   factory DesktopUpdateService() => _instance;
   DesktopUpdateService._internal();
+
+  /// Method channel for receiving update requests from native code
+  static const _channel = MethodChannel('com.omi/updates');
 
   bool _initialized = false;
 
@@ -41,12 +45,30 @@ class DesktopUpdateService {
       await autoUpdater.setFeedURL(feedURL);
       await autoUpdater.setScheduledCheckInterval(10800); // Check every 3 hours
 
+      // Set up method channel handler for native menu "Check for Updates"
+      _channel.setMethodCallHandler(_handleMethodCall);
+
       // Check for updates in background on startup
       await autoUpdater.checkForUpdates(inBackground: true);
 
       _initialized = true;
     } catch (e, stackTrace) {
       Logger.handle(e, stackTrace, message: 'Failed to initialize auto updater');
+    }
+  }
+
+  /// Handle method calls from native code
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'checkForUpdates':
+        Logger.debug('Check for updates triggered from native menu');
+        await checkForUpdates();
+        return null;
+      default:
+        throw PlatformException(
+          code: 'Unimplemented',
+          details: 'Method ${call.method} not implemented',
+        );
     }
   }
 
