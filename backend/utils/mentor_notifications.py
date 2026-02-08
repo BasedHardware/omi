@@ -9,21 +9,12 @@ import time
 import threading
 import logging
 from typing import List, Dict, Any
-from collections import defaultdict
-from openai import OpenAI
 import json
-import os
 
 from database.notifications import get_mentor_notification_frequency
+from utils.llm.clients import llm_mini
 
 logger = logging.getLogger(__name__)
-
-# Initialize OpenAI client
-client = None
-if os.getenv('OPENAI_API_KEY'):
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-else:
-    logger.warning("OPENAI_API_KEY not found - mentor notifications will be disabled")
 
 
 class MessageBuffer:
@@ -90,26 +81,15 @@ MIN_SEGMENTS_FOR_ANALYSIS = 3
 
 
 def extract_topics(discussion_text: str) -> List[str]:
-    """Extract topics from the discussion using OpenAI."""
-    if not client:
-        return []
-
+    """Extract topics from the discussion using LLM."""
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]",
-                },
-                {"role": "user", "content": f"Extract all topics from this conversation:\n{discussion_text}"},
-            ],
-            temperature=0.3,
-            max_tokens=150,
+        prompt = (
+            "You are a topic extraction specialist. Extract all relevant topics from the conversation. "
+            "Return ONLY a JSON array of topic strings, nothing else. "
+            'Example format: ["topic1", "topic2"]\n\n'
+            f"Extract all topics from this conversation:\n{discussion_text}"
         )
-
-        # Parse the response text as JSON
-        response_text = response.choices[0].message.content.strip()
+        response_text = llm_mini.invoke(prompt).content.strip()
         topics = json.loads(response_text)
         logger.info(f"Extracted topics: {topics}")
         return topics
@@ -254,10 +234,6 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
     # Check if mentor notifications are enabled for this user
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
-        return None
-
-    if not client:
-        logger.warning("OpenAI client not initialized - cannot process mentor notification")
         return None
 
     current_time = time.time()
