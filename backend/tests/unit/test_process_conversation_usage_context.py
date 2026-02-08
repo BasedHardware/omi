@@ -423,9 +423,9 @@ def test_models_unchanged_for_llm_calls():
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text()
 
-    # get_transcript_structure should use llm_medium_experiment
+    # get_transcript_structure should use llm_medium_experiment (may have .bind() for cache key)
     struct_match = re.search(
-        r'def get_transcript_structure.*?chain = prompt \| (\w+) \| parser',
+        r'def get_transcript_structure.*?chain = prompt \| (\w+)[\.\|]',
         conv_proc_source,
         re.DOTALL,
     )
@@ -434,9 +434,9 @@ def test_models_unchanged_for_llm_calls():
         struct_match.group(1) == "llm_medium_experiment"
     ), f"Expected llm_medium_experiment for structure, got {struct_match.group(1)}"
 
-    # get_app_result should use llm_medium_experiment
+    # get_app_result should use llm_medium_experiment (may have extra kwargs in invoke)
     app_match = re.search(
-        r'def get_app_result.*?response = (\w+)\.invoke\(prompt\)',
+        r'def get_app_result.*?response = (\w+)\.invoke\(prompt',
         conv_proc_source,
         re.DOTALL,
     )
@@ -445,9 +445,9 @@ def test_models_unchanged_for_llm_calls():
         app_match.group(1) == "llm_medium_experiment"
     ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
 
-    # extract_action_items should use llm_medium_experiment
+    # extract_action_items should use llm_medium_experiment (may have .bind() for cache key)
     action_match = re.search(
-        r'def extract_action_items.*?chain = prompt \| (\w+) \| action_items_parser',
+        r'def extract_action_items.*?chain = prompt \| (\w+)[\.\|]',
         conv_proc_source,
         re.DOTALL,
     )
