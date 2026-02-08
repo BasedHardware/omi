@@ -183,6 +183,7 @@ class TranscriptSegment {
   static String segmentsAsString(
     List<TranscriptSegment> segments, {
     bool includeTimestamps = false,
+    String Function(String speakerId)? speakerLabelBuilder,
   }) {
     String transcript = '';
     var userName = SharedPreferencesUtil().givenName;
@@ -200,7 +201,8 @@ class TranscriptSegment {
         if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
           speakerName = peopleMap[segment.personId]!;
         } else {
-          speakerName = 'Speaker ${getDisplaySpeakerId(segment.speakerId, segments)}';
+          var displayId = '${getDisplaySpeakerId(segment.speakerId, segments)}';
+          speakerName = speakerLabelBuilder != null ? speakerLabelBuilder(displayId) : 'Speaker $displayId';
         }
         transcript += '$timestampStr $speakerName: $segmentText ';
       }
