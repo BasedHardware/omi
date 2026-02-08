@@ -69,6 +69,7 @@ export interface App {
   is_user_paid?: boolean;
   is_popular?: boolean;
   created_at?: string;
+  source_code_url?: string;
 }
 
 export interface AppCategory {
@@ -233,6 +234,7 @@ export interface CreateAppRequest {
     auth_steps?: AuthStep[];
   };
   proactive_notification_scopes?: string[];
+  source_code_url?: string;
 }
 
 export interface UpdateAppRequest extends Partial<CreateAppRequest> {
