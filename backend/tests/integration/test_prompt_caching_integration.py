@@ -1,8 +1,10 @@
 """
 Integration tests for OpenAI prompt caching with live API calls.
 
-Tests that the instructions-first, content-second message ordering produces
-cross-conversation cache hits on gpt-5.1 (the fix from PR #4670).
+Tests three caching scenarios on gpt-5.1 (the fix from PR #4670):
+1. Same user, same conversation — identical calls should fully cache
+2. Same user, cross conversation — same language, different transcripts should cache instruction prefix
+3. Cross user — different languages should still cache instruction prefix (language_code in context, not instructions)
 
 Requires:
     - OPENAI_API_KEY environment variable
@@ -12,7 +14,7 @@ Run:
     cd backend
     PYTHONPATH=. python3 -m pytest tests/integration/test_prompt_caching_integration.py -v -s
 
-Note: These tests make real API calls and cost real money (~$0.05-0.10 per run).
+Note: These tests make real API calls and cost real money (~$0.10-0.20 per run).
 Cache behavior depends on OpenAI infrastructure; cache hits are not guaranteed
 on every run but should appear consistently when the prefix is stable and >1024 tokens.
 """
@@ -37,8 +39,6 @@ MODEL = "gpt-5.1"
 # ---------------------------------------------------------------------------
 
 ACTION_ITEMS_INSTRUCTIONS = """You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
-
-The content language is en. Use the same language en for your response.
 
 EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
 
@@ -228,135 +228,191 @@ Speaker 1: You should also ask about the pre-authorization process. Sometimes th
 Speaker 0: Good point. I'll add that to my list. Also, remind me to pick up the prescription from the pharmacy on the way home tomorrow."""
 
 
-class TestCrossConversationCaching:
-    """Test cross-conversation cache hits with production-length instructions.
+class TestSameUserSameConversation:
+    """Test intra-conversation caching: same user calls structure + action_items on the same transcript.
 
-    With instructions-first ordering and >1024 tokens of static instructions,
-    the instruction prefix should be cached after the first call. Subsequent calls
-    with different transcripts should show cached_tokens > 0.
+    In production, each conversation triggers two sequential LLM calls (get_transcript_structure
+    then extract_action_items). Since both share the same static instruction prefix, the second
+    call should get a cache hit on that prefix even though the instructions differ after the prefix.
+
+    More importantly, calling the SAME function twice with identical messages should produce
+    a near-complete cache hit (all tokens cached).
     """
 
-    def test_action_items_cross_conversation_cache_hits(self, client):
-        """Three extract_action_items calls with different transcripts — later calls should cache instruction prefix."""
+    def test_same_function_same_transcript_full_cache(self, client):
+        """Two identical calls — second should cache nearly all prompt tokens."""
+        msgs = [
+            {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+            {
+                "role": "system",
+                "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{TRANSCRIPT_A}",
+            },
+        ]
+
+        print("\n  === Same user, same conversation (identical calls) ===")
+        r1 = _call_and_get_cache_info(client, msgs)
+        print(f"  Call 1 (prime): prompt={r1['prompt_tokens']}, cached={r1['cached_tokens']}")
+        time.sleep(1)
+
+        r2 = _call_and_get_cache_info(client, msgs)
+        print(f"  Call 2 (repeat): prompt={r2['prompt_tokens']}, cached={r2['cached_tokens']}")
+
+        if r2["cached_tokens"] > 0:
+            pct = r2["cached_tokens"] / r2["prompt_tokens"] * 100
+            print(
+                f"\n  ✅ SAME-CONVERSATION CACHE HIT: {r2['cached_tokens']}/{r2['prompt_tokens']} tokens ({pct:.1f}%)"
+            )
+        else:
+            print("\n  ⚠️  No cache hit on identical repeat (may need warm-up)")
+
+
+class TestSameUserCrossConversation:
+    """Test cross-conversation caching for the same user.
+
+    Same language/timezone, different transcripts. The static instruction prefix
+    should be cached after the first call. This is the primary cost-saving scenario:
+    a single user processes many conversations per day.
+    """
+
+    def test_same_language_different_transcripts(self, client):
+        """Same user (en) processes 3 different conversations — instruction prefix should cache."""
+        lang = "en"
         transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
         results = []
 
+        print("\n  === Same user (en), different conversations ===")
         for i, transcript in enumerate(transcripts):
             msgs = [
                 {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
-                {"role": "system", "content": f"Content:\n{transcript}"},
+                {
+                    "role": "system",
+                    "content": f"The content language is {lang}. Use the same language {lang} for your response.\n\nContent:\n{transcript}",
+                },
             ]
             result = _call_and_get_cache_info(client, msgs)
             results.append(result)
-            print(f"\n  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
             if i < len(transcripts) - 1:
                 time.sleep(1)
 
-        # Summarize
-        total_cached = sum(r["cached_tokens"] for r in results)
-        print(f"\n  Total cached tokens across 3 calls: {total_cached}")
-        print(f"  Call 1 cached: {results[0]['cached_tokens']} (expected: 0, cache priming)")
-        print(f"  Call 2 cached: {results[1]['cached_tokens']} (expected: >0, instruction prefix hit)")
-        print(f"  Call 3 cached: {results[2]['cached_tokens']} (expected: >0, instruction prefix hit)")
-
-        # At least one of calls 2-3 should show cache hits
         later_cached = results[1]["cached_tokens"] + results[2]["cached_tokens"]
+        later_prompt = results[1]["prompt_tokens"] + results[2]["prompt_tokens"]
         if later_cached > 0:
-            pct = later_cached / (results[1]["prompt_tokens"] + results[2]["prompt_tokens"]) * 100
+            pct = later_cached / later_prompt * 100
             print(f"\n  ✅ CROSS-CONVERSATION CACHE HIT: {later_cached} cached tokens ({pct:.1f}% of later calls)")
         else:
-            print("\n  ⚠️  No cache hits (may need warm-up — run test again)")
+            print("\n  ⚠️  No cache hits (may need warm-up)")
 
 
-class TestWrongOrderNoCaching:
-    """Test that content-first ordering (the old bug from PR #4664) produces no cross-conversation cache hits."""
+class TestCrossUserCaching:
+    """Test cross-user caching with different languages.
 
-    def test_content_first_no_cross_conversation_cache(self, client):
-        """Content-first ordering with different transcripts — should NOT produce cache hits."""
-        transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
+    Since {language_code} is now in the context message (not in the instruction prefix),
+    the static instruction prefix should be identical across ALL users regardless of language.
+    This is the key improvement from moving {language_code} out of instructions_text.
+    """
+
+    def test_different_languages_share_instruction_cache(self, client):
+        """Users with different languages should still get instruction prefix cache hits."""
+        # Simulate 3 users with different languages processing different conversations
+        user_calls = [
+            ("en", TRANSCRIPT_A, "English user"),
+            ("es", TRANSCRIPT_B, "Spanish user"),
+            ("ja", TRANSCRIPT_C, "Japanese user"),
+        ]
         results = []
 
-        for i, transcript in enumerate(transcripts):
-            # WRONG order: content first, instructions second
+        print("\n  === Cross-user: different languages, different conversations ===")
+        for i, (lang, transcript, label) in enumerate(user_calls):
             msgs = [
-                {"role": "system", "content": f"Content:\n{transcript}"},
                 {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+                {
+                    "role": "system",
+                    "content": f"The content language is {lang}. Use the same language {lang} for your response.\n\nContent:\n{transcript}",
+                },
             ]
             result = _call_and_get_cache_info(client, msgs)
             results.append(result)
-            print(f"\n  Call {i+1} (WRONG order): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
-            if i < len(transcripts) - 1:
+            print(f"  Call {i+1} ({label}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(user_calls) - 1:
                 time.sleep(1)
 
-        total_cached = sum(r["cached_tokens"] for r in results)
-        print(f"\n  Total cached tokens (wrong order): {total_cached}")
-
-        if total_cached == 0:
-            print("  ✅ CONFIRMED: Content-first ordering produces no cross-conversation cache hits")
+        later_cached = results[1]["cached_tokens"] + results[2]["cached_tokens"]
+        later_prompt = results[1]["prompt_tokens"] + results[2]["prompt_tokens"]
+        if later_cached > 0:
+            pct = later_cached / later_prompt * 100
+            print(f"\n  ✅ CROSS-USER CACHE HIT: {later_cached} cached tokens ({pct:.1f}% of later calls)")
+            print("  Instruction prefix is shared across languages!")
         else:
-            print(f"  ⚠️  Unexpected: {total_cached} cached tokens with wrong order")
+            print("\n  ⚠️  No cross-user cache hits (may need warm-up)")
 
+    def test_cross_user_vs_language_in_instructions(self, client):
+        """A/B: static instructions (language in context) vs dynamic instructions (language baked in).
 
-class TestCacheComparison:
-    """Definitive A/B comparison: correct order vs wrong order.
-
-    Makes the same set of calls with both orderings and compares total cached tokens.
-    This is the key metric that validates the PR #4670 fix.
-    """
-
-    def test_correct_order_beats_wrong_order(self, client):
-        """Instructions-first should produce more cached tokens than content-first."""
+        This proves the value of moving {language_code} out of instructions_text.
+        """
+        languages = ["en", "es", "ja"]
         transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
 
-        # --- Correct order (instructions first) ---
-        print("\n  === Correct order (instructions first) ===")
-        correct_results = []
-        for i, transcript in enumerate(transcripts):
+        # --- New approach: language in context message (static prefix) ---
+        print("\n  === A: Language in context (static instruction prefix) ===")
+        static_results = []
+        for i, (lang, transcript) in enumerate(zip(languages, transcripts)):
             msgs = [
                 {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
-                {"role": "system", "content": f"Content:\n{transcript}"},
+                {
+                    "role": "system",
+                    "content": f"The content language is {lang}. Use the same language {lang} for your response.\n\nContent:\n{transcript}",
+                },
             ]
             result = _call_and_get_cache_info(client, msgs)
-            correct_results.append(result)
-            print(f"    Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
-            if i < len(transcripts) - 1:
+            static_results.append(result)
+            print(f"    Call {i+1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(languages) - 1:
                 time.sleep(1)
 
-        correct_cached = sum(r["cached_tokens"] for r in correct_results)
-        correct_prompt = sum(r["prompt_tokens"] for r in correct_results)
-
-        # Wait for cache to settle
         time.sleep(3)
 
-        # --- Wrong order (content first) ---
-        print("\n  === Wrong order (content first) ===")
-        wrong_results = []
-        for i, transcript in enumerate(transcripts):
+        # --- Old approach: language baked into instructions (dynamic prefix) ---
+        print("\n  === B: Language in instructions (dynamic prefix — old bug) ===")
+        dynamic_results = []
+        for i, (lang, transcript) in enumerate(zip(languages, transcripts)):
+            # Simulate old code: language_code in instructions
+            dynamic_instructions = (
+                f"You are an expert action item extractor.\n\nThe content language is {lang}. Use the same language {lang} for your response.\n\n"
+                + ACTION_ITEMS_INSTRUCTIONS[
+                    len(
+                        "You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.\n\n"
+                    ) :
+                ]
+            )
             msgs = [
+                {"role": "system", "content": dynamic_instructions},
                 {"role": "system", "content": f"Content:\n{transcript}"},
-                {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
             ]
             result = _call_and_get_cache_info(client, msgs)
-            wrong_results.append(result)
-            print(f"    Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
-            if i < len(transcripts) - 1:
+            dynamic_results.append(result)
+            print(f"    Call {i+1} (lang={lang}): prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(languages) - 1:
                 time.sleep(1)
 
-        wrong_cached = sum(r["cached_tokens"] for r in wrong_results)
-        wrong_prompt = sum(r["prompt_tokens"] for r in wrong_results)
-
         # --- Summary ---
+        static_cached = sum(r["cached_tokens"] for r in static_results)
+        static_prompt = sum(r["prompt_tokens"] for r in static_results)
+        dynamic_cached = sum(r["cached_tokens"] for r in dynamic_results)
+        dynamic_prompt = sum(r["prompt_tokens"] for r in dynamic_results)
+
         print(f"\n  === RESULTS ===")
         print(
-            f"  Correct order: {correct_cached}/{correct_prompt} tokens cached ({correct_cached/max(correct_prompt,1)*100:.1f}%)"
+            f"  Static prefix (new):  {static_cached}/{static_prompt} cached ({static_cached/max(static_prompt,1)*100:.1f}%)"
         )
         print(
-            f"  Wrong order:   {wrong_cached}/{wrong_prompt} tokens cached ({wrong_cached/max(wrong_prompt,1)*100:.1f}%)"
+            f"  Dynamic prefix (old): {dynamic_cached}/{dynamic_prompt} cached ({dynamic_cached/max(dynamic_prompt,1)*100:.1f}%)"
         )
 
-        if correct_cached > wrong_cached:
-            print(f"  ✅ Correct order produces {correct_cached - wrong_cached} MORE cached tokens")
-        elif correct_cached == wrong_cached == 0:
-            print("  ⚠️  No cache hits on either (cache may need warm-up, try running test again)")
+        if static_cached > dynamic_cached:
+            print(f"  ✅ Static prefix produces {static_cached - dynamic_cached} MORE cached tokens across languages")
+        elif static_cached == dynamic_cached == 0:
+            print("  ⚠️  No cache hits on either (may need warm-up)")
         else:
-            print("  ⚠️  Unexpected: wrong order matched or beat correct order")
+            print("  ⚠️  Unexpected: dynamic prefix matched or beat static prefix")
