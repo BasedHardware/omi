@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
 
 void main() {
@@ -64,6 +66,13 @@ void main() {
       );
 
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: TranscriptWidget(
             segments: [segment],
@@ -71,6 +80,7 @@ void main() {
           ),
         ),
       ));
+      await tester.pumpAndSettle();
 
       // Should show person name
       expect(find.text('Alice'), findsOneWidget);
@@ -81,6 +91,13 @@ void main() {
       final segment = _segment('seg2', 0);
 
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: TranscriptWidget(
             segments: [segment],
@@ -88,6 +105,7 @@ void main() {
           ),
         ),
       ));
+      await tester.pumpAndSettle();
 
       // Should show Speaker X fallback
       expect(find.text('Speaker 1'), findsOneWidget);
@@ -103,6 +121,13 @@ void main() {
       );
 
       await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: TranscriptWidget(
             segments: [segment],
@@ -111,6 +136,7 @@ void main() {
           ),
         ),
       ));
+      await tester.pumpAndSettle();
 
       // Tag button should no longer exist
       expect(find.text('Tag'), findsNothing);
