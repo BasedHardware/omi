@@ -42,14 +42,23 @@ llm_medium_stream = ChatOpenAI(
     stream_options={"include_usage": True},
     callbacks=[_usage_callback],
 )
-llm_medium_experiment = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback])
+llm_medium_experiment = ChatOpenAI(
+    model='gpt-5.1',
+    model_kwargs={"prompt_cache_retention": "24h"},
+    callbacks=[_usage_callback],
+)
 
 # Specialized models for agentic workflows
-llm_agent = ChatOpenAI(model='gpt-5.1', callbacks=[_usage_callback])
+llm_agent = ChatOpenAI(
+    model='gpt-5.1',
+    model_kwargs={"prompt_cache_retention": "24h"},
+    callbacks=[_usage_callback],
+)
 llm_agent_stream = ChatOpenAI(
     model='gpt-5.1',
     streaming=True,
     stream_options={"include_usage": True},
+    model_kwargs={"prompt_cache_retention": "24h"},
     callbacks=[_usage_callback],
 )
 llm_persona_mini_stream = ChatOpenAI(
