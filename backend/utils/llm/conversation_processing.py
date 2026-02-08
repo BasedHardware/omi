@@ -355,10 +355,10 @@ def extract_action_items(
     - Use participant names in ALL action items (e.g., "Follow up with Sarah" NOT "Follow up with Speaker 0")
     - Reference the meeting title/context when relevant to the action item
     - Consider the scheduled meeting time and duration when extracting due dates
-    - If you cannot confidently match a speaker to a name, use the action description without speaker references{existing_items_context}
+    - If you cannot confidently match a speaker to a name, use the action description without speaker references
 
     CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
-    • DO NOT extract action items that are >95% similar to existing ones listed above
+    • DO NOT extract action items that are >95% similar to existing ones in the content
     • Check both the description AND the due date/timeframe
     • Consider semantic similarity, not just exact word matches
     • Examples of what counts as DUPLICATES (DO NOT extract):
@@ -546,8 +546,8 @@ def extract_action_items(
     ).strip()
 
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
-    # Second system message: conversation context (dynamic, per-conversation)
-    context_message = 'Content:\n{conversation_context}'
+    # Second system message: conversation context + existing items (dynamic, per-conversation)
+    context_message = 'Content:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment | action_items_parser
 
