@@ -243,8 +243,8 @@ def _build_conversation_context(
     """Build the conversation context string shared across LLM prompts.
 
     Produces a deterministic string from transcript, photos, and calendar context.
-    When used as the first system message in a prompt, enables OpenAI prompt caching
-    across sequential calls (e.g. structure + action items) that share the same content.
+    Used as the second system message (after static instructions) so that the static
+    instruction prefix enables cross-conversation OpenAI prompt caching.
 
     Returns:
         Formatted context string, or empty string if no content provided.
@@ -322,10 +322,7 @@ def extract_action_items(
             items_list
         )
 
-    # First system message: shared conversation context (enables OpenAI prompt caching)
-    context_message = 'Content:\n{conversation_context}'
-
-    # Second system message: task-specific instructions
+    # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     instructions_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
 
     The content language is {language_code}. Use the same language {language_code} for your response.
@@ -549,7 +546,9 @@ def extract_action_items(
     ).strip()
 
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
-    prompt = ChatPromptTemplate.from_messages([('system', context_message), ('system', instructions_text)])
+    # Second system message: conversation context (dynamic, per-conversation)
+    context_message = 'Content:\n{conversation_context}'
+    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment | action_items_parser
 
     try:
@@ -589,10 +588,7 @@ def get_transcript_structure(
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
-    # First system message: shared conversation context (enables OpenAI prompt caching)
-    context_message = 'Content:\n{conversation_context}'
-
-    # Second system message: task-specific instructions
+    # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. Use the same language {language_code} for your response.
 
@@ -638,7 +634,9 @@ def get_transcript_structure(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', context_message), ('system', instructions_text)])
+    # Second system message: conversation context (dynamic, per-conversation)
+    context_message = 'Content:\n{conversation_context}'
+    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | llm_medium_experiment | parser
 
     response = chain.invoke(
