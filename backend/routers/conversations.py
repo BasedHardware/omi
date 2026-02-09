@@ -122,6 +122,7 @@ def get_conversations(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    include_photos: bool = Query(True, description="Include photos for each conversation (disable for bulk export)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     print('get_conversations', uid, limit, offset, statuses, folder_id, starred)
@@ -129,17 +130,30 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
-    conversations = conversations_db.get_conversations(
-        uid,
-        limit,
-        offset,
-        include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
-        start_date=start_date,
-        end_date=end_date,
-        folder_id=folder_id,
-        starred=starred,
-    )
+    parsed_statuses = statuses.split(",") if len(statuses) > 0 else []
+
+    if include_photos:
+        conversations = conversations_db.get_conversations(
+            uid,
+            limit,
+            offset,
+            include_discarded=include_discarded,
+            statuses=parsed_statuses,
+            start_date=start_date,
+            end_date=end_date,
+            folder_id=folder_id,
+            starred=starred,
+        )
+    else:
+        conversations = conversations_db.get_conversations_without_photos(
+            uid,
+            limit,
+            offset,
+            include_discarded=include_discarded,
+            statuses=parsed_statuses,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
     for conv in conversations:
         if conv.get('is_locked', False):
