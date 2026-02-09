@@ -6,8 +6,12 @@ and that each sub-feature gets the correct Features constant.
 """
 
 import os
+import re
 import sys
+import threading
 import types
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -240,8 +244,6 @@ def test_no_umbrella_conversation_processing_tracking():
     # Patch track_usage on the process_conversation module (where it's imported)
     original_track = process_conversation.track_usage
 
-    from contextlib import contextmanager
-
     @contextmanager
     def spy_track_usage(uid, feature):
         captured_contexts.append(feature)
@@ -285,8 +287,6 @@ def test_action_items_tracked_separately_from_structure():
 
     original_track = process_conversation.track_usage
 
-    from contextlib import contextmanager
-
     @contextmanager
     def spy_track_usage(uid, feature):
         captured_contexts.append(feature)
@@ -328,8 +328,6 @@ def test_structure_and_apps_tracked_at_runtime():
     captured_contexts = []
 
     original_track = process_conversation.track_usage
-
-    from contextlib import contextmanager
 
     @contextmanager
     def spy_track_usage(uid, feature):
@@ -416,9 +414,6 @@ def test_action_items_skipped_on_discard():
 
 def test_models_unchanged_for_llm_calls():
     """Verify all LLM functions still use llm_medium_experiment (no model changes in this PR)."""
-    import re
-    from pathlib import Path
-
     # Build path relative to this test file: tests/unit/ -> ../../utils/llm/conversation_processing.py
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
     conv_proc_source = conv_proc_path.read_text()
@@ -459,8 +454,6 @@ def test_models_unchanged_for_llm_calls():
 
 def test_threaded_tracking_context_isolation():
     """Verify track_usage context works correctly with threading (context isolation)."""
-    import threading
-
     results = {}
 
     def thread_fn(uid, feature, key):
