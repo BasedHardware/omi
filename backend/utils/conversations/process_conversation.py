@@ -83,11 +83,13 @@ def _get_structured(
     try:
         tz = notification_db.get_user_time_zone(uid)
 
-        # Fetch existing action items from past 2 days for deduplication
+        # Fetch recent pending action items for deduplication (completed items don't need dedup)
         existing_action_items = None
         try:
             two_days_ago = datetime.now(timezone.utc) - timedelta(days=2)
-            existing_action_items = action_items_db.get_action_items(uid=uid, start_date=two_days_ago, limit=50)
+            existing_action_items = action_items_db.get_action_items(
+                uid=uid, start_date=two_days_ago, completed=False, limit=10
+            )
         except Exception as e:
             print(f"Error fetching existing action items for deduplication: {e}")
 
