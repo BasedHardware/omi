@@ -8,6 +8,7 @@ Verifies:
 """
 
 import os
+import re
 import sys
 import types
 from pathlib import Path
@@ -163,8 +164,6 @@ def test_no_duplicate_inline_tool_lists():
     # Count occurrences of the module-level constant pattern vs inline assignment pattern
     assert source.count("CORE_TOOLS = [") == 1, "CORE_TOOLS should be defined exactly once"
     # There should be no `tools = [` followed by tool names (old inline pattern)
-    import re
-
     inline_lists = re.findall(r"tools\s*=\s*\[\s*\n\s*get_conversations_tool", source)
     assert len(inline_lists) == 0, f"Found {len(inline_lists)} inline tool list assignments — should use CORE_TOOLS"
 
