@@ -58,6 +58,35 @@ from utils.llm.chat import _get_agentic_qa_prompt
 from utils.observability.langsmith import get_chat_tracer_callbacks
 from utils.other.endpoints import timeit
 
+# PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
+# OpenAI serializes tools before the system prompt.  If the tool definitions are
+# byte-identical across requests the first ~11 000 tokens are cached (90 % off).
+# Dynamic per-user app tools are appended AFTER this list so the prefix stays stable.
+CORE_TOOLS = [
+    get_conversations_tool,
+    search_conversations_tool,
+    get_memories_tool,
+    search_memories_tool,
+    get_action_items_tool,
+    create_action_item_tool,
+    update_action_item_tool,
+    get_omi_product_info_tool,
+    perplexity_web_search_tool,
+    get_calendar_events_tool,
+    create_calendar_event_tool,
+    update_calendar_event_tool,
+    delete_calendar_event_tool,
+    get_gmail_messages_tool,
+    get_apple_health_steps_tool,
+    get_apple_health_sleep_tool,
+    get_apple_health_heart_rate_tool,
+    get_apple_health_workouts_tool,
+    get_apple_health_summary_tool,
+    search_files_tool,
+    manage_daily_summary_tool,
+    create_chart_tool,
+]
+
 
 def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
     """
@@ -210,33 +239,10 @@ def execute_agentic_chat(
         print(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
-    # Get all tools
-    tools = [
-        get_conversations_tool,
-        search_conversations_tool,
-        get_memories_tool,
-        search_memories_tool,
-        get_action_items_tool,
-        create_action_item_tool,
-        update_action_item_tool,
-        get_omi_product_info_tool,
-        perplexity_web_search_tool,
-        get_calendar_events_tool,
-        create_calendar_event_tool,
-        update_calendar_event_tool,
-        delete_calendar_event_tool,
-        get_gmail_messages_tool,
-        get_apple_health_steps_tool,
-        get_apple_health_sleep_tool,
-        get_apple_health_heart_rate_tool,
-        get_apple_health_workouts_tool,
-        get_apple_health_summary_tool,
-        search_files_tool,
-        manage_daily_summary_tool,
-        create_chart_tool,
-    ]
+    # Core tools (fixed order) + dynamic app tools appended at end
+    tools = list(CORE_TOOLS)
 
-    # Load tools from enabled apps
+    # Load tools from enabled apps (appended AFTER core tools to preserve cache prefix)
     try:
         app_tools = load_app_tools(uid)
         tools.extend(app_tools)
@@ -344,33 +350,10 @@ async def execute_agentic_chat_stream(
         print(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
-    # Get all tools
-    tools = [
-        get_conversations_tool,
-        search_conversations_tool,
-        get_memories_tool,
-        search_memories_tool,
-        get_action_items_tool,
-        create_action_item_tool,
-        update_action_item_tool,
-        get_omi_product_info_tool,
-        perplexity_web_search_tool,
-        get_calendar_events_tool,
-        create_calendar_event_tool,
-        update_calendar_event_tool,
-        delete_calendar_event_tool,
-        get_gmail_messages_tool,
-        get_apple_health_steps_tool,
-        get_apple_health_sleep_tool,
-        get_apple_health_heart_rate_tool,
-        get_apple_health_workouts_tool,
-        get_apple_health_summary_tool,
-        search_files_tool,
-        manage_daily_summary_tool,
-        create_chart_tool,
-    ]
+    # Core tools (fixed order) + dynamic app tools appended at end
+    tools = list(CORE_TOOLS)
 
-    # Load tools from enabled apps
+    # Load tools from enabled apps (appended AFTER core tools to preserve cache prefix)
     try:
         app_tools = load_app_tools(uid)
         tools.extend(app_tools)
