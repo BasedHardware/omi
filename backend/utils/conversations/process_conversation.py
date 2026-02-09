@@ -681,7 +681,8 @@ def process_conversation(
 
         # Skip apps during reprocessing — original app results are already set and
         # re-running would waste 2 LLM calls (suggestion + execution) per conversation (#4641).
-        if not is_reprocess:
+        # Exception: if app_id is explicitly provided, the caller wants to re-run that specific app.
+        if not is_reprocess or app_id:
             _trigger_apps(
                 uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
             )
