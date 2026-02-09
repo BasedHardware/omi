@@ -188,6 +188,28 @@ class TestComputeAppendWindowLimit:
             limit = compute_append_window_limit(total)
             assert limit >= 10, f"total={total} produced limit={limit} < 10"
 
+    def test_non_multiple_min_max_ratio(self):
+        """Non-multiple min_context/max_window (e.g., 6/20) still behaves correctly."""
+        # min=6, max=20: reset at 21, window_start jumps by 6
+        assert compute_append_window_limit(20, min_context=6, max_window=20) == 20
+        assert compute_append_window_limit(21, min_context=6, max_window=20) == 15  # 21 - 6 = 15
+        assert compute_append_window_limit(26, min_context=6, max_window=20) == 20  # 26 - 6 = 20
+        assert compute_append_window_limit(27, min_context=6, max_window=20) == 15  # 27 - 12 = 15
+        # Bounds still hold
+        for total in range(1, 100):
+            limit = compute_append_window_limit(total, min_context=6, max_window=20)
+            assert limit <= 20, f"total={total} produced limit={limit} > 20"
+            if total >= 6:
+                assert limit >= 6, f"total={total} produced limit={limit} < 6"
+
+    def test_degenerate_min_equals_max(self):
+        """When min_context == max_window, every message triggers a reset."""
+        # min=10, max=10: at total=11, excess=1, resets=1, start=10, limit=1
+        assert compute_append_window_limit(10, min_context=10, max_window=10) == 10
+        assert compute_append_window_limit(11, min_context=10, max_window=10) == 1
+        assert compute_append_window_limit(20, min_context=10, max_window=10) == 10
+        assert compute_append_window_limit(21, min_context=10, max_window=10) == 1
+
     def test_prefix_stability_between_resets(self):
         """Between resets, older messages are always included (append-only prefix).
 
