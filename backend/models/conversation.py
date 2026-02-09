@@ -365,7 +365,11 @@ class Conversation(BaseModel):
 
             conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
 
-            if conversation.apps_results and len(conversation.apps_results) > 0:
+            if (
+                conversation.apps_results
+                and len(conversation.apps_results) > 0
+                and conversation.apps_results[0].content.strip()
+            ):
                 conversation_str += f"{conversation.apps_results[0].content}\n"
             else:
                 conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
