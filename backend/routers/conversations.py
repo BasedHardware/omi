@@ -153,6 +153,8 @@ def get_conversations(
             statuses=parsed_statuses,
             start_date=start_date,
             end_date=end_date,
+            folder_id=folder_id,
+            starred=starred,
         )
 
     for conv in conversations:
