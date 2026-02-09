@@ -111,8 +111,11 @@ def postprocess_conversation(
             # TODO: consider doing process_conversation, if any segment still matched to user or people
             return 200, conversation
 
-        # Reprocess conversation with improved transcription
-        result: Conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+        # Reprocess conversation with improved transcription.
+        # Pass is_reprocess=True to skip already-completed steps (apps, folder, webhook) (#4641).
+        result: Conversation = process_conversation(
+            uid, conversation.language, conversation, force_process=True, is_reprocess=True
+        )
 
         # Process users emotion, async
         if emotional_feedback:
