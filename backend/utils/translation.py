@@ -8,6 +8,7 @@ from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 
+from database.redis_db import r
 
 # LRU Cache for language detection
 detection_cache = OrderedDict()
@@ -187,11 +188,24 @@ def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
 
 
 def _detect_with_google_cloud(text: str) -> str | None:
-    """Helper function to detect language using Google Cloud API."""
+    """Helper function to detect language using Google Cloud API with Redis cache."""
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    cache_key = f"translate:detect:{text_hash}"
+    try:
+        cached = r.get(cache_key)
+        if cached:
+            return cached.decode('utf-8')
+    except Exception:
+        pass
+
     response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
     if response.languages and len(response.languages) > 0:
         for language in response.languages:
             if language.confidence >= 1:
+                try:
+                    r.set(cache_key, language.language_code, ex=86400)
+                except Exception:
+                    pass
                 return language.language_code
     return None
 
@@ -273,7 +287,7 @@ class TranslationService:
     def translate_text(self, dest_language: str, text: str) -> str:
         """
         Translates text to the specified destination language using Google Cloud Translation API.
-        Uses a cache to avoid redundant translations.
+        Uses in-memory + Redis cache to avoid redundant translations.
 
         Args:
             dest_language: The language code to translate to (e.g., 'en', 'es', 'fr')
@@ -285,16 +299,28 @@ class TranslationService:
         # Generate hash for the text
         text_hash = hashlib.md5(text.encode()).hexdigest()
 
-        # Check if translation is in cache
+        # Check in-memory cache first
         cache_key = self._get_cache_key(text_hash, dest_language)
         if cache_key in self.translation_cache:
-            # Move the item to the end of the OrderedDict to mark it as recently used
             translated_text = self.translation_cache.pop(cache_key)
             self.translation_cache[cache_key] = translated_text
             return translated_text
 
+        # Check Redis cache
+        redis_key = f"translate:text:{cache_key}"
         try:
-            # Not in cache, perform translation
+            cached = r.get(redis_key)
+            if cached:
+                translated_text = cached.decode('utf-8')
+                if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
+                    self.translation_cache.popitem(last=False)
+                self.translation_cache[cache_key] = translated_text
+                return translated_text
+        except Exception:
+            pass
+
+        try:
+            # Not in any cache, perform translation
             response = _client.translate_text(
                 contents=[text],
                 parent=_parent,
@@ -304,12 +330,17 @@ class TranslationService:
 
             translated_text = response.translations[0].translated_text
 
-            # Add to cache
+            # Add to in-memory cache
             if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
-                # Remove oldest item (first item in OrderedDict)
                 self.translation_cache.popitem(last=False)
-
             self.translation_cache[cache_key] = translated_text
+
+            # Add to Redis cache (24h TTL)
+            try:
+                r.set(redis_key, translated_text, ex=86400)
+            except Exception:
+                pass
+
             return translated_text
         except Exception as e:
             print(f"Translation error: {e}")
