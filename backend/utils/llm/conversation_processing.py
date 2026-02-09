@@ -702,6 +702,8 @@ CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MU
 
 === PART 1: CONTENT STRUCTURE ===
 
+IMPORTANT: You must complete ALL parts of this response: title, overview, emoji, category, events, AND action items. Do not skip events even if there are many action items to extract.
+
 For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
 For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
 For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
@@ -898,6 +900,7 @@ ACTION ITEM FORMAT REQUIREMENTS:
 • Order by: due date → urgency → alphabetical
 
 DUE DATE EXTRACTION (CRITICAL):
+IMPORTANT: Only set due_at when the conversation EXPLICITLY mentions a date, time, or deadline. Do NOT infer or guess due dates that were not stated.
 IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
 IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
 
