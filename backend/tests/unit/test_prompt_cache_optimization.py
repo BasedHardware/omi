@@ -136,8 +136,6 @@ def test_llm_agent_uses_extra_body_for_cache_retention():
     source = _read_clients_source()
     assert 'extra_body={"prompt_cache_retention"' in source, "prompt_cache_retention should be set via extra_body"
     # model_kwargs must NOT contain prompt_cache_retention (SDK rejects it there)
-    import re
-
     mk_blocks = re.findall(r'model_kwargs\s*=\s*\{[^}]*\}', source)
     for block in mk_blocks:
         assert "prompt_cache_retention" not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
