@@ -38,7 +38,10 @@ class TranscriptSegment(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
+        try:
+            self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
+        except (IndexError, ValueError):
+            self.speaker_id = 0
 
 
 class Structured(BaseModel):
@@ -330,7 +333,7 @@ async def health():
 
 
 @app.post('/lecture-notes', response_model=EndpointResponse)
-def lecture_notes_endpoint(conversation: Conversation):
+async def lecture_notes_endpoint(conversation: Conversation):
     """
     Memory creation trigger endpoint.
     Receives a completed conversation from Omi, analyzes it for academic content,
@@ -384,7 +387,7 @@ def lecture_notes_endpoint(conversation: Conversation):
     # Stage 3: LLM structured extraction
     try:
         chat_with_parser = chat.with_structured_output(LectureNotes)
-        notes: LectureNotes = chat_with_parser.invoke(prompt)
+        notes: LectureNotes = await chat_with_parser.ainvoke(prompt)
     except Exception as e:
         logger.error(f'LLM extraction failed: {e}')
         return EndpointResponse(message='')
