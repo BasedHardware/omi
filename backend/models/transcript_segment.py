@@ -29,7 +29,13 @@ class TranscriptSegment(BaseModel):
         super().__init__(**data)
         if not self.id:
             self.id = str(uuid.uuid4())
-        self.speaker_id = int(self.speaker.split('_')[1]) if self.speaker else 0
+
+        if self.speaker:
+            try:
+                _prefix, self.speaker_id = self.speaker.split("_", 1)
+                self.speaker_id = int(self.speaker_id)
+            except (ValueError, AttributeError):
+                self.speaker_id = 0
 
     def get_timestamp_string(self):
         start_duration = timedelta(seconds=int(self.start))
