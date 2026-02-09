@@ -23,6 +23,7 @@ from utils.llm.conversation_processing import (
     _build_conversation_context,
     extract_action_items,
     get_transcript_structure,
+    get_transcript_structure_with_action_items,
 )
 
 
@@ -218,6 +219,32 @@ class TestPromptMessageOrdering:
             # Count 'system' occurrences in the call
             system_count = calls[0].count("'system'")
             assert system_count == 2, f"{func.__name__}: expected 2 system messages, got {system_count}"
+
+    def test_combined_function_instructions_first(self):
+        """Combined function must have instructions before context for caching."""
+        calls = self._get_from_messages_calls(get_transcript_structure_with_action_items)
+        assert len(calls) == 1, "Expected exactly one from_messages call"
+        args = calls[0].strip()
+        instructions_pos = args.index('instructions_text')
+        context_pos = args.index('context_message')
+        assert instructions_pos < context_pos, "instructions_text must come before context_message"
+
+    def test_combined_function_uses_two_system_messages(self):
+        """Combined function must use exactly two system messages."""
+        calls = self._get_from_messages_calls(get_transcript_structure_with_action_items)
+        assert len(calls) == 1, "Expected one from_messages call"
+        system_count = calls[0].count("'system'")
+        assert system_count == 2, f"Expected 2 system messages, got {system_count}"
+
+    def test_combined_function_language_code_not_in_instructions(self):
+        """language_code must be in the context message, not the instructions prefix."""
+        source = inspect.getsource(get_transcript_structure_with_action_items)
+        instructions_match = re.search(r"instructions_text\s*=\s*'''(.*?)'''", source, re.DOTALL)
+        assert instructions_match, "Could not find instructions_text definition"
+        instructions_content = instructions_match.group(1)
+        assert (
+            '{language_code}' not in instructions_content
+        ), "language_code should not be in instructions_text (breaks static prefix caching)"
 
     def test_existing_items_context_not_in_instructions(self):
         """existing_items_context must be in the context message, not the instructions."""
