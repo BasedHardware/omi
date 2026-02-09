@@ -41,7 +41,7 @@ from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm.conversation_processing import (
-    get_transcript_structure,
+    get_transcript_structure_with_action_items,
     get_app_result,
     should_discard_conversation,
     select_best_app_for_conversation,
@@ -104,15 +104,7 @@ def _get_structured(
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
                 with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-                    structured = get_transcript_structure(
-                        conversation.text,
-                        conversation.started_at,
-                        language_code,
-                        tz,
-                        calendar_meeting_context=calendar_context,
-                    )
-                with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
-                    structured.action_items = extract_action_items(
+                    structured = get_transcript_structure_with_action_items(
                         conversation.text,
                         conversation.started_at,
                         language_code,
@@ -170,16 +162,7 @@ def _get_structured(
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
-            structured = get_transcript_structure(
-                transcript_text,
-                conversation.started_at,
-                language_code,
-                tz,
-                photos=conversation.photos,
-                calendar_meeting_context=calendar_context,
-            )
-        with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
-            structured.action_items = extract_action_items(
+            structured = get_transcript_structure_with_action_items(
                 transcript_text,
                 conversation.started_at,
                 language_code,
