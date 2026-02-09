@@ -35,6 +35,7 @@ Future<List<ServerConversation>> getConversations({
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  bool includePhotos = true,
 }) async {
   String url =
       '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
@@ -51,6 +52,9 @@ Future<List<ServerConversation>> getConversations({
   }
   if (starred != null) {
     url += '&starred=$starred';
+  }
+  if (!includePhotos) {
+    url += '&include_photos=false';
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
