@@ -99,7 +99,7 @@ def extract_topics(discussion_text: str) -> list:
     """Extract topics from the discussion using OpenAI"""
     try:
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]"},
                 {"role": "user", "content": f"Extract all topics from this conversation:\n{discussion_text}"}
