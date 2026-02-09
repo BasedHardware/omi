@@ -49,10 +49,16 @@ llm_medium_experiment = ChatOpenAI(
 )
 
 # Specialized models for agentic workflows
+# prompt_cache_key ensures consistent routing to the same cache machine
+# for better prompt prefix cache hit rates.
+_agent_cache_kwargs = {
+    "prompt_cache_key": "omi-agent-v1",
+}
 llm_agent = ChatOpenAI(
     model='gpt-5.1',
     extra_body={"prompt_cache_retention": "24h"},
     callbacks=[_usage_callback],
+    model_kwargs=_agent_cache_kwargs,
 )
 llm_agent_stream = ChatOpenAI(
     model='gpt-5.1',
@@ -60,6 +66,7 @@ llm_agent_stream = ChatOpenAI(
     stream_options={"include_usage": True},
     extra_body={"prompt_cache_retention": "24h"},
     callbacks=[_usage_callback],
+    model_kwargs=_agent_cache_kwargs,
 )
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
