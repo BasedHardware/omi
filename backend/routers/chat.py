@@ -43,6 +43,36 @@ from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_s
 
 router = APIRouter()
 
+# Append-only message window constants for prompt cache optimization.
+# Instead of a sliding window of MIN_CONTEXT that shifts on every message (breaking cache),
+# the window grows from MIN_CONTEXT to MAX_WINDOW, then resets by dropping the oldest MIN_CONTEXT.
+# Between resets, the message prefix is stable = cache-friendly.
+_MIN_CONTEXT = 10
+_MAX_WINDOW = 20
+
+
+def compute_append_window_limit(
+    total_messages: int, min_context: int = _MIN_CONTEXT, max_window: int = _MAX_WINDOW
+) -> int:
+    """Compute message fetch limit for append-only cache-friendly window.
+
+    Returns how many of the most recent messages to include. The window grows
+    append-only (preserving the prefix for OpenAI prompt caching) and resets
+    when it would exceed max_window.
+
+    Example with min_context=10, max_window=20:
+        total=10 -> 10, total=15 -> 15, total=20 -> 20,
+        total=21 -> 11 (reset), total=30 -> 20, total=31 -> 11 (reset)
+    """
+    if total_messages <= 0:
+        return min_context
+    if total_messages <= max_window:
+        return total_messages
+    excess = total_messages - max_window
+    resets = -(-excess // min_context)  # ceil division without math import
+    window_start = resets * min_context
+    return total_messages - window_start
+
 
 def filter_messages(messages, app_id):
     print('filter_messages', len(messages), app_id)
@@ -113,7 +143,17 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Append-only message window for prompt cache optimization (#4692).
+    # Use session message count to compute a stable window that grows append-only,
+    # keeping the message prefix identical between requests for OpenAI cache hits.
+    if chat_session and chat_session.message_ids:
+        total_in_session = len(chat_session.message_ids) + 1  # +1 for just-added human message
+        msg_limit = compute_append_window_limit(total_in_session)
+    else:
+        msg_limit = _MIN_CONTEXT
+    messages = list(
+        reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=msg_limit, app_id=compat_app_id)])
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
