@@ -48,6 +48,22 @@ class TestConversationsToStringDedup:
         result = Conversation.conversations_to_string([conv])
         assert "Fallback overview" in result
 
+    def test_empty_app_content_falls_back_to_overview(self):
+        conv = _make_conversation(
+            overview="Fallback overview",
+            apps_results=[AppResult(app_id="summarizer", content="")],
+        )
+        result = Conversation.conversations_to_string([conv])
+        assert "Fallback overview" in result
+
+    def test_whitespace_app_content_falls_back_to_overview(self):
+        conv = _make_conversation(
+            overview="Fallback overview",
+            apps_results=[AppResult(app_id="summarizer", content="   ")],
+        )
+        result = Conversation.conversations_to_string([conv])
+        assert "Fallback overview" in result
+
     def test_no_duplicate_summarization_label(self):
         conv = _make_conversation(
             apps_results=[AppResult(app_id="summarizer", content="App summary")],
