@@ -222,6 +222,24 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Task indent levels (local UI state)
+  // Format: { "taskId": indentLevel }
+  set taskIndentLevels(Map<String, int> value) {
+    final encoded = jsonEncode(value);
+    saveString('taskIndentLevels', encoded);
+  }
+
+  Map<String, int> get taskIndentLevels {
+    final encoded = getString('taskIndentLevels');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as num).toInt()));
+    } catch (e) {
+      return {};
+    }
+  }
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 
