@@ -1049,10 +1049,5 @@ def get_profiles_shared_with_user(target_uid: str):
 def get_users_shared_with(owner_uid: str):
     """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
-    docs = shared_ref.stream()
-    shared = []
-    for doc in docs:
-        data = doc.to_dict()
-        if not data.get('revoked_at'):
-            shared.append(data['shared_with_uid'])
-    return shared
+    shares_query = shared_ref.where(filter=firestore.FieldFilter('revoked_at', '==', None))
+    return [doc.to_dict()['shared_with_uid'] for doc in shares_query.stream()]
