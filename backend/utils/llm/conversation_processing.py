@@ -548,7 +548,7 @@ def extract_action_items(
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. Use the same language {language_code} for your response.\n\nContent:\n{conversation_context}{existing_items_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | llm_medium_experiment | action_items_parser
+    chain = prompt | llm_mini | action_items_parser
 
     try:
         response = chain.invoke(
