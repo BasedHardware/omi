@@ -1999,7 +1999,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                           setState(() {});
 
                           AppSnackbar.showSnackbar(context.l10n.exportingConversations);
-                          List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
+                          List<ServerConversation> memories =
+                              await getConversations(limit: 10000, offset: 0, includePhotos: false);
                           String json = const JsonEncoder.withIndent("     ").convert(memories);
                           final directory = await getApplicationDocumentsDirectory();
                           final file = File('${directory.path}/conversations.json');
