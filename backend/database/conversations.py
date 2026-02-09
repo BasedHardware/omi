@@ -226,6 +226,8 @@ def get_conversations_without_photos(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -239,6 +241,12 @@ def get_conversations_without_photos(
 
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
 
     # Apply date range filters if provided
     if start_date:
