@@ -991,7 +991,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: const Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
+                            List<ServerConversation> memories =
+                                await getConversations(limit: 10000, offset: 0, includePhotos: false);
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/conversations.json');
