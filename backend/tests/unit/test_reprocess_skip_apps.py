@@ -8,6 +8,7 @@ Verifies that:
 """
 
 import os
+import pathlib
 import sys
 import types
 from unittest.mock import MagicMock, patch, call
@@ -274,14 +275,43 @@ class TestReprocessSkipsApps:
             )
             mock_trigger_apps.assert_called_once()
 
+    def test_trigger_apps_called_when_reprocess_with_app_id(self):
+        """When is_reprocess=True but app_id is provided, _trigger_apps MUST still be called.
+
+        The /v1/conversations/{id}/reprocess endpoint passes app_id to explicitly
+        re-run a specific app, and this must work even during reprocessing.
+        """
+        conv = _make_fake_conversation()
+        fake_structured = (_make_fake_structured(), False)
+
+        with (
+            patch.object(pc_module, '_get_structured', return_value=fake_structured),
+            patch.object(pc_module, '_get_conversation_obj', return_value=conv),
+            patch.object(pc_module, '_trigger_apps') as mock_trigger_apps,
+            patch.object(pc_module, 'save_structured_vector'),
+            patch.object(pc_module, '_extract_memories'),
+            patch.object(pc_module, '_extract_trends'),
+            patch.object(pc_module, '_save_action_items'),
+            patch.object(pc_module, '_update_goal_progress'),
+            patch.object(pc_module, 'conversations_db'),
+            patch.object(pc_module, 'redis_db'),
+        ):
+            pc_module.process_conversation(
+                uid="test-uid",
+                language_code="en",
+                conversation=conv,
+                force_process=True,
+                is_reprocess=True,
+                app_id="specific-app-id",
+            )
+            mock_trigger_apps.assert_called_once()
+
 
 class TestPostprocessPassesIsReprocess:
     """Verify postprocess_conversation passes is_reprocess=True."""
 
     def test_postprocess_source_has_is_reprocess_true(self):
         """The postprocess call site must pass is_reprocess=True."""
-        import pathlib
-
         source_path = (
             pathlib.Path(__file__).resolve().parents[2] / "utils" / "conversations" / "postprocess_conversation.py"
         )
