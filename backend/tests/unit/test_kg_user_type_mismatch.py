@@ -126,6 +126,7 @@ for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memor
 llm_conv = sys.modules["utils.llm.conversation_processing"]
 for attr in [
     "get_transcript_structure",
+    "get_transcript_structure_with_action_items",
     "get_app_result",
     "should_discard_conversation",
     "select_best_app_for_conversation",
