@@ -119,7 +119,7 @@ def get_openai_response(text):
         logger.info(f"Sending question to OpenAI: {text}")
 
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4.1-mini",
             messages=[
                 {
                     "role": "system",

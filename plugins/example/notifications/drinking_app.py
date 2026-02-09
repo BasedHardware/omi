@@ -48,7 +48,7 @@ def analyze_drinking_intent(text):
         logger.info(f"API key check (last 4 chars): {key_preview}")
 
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4.1-mini",
             messages=[
                 {
                     "role": "system",

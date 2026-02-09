@@ -201,6 +201,12 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
+@router.get('/v1/apps/enabled', tags=['v1'])
+def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
+    """Returns the list of app IDs the user has enabled/installed."""
+    return get_enabled_apps(uid)
+
+
 @router.get('/v2/apps', tags=['v2'])
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
@@ -327,8 +333,9 @@ def search_apps(
     category: str | None = Query(default=None, description='Filter by category id'),
     rating: float | None = Query(default=None, ge=0, le=5, description='Minimum rating filter'),
     capability: str | None = Query(default=None, description='Filter by capability id'),
-    sort: str
-    | None = Query(default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'),
+    sort: str | None = Query(
+        default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'
+    ),
     my_apps: bool | None = Query(default=None, description='Filter to show only user\'s apps'),
     installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
     offset: int = Query(default=0, ge=0),
