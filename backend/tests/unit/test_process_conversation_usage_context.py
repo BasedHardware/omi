@@ -445,16 +445,14 @@ def test_models_unchanged_for_llm_calls():
         app_match.group(1) == "llm_medium_experiment"
     ), f"Expected llm_medium_experiment for app result, got {app_match.group(1)}"
 
-    # extract_action_items should use llm_medium_experiment
+    # extract_action_items should use llm_mini (downgraded from llm_medium_experiment for cost savings)
     action_match = re.search(
         r'def extract_action_items.*?chain = prompt \| (\w+) \| action_items_parser',
         conv_proc_source,
         re.DOTALL,
     )
     assert action_match is not None
-    assert (
-        action_match.group(1) == "llm_medium_experiment"
-    ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
+    assert action_match.group(1) == "llm_mini", f"Expected llm_mini for action items, got {action_match.group(1)}"
 
 
 def test_threaded_tracking_context_isolation():
