@@ -103,6 +103,7 @@ for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memor
 llm_conv = sys.modules["utils.llm.conversation_processing"]
 for attr in [
     "get_transcript_structure",
+    "get_transcript_structure_with_action_items",
     "get_app_result",
     "should_discard_conversation",
     "select_best_app_for_conversation",
@@ -198,7 +199,7 @@ def test_discard_call_uses_discard_feature_tracking():
 
     # Patch on the process_conversation module (where it's imported/bound)
     with patch.object(process_conversation, "should_discard_conversation", fake_discard), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
+        process_conversation, "get_transcript_structure_with_action_items", MagicMock()
     ):
         try:
             process_conversation._get_structured("user-1", "en", conversation)
@@ -279,8 +280,8 @@ def test_no_umbrella_conversation_processing_tracking():
     )
 
 
-def test_action_items_tracked_separately_from_structure():
-    """Verify action items extraction uses CONVERSATION_ACTION_ITEMS, not CONVERSATION_STRUCTURE."""
+def test_combined_structure_includes_action_items():
+    """Verify the normal path uses a single combined call tracked under CONVERSATION_STRUCTURE."""
     captured_contexts = []
 
     original_track = process_conversation.track_usage
@@ -307,19 +308,56 @@ def test_action_items_tracked_separately_from_structure():
     action_items_mod.get_action_items = MagicMock(return_value=[])
 
     with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
-        process_conversation, "track_usage", spy_track_usage
-    ):
+        process_conversation, "get_transcript_structure_with_action_items", MagicMock()
+    ), patch.object(process_conversation, "track_usage", spy_track_usage):
         try:
             process_conversation._get_structured("user-3", "en", conversation)
         except Exception:
             pass
 
+    # Structure tracking should be present (combined call includes action items)
+    assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
+
+
+def test_reprocess_action_items_tracked_separately():
+    """Verify reprocess path still tracks action items separately from structure."""
+    captured_contexts = []
+
+    original_track = process_conversation.track_usage
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def spy_track_usage(uid, feature):
+        captured_contexts.append(feature)
+        with original_track(uid, feature):
+            yield
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+    conversation.structured = MagicMock()
+    conversation.structured.title = "Test"
+    conversation.started_at = MagicMock()
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=[])
+
+    with patch.object(process_conversation, "get_reprocess_transcript_structure", MagicMock()), patch.object(
+        process_conversation, "extract_action_items", MagicMock(return_value=[])
+    ), patch.object(process_conversation, "track_usage", spy_track_usage):
+        try:
+            process_conversation._get_structured("user-3", "en", conversation, force_process=True)
+        except Exception:
+            pass
+
     assert usage_tracker.Features.CONVERSATION_ACTION_ITEMS in captured_contexts
-    # Action items should be tracked separately from structure
-    assert captured_contexts.count(usage_tracker.Features.CONVERSATION_ACTION_ITEMS) >= 1
-    # Structure should also be tracked
     assert usage_tracker.Features.CONVERSATION_STRUCTURE in captured_contexts
 
 
@@ -371,8 +409,8 @@ def test_structure_and_apps_tracked_at_runtime():
     redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
 
     with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
-        process_conversation, "get_transcript_structure", MagicMock()
-    ), patch.object(process_conversation, "extract_action_items", MagicMock(return_value=[])), patch.object(
+        process_conversation, "get_transcript_structure_with_action_items", MagicMock()
+    ), patch.object(
         process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
     ), patch.object(
         process_conversation, "track_usage", spy_track_usage
@@ -455,6 +493,17 @@ def test_models_unchanged_for_llm_calls():
     assert (
         action_match.group(1) == "llm_medium_experiment"
     ), f"Expected llm_medium_experiment for action items, got {action_match.group(1)}"
+
+    # get_transcript_structure_with_action_items should use llm_medium_experiment
+    combined_match = re.search(
+        r'def get_transcript_structure_with_action_items.*?chain = prompt \| (\w+) \| parser',
+        conv_proc_source,
+        re.DOTALL,
+    )
+    assert combined_match is not None
+    assert (
+        combined_match.group(1) == "llm_medium_experiment"
+    ), f"Expected llm_medium_experiment for combined function, got {combined_match.group(1)}"
 
 
 def test_threaded_tracking_context_isolation():
