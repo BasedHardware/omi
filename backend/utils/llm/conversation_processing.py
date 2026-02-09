@@ -656,6 +656,323 @@ def get_transcript_structure(
     return response
 
 
+def get_transcript_structure_with_action_items(
+    transcript: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    photos: List[ConversationPhoto] = None,
+    existing_action_items: List[dict] = None,
+    calendar_meeting_context: 'CalendarMeetingContext' = None,
+) -> Structured:
+    """Extract both conversation structure and action items in a single LLM call.
+
+    Combines get_transcript_structure and extract_action_items to avoid sending
+    the transcript twice, saving ~50% token cost on these operations.
+    """
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    if not conversation_context:
+        return Structured()
+
+    existing_items_context = ""
+    if existing_action_items:
+        items_list = []
+        for item in existing_action_items:
+            desc = item.get('description', '')
+            due = item.get('due_at')
+            due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
+            completed = '✓ Completed' if item.get('completed', False) else 'Pending'
+            items_list.append(f"  • {desc} (Due: {due_str}) [{completed}]")
+        existing_items_context = f"\n\nEXISTING ACTION ITEMS FROM PAST 2 DAYS ({len(items_list)} items):\n" + "\n".join(
+            items_list
+        )
+
+    instructions_text = '''You are an expert content analyzer and action item extractor. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide both a structured summary AND extract actionable tasks in a single response.
+
+CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
+- The conversation DEFINITELY happened between the named participants
+- NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc. when participant names are available
+- Match transcript speakers to participant names by carefully analyzing the conversation context
+- Use participant names throughout the title, overview, action items, and all generated content
+- Use the meeting title as a strong signal for the conversation title (but you can refine it based on the actual discussion)
+- Use the meeting platform and scheduled time to provide better context in the overview
+- Consider the meeting notes/description when analyzing the conversation's purpose
+- If there are 2-3 participants with known names, naturally mention them in the title (e.g., "Sarah and John Discuss Q2 Budget", "Team Meeting with Alex, Maria, and Chris")
+- If you cannot confidently match a speaker to a name, use the action description without speaker references
+
+=== PART 1: CONTENT STRUCTURE ===
+
+For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
+For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
+For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
+
+For the category, classify the content into one of the available categories.
+
+For Calendar Events, apply strict filtering to include ONLY events that meet ALL these criteria:
+• **Confirmed commitment**: Not suggestions or "maybe" - actual scheduled events
+• **User involvement**: The user is expected to attend, participate, or take action
+• **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
+• **Important/actionable**: Missing it would have real consequences or impact
+
+INCLUDE these event types:
+• Meetings & appointments (business meetings, doctor visits, interviews)
+• Hard deadlines (project due dates, payment deadlines, submission dates)
+• Personal commitments (family events, social gatherings user committed to)
+• Travel & transportation (flights, trains, scheduled pickups)
+• Recurring obligations (classes, regular meetings, scheduled calls)
+
+EXCLUDE these:
+• Casual mentions ("we should meet sometime", "maybe next week")
+• Historical references (past events being discussed)
+• Other people's events (events user isn't involved in)
+• Vague suggestions ("let's grab coffee soon")
+• Hypothetical scenarios ("if we meet Tuesday...")
+
+=== PART 2: ACTION ITEM EXTRACTION ===
+
+EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
+
+When the primary user OR someone speaking to them uses these patterns, ALWAYS extract the task:
+- "Remind me to X" / "Remember to X" → EXTRACT "X"
+- "Don't forget to X" / "Don't let me forget X" → EXTRACT "X"
+- "Add task X" / "Create task X" / "Make a task for X" → EXTRACT "X"
+- "Note to self: X" / "Mental note: X" → EXTRACT "X"
+- "Task: X" / "Todo: X" / "To do: X" → EXTRACT "X"
+- "I need to remember to X" → EXTRACT "X"
+- "Put X on my list" / "Add X to my tasks" → EXTRACT "X"
+- "Set a reminder for X" / "Can you remind me X" → EXTRACT "X"
+- "You need to X" / "You should X" / "Make sure you X" (said TO the user) → EXTRACT "X"
+
+These explicit requests bypass importance/timing filters. If someone explicitly asks for a reminder or task, extract it.
+
+Examples:
+- User says "Remind me to buy milk" → Extract "Buy milk"
+- Someone tells user "Don't forget to call your mom" → Extract "Call mom"
+- User says "Add task pick up dry cleaning" → Extract "Pick up dry cleaning"
+- User says "Note to self, check tire pressure" → Extract "Check tire pressure"
+
+CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
+• DO NOT extract action items that are >95% similar to existing ones in the content
+• Check both the description AND the due date/timeframe
+• Consider semantic similarity, not just exact word matches
+• Examples of what counts as DUPLICATES (DO NOT extract):
+  - "Call John" vs "Phone John" → DUPLICATE
+  - "Finish report by Friday" (existing) vs "Complete report by end of week" → DUPLICATE
+  - "Buy milk" (existing) vs "Get milk from store" → DUPLICATE
+  - "Email Sarah about meeting" (existing) vs "Send email to Sarah regarding the meeting" → DUPLICATE
+• Examples of what is NOT duplicate (OK to extract):
+  - "Buy groceries" (existing) vs "Buy milk" → NOT duplicate (different scope)
+  - "Call dentist" (existing) vs "Call plumber" → NOT duplicate (different person/service)
+  - "Submit report by March 1st" (existing) vs "Submit report by March 15th" → NOT duplicate (different deadlines)
+• If you're unsure whether something is a duplicate, err on the side of treating it as a duplicate (DON'T extract)
+
+WORKFLOW:
+1. FIRST: Read the ENTIRE conversation carefully to understand the full context
+2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
+3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
+   - Is the user ALREADY doing this? SKIP IT
+   - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
+   - Would missing this have real consequences? If not obvious, SKIP IT
+   - Better to extract 0 implicit tasks than flood the user with noise
+4. FOURTH: Extract timing information separately and put it in the due_at field
+5. FIFTH: Clean the description - remove ALL time references and vague words
+6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+
+CRITICAL CONTEXT:
+• These action items are primarily for the PRIMARY USER who is having/recording this conversation
+• The user is the person wearing the device or initiating the conversation
+• Focus on tasks the primary user needs to track and act upon
+• Include tasks for OTHER people ONLY if:
+  - The primary user is dependent on that task being completed
+  - It's super crucial for the primary user to track it
+  - The primary user needs to follow up on it
+
+BALANCE QUALITY AND USER INTENT:
+• For EXPLICIT requests (remind me, add task, don't forget, etc.) - ALWAYS extract
+• For IMPLICIT tasks inferred from conversation - be very selective, better to extract 0 than flood the user
+• Think: "Did the user ask for this reminder, or am I guessing they need it?"
+• If the user explicitly asked for a task/reminder, respect their request even if it seems trivial
+
+STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
+
+1. **Clear Ownership & Relevance to Primary User**:
+   - Identify which speaker is the primary user based on conversational context
+   - Look for cues: who is asking questions, who is receiving advice/tasks, who initiates topics
+   - For tasks assigned to the primary user: phrase them directly (start with verb)
+   - For tasks assigned to others: include them ONLY if primary user is dependent on them or needs to track them
+   - **CRITICAL**: When CALENDAR MEETING CONTEXT provides participant names:
+     * Analyze the transcript to match speakers to the named participants
+     * Use the actual participant names in ALL action items
+     * ABSOLUTELY NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc.
+     * Example: "Follow up with Sarah about budget" NOT "Follow up with Speaker 0 about budget"
+   - If no calendar context: NEVER use "Speaker 0", "Speaker 1", etc. in the final action item description
+   - If unsure about names, use natural phrasing like "Follow up on...", "Ensure...", etc.
+
+2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
+
+3. **Timing Signal** (NOT required for explicit task requests):
+   - Explicit dates or times
+   - Relative timing ("tomorrow", "next week", "by Friday", "this month")
+   - Urgency markers ("urgent", "ASAP", "high priority")
+   - NOTE: Skip this requirement if user explicitly asked for a reminder/task
+
+4. **Real Importance** (NOT required for explicit task requests):
+   - Financial impact (bills, payments, purchases, invoices)
+   - Health/safety concerns (appointments, medications, safety checks)
+   - Hard deadlines (submissions, filings, registrations)
+   - Explicit stress if missed (stated by speakers)
+   - Critical dependencies (primary user blocked without it)
+   - Commitments to other people (meetings, deliverables, promises)
+   - NOTE: Skip this requirement if user explicitly asked for a reminder/task
+
+5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
+   - "I want to X" → EXTRACT (user stated intention, needs reminder)
+   - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
+   - "Today I will X" → EXTRACT (daily goal, needs tracking)
+   - "This week/month I want to X" → EXTRACT (time-bound goal)
+
+   Only skip if user is ACTIVELY doing something RIGHT NOW:
+   - "I am currently in the middle of X" → Skip (actively doing it this moment)
+   - "Right now I'm doing X" → Skip (immediate present action)
+
+   Examples:
+   - ✅ "Today, I want to complete the onboarding experience" → EXTRACT (stated goal with deadline)
+   - ✅ "I want to finish the report by Friday" → EXTRACT (intention + deadline)
+   - ✅ "This month, I want to grow users to 500k" → EXTRACT (monthly goal)
+   - ✅ "Need to call the plumber tomorrow" → EXTRACT (future task)
+   - ✅ "Have to submit tax documents by March 31st" → EXTRACT (deadline)
+   - ❌ "I'm currently on a call with the client" → Skip (happening right now)
+   - ❌ "Right now I'm debugging this issue" → Skip (immediate action)
+
+EXCLUDE these types of items (be aggressive about exclusion):
+• Things user is ALREADY doing or actively working on
+• Casual mentions or updates ("I'm working on X", "currently doing Y")
+• Vague suggestions without commitment ("we should grab coffee sometime", "let's meet up soon")
+• Casual mentions without commitment ("maybe I'll check that out")
+• General goals without specific next steps ("I need to exercise more")
+• Past actions being discussed
+• Hypothetical scenarios ("if we do X, then Y")
+• Trivial tasks with no real consequences
+• Tasks assigned to others that don't impact the primary user
+• Routine daily activities the user already knows about
+• Things that are obvious or don't need a reminder
+• Updates or status reports about ongoing work
+
+ACTION ITEM FORMAT REQUIREMENTS:
+• Keep each action item SHORT and concise (maximum 15 words, strict limit)
+• Use clear, direct language
+• Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
+• Include only essential details
+
+• CRITICAL - Resolve ALL vague references:
+  - Read the ENTIRE conversation to understand what is being discussed
+  - If you see vague references like:
+    * "the feature" → identify WHAT feature from conversation
+    * "this project" → identify WHICH project from conversation
+    * "that task" → identify WHAT task from conversation
+    * "it" → identify what "it" refers to from conversation
+  - Look for keywords, topics, or subjects mentioned earlier in the conversation
+  - Replace ALL vague words with specific names from the conversation context
+  - Examples:
+    * User says: "planning Sarah's birthday party" then later "buy decorations for it"
+      → Extract: "Buy decorations for Sarah's birthday party"
+    * User says: "car making weird noise" then later "take it to mechanic"
+      → Extract: "Take car to mechanic"
+    * User says: "quarterly sales report" then later "send it to the team"
+      → Extract: "Send quarterly sales report to team"
+
+• CRITICAL - Remove time references from description (they go in due_at field):
+  - NEVER include timing words in the action item description itself
+  - Remove: "by tomorrow", "by evening", "today", "next week", "by Friday", etc.
+  - The timing information is captured in the due_at field separately
+  - Focus ONLY on the action and what needs to be done
+  - Examples:
+    * "buy groceries by tomorrow" → "Buy groceries"
+    * "call dentist by next Monday" → "Call dentist"
+    * "pay electricity bill by Friday" → "Pay electricity bill"
+    * "submit insurance claim today" → "Submit insurance claim"
+    * "book flight tickets by evening" → "Book flight tickets"
+
+• Remove filler words and unnecessary context
+• Merge duplicates
+• Order by: due date → urgency → alphabetical
+
+DUE DATE EXTRACTION (CRITICAL):
+IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
+IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
+
+Step-by-step date parsing process:
+1. IDENTIFY THE DATE:
+   - "today" → current date from {started_at}
+   - "tomorrow" → next day from {started_at}
+   - "Monday", "Tuesday", etc. → next occurrence of that weekday
+   - "next week" → same day next week
+   - Specific date (e.g., "March 15") → that date
+
+2. IDENTIFY THE TIME (if mentioned):
+   - "before 10am", "by 10am", "at 10am" → 10:00 AM
+   - "before 3pm", "by 3pm", "at 3pm" → 3:00 PM
+   - "in the morning" → 9:00 AM
+   - "in the afternoon" → 2:00 PM
+   - "in the evening", "by evening" → 6:00 PM
+   - "at noon" → 12:00 PM
+   - "by midnight", "by end of day" → 11:59 PM
+   - No time mentioned → 11:59 PM (end of day)
+
+3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
+
+Examples of CORRECT date parsing:
+If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+- "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
+- "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
+- "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
+- "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
+- "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
+
+CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
+DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
+
+=== DATE CONTEXT ===
+
+Reference time: {started_at}
+User timezone: {tz}
+
+For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times and action item due dates to UTC and respond in UTC.
+
+{format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
+
+    context_message = 'The content language is {language_code}. Use the same language {language_code} for your response.\n\nContent:\n{conversation_context}{existing_items_context}'
+    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    chain = prompt | llm_medium_experiment | parser
+
+    response = chain.invoke(
+        {
+            'conversation_context': conversation_context,
+            'format_instructions': parser.get_format_instructions(),
+            'language_code': language_code,
+            'started_at': started_at.isoformat(),
+            'tz': tz,
+            'existing_items_context': existing_items_context,
+        }
+    )
+
+    # Post-process events
+    for event in response.events or []:
+        if event.duration > 180:
+            event.duration = 180
+        event.created = False
+
+    # Post-process action items
+    now = datetime.now(timezone.utc)
+    for action_item in response.action_items or []:
+        if action_item.created_at is None:
+            action_item.created_at = now
+
+    return response
+
+
 def get_reprocess_transcript_structure(
     transcript: str,
     started_at: datetime,
