@@ -333,3 +333,44 @@ class TestTranscriptSegmentLanguageCache:
         # hint_language "xx" is unreliable — detect_language returns None
         result = cache.is_in_target_language("seg1", "some text", "xx")
         assert result is True
+
+    def test_repeated_calls_same_segment_hit_detect_once(self):
+        """Repeated is_in_target_language with same text should not re-detect after sticky cache."""
+        from utils import translation
+        cache = TranscriptSegmentLanguageCache()
+        call_count = [0]
+        original = translation._detect_with_langdetect
+
+        def counting_detect(text, hint):
+            call_count[0] += 1
+            return original(text, hint)
+
+        translation._detect_with_langdetect = counting_detect
+        try:
+            text = "Hola esto es una prueba en español"
+            cache.is_in_target_language("seg1", text, "en")  # detects foreign, sets sticky false
+            count_after_first = call_count[0]
+            cache.is_in_target_language("seg1", text, "en")  # sticky false, should skip detect
+            assert call_count[0] == count_after_first  # no additional detect call
+        finally:
+            translation._detect_with_langdetect = original
+
+
+class TestCacheKeyNormalization:
+    """Verify cache behavior with non-lexical cleaning."""
+
+    def test_cleaned_text_is_cache_key(self):
+        """When remove_non_lexical=True, cache key should be the cleaned text."""
+        detection_cache.clear()
+        # "hmm Hello world" with non-lexical removed becomes "Hello world"
+        detect_language("hmm Hello world test phrase", remove_non_lexical=True, hint_language="en")
+        # The cleaned text should be in cache, not the original
+        assert "Hello world test phrase" in detection_cache
+        assert "hmm Hello world test phrase" not in detection_cache
+
+    def test_undetectable_text_not_cached(self):
+        """None results (undetectable) should NOT be cached to avoid permanent misses."""
+        detection_cache.clear()
+        detect_language("some text", hint_language="xx")  # unreliable hint → None
+        # None results should not pollute the cache
+        assert "some text" not in detection_cache
