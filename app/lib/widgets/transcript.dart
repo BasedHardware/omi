@@ -35,6 +35,7 @@ class TranscriptWidget extends StatefulWidget {
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
   final Function(TranscriptSegment)? onSegmentTap;
+  final Function(int segmentIndex)? onEditSegmentText;
 
   const TranscriptWidget({
     super.key,
@@ -54,6 +55,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
     this.onSegmentTap,
+    this.onEditSegmentText,
   });
 
   @override
@@ -259,10 +261,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottomGently();
-    });
   }
 
   void _scrollToSearchResult() {
@@ -561,137 +559,125 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
                       children: [
                         Flexible(
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.75,
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(isUser
-                                    ? 18
-                                    : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                        ? 6
-                                        : 18),
-                                topRight: Radius.circular(isUser ? 18 : 18),
-                                bottomLeft: Radius.circular(18),
-                                bottomRight: Radius.circular(isUser ? 6 : 18),
+                          child: GestureDetector(
+                            onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
+                                ? () {
+                                    HapticFeedback.mediumImpact();
+                                    widget.onEditSegmentText!(segmentIdx);
+                                  }
+                                : null,
+                            child: Container(
+                              constraints: BoxConstraints(
+                                maxWidth: MediaQuery.of(context).size.width * 0.75,
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.15),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 1),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(isUser
+                                      ? 18
+                                      : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
+                                          ? 6
+                                          : 18),
+                                  topRight: Radius.circular(isUser ? 18 : 18),
+                                  bottomLeft: Radius.circular(18),
+                                  bottomRight: Radius.circular(isUser ? 6 : 18),
                                 ),
-                              ],
-                            ),
-                            child: SelectionArea(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  RichText(
-                                    textAlign: TextAlign.left,
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white : Colors.grey.shade100,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
-                                      children: widget.searchQuery.isNotEmpty
-                                          ? _highlightSearchMatchesWithKeys(
-                                              _getDecodedText(data.text),
-                                              widget.searchQuery,
-                                              segmentIdx,
-                                            )
-                                          : [
-                                              TextSpan(
-                                                text: _getDecodedText(data.text),
-                                              )
-                                            ],
-                                    ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
                                   ),
-                                  if (data.translations.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    ...data.translations.map((translation) => Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Text(
-                                            _getDecodedText(translation.text),
-                                            style: TextStyle(
-                                              letterSpacing: 0.0,
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.8)
-                                                  : Colors.grey.shade300.withValues(alpha: 0.8),
-                                              fontSize: 14,
-                                              fontStyle: FontStyle.italic,
-                                              height: 1.3,
+                                ],
+                              ),
+                              child: SelectionArea(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildSegmentText(data, segmentIdx, isUser),
+                                    if (data.translations.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      ...data.translations.map((translation) => Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              _getDecodedText(translation.text),
+                                              style: TextStyle(
+                                                letterSpacing: 0.0,
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.8)
+                                                    : Colors.grey.shade300.withValues(alpha: 0.8),
+                                                fontSize: 14,
+                                                fontStyle: FontStyle.italic,
+                                                height: 1.3,
+                                              ),
+                                              textAlign: TextAlign.left,
                                             ),
-                                            textAlign: TextAlign.left,
-                                          ),
-                                        )),
-                                    const SizedBox(height: 4),
-                                    _buildTranslationNotice(),
-                                  ],
-                                  // Timestamp, provider, and play button
-                                  if (widget.canDisplaySeconds ||
-                                      data.sttProvider != null ||
-                                      widget.onSegmentTap != null) ...[
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        if (data.sttProvider != null) ...[
-                                          Text(
-                                            SttProviderConfig.getDisplayName(data.sttProvider),
-                                            style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
-                                              fontSize: 10,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                          if (widget.canDisplaySeconds) ...[
+                                          )),
+                                      const SizedBox(height: 4),
+                                      _buildTranslationNotice(),
+                                    ],
+                                    // Timestamp, provider, and play button
+                                    if (widget.canDisplaySeconds ||
+                                        data.sttProvider != null ||
+                                        widget.onSegmentTap != null) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          if (data.sttProvider != null) ...[
                                             Text(
-                                              ' · ',
+                                              SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
                                                 color:
                                                     isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
+                                                fontStyle: FontStyle.italic,
                                               ),
                                             ),
+                                            if (widget.canDisplaySeconds) ...[
+                                              Text(
+                                                ' · ',
+                                                style: TextStyle(
+                                                  color: isUser
+                                                      ? Colors.white.withValues(alpha: 0.5)
+                                                      : Colors.grey.shade500,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
                                           ],
-                                        ],
-                                        // Play button for tap-to-seek
-                                        if (widget.onSegmentTap != null) ...[
-                                          GestureDetector(
-                                            onTap: () {
-                                              HapticFeedback.lightImpact();
-                                              widget.onSegmentTap?.call(data);
-                                            },
-                                            child: Icon(
-                                              Icons.play_circle_outline,
-                                              size: 16,
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                          // Play button for tap-to-seek
+                                          if (widget.onSegmentTap != null) ...[
+                                            GestureDetector(
+                                              onTap: () {
+                                                HapticFeedback.lightImpact();
+                                                widget.onSegmentTap?.call(data);
+                                              },
+                                              child: Icon(
+                                                Icons.play_circle_outline,
+                                                size: 16,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                              ),
                                             ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                        ],
-                                        if (widget.canDisplaySeconds)
-                                          Text(
-                                            data.getTimestampString(),
-                                            style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
-                                              fontSize: 11,
+                                            const SizedBox(width: 6),
+                                          ],
+                                          if (widget.canDisplaySeconds)
+                                            Text(
+                                              data.getTimestampString(),
+                                              style: TextStyle(
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                                fontSize: 11,
+                                              ),
                                             ),
-                                          ),
-                                      ],
-                                    ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -725,6 +711,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ],
           ),
         ));
+  }
+
+  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser) {
+    final richText = RichText(
+      textAlign: TextAlign.left,
+      text: TextSpan(
+        style: TextStyle(
+          letterSpacing: 0.0,
+          color: isUser ? Colors.white : Colors.grey.shade100,
+          fontSize: 15,
+          height: 1.4,
+        ),
+        children: widget.searchQuery.isNotEmpty
+            ? _highlightSearchMatchesWithKeys(
+                _getDecodedText(data.text),
+                widget.searchQuery,
+                segmentIdx,
+              )
+            : [TextSpan(text: _getDecodedText(data.text))],
+      ),
+    );
+    return richText;
   }
 
   Widget _buildTranslationNotice() {
