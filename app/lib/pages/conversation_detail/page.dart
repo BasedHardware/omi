@@ -1448,11 +1448,20 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   final speakerName = person?.name ??
                       context.l10n
                           .speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+                  MixpanelManager().editSegmentTextStarted();
+                  bool saved = false;
                   showEditSegmentBottomSheet(
                     context,
                     segment: segment,
                     speakerName: speakerName,
-                    onSave: (newText) => provider.saveEditingSegmentText(segmentIndex, newText),
+                    onSave: (newText) {
+                      saved = true;
+                      MixpanelManager().editSegmentTextSaved();
+                      provider.saveEditingSegmentText(segmentIndex, newText);
+                    },
+                    onDismissed: () {
+                      if (!saved) MixpanelManager().editSegmentTextCancelled();
+                    },
                   );
                 },
                 editSegment: (segmentId, speakerId) {
