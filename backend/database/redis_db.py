@@ -806,7 +806,7 @@ def cache_translation(text_hash: str, dest_language: str, translated_text: str, 
 def get_cached_translation(text_hash: str, dest_language: str) -> Optional[str]:
     """Retrieve a cached translation. Returns None on miss or Redis failure."""
     result = r.get(f'translate:v1:{text_hash}:{dest_language}')
-    if not result:
+    if result is None:
         return None
     return result.decode()
 

@@ -8,6 +8,8 @@ from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 
+from database.redis_db import get_cached_translation, cache_translation
+
 # LRU Cache for language detection
 detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
@@ -281,8 +283,6 @@ class TranslationService:
         Returns:
             The translated text as a string
         """
-        from database.redis_db import get_cached_translation, cache_translation
-
         # Generate hash for the text
         text_hash = hashlib.md5(text.encode()).hexdigest()
 
