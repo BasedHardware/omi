@@ -1204,16 +1204,16 @@ async def _stream_handler(
                     continue
 
                 # Translation
-                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
+                result = translation_service.translate_text_by_sentence(translation_language, segment_text)
 
-                if translated_text == segment_text:
-                    # If translation is same as original, it's likely in the target language.
+                if result.detected_language_code and result.detected_language_code == translation_language:
+                    # Source language matches target — no translation needed.
                     # Delete from cache to allow re-evaluation if more text is added.
                     language_cache.delete_cache(segment.id)
                     continue
 
                 # Create/Update Translation object
-                translation = Translation(lang=translation_language, text=translated_text)
+                translation = Translation(lang=translation_language, text=result.text)
                 if segment.translations is not None:
                     existing_translation_index = next(
                         (i for i, t in enumerate(segment.translations) if t.lang == language), None

@@ -2,11 +2,16 @@ import os
 import hashlib
 import re
 from collections import OrderedDict
-from typing import List
+from typing import List, NamedTuple, Optional
 
 from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
+
+
+class TranslationResult(NamedTuple):
+    text: str
+    detected_language_code: Optional[str] = None
 
 
 # LRU Cache for language detection
@@ -186,16 +191,6 @@ def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
         return None
 
 
-def _detect_with_google_cloud(text: str) -> str | None:
-    """Helper function to detect language using Google Cloud API."""
-    response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
-    if response.languages and len(response.languages) > 0:
-        for language in response.languages:
-            if language.confidence >= 1:
-                return language.language_code
-    return None
-
-
 def detect_language(text: str, remove_non_lexical: bool = False, hint_language: str = None) -> str | None:
     text_for_detection = text
     if remove_non_lexical:
@@ -209,18 +204,10 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
         detection_cache.move_to_end(text_for_detection)
         return detection_cache[text_for_detection]
 
-    # Count words to determine which detection method to use
-    word_count = len(text_for_detection.split())
     detected_language = None
 
-    # Use Google Cloud API for short text (≤5 words)
-    # Otherwise, use langdetect for longer text (cost-effective)
-    # Fallback to Google Cloud API if langdetect fails
     try:
-        if word_count <= 5:
-            detected_language = _detect_with_google_cloud(text_for_detection)
-        if not detected_language:
-            detected_language = _detect_with_langdetect(text_for_detection, hint_language)
+        detected_language = _detect_with_langdetect(text_for_detection, hint_language)
 
         # Cache the result
         if detected_language:
@@ -254,23 +241,29 @@ class TranslationService:
         """Generate a cache key from text hash and language"""
         return f"{text_hash}:{dest_language}"
 
-    def translate_text_by_sentence(self, dest_language: str, text: str) -> str:
+    def translate_text_by_sentence(self, dest_language: str, text: str) -> TranslationResult:
         """
         Translates text by splitting it into sentences, translating each, and rejoining.
         Maximizes cache hits by translating sentence by sentence.
+        Returns TranslationResult with detected_language_code if all sentences agree.
         """
         if not text:
-            return ""
+            return TranslationResult(text="")
 
         sentences = split_into_sentences(text)
-        translated_sentences = []
+        results = []
         for sentence in sentences:
-            # Each sentence translation will hit the cache if seen before.
-            translated_sentences.append(self.translate_text(dest_language, sentence))
+            results.append(self.translate_text(dest_language, sentence))
 
-        return ' '.join(translated_sentences)
+        translated_text = ' '.join(r.text for r in results)
 
-    def translate_text(self, dest_language: str, text: str) -> str:
+        # Aggregate detected language: use it only if all sentences agree
+        detected_langs = {r.detected_language_code for r in results if r.detected_language_code}
+        detected_language_code = detected_langs.pop() if len(detected_langs) == 1 else None
+
+        return TranslationResult(text=translated_text, detected_language_code=detected_language_code)
+
+    def translate_text(self, dest_language: str, text: str) -> TranslationResult:
         """
         Translates text to the specified destination language using Google Cloud Translation API.
         Uses a cache to avoid redundant translations.
@@ -280,7 +273,7 @@ class TranslationService:
             text: The text to translate
 
         Returns:
-            The translated text as a string
+            TranslationResult with translated text and detected source language code
         """
         # Generate hash for the text
         text_hash = hashlib.md5(text.encode()).hexdigest()
@@ -289,9 +282,9 @@ class TranslationService:
         cache_key = self._get_cache_key(text_hash, dest_language)
         if cache_key in self.translation_cache:
             # Move the item to the end of the OrderedDict to mark it as recently used
-            translated_text = self.translation_cache.pop(cache_key)
-            self.translation_cache[cache_key] = translated_text
-            return translated_text
+            cached = self.translation_cache.pop(cache_key)
+            self.translation_cache[cache_key] = cached
+            return cached
 
         try:
             # Not in cache, perform translation
@@ -302,15 +295,19 @@ class TranslationService:
                 target_language_code=dest_language,
             )
 
-            translated_text = response.translations[0].translated_text
+            translation = response.translations[0]
+            result = TranslationResult(
+                text=translation.translated_text,
+                detected_language_code=translation.detected_language_code or None,
+            )
 
             # Add to cache
             if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
                 # Remove oldest item (first item in OrderedDict)
                 self.translation_cache.popitem(last=False)
 
-            self.translation_cache[cache_key] = translated_text
-            return translated_text
+            self.translation_cache[cache_key] = result
+            return result
         except Exception as e:
             print(f"Translation error: {e}")
-            return text  # Return original text if translation fails
+            return TranslationResult(text=text)  # Return original text if translation fails
