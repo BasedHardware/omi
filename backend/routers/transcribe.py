@@ -1185,12 +1185,76 @@ async def _stream_handler(
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
+    # Debounce state for translation: prevents re-translating growing segments on every 0.6s tick
+    _segment_debounce: dict = {}  # segment_id → {text_hash, generation, task}
+    TRANSLATE_DEBOUNCE_SEC = 1.0
+
+    async def _translate_segment(segment: TranscriptSegment, conversation_id: str):
+        """Translate a single segment and persist/notify. Returns True if translation was applied."""
+        if not translation_language:
+            return False
+
+        segment_text = segment.text.strip()
+        if not segment_text:
+            return False
+
+        # Language Detection
+        if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
+            return False
+
+        # Translation
+        translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
+
+        if translated_text == segment_text:
+            language_cache.delete_cache(segment.id)
+            return False
+
+        # Create/Update Translation object
+        translation = Translation(lang=translation_language, text=translated_text)
+        if segment.translations is not None:
+            existing_translation_index = next(
+                (i for i, t in enumerate(segment.translations) if t.lang == language), None
+            )
+            if existing_translation_index is not None:
+                segment.translations[existing_translation_index] = translation
+            else:
+                segment.translations.append(translation)
+
+        # Persist
+        conversation = conversations_db.get_conversation(uid, conversation_id)
+        if conversation:
+            for i, existing_segment in enumerate(conversation['transcript_segments']):
+                if existing_segment['id'] == segment.id:
+                    conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                    conversations_db.update_conversation_segments(
+                        uid, conversation_id, conversation['transcript_segments']
+                    )
+                    break
+
+        # Notify
+        if websocket_active:
+            _send_message_event(TranslationEvent(segments=[segment.dict()]))
+
+        return True
+
+    async def _debounced_translate_task(segment_id: str, segment: TranscriptSegment, conversation_id: str, generation: int):
+        """Wait for debounce window, then translate if generation is still current."""
+        try:
+            await asyncio.sleep(TRANSLATE_DEBOUNCE_SEC)
+            state = _segment_debounce.get(segment_id)
+            if not state or state['generation'] != generation:
+                return  # Stale — a newer update superseded this one
+            await _translate_segment(segment, conversation_id)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Debounced translation error: {e}", uid, session_id)
+
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         if not translation_language:
             return
 
         try:
-            translated_segments = []
             for segment in segments:
                 if not segment or not segment.id:
                     continue
@@ -1199,52 +1263,30 @@ async def _stream_handler(
                 if not segment_text:
                     continue
 
-                # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
-                    continue
+                text_hash = hash(segment_text)
+                state = _segment_debounce.get(segment.id)
 
-                # Translation
-                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
-
-                if translated_text == segment_text:
-                    # If translation is same as original, it's likely in the target language.
-                    # Delete from cache to allow re-evaluation if more text is added.
-                    language_cache.delete_cache(segment.id)
-                    continue
-
-                # Create/Update Translation object
-                translation = Translation(lang=translation_language, text=translated_text)
-                if segment.translations is not None:
-                    existing_translation_index = next(
-                        (i for i, t in enumerate(segment.translations) if t.lang == language), None
+                if state is None:
+                    # First time seeing this segment — translate immediately (zero UX delay)
+                    _segment_debounce[segment.id] = {'text_hash': text_hash, 'generation': 0, 'task': None}
+                    await _translate_segment(segment, conversation_id)
+                elif state['text_hash'] != text_hash:
+                    # Text changed — cancel pending debounce, schedule new one
+                    if state['task'] and not state['task'].done():
+                        state['task'].cancel()
+                    state['generation'] += 1
+                    state['text_hash'] = text_hash
+                    state['task'] = asyncio.create_task(
+                        _debounced_translate_task(segment.id, segment, conversation_id, state['generation'])
                     )
-                    if existing_translation_index is not None:
-                        segment.translations[existing_translation_index] = translation
-                    else:
-                        segment.translations.append(translation)
+                # else: same text hash — skip (already translated or debounce pending)
 
-                translated_segments.append(segment)
-
-            if not translated_segments:
-                return
-
-            # Persist and notify
-            conversation = conversations_db.get_conversation(uid, conversation_id)
-            if conversation:
-                should_update = False
-                for segment in translated_segments:
-                    for i, existing_segment in enumerate(conversation['transcript_segments']):
-                        if existing_segment['id'] == segment.id:
-                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
-                            should_update = True
-                            break
-                if should_update:
-                    conversations_db.update_conversation_segments(
-                        uid, conversation_id, conversation['transcript_segments']
-                    )
-
-            if websocket_active:
-                _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
+            # Prune old debounce state (segments not seen for 30+ seconds)
+            stale_ids = [sid for sid, s in _segment_debounce.items()
+                         if s.get('task') and s['task'].done()]
+            for sid in stale_ids:
+                if sid not in {s.id for s in segments if s}:
+                    del _segment_debounce[sid]
 
         except Exception as e:
             print(f"Translation error: {e}", uid, session_id)
