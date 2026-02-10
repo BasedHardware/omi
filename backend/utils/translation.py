@@ -8,7 +8,6 @@ from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 
-
 # LRU Cache for language detection
 detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
@@ -237,11 +236,14 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
 
 
 def split_into_sentences(text: str) -> List[str]:
-    """Splits text into sentences based on punctuation."""
+    """Splits text into sentences based on sentence-ending punctuation (.?!) and newlines.
+
+    Does NOT split on commas — comma-separated clauses stay together for better
+    translation quality and fewer API calls.
+    """
     if not text:
         return []
-    # Find all sequences of characters that are not .?!,, followed by an optional .?!,, and optional whitespace.
-    sentences = re.findall(r'[^.?!,]+(?:[.?!,]\s*|\s*$)', text)
+    sentences = re.findall(r'[^.?!\n]+(?:[.?!]\s*|\n|\s*$)', text)
     return [s.strip() for s in sentences if s.strip()]
 
 
@@ -256,19 +258,55 @@ class TranslationService:
 
     def translate_text_by_sentence(self, dest_language: str, text: str) -> str:
         """
-        Translates text by splitting it into sentences, translating each, and rejoining.
-        Maximizes cache hits by translating sentence by sentence.
+        Translates text by splitting into sentences, checking cache per-sentence,
+        then batching all cache misses into a single API call.
         """
         if not text:
             return ""
 
         sentences = split_into_sentences(text)
-        translated_sentences = []
-        for sentence in sentences:
-            # Each sentence translation will hit the cache if seen before.
-            translated_sentences.append(self.translate_text(dest_language, sentence))
+        if not sentences:
+            return text
 
-        return ' '.join(translated_sentences)
+        results = {}
+        misses = []  # (index, sentence) pairs for cache-miss sentences
+
+        # Check in-memory cache for each sentence
+        for i, sentence in enumerate(sentences):
+            text_hash = hashlib.md5(sentence.encode()).hexdigest()
+            cache_key = self._get_cache_key(text_hash, dest_language)
+            if cache_key in self.translation_cache:
+                translated = self.translation_cache.pop(cache_key)
+                self.translation_cache[cache_key] = translated
+                results[i] = translated
+            else:
+                misses.append((i, sentence))
+
+        # Batch-translate all cache misses in one API call
+        if misses:
+            try:
+                response = _client.translate_text(
+                    contents=[s for _, s in misses],
+                    parent=_parent,
+                    mime_type=_mime_type,
+                    target_language_code=dest_language,
+                )
+                for (idx, sentence), translation in zip(misses, response.translations):
+                    translated_text = translation.translated_text
+                    results[idx] = translated_text
+                    # Cache each translated sentence
+                    text_hash = hashlib.md5(sentence.encode()).hexdigest()
+                    cache_key = self._get_cache_key(text_hash, dest_language)
+                    if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
+                        self.translation_cache.popitem(last=False)
+                    self.translation_cache[cache_key] = translated_text
+            except Exception as e:
+                print(f"Batch translation error: {e}")
+                # Fall back to original text for missed sentences
+                for idx, sentence in misses:
+                    results[idx] = sentence
+
+        return ' '.join(results[i] for i in range(len(sentences)))
 
     def translate_text(self, dest_language: str, text: str) -> str:
         """
