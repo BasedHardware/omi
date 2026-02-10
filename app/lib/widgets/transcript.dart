@@ -559,39 +559,40 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
                       children: [
                         Flexible(
-                          child: GestureDetector(
-                            onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
-                                ? () {
-                                    HapticFeedback.mediumImpact();
-                                    widget.onEditSegmentText!(segmentIdx);
-                                  }
-                                : null,
-                            child: Container(
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.75,
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.75,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(isUser
+                                    ? 18
+                                    : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
+                                        ? 6
+                                        : 18),
+                                topRight: Radius.circular(isUser ? 18 : 18),
+                                bottomLeft: Radius.circular(18),
+                                bottomRight: Radius.circular(isUser ? 6 : 18),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
-                                borderRadius: BorderRadius.only(
-                                  topLeft: Radius.circular(isUser
-                                      ? 18
-                                      : (segmentIdx > 0 && !widget.segments[segmentIdx - 1].isUser)
-                                          ? 6
-                                          : 18),
-                                  topRight: Radius.circular(isUser ? 18 : 18),
-                                  bottomLeft: Radius.circular(18),
-                                  bottomRight: Radius.circular(isUser ? 6 : 18),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                              child: SelectionArea(
+                              ],
+                            ),
+                            child: SelectionArea(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
+                                    ? () {
+                                        HapticFeedback.mediumImpact();
+                                        widget.onEditSegmentText!(segmentIdx);
+                                      }
+                                    : null,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
