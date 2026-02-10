@@ -512,6 +512,11 @@ class BulkAssignSegmentsRequest(BaseModel):
     value: Optional[str] = None
 
 
+class UpdateSegmentTextRequest(BaseModel):
+    segment_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=10000)
+
+
 class DeleteActionItemRequest(BaseModel):
     description: str
     completed: bool
