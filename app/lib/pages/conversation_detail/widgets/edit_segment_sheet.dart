@@ -8,6 +8,7 @@ void showEditSegmentBottomSheet(
   required TranscriptSegment segment,
   required String speakerName,
   required Function(String newText) onSave,
+  VoidCallback? onDismissed,
 }) {
   showModalBottomSheet(
     context: context,
@@ -17,7 +18,7 @@ void showEditSegmentBottomSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (context) => _EditSegmentSheet(segment: segment, speakerName: speakerName, onSave: onSave),
-  );
+  ).whenComplete(() => onDismissed?.call());
 }
 
 class _EditSegmentSheet extends StatefulWidget {
