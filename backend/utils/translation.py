@@ -257,9 +257,12 @@ class TranslationService:
 
         translated_text = ' '.join(r.text for r in results)
 
-        # Aggregate detected language: use it only if all sentences agree
-        detected_langs = {r.detected_language_code for r in results if r.detected_language_code}
-        detected_language_code = detected_langs.pop() if len(detected_langs) == 1 else None
+        # Aggregate detected language: only if ALL sentences have a non-null code and they all match
+        detected_langs = [r.detected_language_code for r in results]
+        if detected_langs and all(d is not None for d in detected_langs) and len(set(detected_langs)) == 1:
+            detected_language_code = detected_langs[0]
+        else:
+            detected_language_code = None
 
         return TranslationResult(text=translated_text, detected_language_code=detected_language_code)
 

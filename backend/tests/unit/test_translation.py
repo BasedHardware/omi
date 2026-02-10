@@ -185,6 +185,33 @@ class TestTranslateTextBySentence:
         finally:
             translation._client = original_client
 
+    def test_partial_detection_returns_none(self):
+        """If some sentences have None detection, don't treat detected ones as authoritative."""
+        from utils import translation
+        mock_client = MagicMock()
+        call_count = [0]
+
+        def mock_translate(contents, parent, mime_type, target_language_code):
+            mock_t = MagicMock()
+            mock_t.translated_text = f"translated_{contents[0]}"
+            # First sentence detects "en", second returns None (API quirk/error)
+            mock_t.detected_language_code = "en" if call_count[0] == 0 else ""
+            call_count[0] += 1
+            mock_r = MagicMock()
+            mock_r.translations = [mock_t]
+            return mock_r
+
+        mock_client.translate_text.side_effect = mock_translate
+
+        original_client = translation._client
+        translation._client = mock_client
+        try:
+            result = self.service.translate_text_by_sentence("en", "Hello world. Goodbye world.")
+            # Should NOT skip translation — one sentence had no detection
+            assert result.detected_language_code is None
+        finally:
+            translation._client = original_client
+
     def test_mixed_languages_returns_none(self):
         from utils import translation
         mock_client = MagicMock()
