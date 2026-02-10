@@ -35,10 +35,11 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
+import 'widgets/edit_segment_sheet.dart';
 import 'widgets/name_speaker_sheet.dart';
 import 'widgets/share_to_contacts_sheet.dart';
 
-// import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/preferences.dart';
 
 // import 'share.dart';
 // import 'package:omi/pages/settings/developer.dart';
@@ -1434,6 +1435,26 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 currentResultIndex: widget.currentResultIndex,
                 onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 onSegmentTap: widget.onSegmentTap,
+                onEditSegmentText: (segmentIndex) {
+                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                  if (!connectivityProvider.isConnected) {
+                    ConnectivityProvider.showNoInternetDialog(context);
+                    return;
+                  }
+                  final segments = provider.conversation.transcriptSegments;
+                  final segment = segments[segmentIndex];
+                  final person =
+                      segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                  final speakerName = person?.name ??
+                      context.l10n
+                          .speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
+                  showEditSegmentBottomSheet(
+                    context,
+                    segment: segment,
+                    speakerName: speakerName,
+                    onSave: (newText) => provider.saveEditingSegmentText(segmentIndex, newText),
+                  );
+                },
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
