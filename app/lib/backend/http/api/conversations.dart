@@ -124,6 +124,17 @@ Future<bool> updateConversationTitle(String conversationId, String title) async 
   return response.statusCode == 200;
 }
 
+Future<bool> updateConversationSegmentText(String conversationId, String segmentId, String text) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/text',
+    headers: {'Content-Type': 'application/json'},
+    method: 'PATCH',
+    body: jsonEncode({'segment_id': segmentId, 'text': text}),
+  );
+  if (response == null) return false;
+  return response.statusCode == 200;
+}
+
 Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/photos',

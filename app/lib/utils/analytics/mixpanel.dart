@@ -552,6 +552,12 @@ class MixpanelManager {
 
   void untaggedSegment() => track('Untagged Segment');
 
+  void editSegmentTextStarted() => track('Edit Segment Text Started');
+
+  void editSegmentTextSaved() => track('Edit Segment Text Saved');
+
+  void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
+
   void deleteAccountClicked() => track('Delete Account Clicked');
 
   void deleteAccountConfirmed() => track('Delete Account Confirmed');
