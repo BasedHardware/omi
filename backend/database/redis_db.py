@@ -791,6 +791,26 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
+# ******************************************************
+# ************ TRANSLATION CACHE ***********************
+# ******************************************************
+
+
+@try_catch_decorator
+def cache_translation(text_hash: str, dest_language: str, translated_text: str, ttl: int = 60 * 60 * 24 * 14):
+    """Cache a translation result globally. TTL defaults to 14 days."""
+    r.set(f'translate:v1:{text_hash}:{dest_language}', translated_text, ex=ttl)
+
+
+@try_catch_decorator
+def get_cached_translation(text_hash: str, dest_language: str) -> Optional[str]:
+    """Retrieve a cached translation. Returns None on miss or Redis failure."""
+    result = r.get(f'translate:v1:{text_hash}:{dest_language}')
+    if not result:
+        return None
+    return result.decode()
+
+
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)

@@ -8,7 +8,6 @@ from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 
-
 # LRU Cache for language detection
 detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
@@ -273,7 +272,7 @@ class TranslationService:
     def translate_text(self, dest_language: str, text: str) -> str:
         """
         Translates text to the specified destination language using Google Cloud Translation API.
-        Uses a cache to avoid redundant translations.
+        Uses a two-tier cache: in-memory (per-session) and Redis (global, persistent).
 
         Args:
             dest_language: The language code to translate to (e.g., 'en', 'es', 'fr')
@@ -282,19 +281,29 @@ class TranslationService:
         Returns:
             The translated text as a string
         """
+        from database.redis_db import get_cached_translation, cache_translation
+
         # Generate hash for the text
         text_hash = hashlib.md5(text.encode()).hexdigest()
 
-        # Check if translation is in cache
+        # Tier 1: Check in-memory cache (fast, per-session)
         cache_key = self._get_cache_key(text_hash, dest_language)
         if cache_key in self.translation_cache:
-            # Move the item to the end of the OrderedDict to mark it as recently used
             translated_text = self.translation_cache.pop(cache_key)
             self.translation_cache[cache_key] = translated_text
             return translated_text
 
+        # Tier 2: Check Redis cache (global, persistent across sessions/users)
+        cached = get_cached_translation(text_hash, dest_language)
+        if cached is not None:
+            # Populate in-memory cache for fast subsequent access
+            if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
+                self.translation_cache.popitem(last=False)
+            self.translation_cache[cache_key] = cached
+            return cached
+
         try:
-            # Not in cache, perform translation
+            # Cache miss — call Google Translate API
             response = _client.translate_text(
                 contents=[text],
                 parent=_parent,
@@ -304,12 +313,12 @@ class TranslationService:
 
             translated_text = response.translations[0].translated_text
 
-            # Add to cache
+            # Store in both caches
             if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
-                # Remove oldest item (first item in OrderedDict)
                 self.translation_cache.popitem(last=False)
-
             self.translation_cache[cache_key] = translated_text
+            cache_translation(text_hash, dest_language, translated_text)
+
             return translated_text
         except Exception as e:
             print(f"Translation error: {e}")
