@@ -8,7 +8,7 @@ from utils.llms.memory import get_prompt_memories
 def get_proactive_message(
     uid: str, plugin_prompt: str, params: [str], context: str, chat_messages: List[Message]
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid, context=context, k=20)
 
     prompt = plugin_prompt
     for param in params:

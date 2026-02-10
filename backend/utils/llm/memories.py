@@ -50,7 +50,7 @@ def new_memories_extractor(
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
-        user_name, memories_str = get_prompt_memories(uid)
+        user_name, memories_str, _ = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
     people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
@@ -90,7 +90,7 @@ def extract_memories_from_text(
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
-        user_name, memories_str = get_prompt_memories(uid)
+        user_name, memories_str, _ = get_prompt_memories(uid, context=text)
 
     if not text or len(text) == 0:
         return []
@@ -132,7 +132,7 @@ def new_learnings_extractor(
     uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, learnings_str: Optional[str] = None
 ) -> List[Memory]:
     if user_name is None or learnings_str is None:
-        user_name, memories_str = get_prompt_memories(uid)
+        user_name, memories_str, _ = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
     people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []

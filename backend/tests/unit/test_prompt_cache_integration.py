@@ -112,7 +112,7 @@ llms_mod = _stub_module("utils.llms")
 if not hasattr(llms_mod, "__path__"):
     llms_mod.__path__ = []
 llms_memory_mod = _stub_module("utils.llms.memory")
-llms_memory_mod.get_prompt_memories = MagicMock(return_value=("TestUser", "Some facts"))
+llms_memory_mod.get_prompt_memories = MagicMock(return_value=("TestUser", "Some facts", "abc12345"))
 
 # --- Observability stubs ---
 obs_mod = _stub_module("utils.observability")

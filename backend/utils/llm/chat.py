@@ -26,7 +26,7 @@ from utils.llms.memory import get_prompt_memories
 
 
 def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_str: str = '') -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid)
     if plugin is None:
         prompt = f"""
 You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
@@ -228,7 +228,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     conversation_history = Message.get_messages_as_string(
         messages, use_user_name_if_available=True, use_plugin_name_if_available=True
     )
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid)
 
     plugin_info = ""
     if app:
@@ -300,7 +300,7 @@ def _get_qa_rag_prompt(
     messages: List[Message] = [],
     tz: Optional[str] = "UTC",
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid, context=question)
     memories_str = '\n'.join(memories_str.split('\n')[1:]).strip()
 
     # Use as template (make sure it varies every time): "If I were you $user_name I would do x, y, z."
@@ -862,7 +862,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
 
 
 def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid, context=context)
 
     person_ids = memory.get_person_ids()
     people = []
@@ -1264,7 +1264,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
 
 
 def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid)
 
     person_ids = list(set(segment.person_id for segment in segments if segment.person_id))
     people = []
@@ -1301,7 +1301,7 @@ class OutputMessage(BaseModel):
 
 
 def provide_advice_message(uid: str, segments: List[TranscriptSegment], context: str) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid, context=context)
 
     person_ids = [s.person_id for s in segments if s.person_id]
     people = []

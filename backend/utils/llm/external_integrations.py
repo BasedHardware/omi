@@ -78,7 +78,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid)
 
     all_person_ids = []
     for m in memories:
@@ -131,7 +131,7 @@ def generate_comprehensive_daily_summary(
     except Exception:
         user_tz = pytz.UTC
 
-    user_name, memories_str = get_prompt_memories(uid)
+    user_name, memories_str, _ = get_prompt_memories(uid)
 
     all_person_ids = []
     for m in conversations:

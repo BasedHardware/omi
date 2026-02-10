@@ -86,7 +86,7 @@ llms_mod = _stub_module("utils.llms")
 if not hasattr(llms_mod, '__path__'):
     llms_mod.__path__ = []
 _stub_module("utils.llms.memory")
-sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=("TestUser", "some memories"))
+sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=("TestUser", "some memories", "abc12345"))
 
 # --- Import real usage_tracker ---
 from utils.llm.usage_tracker import _usage_context, Features
