@@ -50,6 +50,24 @@ mock_redis.get = MagicMock(return_value=None)
 mock_redis.setex = MagicMock()
 redis_db_mod.r = mock_redis
 
+
+def _reset_mocks():
+    """Reset all mocks to clean state — call in setup_method to avoid cross-test contamination."""
+    import database.redis_db as _rdb
+
+    mock_redis.reset_mock()
+    mock_redis.get.return_value = None
+    _rdb.r = mock_redis
+    memories_db_mod.get_memories.reset_mock()
+    memories_db_mod.get_memories.return_value = []
+    memories_db_mod.get_memories_by_ids.reset_mock()
+    memories_db_mod.get_memories_by_ids.return_value = []
+    vector_db_mod.search_memories_by_vector.reset_mock()
+    vector_db_mod.search_memories_by_vector.return_value = []
+    vector_db_mod.search_memories_by_vector.side_effect = None
+    auth_mod.get_user_name.return_value = "TestUser"
+
+
 vector_db_mod = _stub_module("database.vector_db")
 vector_db_mod.search_memories_by_vector = MagicMock(return_value=[])
 
@@ -92,6 +110,9 @@ def _make_memories(n, manually_added=False):
 
 class TestTopKLimit:
     """Part A: Top-K retrieval with configurable limit."""
+
+    def setup_method(self):
+        _reset_mocks()
 
     def test_default_k_is_50(self):
         """get_prompt_data defaults to k=50."""
@@ -137,6 +158,9 @@ class TestTopKLimit:
 
 class TestSemanticRetrieval:
     """Part A: Pinecone semantic search when context is provided."""
+
+    def setup_method(self):
+        _reset_mocks()
 
     def test_context_triggers_pinecone_search(self):
         """When context is provided, Pinecone search is attempted."""
@@ -185,6 +209,9 @@ class TestSemanticRetrieval:
 
 class TestVersionHash:
     """Part B: Deterministic versioned memory packs."""
+
+    def setup_method(self):
+        _reset_mocks()
 
     def test_deterministic_hash(self):
         """Same memories always produce the same hash."""
@@ -239,6 +266,9 @@ class TestVersionHash:
 
 class TestRedisCache:
     """Part C: Application-level caching."""
+
+    def setup_method(self):
+        _reset_mocks()
 
     def test_cache_miss_fetches_from_db(self):
         """On cache miss, fetches from Firestore."""
@@ -321,6 +351,9 @@ class TestRedisCache:
 
 class TestReturnSignature:
     """Verify the new return signature works with all call patterns."""
+
+    def setup_method(self):
+        _reset_mocks()
 
     def test_three_tuple_return(self):
         """get_prompt_memories returns (user_name, memories_str, version)."""
