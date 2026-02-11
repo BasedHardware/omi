@@ -1,0 +1,27 @@
+# Maestro E2E Test Configuration for Omi App
+# https://maestro.mobile.dev/
+
+appId: com.friend.ios.dev
+
+# Flow execution settings
+flows:
+  - "flows/*"
+
+# Default output directory for reports
+output:
+  path: report/
+
+# Tags for selective test execution
+tags:
+  core:
+    - "flows/01_onboarding.yaml"
+    - "flows/02_conversations_list.yaml"
+    - "flows/03_conversation_detail.yaml"
+    - "flows/04_conversation_crud.yaml"
+    - "flows/05_memories.yaml"
+    - "flows/06_chat.yaml"
+    - "flows/07_apps.yaml"
+    - "flows/08_settings.yaml"
+  device_required:
+    - "flows/09_device_connection.yaml"
+    - "flows/10_recording.yaml"
