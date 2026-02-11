@@ -224,12 +224,14 @@ def _process_proactive_notification(uid: str, app: App, data):
         return None
 
     # Short-circuit for tool-based proactive notifications (already have notification text)
-    if data.get('source') == 'tool' and data.get('notification_text'):
-        message = data['notification_text']
-        send_app_notification(uid, app.name, app.id, message)
+    if data.get('source') == 'tool' and data.get('notifications'):
+        messages_sent = []
+        for noti in data['notifications']:
+            send_app_notification(uid, app.name, app.id, noti['notification_text'])
+            print(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
+            messages_sent.append(noti['notification_text'])
         _set_proactive_noti_sent_at(uid, app)
-        print(f"Sent proactive tool notification to user {uid} (tool: {data.get('tool_name')})")
-        return message
+        return "\n\n".join(messages_sent)
 
     max_prompt_char_limit = 128000
     min_message_char_limit = 5

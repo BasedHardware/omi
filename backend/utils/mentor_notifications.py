@@ -181,12 +181,12 @@ PROACTIVE_TOOLS = [
 ]
 
 
-def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], frequency: int) -> Dict[str, Any] | None:
+def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], frequency: int) -> List[Dict[str, Any]]:
     """
     Attempt to detect proactive triggers via tool calling.
 
-    Returns a dict with notification_text + metadata if a tool fires with sufficient
-    confidence, or None if no trigger applies.
+    Returns a list of notification dicts (one per triggered tool that passes the
+    confidence threshold). Empty list if no triggers apply.
     """
     try:
         # Load user context
@@ -206,10 +206,18 @@ def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], freque
         conversation_text = "\n".join(lines)
 
         system_prompt = (
-            f"You are {user_name}'s proactive AI mentor. "
+            f"You are {user_name}'s proactive AI mentor and trusted friend. "
+            "You may call multiple tools if multiple triggers clearly apply. "
             "Call a tool ONLY when the conversation clearly matches a trigger. "
-            "If no trigger applies, respond with no tool calls. "
-            "Be direct and empathetic. Notification text must be <300 chars."
+            "If no trigger applies, respond with no tool calls.\n\n"
+            "IMPORTANT RULES:\n"
+            "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
+            "- Reference specific details from the conversation (names, situations, feelings)\n"
+            "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
+            "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
+            "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
+            "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
+            "- Always end with a gentle question or suggestion, never a lecture"
         )
 
         user_message = (
@@ -225,38 +233,43 @@ def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], freque
 
         if not resp.tool_calls:
             logger.info(f"proactive_tool_decision uid={uid} triggered=false")
-            return None
+            return []
 
-        tool_call = resp.tool_calls[0]
-        tool_name = tool_call["name"]
-        tool_args = tool_call["args"]
-        confidence = tool_args.get("confidence", 0)
-        notification_text = tool_args.get("notification_text", "")
+        results = []
+        for tool_call in resp.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            confidence = tool_args.get("confidence", 0)
+            notification_text = tool_args.get("notification_text", "")
 
-        logger.info(
-            f"proactive_tool_decision uid={uid} triggered=true "
-            f"tool={tool_name} confidence={confidence:.2f} "
-            f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
-        )
+            logger.info(
+                f"proactive_tool_decision uid={uid} triggered=true "
+                f"tool={tool_name} confidence={confidence:.2f} "
+                f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
+            )
 
-        if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
-            logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
-            return None
+            if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
+                logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
+                continue
 
-        if not notification_text or len(notification_text) < 5:
-            logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
-            return None
+            if not notification_text or len(notification_text) < 5:
+                logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
+                continue
 
-        return {
-            "notification_text": notification_text,
-            "tool_name": tool_name,
-            "tool_args": tool_args,
-            "source": "tool",
-        }
+            results.append(
+                {
+                    "notification_text": notification_text,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                }
+            )
+
+        logger.info(f"proactive_tool_results uid={uid} total_calls={len(resp.tool_calls)} accepted={len(results)}")
+        return results
 
     except Exception as e:
         logger.error(f"proactive_tool_error uid={uid} error={e}")
-        return None
+        return []
 
 
 def extract_topics(discussion_text: str) -> List[str]:
@@ -462,10 +475,11 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
         buffer_data['messages'] = []  # Clear buffer after analysis
 
         # Try proactive tool calling first
-        tool_result = _try_proactive_tools(uid, sorted_messages, frequency)
-        if tool_result:
-            logger.info(f"Proactive tool triggered for user {uid} (tool: {tool_result['tool_name']})")
-            return tool_result
+        tool_results = _try_proactive_tools(uid, sorted_messages, frequency)
+        if tool_results:
+            tools_str = ", ".join(r['tool_name'] for r in tool_results)
+            logger.info(f"Proactive tools triggered for user {uid} ({len(tool_results)} tools: {tools_str})")
+            return {"source": "tool", "notifications": tool_results}
 
         # Fall back to existing prompt-based mentor notification
         notification_data = create_notification_data(sorted_messages, frequency)

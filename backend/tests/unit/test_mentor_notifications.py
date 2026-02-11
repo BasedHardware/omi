@@ -243,13 +243,12 @@ def test_try_proactive_tools_triggered():
         {"text": "I feel so frustrated with work", "timestamp": 1002, "is_user": True},
     ]
 
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
 
-    assert result is not None
-    assert result["source"] == "tool"
-    assert result["tool_name"] == "trigger_emotional_support"
-    assert "tough day" in result["notification_text"]
-    assert result["tool_args"]["confidence"] == 0.85
+    assert len(results) == 1
+    assert results[0]["tool_name"] == "trigger_emotional_support"
+    assert "tough day" in results[0]["notification_text"]
+    assert results[0]["tool_args"]["confidence"] == 0.85
 
     # Verify bind_tools was called with our tool defs
     mock_llm_mini.bind_tools.assert_called_once()
@@ -276,12 +275,12 @@ def test_try_proactive_tools_no_trigger():
         {"text": "Yeah pretty sunny", "timestamp": 1001, "is_user": False},
     ]
 
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
-    assert result is None
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
+    assert results == []
 
 
 def test_try_proactive_tools_low_confidence():
-    """_try_proactive_tools should return None when confidence is below threshold."""
+    """_try_proactive_tools should return empty list when confidence is below threshold."""
     from utils.mentor_notifications import _try_proactive_tools, PROACTIVE_CONFIDENCE_THRESHOLD
 
     mock_get_prompt_memories.return_value = ("Carol", "Carol is a teacher.")
@@ -307,8 +306,8 @@ def test_try_proactive_tools_low_confidence():
         {"text": "My coworker said something I disagree with", "timestamp": 1000, "is_user": True},
     ]
 
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
-    assert result is None
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
+    assert results == []
     assert PROACTIVE_CONFIDENCE_THRESHOLD == 0.7
 
 
@@ -342,12 +341,11 @@ def test_try_proactive_tools_goal_misalignment():
         {"text": "Yeah I just don't feel like it", "timestamp": 1002, "is_user": True},
     ]
 
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
 
-    assert result is not None
-    assert result["tool_name"] == "trigger_goal_misalignment"
-    assert result["tool_args"]["goal_name"] == "Exercise 3x per week"
-    assert result["source"] == "tool"
+    assert len(results) == 1
+    assert results[0]["tool_name"] == "trigger_goal_misalignment"
+    assert results[0]["tool_args"]["goal_name"] == "Exercise 3x per week"
     # Verify goals were fetched
     mock_get_user_goals.assert_called_with("test_uid")
 
@@ -359,9 +357,9 @@ def test_try_proactive_tools_handles_exception():
     mock_get_prompt_memories.side_effect = Exception("DB connection failed")
 
     messages = [{"text": "hello", "timestamp": 1000, "is_user": True}]
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
 
-    assert result is None
+    assert results == []
     mock_get_prompt_memories.side_effect = None
 
 
@@ -388,9 +386,9 @@ def test_try_proactive_tools_empty_notification_text():
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
     messages = [{"text": "I feel sad", "timestamp": 1000, "is_user": True}]
-    result = _try_proactive_tools("test_uid", messages, frequency=3)
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
 
-    assert result is None
+    assert results == []
 
 
 def test_process_mentor_notification_tries_tools_first():
@@ -431,8 +429,10 @@ def test_process_mentor_notification_tries_tools_first():
 
     assert result is not None
     assert result.get("source") == "tool"
-    assert result["tool_name"] == "trigger_argument_perspective"
-    assert "deadline" in result["notification_text"] or "valid point" in result["notification_text"]
+    assert len(result["notifications"]) == 1
+    assert result["notifications"][0]["tool_name"] == "trigger_argument_perspective"
+    noti_text = result["notifications"][0]["notification_text"]
+    assert "deadline" in noti_text or "valid point" in noti_text
 
 
 def test_process_mentor_notification_falls_back_to_prompt():
@@ -519,3 +519,139 @@ def test_no_goals_shows_placeholder():
     invoke_call = mock_bound.invoke.call_args[0][0]
     user_msg_content = invoke_call[1].content
     assert "No goals set" in user_msg_content
+
+
+def test_multiple_tool_calls():
+    """_try_proactive_tools should return multiple results when multiple tools fire."""
+    from utils.mentor_notifications import _try_proactive_tools
+
+    mock_get_prompt_memories.return_value = ("Jane", "Jane is stressed about work and fitness.")
+    mock_get_user_goals.return_value = [{"title": "Exercise daily", "is_active": True}]
+
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Jane, sounds like a rough day. Try a 5-min breathing exercise?",
+                "detected_emotion": "stress",
+                "suggested_action": "Breathing exercise",
+                "confidence": 0.9,
+            },
+        },
+        {
+            "name": "trigger_goal_misalignment",
+            "args": {
+                "notification_text": "Jane, skipping your workout goes against your daily exercise goal.",
+                "goal_name": "Exercise daily",
+                "conflict_description": "Canceling workout contradicts exercise goal",
+                "confidence": 0.85,
+            },
+        },
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    messages = [
+        {"text": "I'm so stressed today, I'm canceling my workout", "timestamp": 1000, "is_user": True},
+        {"text": "Are you sure?", "timestamp": 1001, "is_user": False},
+        {"text": "Yeah I just can't deal with anything right now", "timestamp": 1002, "is_user": True},
+    ]
+
+    results = _try_proactive_tools("test_uid_jane", messages, frequency=3)
+
+    assert len(results) == 2
+    assert results[0]["tool_name"] == "trigger_emotional_support"
+    assert results[1]["tool_name"] == "trigger_goal_misalignment"
+
+
+def test_multiple_tools_mixed_confidence():
+    """Only tool calls above confidence threshold should be included."""
+    from utils.mentor_notifications import _try_proactive_tools
+
+    mock_get_prompt_memories.return_value = ("Kim", "Kim is a developer.")
+    mock_get_user_goals.return_value = []
+
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Kim, take a break.",
+                "detected_emotion": "frustration",
+                "confidence": 0.8,  # Above threshold
+            },
+        },
+        {
+            "name": "trigger_argument_perspective",
+            "args": {
+                "notification_text": "Maybe they have a point.",
+                "other_person": "manager",
+                "confidence": 0.3,  # Below threshold
+                "rationale": "Mild disagreement",
+            },
+        },
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    messages = [{"text": "My manager is annoying and I'm frustrated", "timestamp": 1000, "is_user": True}]
+
+    results = _try_proactive_tools("test_uid_kim", messages, frequency=3)
+
+    assert len(results) == 1
+    assert results[0]["tool_name"] == "trigger_emotional_support"
+
+
+def test_process_mentor_notification_multiple_tools():
+    """process_mentor_notification should return multiple notifications in the result."""
+    from utils.mentor_notifications import process_mentor_notification, message_buffer
+
+    message_buffer.buffers.clear()
+
+    mock_get_prompt_memories.return_value = ("Lisa", "Lisa is a busy parent.")
+    mock_get_user_goals.return_value = [{"title": "Spend more time with kids", "is_active": True}]
+
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_goal_misalignment",
+            "args": {
+                "notification_text": "Lisa, working late again conflicts with your family time goal.",
+                "goal_name": "Spend more time with kids",
+                "conflict_description": "Working late reduces family time",
+                "confidence": 0.92,
+            },
+        },
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Lisa, you sound overwhelmed. Can you delegate one task today?",
+                "detected_emotion": "overwhelm",
+                "suggested_action": "Delegate one task",
+                "confidence": 0.78,
+            },
+        },
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    segments = [
+        {"text": "I have to work late again tonight", "start": 1000, "is_user": True},
+        {"text": "The kids will miss you", "start": 1001, "is_user": False},
+        {"text": "I know, I feel terrible about it", "start": 1002, "is_user": True},
+    ]
+
+    result = process_mentor_notification("test_uid_lisa", segments)
+
+    assert result is not None
+    assert result["source"] == "tool"
+    assert len(result["notifications"]) == 2
+    assert result["notifications"][0]["tool_name"] == "trigger_goal_misalignment"
+    assert result["notifications"][1]["tool_name"] == "trigger_emotional_support"
