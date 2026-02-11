@@ -19,9 +19,10 @@ void main(List<String> args) {
   final results = <String, Map<String, dynamic>>{};
 
   // Find the most recent JSON result files
-  final tmpDir = Directory('/tmp');
+  final reportDir = Platform.environment['PERF_REPORT_DIR'] ?? '/tmp';
+  final tmpDir = Directory(reportDir);
   if (!tmpDir.existsSync()) {
-    stderr.writeln('Error: /tmp directory not found');
+    stderr.writeln('Error: report directory not found: $reportDir');
     exit(1);
   }
 
