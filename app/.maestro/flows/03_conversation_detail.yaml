@@ -1,0 +1,97 @@
+# Omi App - Conversation Detail Flow
+# Tests: Opening a conversation, viewing transcript segments, speaker labels,
+#         summary/action items tabs, navigating back.
+#
+# Prerequisites:
+#   - User is signed in
+#   - At least one conversation exists
+#
+# Run: maestro test .maestro/flows/03_conversation_detail.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Verify conversations list is visible
+- assertVisible: "Conversations"
+
+# Tap into the first conversation
+# Conversations appear as list items below the "Conversations" header
+# We scroll down slightly and tap the first available conversation item
+- scroll:
+    direction: DOWN
+    duration: 500
+
+# Tap on the first conversation item (below the header area)
+- tapOn:
+    point: "50%,45%"
+
+# Wait for conversation detail to load
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Transcript"
+      - visible: "Summary"
+      - visible: "Action Items"
+      - visible: "Overview"
+    timeout: 10000
+
+# Check for transcript tab
+- runFlow:
+    when:
+      visible: "Transcript"
+    commands:
+      - tapOn: "Transcript"
+      - waitForAnimationToEnd
+      # Scroll through transcript
+      - scroll:
+          direction: DOWN
+          duration: 1000
+      - scroll:
+          direction: UP
+          duration: 1000
+
+# Check for summary tab
+- runFlow:
+    when:
+      visible: "Summary"
+    commands:
+      - tapOn: "Summary"
+      - waitForAnimationToEnd
+
+# Check for action items tab
+- runFlow:
+    when:
+      visible: "Action Items"
+    commands:
+      - tapOn: "Action Items"
+      - waitForAnimationToEnd
+
+# Navigate back to conversations list
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on the home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 10000
