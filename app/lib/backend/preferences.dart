@@ -78,6 +78,22 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  set deviceNameDeviceId(String value) => saveString('deviceNameDeviceId', value);
+
+  String get deviceNameDeviceId => getString('deviceNameDeviceId');
+
+  /// Update deviceName on connection, preserving user-set custom names.
+  /// Resets to hardware name when switching to a different device.
+  void updateDeviceNameOnConnect(String newDeviceId, String hardwareName) {
+    final previousId = deviceNameDeviceId;
+    if (previousId.isNotEmpty && previousId != newDeviceId) {
+      deviceName = hardwareName;
+    } else if (deviceName.isEmpty) {
+      deviceName = hardwareName;
+    }
+    deviceNameDeviceId = newDeviceId;
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
