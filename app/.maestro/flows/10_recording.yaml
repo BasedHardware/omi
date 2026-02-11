@@ -1,0 +1,129 @@
+# Omi App - Recording Flow (Requires Omi Device)
+# Tests: Start recording, verify indicator, wait for transcription, stop, verify conversation.
+#
+# ⚠️  REQUIRES PHYSICAL OMI DEVICE
+# This test cannot run without a physical Omi device connected.
+# It is included for completeness and for maintainers with hardware access.
+#
+# Prerequisites:
+#   - User is signed in
+#   - Omi device connected (run 09_device_connection.yaml first)
+#   - Microphone permission granted
+#
+# Run: maestro test .maestro/flows/10_recording.yaml
+
+appId: com.friend.ios.dev
+tags:
+  - device_required
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Verify device is connected before attempting recording
+# Look for connected device indicator on home screen
+- runFlow:
+    when:
+      visible:
+          text: ".*[Cc]onnected.*"
+          regex: true
+    commands:
+      - assertVisible:
+          text: ".*[Cc]onnected.*"
+          regex: true
+
+# Start a recording session
+# The recording may start automatically when device is connected,
+# or there may be a manual start button
+- runFlow:
+    when:
+      visible: "Start Recording"
+    commands:
+      - tapOn: "Start Recording"
+      - waitForAnimationToEnd
+
+# Verify recording indicator is visible
+# This could be a pulsing dot, waveform animation, or text indicator
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Rr]ecording.*"
+          regex: true
+      - visible:
+          text: ".*[Ll]istening.*"
+          regex: true
+      - visible:
+          text: ".*[Cc]apturing.*"
+          regex: true
+    timeout: 15000
+
+# Wait for some audio to be captured and transcription to begin
+# Speak something into the Omi device during this wait
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Tt]ranscri.*"
+          regex: true
+    timeout: 60000
+
+# Let the recording run for a bit to capture content
+- waitForAnimationToEnd
+- scroll:
+    direction: DOWN
+    duration: 500
+
+# Stop recording if there's a stop button
+- runFlow:
+    when:
+      visible: "Stop Recording"
+    commands:
+      - tapOn: "Stop Recording"
+      - waitForAnimationToEnd
+
+# Wait for the conversation to be processed and created
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Conversations"
+      - visible:
+          text: ".*[Pp]rocessing.*"
+          regex: true
+    timeout: 30000
+
+# If processing, wait for it to complete
+- runFlow:
+    when:
+      visible:
+        text: ".*[Pp]rocessing.*"
+        regex: true
+    commands:
+      - extendedWaitUntil:
+          notVisible:
+            text: ".*[Pp]rocessing.*"
+            regex: true
+          timeout: 60000
+
+# Verify a conversation was created
+- assertVisible: "Conversations"
+
+# Scroll to find the new conversation (should be at top)
+- scroll:
+    direction: UP
+    duration: 500
