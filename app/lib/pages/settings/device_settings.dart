@@ -934,6 +934,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
                       SharedPreferencesUtil().deviceName = '';
+                      SharedPreferencesUtil().deviceNameDeviceId = '';
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
