@@ -13,7 +13,6 @@ from utils.other.endpoints import timeit
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
-
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -82,6 +81,28 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         memories_id=[conversation_id] if conversation_id else [],
     )
     add_message(uid, ai_message.dict())
+    return ai_message
+
+
+def add_integration_chat_message(text: str, app_id: Optional[str], uid: str) -> Message:
+    """Add a chat message from an external integration (e.g. notification API),
+    linking it to the user's existing chat session so it appears in the chat feed."""
+    chat_session = get_chat_session(uid, app_id=app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        from_external_integration=True,
+        type='text',
+        chat_session_id=chat_session_id,
+    )
+    add_message(uid, ai_message.dict())
+    if chat_session_id:
+        add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
 
 

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from typing import Tuple, Optional
 
 from database.redis_db import get_enabled_apps, r as redis_client
-from database.chat import add_app_message
+from database.chat import add_integration_chat_message
 from utils.apps import get_available_app_by_id, verify_api_key
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
@@ -144,7 +144,7 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
     if app.external_integration and app.external_integration.chat_messages_enabled:
         target = app.external_integration.chat_messages_target
         chat_app_id = None if target == 'main' else app.id
-        add_app_message(data['message'], chat_app_id, uid)
+        add_integration_chat_message(data['message'], chat_app_id, uid)
 
     # Always send push notification
     send_app_notification(uid, app.name, app.id, data['message'], target=target)
