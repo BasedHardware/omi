@@ -17,7 +17,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAESTRO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-FLOWS_DIR="$MAESTRO_DIR/flows"
 
 # Check Maestro is installed
 if ! command -v maestro &> /dev/null; then
@@ -32,56 +31,20 @@ echo "║     OMI APP - DEVICE-DEPENDENT MAESTRO TESTS                ║"
 echo "║     ⚠️  Requires physical Omi device                        ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-
-DEVICE_FLOWS=(
-  "09_device_connection.yaml"
-  "10_recording.yaml"
-)
-
-PASSED=0
-FAILED=0
-RESULTS=()
-
-for flow in "${DEVICE_FLOWS[@]}"; do
-  flow_path="$FLOWS_DIR/$flow"
-  flow_name="${flow%.yaml}"
-
-  if [[ ! -f "$flow_path" ]]; then
-    echo "⚠ SKIP: $flow (file not found)"
-    RESULTS+=("SKIP  $flow_name")
-    continue
-  fi
-
-  echo "────────────────────────────────────────────────"
-  echo "Running: $flow_name"
-  echo "────────────────────────────────────────────────"
-
-  if maestro test "$flow_path"; then
-    echo "✓ PASS: $flow_name"
-    PASSED=$((PASSED + 1))
-    RESULTS+=("PASS  $flow_name")
-  else
-    echo "✗ FAIL: $flow_name"
-    FAILED=$((FAILED + 1))
-    RESULTS+=("FAIL  $flow_name")
-  fi
-  echo ""
-done
-
-# Summary
-TOTAL=$((PASSED + FAILED))
+echo "Running all flows tagged 'device_required'..."
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                      TEST SUMMARY                           ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-for result in "${RESULTS[@]}"; do
-  printf "║  %-56s  ║\n" "$result"
-done
-echo "╠══════════════════════════════════════════════════════════════╣"
-printf "║  Total: %-3d | Passed: %-3d | Failed: %-3d                   ║\n" \
-  "$TOTAL" "$PASSED" "$FAILED"
-echo "╚══════════════════════════════════════════════════════════════╝"
 
-if [[ "$FAILED" -gt 0 ]]; then
+# Run all device_required-tagged flows via Maestro's tag system.
+# Flow tags are defined in config.yaml — no hardcoded list needed.
+if maestro test "$MAESTRO_DIR" --include-tags=device_required; then
+  echo ""
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  echo "║  Result: ALL DEVICE TESTS PASSED                            ║"
+  echo "╚══════════════════════════════════════════════════════════════╝"
+else
+  echo ""
+  echo "╔══════════════════════════════════════════════════════════════╗"
+  echo "║  Result: SOME TESTS FAILED — see output above               ║"
+  echo "╚══════════════════════════════════════════════════════════════╝"
   exit 1
 fi
