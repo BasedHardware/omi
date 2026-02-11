@@ -1,10 +1,10 @@
 """
-Tests for mentor_notifications.py and the proactive tool calling flow (#4728-#4730).
+Tests for mentor_notifications.py and the proactive trigger flow (#4728-#4730).
 
 mentor_notifications.py: buffering, topic extraction, notification data creation.
-app_integrations._process_tools: generic tool calling with confidence gating.
-app_integrations._build_tool_context: scope-aware context building for tool calling.
-app_integrations._process_proactive_notification: notification delivery with tool_uses flag.
+app_integrations._process_triggers: generic trigger evaluation with confidence gating.
+app_integrations._build_trigger_context: scope-aware context building for trigger evaluation.
+app_integrations._process_proactive_notification: notification delivery with has_triggers flag.
 """
 
 import os
@@ -249,7 +249,7 @@ def test_create_notification_data_includes_tools():
     mock_llm_mini.invoke.reset_mock()
     mock_llm_mini.invoke.return_value = MagicMock(content='["tech"]')
 
-    from utils.mentor_notifications import create_notification_data, PROACTIVE_TOOLS
+    from utils.mentor_notifications import create_notification_data, PROACTIVE_TRIGGERS
 
     messages = [
         {'text': 'I love coding', 'timestamp': 1000, 'is_user': True},
@@ -259,27 +259,27 @@ def test_create_notification_data_includes_tools():
 
     result = create_notification_data(messages, frequency=3)
 
-    assert "tools" in result
-    assert result["tools"] == PROACTIVE_TOOLS
+    assert "triggers" in result
+    assert result["triggers"] == PROACTIVE_TRIGGERS
     assert "messages" in result
     assert result["messages"] == messages
 
 
-# ── Proactive tool definitions tests ──
+# ── Proactive trigger definitions tests ──
 
 
 def test_proactive_tools_defined():
-    """PROACTIVE_TOOLS should contain 3 tool definitions in OpenAI format."""
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    """PROACTIVE_TRIGGERS should contain 3 tool definitions in OpenAI format."""
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
 
-    assert len(PROACTIVE_TOOLS) == 3
+    assert len(PROACTIVE_TRIGGERS) == 3
 
-    names = [t["function"]["name"] for t in PROACTIVE_TOOLS]
+    names = [t["function"]["name"] for t in PROACTIVE_TRIGGERS]
     assert "trigger_argument_perspective" in names
     assert "trigger_goal_misalignment" in names
     assert "trigger_emotional_support" in names
 
-    for tool in PROACTIVE_TOOLS:
+    for tool in PROACTIVE_TRIGGERS:
         assert tool["type"] == "function"
         params = tool["function"]["parameters"]
         assert "notification_text" in params["properties"]
@@ -289,19 +289,19 @@ def test_proactive_tools_defined():
 
 def test_proactive_tools_required_fields():
     """Each tool should require notification_text and confidence."""
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
 
-    for tool in PROACTIVE_TOOLS:
+    for tool in PROACTIVE_TRIGGERS:
         required = tool["function"]["parameters"]["required"]
         assert "notification_text" in required, f"{tool['function']['name']} missing notification_text"
         assert "confidence" in required, f"{tool['function']['name']} missing confidence"
 
 
-# ── Tool calling tests (app_integrations._process_tools) ──
+# ── Tool calling tests (app_integrations._process_triggers) ──
 
 
-def test_process_tools_triggered():
-    """_process_tools should return notification data when tool fires with high confidence."""
+def test_process_triggers_triggered():
+    """_process_triggers should return notification data when trigger fires with high confidence."""
     _setup_app_integrations_stubs()
 
     mock_tool_response = MagicMock()
@@ -321,17 +321,17 @@ def test_process_tools_triggered():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools(
-        "test_uid", "system prompt", "user message", PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    results = app_int._process_triggers(
+        "test_uid", "system prompt", "user message", PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
     )
 
     assert len(results) == 1
-    assert results[0]["tool_name"] == "trigger_emotional_support"
+    assert results[0]["trigger_name"] == "trigger_emotional_support"
     assert "tough day" in results[0]["notification_text"]
-    assert results[0]["tool_args"]["confidence"] == 0.85
+    assert results[0]["trigger_args"]["confidence"] == 0.85
 
     mock_llm_mini.bind_tools.assert_called_once()
     call_args = mock_llm_mini.bind_tools.call_args
@@ -339,8 +339,8 @@ def test_process_tools_triggered():
     assert call_args[1]["tool_choice"] == "auto"
 
 
-def test_process_tools_no_trigger():
-    """_process_tools should return empty list when LLM makes no tool call."""
+def test_process_triggers_no_trigger():
+    """_process_triggers should return empty list when no trigger fires."""
     _setup_app_integrations_stubs()
 
     mock_tool_response = MagicMock()
@@ -350,18 +350,18 @@ def test_process_tools_no_trigger():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid", "system prompt", "user message", PROACTIVE_TOOLS, 0.7)
+    results = app_int._process_triggers("test_uid", "system prompt", "user message", PROACTIVE_TRIGGERS, 0.7)
     assert results == []
 
 
-def test_process_tools_low_confidence():
-    """_process_tools should return empty list when confidence is below threshold."""
+def test_process_triggers_low_confidence():
+    """_process_triggers should return empty list when confidence is below threshold."""
     _setup_app_integrations_stubs()
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
 
     mock_tool_response = MagicMock()
     mock_tool_response.tool_calls = [
@@ -382,30 +382,30 @@ def test_process_tools_low_confidence():
 
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools(
-        "test_uid", "system prompt", "user message", PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    results = app_int._process_triggers(
+        "test_uid", "system prompt", "user message", PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
     )
     assert results == []
     assert PROACTIVE_CONFIDENCE_THRESHOLD == 0.7
 
 
-def test_process_tools_handles_exception():
-    """_process_tools should return empty list on LLM exception."""
+def test_process_triggers_handles_exception():
+    """_process_triggers should return empty list on LLM exception."""
     _setup_app_integrations_stubs()
 
     mock_llm_mini.bind_tools = MagicMock(side_effect=Exception("LLM error"))
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid", "system prompt", "user message", PROACTIVE_TOOLS, 0.7)
+    results = app_int._process_triggers("test_uid", "system prompt", "user message", PROACTIVE_TRIGGERS, 0.7)
 
     assert results == []
     mock_llm_mini.bind_tools.side_effect = None
 
 
-def test_process_tools_empty_notification_text():
-    """_process_tools should skip when notification_text is empty."""
+def test_process_triggers_empty_notification_text():
+    """_process_triggers should skip when notification_text is empty."""
     _setup_app_integrations_stubs()
 
     mock_tool_response = MagicMock()
@@ -424,24 +424,24 @@ def test_process_tools_empty_notification_text():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid", "system prompt", "user message", PROACTIVE_TOOLS, 0.7)
+    results = app_int._process_triggers("test_uid", "system prompt", "user message", PROACTIVE_TRIGGERS, 0.7)
     assert results == []
 
 
-def test_process_tools_empty_tools_list():
-    """_process_tools should return empty list when no tools provided."""
+def test_process_triggers_empty_tools_list():
+    """_process_triggers should return empty list when no tools provided."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid", "system prompt", "user message", [], 0.7)
+    results = app_int._process_triggers("test_uid", "system prompt", "user message", [], 0.7)
     assert results == []
 
 
-# ── Tool context tests (app_integrations._build_tool_context) ──
+# ── Tool context tests (app_integrations._build_trigger_context) ──
 
 
 def _make_mentor_app():
@@ -460,8 +460,8 @@ def _make_mentor_app():
     )
 
 
-def test_build_tool_context_includes_goals():
-    """_build_tool_context should include user goals in the user message."""
+def test_build_trigger_context_includes_goals():
+    """_build_trigger_context should include user goals in the user message."""
     _setup_app_integrations_stubs()
 
     mock_get_user_goals.return_value = [{"title": "Exercise 3x per week", "is_active": True}]
@@ -476,7 +476,7 @@ def test_build_tool_context_includes_goals():
         ],
     }
 
-    system_prompt, user_message = app_int._build_tool_context(
+    system_prompt, user_message = app_int._build_trigger_context(
         "test_uid",
         "Dave",
         "Dave wants to get fit.",
@@ -494,7 +494,7 @@ def test_build_tool_context_includes_goals():
 
 def test_process_mentor_notification_returns_tools_and_messages():
     """process_mentor_notification should include tools and messages in notification_data."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer, PROACTIVE_TOOLS
+    from utils.mentor_notifications import process_mentor_notification, message_buffer, PROACTIVE_TRIGGERS
 
     message_buffer.buffers.clear()
 
@@ -511,12 +511,12 @@ def test_process_mentor_notification_returns_tools_and_messages():
     result = process_mentor_notification("test_uid_frank", segments)
 
     assert result is not None
-    # No longer has source/notifications — tool calling is downstream
+    # No longer has source/notifications — trigger evaluation is downstream
     assert "source" not in result
     assert "notifications" not in result
     # Has tools and messages for downstream processing
-    assert "tools" in result
-    assert result["tools"] == PROACTIVE_TOOLS
+    assert "triggers" in result
+    assert result["triggers"] == PROACTIVE_TRIGGERS
     assert "messages" in result
     assert len(result["messages"]) > 0
     # Still has prompt/params/context
@@ -546,12 +546,12 @@ def test_process_mentor_notification_falls_back_to_prompt():
     assert "source" not in result
     assert "prompt" in result
     assert "params" in result
-    assert "tools" in result
+    assert "triggers" in result
     assert "messages" in result
 
 
-def test_build_tool_context_multiple_goals():
-    """_build_tool_context should include multiple goals in the user message."""
+def test_build_trigger_context_multiple_goals():
+    """_build_trigger_context should include multiple goals in the user message."""
     _setup_app_integrations_stubs()
 
     mock_get_user_goals.return_value = [
@@ -566,7 +566,7 @@ def test_build_tool_context_multiple_goals():
         "messages": [{"text": "I should study more", "timestamp": 1000, "is_user": True}],
     }
 
-    system_prompt, user_message = app_int._build_tool_context(
+    system_prompt, user_message = app_int._build_trigger_context(
         "test_uid_helen",
         "Helen",
         "Helen is a student.",
@@ -580,8 +580,8 @@ def test_build_tool_context_multiple_goals():
     assert "Learn Spanish" in user_message
 
 
-def test_build_tool_context_no_goals():
-    """_build_tool_context with no goals should not include goals section."""
+def test_build_trigger_context_no_goals():
+    """_build_trigger_context with no goals should not include goals section."""
     _setup_app_integrations_stubs()
 
     mock_get_user_goals.return_value = []
@@ -593,7 +593,7 @@ def test_build_tool_context_no_goals():
         "messages": [{"text": "hello world", "timestamp": 1000, "is_user": True}],
     }
 
-    system_prompt, user_message = app_int._build_tool_context(
+    system_prompt, user_message = app_int._build_trigger_context(
         "test_uid_ian",
         "Ian",
         "Ian is new.",
@@ -607,7 +607,7 @@ def test_build_tool_context_no_goals():
 
 
 def test_multiple_tool_calls():
-    """_process_tools should return multiple results when multiple tools fire."""
+    """_process_triggers should return multiple results when multiple tools fire."""
     _setup_app_integrations_stubs()
 
     mock_tool_response = MagicMock()
@@ -636,14 +636,14 @@ def test_multiple_tool_calls():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid_jane", "system prompt", "user message", PROACTIVE_TOOLS, 0.7)
+    results = app_int._process_triggers("test_uid_jane", "system prompt", "user message", PROACTIVE_TRIGGERS, 0.7)
 
     assert len(results) == 2
-    assert results[0]["tool_name"] == "trigger_emotional_support"
-    assert results[1]["tool_name"] == "trigger_goal_misalignment"
+    assert results[0]["trigger_name"] == "trigger_emotional_support"
+    assert results[1]["trigger_name"] == "trigger_goal_misalignment"
 
 
 def test_multiple_tools_mixed_confidence():
@@ -675,20 +675,20 @@ def test_multiple_tools_mixed_confidence():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools("test_uid_kim", "system prompt", "user message", PROACTIVE_TOOLS, 0.7)
+    results = app_int._process_triggers("test_uid_kim", "system prompt", "user message", PROACTIVE_TRIGGERS, 0.7)
 
     assert len(results) == 1
-    assert results[0]["tool_name"] == "trigger_emotional_support"
+    assert results[0]["trigger_name"] == "trigger_emotional_support"
 
 
 # ── Tool delivery through _process_proactive_notification ──
 
 
 def test_process_proactive_notification_tool_delivery():
-    """_process_proactive_notification with tool_uses=True sends tool notifications AND the main notification."""
+    """_process_proactive_notification with has_triggers=True sends trigger notifications AND the main notification."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -699,12 +699,12 @@ def test_process_proactive_notification_tool_delivery():
     mock_send_app = MagicMock()
     app_int.send_app_notification = mock_send_app
 
-    # Mock _process_tools to return results
-    original_process_tools = app_int._process_tools
-    app_int._process_tools = MagicMock(
+    # Mock _process_triggers to return results
+    original_process_triggers = app_int._process_triggers
+    app_int._process_triggers = MagicMock(
         return_value=[
-            {"notification_text": "Hey, take a break!", "tool_name": "trigger_emotional_support"},
-            {"notification_text": "This conflicts with your goal.", "tool_name": "trigger_goal_misalignment"},
+            {"notification_text": "Hey, take a break!", "trigger_name": "trigger_emotional_support"},
+            {"notification_text": "This conflicts with your goal.", "trigger_name": "trigger_goal_misalignment"},
         ]
     )
 
@@ -725,7 +725,7 @@ def test_process_proactive_notification_tool_delivery():
         proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
     )
 
-    tools = [{"type": "function", "function": {"name": "test"}}]
+    triggers = [{"type": "function", "function": {"name": "test"}}]
     data = {
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
         "prompt": "Some prompt",
@@ -738,20 +738,20 @@ def test_process_proactive_notification_tool_delivery():
             "test_uid",
             mentor_app,
             data,
-            tools=tools,
-            tool_uses=True,
+            triggers=triggers,
+            has_triggers=True,
         )
 
-        # Tool notifications sent as extra (2) + main prompt notification (1) = 3
+        # Trigger notifications sent as extra (2) + main prompt notification (1) = 3
         assert mock_send_app.call_count == 3
         # Result is the main prompt message
         assert result == "Main prompt notification"
     finally:
-        app_int._process_tools = original_process_tools
+        app_int._process_triggers = original_process_triggers
 
 
 def test_process_proactive_notification_tool_rate_limited():
-    """_process_proactive_notification should skip tool notifications when rate-limited."""
+    """_process_proactive_notification should skip trigger notifications when rate-limited."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -778,16 +778,16 @@ def test_process_proactive_notification_tool_rate_limited():
     data = {
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
     }
-    tools = [{"type": "function", "function": {"name": "test"}}]
+    triggers = [{"type": "function", "function": {"name": "test"}}]
 
-    result = app_int._process_proactive_notification("test_uid", mentor_app, data, tools=tools, tool_uses=True)
+    result = app_int._process_proactive_notification("test_uid", mentor_app, data, triggers=triggers, has_triggers=True)
 
     assert result is None
     mock_send.assert_not_called()
 
 
-def test_process_proactive_notification_tool_uses_false_skips_tools():
-    """_process_proactive_notification with tool_uses=False should NOT call tools."""
+def test_process_proactive_notification_has_triggers_false_skips_triggers():
+    """_process_proactive_notification with has_triggers=False should NOT call triggers."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -795,9 +795,9 @@ def test_process_proactive_notification_tool_uses_false_skips_tools():
     app_int._hit_proactive_notification_rate_limits = MagicMock(return_value=False)
     app_int._set_proactive_noti_sent_at = MagicMock()
 
-    mock_process_tools = MagicMock()
-    original_process_tools = app_int._process_tools
-    app_int._process_tools = mock_process_tools
+    mock_process_triggers = MagicMock()
+    original_process_triggers = app_int._process_triggers
+    app_int._process_triggers = mock_process_triggers
 
     # Patch get_proactive_message directly on the module (from-import binding)
     app_int.get_proactive_message = MagicMock(return_value="Prompt-based advice here")
@@ -822,23 +822,23 @@ def test_process_proactive_notification_tool_uses_false_skips_tools():
         "params": ["user_name", "user_facts"],
         "context": {"filters": {"topics": []}},
     }
-    tools = [{"type": "function", "function": {"name": "test"}}]
+    triggers = [{"type": "function", "function": {"name": "test"}}]
 
     try:
         result = app_int._process_proactive_notification(
-            "test_uid", some_app, data, tools=tools
-        )  # tool_uses defaults to False
+            "test_uid", some_app, data, triggers=triggers
+        )  # has_triggers defaults to False
 
-        # Tools should NOT be called
-        mock_process_tools.assert_not_called()
+        # Triggers should NOT be called
+        mock_process_triggers.assert_not_called()
         # Should fall through to prompt-based path
         assert result is not None
     finally:
-        app_int._process_tools = original_process_tools
+        app_int._process_triggers = original_process_triggers
 
 
 def test_process_proactive_notification_no_tool_results_still_sends_prompt():
-    """When tools don't fire, only the main prompt notification is sent."""
+    """When triggers don't fire, only the main prompt notification is sent."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -846,8 +846,8 @@ def test_process_proactive_notification_no_tool_results_still_sends_prompt():
     app_int._hit_proactive_notification_rate_limits = MagicMock(return_value=False)
     app_int._set_proactive_noti_sent_at = MagicMock()
 
-    original_process_tools = app_int._process_tools
-    app_int._process_tools = MagicMock(return_value=[])  # No tool results
+    original_process_triggers = app_int._process_triggers
+    app_int._process_triggers = MagicMock(return_value=[])  # No trigger results
 
     app_int.get_proactive_message = MagicMock(return_value="Main prompt advice")
 
@@ -868,7 +868,7 @@ def test_process_proactive_notification_no_tool_results_still_sends_prompt():
         proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
     )
 
-    tools = [{"type": "function", "function": {"name": "test"}}]
+    triggers = [{"type": "function", "function": {"name": "test"}}]
     data = {
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
         "prompt": "Some prompt",
@@ -877,13 +877,15 @@ def test_process_proactive_notification_no_tool_results_still_sends_prompt():
     }
 
     try:
-        result = app_int._process_proactive_notification("test_uid", mentor_app, data, tools=tools, tool_uses=True)
+        result = app_int._process_proactive_notification(
+            "test_uid", mentor_app, data, triggers=triggers, has_triggers=True
+        )
 
-        app_int._process_tools.assert_called_once()
+        app_int._process_triggers.assert_called_once()
         assert result == "Main prompt advice"
         assert mock_send_app.call_count == 1  # Only the main prompt notification
     finally:
-        app_int._process_tools = original_process_tools
+        app_int._process_triggers = original_process_triggers
 
 
 # ── Boundary tests ──
@@ -893,7 +895,7 @@ def test_confidence_at_exact_threshold():
     """Tool call with confidence == PROACTIVE_CONFIDENCE_THRESHOLD should be accepted."""
     _setup_app_integrations_stubs()
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
 
     mock_tool_response = MagicMock()
     mock_tool_response.tool_calls = [
@@ -913,16 +915,16 @@ def test_confidence_at_exact_threshold():
 
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools(
+    results = app_int._process_triggers(
         "test_uid",
         "You are a mentor.",
         "I'm stressed",
-        PROACTIVE_TOOLS,
+        PROACTIVE_TRIGGERS,
         PROACTIVE_CONFIDENCE_THRESHOLD,
     )
 
     assert len(results) == 1
-    assert results[0]["tool_args"]["confidence"] == PROACTIVE_CONFIDENCE_THRESHOLD
+    assert results[0]["trigger_args"]["confidence"] == PROACTIVE_CONFIDENCE_THRESHOLD
 
 
 def test_notification_text_too_short():
@@ -945,21 +947,21 @@ def test_notification_text_too_short():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
-    from utils.mentor_notifications import PROACTIVE_TOOLS, PROACTIVE_CONFIDENCE_THRESHOLD
+    from utils.mentor_notifications import PROACTIVE_TRIGGERS, PROACTIVE_CONFIDENCE_THRESHOLD
     import utils.app_integrations as app_int
 
-    results = app_int._process_tools(
+    results = app_int._process_triggers(
         "test_uid",
         "You are a mentor.",
         "I'm stressed",
-        PROACTIVE_TOOLS,
+        PROACTIVE_TRIGGERS,
         PROACTIVE_CONFIDENCE_THRESHOLD,
     )
     assert results == []
 
 
 def test_empty_tool_results_falls_through_to_prompt():
-    """When tool results are empty, process_mentor_notification returns data for prompt-based path."""
+    """When trigger results are empty, process_mentor_notification returns data for prompt-based path."""
     from utils.mentor_notifications import process_mentor_notification, message_buffer
 
     message_buffer.buffers.clear()
@@ -975,10 +977,10 @@ def test_empty_tool_results_falls_through_to_prompt():
 
     result = process_mentor_notification("test_uid_faye", segments)
 
-    # No source key — downstream _process_proactive_notification handles tool calling
+    # No source key — downstream _process_proactive_notification handles trigger evaluation
     assert result is not None
     assert "source" not in result
     assert "prompt" in result
     assert "params" in result
-    assert "tools" in result
+    assert "triggers" in result
     assert "messages" in result

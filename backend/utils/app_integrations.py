@@ -218,50 +218,50 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-def _process_tools(
-    uid: str, system_prompt: str, user_message: str, tools: list, confidence_threshold: float
+def _process_triggers(
+    uid: str, system_prompt: str, user_message: str, triggers: list, confidence_threshold: float
 ) -> list[dict]:
     """
-    Run LLM tool calling and filter results by confidence threshold.
+    Run LLM trigger evaluation and filter results by confidence threshold.
 
     Args:
         uid: User ID (for logging)
         system_prompt: System prompt for the LLM
         user_message: User message with conversation context
-        tools: Tool definitions (OpenAI function-calling format)
-        confidence_threshold: Minimum confidence to accept a tool result
+        triggers: Trigger definitions (OpenAI function-calling format)
+        confidence_threshold: Minimum confidence to accept a trigger result
 
     Returns:
         List of accepted notification dicts. Empty list if no triggers apply.
     """
-    if not tools:
+    if not triggers:
         return []
 
     try:
         llm_messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
 
-        llm_with_tools = llm_mini.bind_tools(tools, tool_choice="auto")
+        llm_with_tools = llm_mini.bind_tools(triggers, tool_choice="auto")
         resp = llm_with_tools.invoke(llm_messages)
 
         if not resp.tool_calls:
-            print(f"proactive_tool_decision triggered=false", uid)
+            print(f"proactive_trigger triggered=false", uid)
             return []
 
         results = []
         for tool_call in resp.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
-            confidence = tool_args.get("confidence", 0)
-            notification_text = tool_args.get("notification_text", "")
+            trigger_name = tool_call["name"]
+            trigger_args = tool_call["args"]
+            confidence = trigger_args.get("confidence", 0)
+            notification_text = trigger_args.get("notification_text", "")
 
-            print(f"proactive_tool_decision triggered=true tool={tool_name} confidence={confidence:.2f}", uid)
+            print(f"proactive_trigger triggered=true trigger={trigger_name} confidence={confidence:.2f}", uid)
 
             if confidence < confidence_threshold:
-                print(f"proactive_tool_below_threshold tool={tool_name} confidence={confidence:.2f}", uid)
+                print(f"proactive_trigger_below_threshold trigger={trigger_name} confidence={confidence:.2f}", uid)
                 continue
 
             if not notification_text or len(notification_text) < 5:
-                print(f"proactive_tool_empty_text tool={tool_name}", uid)
+                print(f"proactive_trigger_empty_text trigger={trigger_name}", uid)
                 continue
 
             if len(notification_text) > 300:
@@ -270,20 +270,20 @@ def _process_tools(
             results.append(
                 {
                     "notification_text": notification_text,
-                    "tool_name": tool_name,
-                    "tool_args": tool_args,
+                    "trigger_name": trigger_name,
+                    "trigger_args": trigger_args,
                 }
             )
 
-        print(f"proactive_tool_results total_calls={len(resp.tool_calls)} accepted={len(results)}", uid)
+        print(f"proactive_trigger_results total_calls={len(resp.tool_calls)} accepted={len(results)}", uid)
         return results
 
     except Exception as e:
-        print(f"proactive_tool_error error={e}", uid)
+        print(f"proactive_trigger_error error={e}", uid)
         return []
 
 
-def _build_tool_context(
+def _build_trigger_context(
     uid: str,
     user_name: str,
     user_facts: str,
@@ -292,7 +292,7 @@ def _build_tool_context(
     conversation_messages: list[dict],
     data: dict,
 ) -> tuple[str, str]:
-    """Build system prompt and user message for tool calling from pre-fetched context."""
+    """Build system prompt and user message for trigger evaluation from pre-fetched context."""
     context_parts = []
 
     if user_name:
@@ -320,7 +320,7 @@ def _build_tool_context(
             goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
             context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
     except Exception as e:
-        print(f"proactive_tool_goals_fetch_failed error={e}", uid)
+        print(f"proactive_trigger_goals_fetch_failed error={e}", uid)
 
     # Substitute template placeholders.
     # Mentor prompt uses {{x}} in source, but .format(text=...) converts {{x}} to {x},
@@ -341,7 +341,7 @@ def _build_tool_context(
     return system_prompt, user_message
 
 
-def _process_proactive_notification(uid: str, app: App, data, tools: list = None, tool_uses: bool = False):
+def _process_proactive_notification(uid: str, app: App, data, triggers: list = None, has_triggers: bool = False):
     if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
@@ -367,7 +367,7 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
 
     filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
 
-    # Fetch context once — shared by both tool and prompt paths
+    # Fetch context once — shared by both trigger and prompt paths
     user_name, user_facts = get_prompt_memories(uid)
 
     context = None
@@ -380,9 +380,9 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
     if 'user_chat' in filter_scopes:
         chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    # Tool-based proactive notifications (extra, does not replace the main notification).
-    if tool_uses and tools and data.get('messages'):
-        system_prompt, user_message = _build_tool_context(
+    # Trigger-based proactive notifications (extra, does not replace the main notification).
+    if has_triggers and triggers and data.get('messages'):
+        system_prompt, user_message = _build_trigger_context(
             uid,
             user_name,
             user_facts,
@@ -391,10 +391,10 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
             data.get('messages', []),
             data,
         )
-        tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
-        for noti in tool_results:
+        trigger_results = _process_triggers(uid, system_prompt, user_message, triggers, PROACTIVE_CONFIDENCE_THRESHOLD)
+        for noti in trigger_results:
             send_app_notification(uid, app.name, app.id, noti['notification_text'])
-            print(f"proactive_tool_sent tool={noti.get('tool_name')}", uid)
+            print(f"proactive_trigger_sent trigger={noti.get('trigger_name')}", uid)
 
     # Main prompt-based notification
     message = get_proactive_message(uid, prompt, filter_scopes, context, chat_messages, user_name, user_facts)
@@ -465,8 +465,8 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
                 uid,
                 mentor_app,
                 mentor_notification,
-                tools=mentor_notification.get('tools'),
-                tool_uses=True,
+                triggers=mentor_notification.get('triggers'),
+                has_triggers=True,
             )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
