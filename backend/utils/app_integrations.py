@@ -270,6 +270,9 @@ def _process_tools(
                 logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
                 continue
 
+            if len(notification_text) > 300:
+                notification_text = notification_text[:300]
+
             results.append(
                 {
                     "notification_text": notification_text,
@@ -317,10 +320,13 @@ def _build_tool_context(
             lines.append(f"[{speaker}]: {msg['text']}")
         context_parts.append(f"Current conversation:\n" + "\n".join(lines))
 
-    goals = get_user_goals(uid)
-    if goals:
-        goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
-        context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
+    try:
+        goals = get_user_goals(uid)
+        if goals:
+            goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+            context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch goals for uid={uid}: {e}")
 
     system_prompt = data.get('prompt', '')
     user_message = "\n\n".join(context_parts)

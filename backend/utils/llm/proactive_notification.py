@@ -2,6 +2,7 @@ from typing import List
 
 from models.chat import Message
 from utils.llm.clients import llm_mini
+from utils.llms.memory import get_prompt_memories
 
 
 def get_proactive_message(
@@ -10,9 +11,12 @@ def get_proactive_message(
     params: [str],
     context: str,
     chat_messages: List[Message],
-    user_name: str = '',
-    user_facts: str = '',
+    user_name: str = None,
+    user_facts: str = None,
 ) -> str:
+    if user_name is None or user_facts is None:
+        user_name, user_facts = get_prompt_memories(uid)
+
     prompt = plugin_prompt
     memories_str = user_facts
     for param in params:
