@@ -90,7 +90,7 @@ export default async function SharedTasksPage({ params }: TasksPageProps) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black font-system-ui">
       <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,rgba(88,28,135,0.2),transparent)]" />
-      <section className="relative mx-auto max-w-screen-md px-6 py-16 md:px-12 md:py-24">
+      <section className="relative mx-auto max-w-screen-md px-6 pt-24 pb-16 md:px-12 md:pt-32 md:pb-24">
         {/* Sender info */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-white md:text-4xl">
