@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:omi/main.dart' as app;
+
+import 'test_helpers.dart';
 
 /// CPU Load Profiling Test
 ///
@@ -16,8 +17,6 @@ import 'package:omi/main.dart' as app;
 ///   1. Idle (home screen, no interaction)
 ///   2. Active (scrolling conversations, chat animation)
 ///   3. Background simulation (no pumping — measures residual frame activity)
-///
-/// Extends the pattern from shimmer_cpu_test.dart but tests the real app.
 ///
 /// Run with:
 /// ```bash
@@ -48,15 +47,15 @@ void main() {
       }
 
       // Handle onboarding
-      await _handleOnboardingIfNeeded(tester);
-      await _pumpFor(tester, 3000);
-      await _dismissAnyPopup(tester);
+      await handleOnboardingIfNeeded(tester);
+      await pumpFor(tester, 3000);
+      await dismissAnyPopup(tester);
 
       // Stabilize
       debugPrint('[2/6] Stabilizing (30s)...');
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(seconds: 1));
-        await _dismissAnyPopup(tester);
+        await dismissAnyPopup(tester);
       }
 
       final allResults = <String, _CpuMetrics>{};
@@ -95,12 +94,12 @@ void main() {
         if (scrollable.evaluate().isNotEmpty) {
           final size = tester.view.physicalSize / tester.view.devicePixelRatio;
           await tester.fling(scrollable.first, Offset(0, -size.height * 0.2), 600);
-          await _pumpFor(tester, 750);
+          await pumpFor(tester, 750);
           // Scroll back up
           await tester.fling(scrollable.first, Offset(0, size.height * 0.2), 600);
-          await _pumpFor(tester, 750);
+          await pumpFor(tester, 750);
         } else {
-          await _pumpFor(tester, 1500);
+          await pumpFor(tester, 1500);
         }
       }
 
@@ -118,7 +117,7 @@ void main() {
       final askOmi = find.text('Ask Omi');
       if (askOmi.evaluate().isNotEmpty) {
         await tester.tap(askOmi);
-        await _pumpFor(tester, 2000);
+        await pumpFor(tester, 2000);
 
         timings = <FrameTiming>[];
         void chatCallback(List<FrameTiming> t) => timings.addAll(t);
@@ -128,7 +127,7 @@ void main() {
         final textField = find.byType(TextField);
         if (textField.evaluate().isNotEmpty) {
           await tester.enterText(textField.first, 'hello');
-          await _pumpFor(tester, 500);
+          await pumpFor(tester, 500);
           final sendButton = find.byIcon(Icons.send);
           if (sendButton.evaluate().isNotEmpty) {
             await tester.tap(sendButton);
@@ -152,9 +151,9 @@ void main() {
 
         // Go back
         await tester.pageBack();
-        await _pumpFor(tester, 1000);
+        await pumpFor(tester, 1000);
       } else {
-        debugPrint('      ⚠ Could not find Ask Omi button — skipping chat test');
+        debugPrint('      Could not find Ask Omi button — skipping chat test');
       }
 
       // ── SCENARIO 4: Background simulation ──
@@ -194,7 +193,25 @@ void main() {
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       // Write JSON results
-      _writeResults(allResults);
+      final jsonResults = <String, dynamic>{
+        'test': 'cpu',
+        'scenarios': {
+          for (final entry in allResults.entries)
+            entry.key: {
+              'label': entry.value.label,
+              'total_frames': entry.value.totalFrames,
+              'duration_seconds': entry.value.durationSeconds,
+              'fps': double.parse(entry.value.fps.toStringAsFixed(2)),
+              'avg_build_ms': double.parse(entry.value.avgBuildMs.toStringAsFixed(3)),
+              'avg_raster_ms': double.parse(entry.value.avgRasterMs.toStringAsFixed(3)),
+              'p95_build_ms': double.parse(entry.value.p95BuildMs.toStringAsFixed(3)),
+              'peak_build_ms': double.parse(entry.value.peakBuildMs.toStringAsFixed(3)),
+              'janky_frames': entry.value.jankyFrames,
+              'janky_percent': double.parse(entry.value.jankyPercent.toStringAsFixed(2)),
+            },
+        },
+      };
+      writeResults('cpu', jsonResults);
 
       // Assertions
       final idle = allResults['idle']!;
@@ -280,106 +297,4 @@ void _printMetrics(_CpuMetrics m) {
   debugPrint('      │ Peak build:  ${m.peakBuildMs.toStringAsFixed(2).padLeft(6)} ms');
   debugPrint('      │ Janky:       ${m.jankyFrames.toString().padLeft(6)} (${m.jankyPercent.toStringAsFixed(1)}%)');
   debugPrint('      └─────────────────────────────────────');
-}
-
-void _writeResults(Map<String, _CpuMetrics> results) {
-  try {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_perf_cpu_$timestamp.json');
-    final buffer = StringBuffer();
-    buffer.writeln('{');
-    buffer.writeln('  "test": "cpu",');
-    buffer.writeln('  "scenarios": {');
-    final entries = results.entries.toList();
-    for (int i = 0; i < entries.length; i++) {
-      final m = entries[i].value;
-      buffer.writeln('    "${entries[i].key}": {');
-      buffer.writeln('      "label": "${m.label}",');
-      buffer.writeln('      "total_frames": ${m.totalFrames},');
-      buffer.writeln('      "duration_seconds": ${m.durationSeconds},');
-      buffer.writeln('      "fps": ${m.fps.toStringAsFixed(2)},');
-      buffer.writeln('      "avg_build_ms": ${m.avgBuildMs.toStringAsFixed(3)},');
-      buffer.writeln('      "avg_raster_ms": ${m.avgRasterMs.toStringAsFixed(3)},');
-      buffer.writeln('      "p95_build_ms": ${m.p95BuildMs.toStringAsFixed(3)},');
-      buffer.writeln('      "peak_build_ms": ${m.peakBuildMs.toStringAsFixed(3)},');
-      buffer.writeln('      "janky_frames": ${m.jankyFrames},');
-      buffer.writeln('      "janky_percent": ${m.jankyPercent.toStringAsFixed(2)}');
-      buffer.writeln('    }${i < entries.length - 1 ? "," : ""}');
-    }
-    buffer.writeln('  }');
-    buffer.writeln('}');
-    file.writeAsStringSync(buffer.toString());
-    debugPrint('Results saved to: ${file.path}');
-  } catch (e) {
-    debugPrint('Could not save results: $e');
-  }
-}
-
-// ─── Shared helpers (same pattern as app_performance_test.dart) ──────
-
-Future<void> _pumpFor(WidgetTester tester, int milliseconds) async {
-  final iterations = milliseconds ~/ 100;
-  for (int i = 0; i < iterations; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-}
-
-Future<void> _dismissAnyPopup(WidgetTester tester) async {
-  await tester.pump(const Duration(milliseconds: 100));
-  if (find.text('Loving Omi?').evaluate().isNotEmpty) {
-    for (final text in ['Maybe later', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first, warnIfMissed: false);
-        await _pumpFor(tester, 500);
-        return;
-      }
-    }
-  }
-  for (final text in ['Skip for now', 'Skip', 'Not now']) {
-    final btn = find.text(text);
-    if (btn.evaluate().isNotEmpty) {
-      await tester.tap(btn.first, warnIfMissed: false);
-      await _pumpFor(tester, 500);
-      return;
-    }
-  }
-}
-
-Future<void> _handleOnboardingIfNeeded(WidgetTester tester) async {
-  debugPrint('      Checking for onboarding...');
-  if (find.text('Ask Omi').evaluate().isNotEmpty) {
-    debugPrint('      Already on home screen');
-    return;
-  }
-
-  final signIn = find.text('Sign in with Google');
-  if (signIn.evaluate().isNotEmpty) {
-    debugPrint('      Found auth screen');
-    await tester.tap(signIn);
-    await _pumpFor(tester, 2000);
-    debugPrint('      >>> Please complete sign-in on device <<<');
-    for (int i = 0; i < 120; i++) {
-      await tester.pump(const Duration(milliseconds: 500));
-      if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-      final cont = find.text('Continue');
-      if (cont.evaluate().isNotEmpty) {
-        await tester.tap(cont.first);
-        await _pumpFor(tester, 2000);
-      }
-    }
-  }
-
-  for (int attempt = 0; attempt < 20; attempt++) {
-    await _pumpFor(tester, 500);
-    if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-    for (final text in ['Continue', 'Skip for now', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first);
-        await _pumpFor(tester, 2000);
-        break;
-      }
-    }
-  }
 }
