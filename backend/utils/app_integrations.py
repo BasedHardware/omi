@@ -223,7 +223,11 @@ def _process_proactive_notification(uid: str, app: App, data):
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    # Short-circuit for tool-based proactive notifications (already have notification text)
+    # Short-circuit for tool-based proactive notifications (already have notification text).
+    # By design, all tool notifications from one analysis cycle are sent together (up to 3,
+    # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown), not
+    # individual notifications within one cycle. This is per CTO request to allow multiple
+    # tool calls per analysis.
     if data.get('source') == 'tool' and data.get('notifications'):
         messages_sent = []
         for noti in data['notifications']:

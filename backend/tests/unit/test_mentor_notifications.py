@@ -670,3 +670,157 @@ def test_process_mentor_notification_multiple_tools():
     # create_notification_data always called — prompt/params/context present
     assert "prompt" in result
     assert "params" in result
+
+
+# ── Tool delivery path tests (app_integrations._process_proactive_notification) ──
+
+
+def _setup_app_integrations_stubs():
+    """Stub all app_integrations dependencies so it can be imported in tests."""
+    # database stubs (some already done at top, add missing ones)
+    apps_mod = sys.modules.get("database.apps") or _stub_module("database.apps")
+    apps_mod.record_app_usage = MagicMock()
+    chat_db_mod = sys.modules.get("database.chat") or _stub_module("database.chat")
+    chat_db_mod.add_app_message = MagicMock()
+    chat_db_mod.get_app_messages = MagicMock(return_value=[])
+    redis_mod = sys.modules.get("database.redis_db") or _stub_module("database.redis_db")
+    redis_mod.get_generic_cache = MagicMock(return_value=None)
+    redis_mod.set_generic_cache = MagicMock()
+    redis_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
+    redis_mod.set_proactive_noti_sent_at = MagicMock()
+    redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
+    mem_mod = sys.modules.get("database.mem_db") or _stub_module("database.mem_db")
+    mem_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
+    mem_mod.set_proactive_noti_sent_at = MagicMock()
+    vec_mod = sys.modules.get("database.vector_db") or _stub_module("database.vector_db")
+    vec_mod.query_vectors_by_metadata = MagicMock(return_value=[])
+    conv_db_mod = sys.modules.get("database.conversations") or _stub_module("database.conversations")
+    conv_db_mod.get_conversations_by_id = MagicMock(return_value=[])
+
+    # model stubs
+    noti_msg_mod = _stub_module("models.notification_message")
+    mock_noti_msg = MagicMock()
+    mock_noti_msg.get_message_as_dict = MagicMock(return_value={})
+    noti_msg_mod.NotificationMessage = mock_noti_msg
+
+    conv_mod = sys.modules.get("models.conversation") or _stub_module("models.conversation")
+    if not hasattr(conv_mod, 'Conversation'):
+        conv_mod.Conversation = MagicMock()
+    if not hasattr(conv_mod, 'ConversationSource'):
+        conv_mod.ConversationSource = MagicMock()
+
+    chat_mod = sys.modules.get("models.chat") or _stub_module("models.chat")
+    if not hasattr(chat_mod, 'Message'):
+        chat_mod.Message = MagicMock()
+
+    # utils stubs
+    apps_util_mod = _stub_module("utils.apps")
+    apps_util_mod.get_available_apps = MagicMock(return_value=[])
+
+    notifications_util_mod = _stub_module("utils.notifications")
+    mock_send = MagicMock()
+    notifications_util_mod.send_notification = mock_send
+
+    proactive_noti_mod = _stub_module("utils.llm.proactive_notification")
+    proactive_noti_mod.get_proactive_message = MagicMock()
+
+    clients_mod_existing = sys.modules.get("utils.llm.clients") or _stub_module("utils.llm.clients")
+    if not hasattr(clients_mod_existing, 'generate_embedding'):
+        clients_mod_existing.generate_embedding = MagicMock(return_value=[0] * 3072)
+
+    tracker_mod_existing = sys.modules.get("utils.llm.usage_tracker") or _stub_module("utils.llm.usage_tracker")
+    if not hasattr(tracker_mod_existing, 'track_usage'):
+        tracker_mod_existing.track_usage = MagicMock()
+    if not hasattr(tracker_mod_existing, 'Features'):
+        tracker_mod_existing.Features = MagicMock()
+
+    # models.app needs real imports (not stubbed)
+    return mock_send
+
+
+def test_process_proactive_notification_tool_delivery():
+    """_process_proactive_notification should send each tool notification via send_app_notification."""
+    mock_send = _setup_app_integrations_stubs()
+
+    import utils.app_integrations as app_int
+
+    app_int._hit_proactive_notification_rate_limits = MagicMock(return_value=False)
+    app_int._set_proactive_noti_sent_at = MagicMock()
+
+    from models.app import App, ProactiveNotification
+
+    mentor_app = App(
+        id='mentor',
+        name='Omi',
+        category='productivity',
+        author='Omi',
+        description='AI mentor',
+        image='/test.png',
+        capabilities={'proactive_notification'},
+        enabled=True,
+        proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
+    )
+
+    tool_data = {
+        "source": "tool",
+        "notifications": [
+            {"notification_text": "Hey, take a break!", "tool_name": "trigger_emotional_support"},
+            {"notification_text": "This conflicts with your goal.", "tool_name": "trigger_goal_misalignment"},
+        ],
+        "prompt": "unused in tool path",
+        "params": ["user_name"],
+        "context": {"filters": {"topics": ["stress"]}},
+    }
+
+    result = app_int._process_proactive_notification("test_uid", mentor_app, tool_data)
+
+    # Both notifications should be sent
+    assert result is not None
+    assert "take a break" in result
+    assert "conflicts with your goal" in result
+
+    # send_notification should have been called twice (once per tool notification)
+    assert mock_send.call_count == 2
+
+    # Rate limit should be set once after all notifications
+    app_int._set_proactive_noti_sent_at.assert_called_once_with("test_uid", mentor_app)
+
+
+def test_process_proactive_notification_tool_rate_limited():
+    """_process_proactive_notification should skip tool notifications when rate-limited."""
+    _setup_app_integrations_stubs()
+
+    import utils.app_integrations as app_int
+
+    app_int._hit_proactive_notification_rate_limits = MagicMock(return_value=True)
+
+    mock_send = MagicMock()
+    app_int.send_app_notification = mock_send
+
+    from models.app import App, ProactiveNotification
+
+    mentor_app = App(
+        id='mentor',
+        name='Omi',
+        category='productivity',
+        author='Omi',
+        description='AI mentor',
+        image='/test.png',
+        capabilities={'proactive_notification'},
+        enabled=True,
+        proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
+    )
+
+    tool_data = {
+        "source": "tool",
+        "notifications": [
+            {"notification_text": "Hey!", "tool_name": "trigger_emotional_support"},
+        ],
+    }
+
+    result = app_int._process_proactive_notification("test_uid", mentor_app, tool_data)
+
+    # Should return None because rate limited
+    assert result is None
+    # send_app_notification should NOT have been called
+    mock_send.assert_not_called()
