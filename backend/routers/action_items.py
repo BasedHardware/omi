@@ -1,13 +1,17 @@
 import asyncio
 import threading
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
+import database.redis_db as redis_db
+from database.users import get_user_profile
 from utils.other import endpoints as auth
 from utils.notifications import (
+    send_notification,
     send_action_item_data_message,
     send_action_item_update_message,
     send_action_item_deletion_message,
@@ -236,6 +240,21 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+
+    # Notify sender if this was a shared task that just got completed
+    if completed and existing_item.get('shared_from'):
+        shared_from = existing_item['shared_from']
+        sender_uid = shared_from.get('sender_uid')
+        if sender_uid:
+            recipient_profile = get_user_profile(uid)
+            recipient_name = recipient_profile.get('name', '') or 'Someone'
+            description = existing_item.get('description', '')[:60]
+            send_notification(
+                sender_uid,
+                "Task completed",
+                f"{recipient_name} completed: {description}",
+            )
+
     return ActionItemResponse(**updated_item)
 
 
@@ -319,3 +338,110 @@ def create_action_items_batch(
                 )
 
     return {"action_items": created_items, "created_count": len(created_items)}
+
+
+# *****************************
+# ******* TASK SHARING ********
+# *****************************
+
+
+class ShareTasksRequest(BaseModel):
+    task_ids: List[str] = Field(description="IDs of action items to share", min_length=1, max_length=20)
+
+
+class AcceptSharedTasksRequest(BaseModel):
+    token: str = Field(description="Share token from the shared URL")
+
+
+@router.post("/v1/action-items/share", tags=['action-items'])
+def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a shareable link for selected action items."""
+    # Validate all task_ids belong to user
+    for task_id in request.task_ids:
+        item = action_items_db.get_action_item(uid, task_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
+
+    # Get sender display name
+    profile = get_user_profile(uid)
+    display_name = profile.get('name', '') or profile.get('display_name', '') or 'Someone'
+
+    # Generate token and store in Redis
+    token = uuid.uuid4().hex
+    redis_db.store_task_share(token, uid, display_name, request.task_ids)
+
+    return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
+
+
+@router.get("/v1/action-items/shared/{token}", tags=['action-items'])
+def get_shared_action_items(token: str):
+    """Public endpoint — get shared task preview (no auth required)."""
+    share_data = redis_db.get_task_share(token)
+    if not share_data:
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
+    sender_uid = share_data['uid']
+    task_ids = share_data['task_ids']
+
+    # Fetch tasks — only expose description + due_at
+    tasks = []
+    for task_id in task_ids:
+        item = action_items_db.get_action_item(sender_uid, task_id)
+        if item:
+            tasks.append(
+                {
+                    "description": item.get('description', ''),
+                    "due_at": item.get('due_at'),
+                }
+            )
+
+    return {
+        "sender_name": share_data['display_name'],
+        "tasks": tasks,
+        "count": len(tasks),
+    }
+
+
+@router.post("/v1/action-items/accept", tags=['action-items'])
+def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Save shared tasks to the recipient's task list."""
+    share_data = redis_db.get_task_share(request.token)
+    if not share_data:
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
+    # Prevent self-accept
+    if share_data['uid'] == uid:
+        raise HTTPException(status_code=400, detail="Cannot accept your own shared tasks")
+
+    # Prevent duplicate accept
+    if redis_db.has_accepted_task_share(request.token, uid):
+        raise HTTPException(status_code=409, detail="You have already accepted this share")
+
+    sender_uid = share_data['uid']
+    task_ids = share_data['task_ids']
+
+    # Copy each task to recipient's list
+    created_ids = []
+    for task_id in task_ids:
+        original = action_items_db.get_action_item(sender_uid, task_id)
+        if not original:
+            continue
+
+        new_item = {
+            'description': original.get('description', ''),
+            'completed': False,
+            'due_at': original.get('due_at'),
+            'shared_from': {
+                'token': request.token,
+                'sender_uid': sender_uid,
+                'sender_name': share_data['display_name'],
+                'original_task_id': task_id,
+            },
+        }
+        new_id = action_items_db.create_action_item(uid, new_item)
+        created_ids.append(new_id)
+
+    # Mark as accepted
+    redis_db.mark_task_share_accepted(request.token, uid)
+
+    return {"created": created_ids, "count": len(created_ids)}
