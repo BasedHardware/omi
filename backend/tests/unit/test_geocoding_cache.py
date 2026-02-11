@@ -185,3 +185,128 @@ class TestRedisFailure:
 
         assert result is not None
         assert result.google_place_id == "ChIJ_write_fail"
+
+
+class TestApiEdgeCases:
+    """Edge cases in Google Maps API responses."""
+
+    def test_api_status_not_ok_returns_none(self):
+        """Non-OK status (e.g. ZERO_RESULTS, OVER_QUERY_LIMIT) returns None."""
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = None
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {"status": "ZERO_RESULTS", "results": []}
+                mock_req.get.return_value = mock_resp
+
+                result = get_google_maps_location(37.785, -122.409)
+
+        assert result is None
+        mock_r.set.assert_not_called()
+
+    def test_missing_place_id_returns_none(self):
+        """Result with no place_id returns None."""
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = None
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {
+                    "status": "OK",
+                    "results": [{"place_id": None, "formatted_address": "Nowhere", "types": []}],
+                }
+                mock_req.get.return_value = mock_resp
+
+                result = get_google_maps_location(37.785, -122.409)
+
+        assert result is None
+
+    def test_empty_types_gives_none_location_type(self):
+        """Result with no types gives location_type=None."""
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = None
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {
+                    "status": "OK",
+                    "results": [{"place_id": "ChIJ_notype", "formatted_address": "No Type St", "types": []}],
+                }
+                mock_req.get.return_value = mock_resp
+
+                result = get_google_maps_location(37.785, -122.409)
+
+        assert result is not None
+        assert result.location_type is None
+
+    def test_missing_types_key_gives_none_location_type(self):
+        """Result with no 'types' key at all gives location_type=None."""
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = None
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {
+                    "status": "OK",
+                    "results": [{"place_id": "ChIJ_nokey", "formatted_address": "No Key St"}],
+                }
+                mock_req.get.return_value = mock_resp
+
+                result = get_google_maps_location(37.785, -122.409)
+
+        assert result is not None
+        assert result.location_type is None
+
+
+class TestCorruptCache:
+    """Corrupt cached data should fall back to API gracefully."""
+
+    def test_invalid_json_falls_through_to_api(self):
+        """Corrupt JSON in cache should log warning and call API."""
+        api_response = {
+            "status": "OK",
+            "results": [
+                {
+                    "place_id": "ChIJ_recover",
+                    "formatted_address": "Recovered St",
+                    "types": ["route"],
+                }
+            ],
+        }
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = "not-valid-json{{"
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = api_response
+                mock_req.get.return_value = mock_resp
+
+                with patch("utils.conversations.location.logging") as mock_log:
+                    result = get_google_maps_location(37.785, -122.409)
+                    mock_log.warning.assert_called()
+
+        assert result is not None
+        assert result.google_place_id == "ChIJ_recover"
+
+    def test_schema_mismatch_falls_through_to_api(self):
+        """Cached data with wrong schema should log warning and call API."""
+        api_response = {
+            "status": "OK",
+            "results": [
+                {
+                    "place_id": "ChIJ_schema",
+                    "formatted_address": "Schema St",
+                    "types": ["route"],
+                }
+            ],
+        }
+        with patch("utils.conversations.location.r") as mock_r:
+            # Missing required 'latitude' and 'longitude' fields
+            mock_r.get.return_value = json.dumps({"bad_field": "bad_value"})
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = api_response
+                mock_req.get.return_value = mock_resp
+
+                with patch("utils.conversations.location.logging") as mock_log:
+                    result = get_google_maps_location(37.785, -122.409)
+                    mock_log.warning.assert_called()
+
+        assert result is not None
+        assert result.google_place_id == "ChIJ_schema"
