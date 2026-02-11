@@ -2,6 +2,7 @@ import datetime
 import io
 import json
 import os
+import urllib.parse
 import wave
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -767,6 +768,12 @@ def delete_speech_profile_blob(path: str) -> bool:
 def _get_signed_url(blob, minutes):
     if cached := get_cached_signed_url(blob.name):
         return cached
+
+    if os.getenv('STORAGE_EMULATOR_HOST'):
+        encoded_name = urllib.parse.quote(blob.name, safe='')
+        url = f"{os.getenv('STORAGE_EMULATOR_HOST')}/v0/b/{blob.bucket.name}/o/{encoded_name}?alt=media"
+        cache_signed_url(blob.name, url, minutes * 60)
+        return url
 
     signed_url = blob.generate_signed_url(version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET")
     cache_signed_url(blob.name, signed_url, minutes * 60)
