@@ -490,15 +490,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
-        var previousId = SharedPreferencesUtil().btDevice.id;
-        if (previousId.isNotEmpty && previousId != cDevice.id) {
-          SharedPreferencesUtil().deviceName = cDevice.name;
-        } else {
-          var storedName = SharedPreferencesUtil().deviceName;
-          if (storedName.isEmpty) {
-            SharedPreferencesUtil().deviceName = cDevice.name;
-          }
-        }
+        SharedPreferencesUtil().updateDeviceNameOnConnect(cDevice.id, cDevice.name);
         deviceProvider!.setIsConnected(true);
       }
       await deviceProvider?.scanAndConnectToDevice();
@@ -509,16 +501,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
       await Future.delayed(const Duration(seconds: 2));
-      var previousId2 = SharedPreferencesUtil().btDevice.id;
       SharedPreferencesUtil().btDevice = connectedDevice!;
-      if (previousId2.isNotEmpty && previousId2 != connectedDevice.id) {
-        SharedPreferencesUtil().deviceName = connectedDevice.name;
-      } else {
-        var storedName2 = SharedPreferencesUtil().deviceName;
-        if (storedName2.isEmpty) {
-          SharedPreferencesUtil().deviceName = connectedDevice.name;
-        }
-      }
+      SharedPreferencesUtil().updateDeviceNameOnConnect(connectedDevice.id, connectedDevice.name);
       foundDevicesMap.clear();
       deviceList.clear();
       if (isFromOnboarding) {
