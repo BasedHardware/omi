@@ -206,7 +206,7 @@ class TestAcceptEndpoint:
             "routers.action_items.action_items_db"
         ) as mock_db:
             mock_redis.get_task_share.return_value = self._mock_share_data()
-            mock_redis.has_accepted_task_share.return_value = False
+            mock_redis.try_accept_task_share.return_value = True
             mock_db.get_action_item.return_value = {
                 "id": "t1",
                 "description": "Review PR",
@@ -244,7 +244,7 @@ class TestAcceptEndpoint:
         request = AcceptSharedTasksRequest(token="tok1")
         with patch("routers.action_items.redis_db") as mock_redis:
             mock_redis.get_task_share.return_value = self._mock_share_data()
-            mock_redis.has_accepted_task_share.return_value = True
+            mock_redis.try_accept_task_share.return_value = False
             try:
                 accept_shared_action_items(request, uid="uid_bob")
                 assert False, "Should have raised HTTPException"
@@ -252,11 +252,11 @@ class TestAcceptEndpoint:
                 assert e.status_code == 409
 
     def test_accept_returns_503_on_redis_failure(self):
-        """If Redis has_accepted check fails (returns None), should raise 503."""
+        """If Redis try_accept fails (returns None), should raise 503."""
         request = AcceptSharedTasksRequest(token="tok1")
         with patch("routers.action_items.redis_db") as mock_redis:
             mock_redis.get_task_share.return_value = self._mock_share_data()
-            mock_redis.has_accepted_task_share.return_value = None
+            mock_redis.try_accept_task_share.return_value = None
             try:
                 accept_shared_action_items(request, uid="uid_bob")
                 assert False, "Should have raised HTTPException"

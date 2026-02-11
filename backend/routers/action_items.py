@@ -416,11 +416,11 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     if share_data['uid'] == uid:
         raise HTTPException(status_code=400, detail="Cannot accept your own shared tasks")
 
-    # Prevent duplicate accept
-    accepted = redis_db.has_accepted_task_share(request.token, uid)
+    # Atomically check and mark acceptance to prevent duplicates
+    accepted = redis_db.try_accept_task_share(request.token, uid)
     if accepted is None:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-    if accepted:
+    if not accepted:
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
     sender_uid = share_data['uid']
@@ -446,8 +446,5 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         }
         new_id = action_items_db.create_action_item(uid, new_item)
         created_ids.append(new_id)
-
-    # Mark as accepted
-    redis_db.mark_task_share_accepted(request.token, uid)
 
     return {"created": created_ids, "count": len(created_ids)}

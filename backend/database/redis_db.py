@@ -815,16 +815,13 @@ def get_task_share(token: str) -> Optional[dict]:
 
 
 @try_catch_decorator
-def has_accepted_task_share(token: str, uid: str) -> bool:
-    """Check if a user has already accepted a task share."""
-    return r.sismember(f'task_share:{token}:accepted', uid)
-
-
-@try_catch_decorator
-def mark_task_share_accepted(token: str, uid: str):
-    """Record that a user has accepted a task share."""
-    r.sadd(f'task_share:{token}:accepted', uid)
-    r.expire(f'task_share:{token}:accepted', TASK_SHARE_TTL)
+def try_accept_task_share(token: str, uid: str) -> bool:
+    """Atomically mark a task share as accepted. Returns True on first acceptance, False if already accepted."""
+    key = f'task_share:{token}:accepted'
+    if r.sadd(key, uid) == 1:
+        r.expire(key, TASK_SHARE_TTL)
+        return True
+    return False
 
 
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:

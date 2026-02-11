@@ -47,7 +47,7 @@ export async function generateMetadata(
       ...prevData.openGraph,
       title: title,
       type: 'website',
-      url: `${prevData.metadataBase}/tasks/${params.token}`,
+      url: new URL(`/tasks/${params.token}`, prevData.metadataBase).toString(),
       description: 'Open in Omi to add these tasks to your list.',
     },
     other: {
