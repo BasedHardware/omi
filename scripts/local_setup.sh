@@ -54,20 +54,11 @@ ELAPSED=0
 while [ $ELAPSED -lt $TIMEOUT ]; do
     HEALTHY=$(docker compose ps --format json 2>/dev/null | python3 -c "
 import sys, json
-healthy = 0
-total = 0
-for line in sys.stdin:
-    line = line.strip()
-    if not line:
-        continue
-    svc = json.loads(line)
-    total += 1
-    status = svc.get('Health', svc.get('State', ''))
-    if 'healthy' in status.lower() or svc.get('State') == 'running':
-        healthy += 1
-print(f'{healthy}/{total}')
+services = [json.loads(line) for line in sys.stdin if line.strip()]
+healthy_count = sum(1 for svc in services if 'healthy' in svc.get('Health', '').lower())
+print(f'{healthy_count}/{len(services)}')
 " 2>/dev/null || echo "0/0")
-    if [[ "$HEALTHY" == "5/5" ]] || [[ "$HEALTHY" == "4/4" ]]; then
+    if [[ "$HEALTHY" == "5/5" ]]; then
         echo " done!"
         break
     fi
