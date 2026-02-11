@@ -359,7 +359,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           GestureDetector(
             onTap: () async {
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-              SharedPreferencesUtil().deviceName = '';
               if (provider.connectedDevice != null) {
                 await _bleDisconnectDevice(provider.connectedDevice!);
               }
