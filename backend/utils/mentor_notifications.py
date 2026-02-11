@@ -82,8 +82,8 @@ MIN_SEGMENTS_FOR_ANALYSIS = 3
 # Minimum confidence to trigger a proactive notification
 PROACTIVE_CONFIDENCE_THRESHOLD = 0.7
 
-# Proactive tool definitions (OpenAI function-calling format)
-PROACTIVE_TOOLS = [
+# Proactive trigger definitions (OpenAI function-calling format)
+PROACTIVE_TRIGGERS = [
     {
         "type": "function",
         "function": {
@@ -314,7 +314,7 @@ Remember: First evaluate silently, then either respond with empty string OR give
         "prompt": adjusted_prompt,
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
         "context": {"filters": {"people": [], "entities": [], "topics": topics}},
-        "tools": PROACTIVE_TOOLS,
+        "triggers": PROACTIVE_TRIGGERS,
         "messages": messages,
     }
 
