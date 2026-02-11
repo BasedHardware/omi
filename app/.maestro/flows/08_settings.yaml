@@ -21,14 +21,13 @@ appId: com.friend.ios.dev
 # Dismiss any popup
 - runFlow:
     when:
-      visible: "Maybe later"
+      visible:
+        text: "Maybe [Ll]ater"
+        regex: true
     commands:
-      - tapOn: "Maybe later"
-- runFlow:
-    when:
-      visible: "Maybe Later"
-    commands:
-      - tapOn: "Maybe Later"
+      - tapOn:
+          text: "Maybe [Ll]ater"
+          regex: true
 
 # Navigate to Settings
 # Settings is typically accessed via a gear icon or profile icon in the top bar
