@@ -1,0 +1,140 @@
+# Omi App - Device Connection Flow (Requires Omi Device)
+# Tests: Device scanning screen, BLE scan, connect to Omi, verify connected.
+#
+# ⚠️  REQUIRES PHYSICAL OMI DEVICE
+# This test cannot run without a physical Omi device nearby.
+# It is included for completeness and for maintainers with hardware access.
+#
+# Prerequisites:
+#   - User is signed in
+#   - Physical Omi device powered on and in range
+#   - Bluetooth enabled on test device
+#
+# Run: maestro test .maestro/flows/09_device_connection.yaml
+
+appId: com.friend.ios.dev
+tags:
+  - device_required
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Navigate to device settings/connection
+# The device connection is typically in settings or via a device icon
+- runFlow:
+    when:
+      visible:
+        id: ".*settings.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*settings.*"
+          regex: true
+- runFlow:
+    when:
+      notVisible:
+        id: ".*settings.*"
+        regex: true
+    commands:
+      - tapOn:
+          point: "8%,6%"
+- waitForAnimationToEnd
+
+# Look for device-related settings
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Dd]evice.*"
+          regex: true
+      - visible:
+          text: ".*[Cc]onnect.*"
+          regex: true
+      - visible: "Settings"
+    timeout: 10000
+
+# Tap on device/connection option
+- runFlow:
+    when:
+      visible:
+        text: ".*[Dd]evice.*"
+        regex: true
+    commands:
+      - tapOn:
+          text: ".*[Dd]evice.*"
+          regex: true
+      - waitForAnimationToEnd
+
+# Wait for scanning screen
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Ss]can.*"
+          regex: true
+      - visible:
+          text: ".*[Ss]earch.*"
+          regex: true
+      - visible:
+          text: ".*[Cc]onnect.*"
+          regex: true
+    timeout: 15000
+
+# The app should auto-scan for nearby BLE devices
+# Wait for Omi device to appear in the scan results
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Oo]mi.*"
+          regex: true
+      - visible:
+          text: ".*Friend.*"
+          regex: true
+    timeout: 30000
+
+# Tap on the Omi device to connect
+- tapOn:
+    text: ".*[Oo]mi.*"
+    regex: true
+- waitForAnimationToEnd
+
+# Wait for connection to be established
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*[Cc]onnected.*"
+          regex: true
+      - visible:
+          text: ".*[Pp]aired.*"
+          regex: true
+    timeout: 30000
+
+# Verify connected status is shown
+
+# Navigate back
+- pressKey: back
+- waitForAnimationToEnd
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 10000
