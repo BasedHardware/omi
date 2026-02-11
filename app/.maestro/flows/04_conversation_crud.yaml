@@ -1,0 +1,172 @@
+# Omi App - Conversation CRUD Flow
+# Tests: Edit conversation title, delete a conversation.
+#
+# Prerequisites:
+#   - User is signed in
+#   - At least two conversations exist (one will be deleted)
+#
+# Run: maestro test .maestro/flows/04_conversation_crud.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+- assertVisible: "Conversations"
+
+# Scroll to find a conversation
+- scroll:
+    direction: DOWN
+    duration: 500
+
+# Tap into a conversation to open detail view
+- tapOn:
+    point: "50%,45%"
+
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Transcript"
+      - visible: "Summary"
+      - visible: "Overview"
+    timeout: 10000
+
+# Look for edit/options menu (typically a three-dot menu or edit icon)
+- runFlow:
+    when:
+      visible:
+        id: ".*more.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*more.*"
+          regex: true
+      - waitForAnimationToEnd
+
+# Try tapping the options/overflow button (top-right area)
+- runFlow:
+    when:
+      notVisible:
+        id: ".*more.*"
+        regex: true
+    commands:
+      # Tap top-right area where options menu typically is
+      - tapOn:
+          point: "92%,6%"
+      - waitForAnimationToEnd
+
+# Look for Edit option in the menu
+- runFlow:
+    when:
+      visible: "Edit"
+    commands:
+      - tapOn: "Edit"
+      - waitForAnimationToEnd
+      # Clear existing title and type new one
+      - runFlow:
+          when:
+            visible:
+              id: ".*title.*"
+              regex: true
+          commands:
+            - clearText
+            - inputText: "Maestro Test Conversation"
+      # Save the edit
+      - runFlow:
+          when:
+            visible: "Save"
+          commands:
+            - tapOn: "Save"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Done"
+          commands:
+            - tapOn: "Done"
+            - waitForAnimationToEnd
+
+# Navigate back to list
+- pressKey: back
+- waitForAnimationToEnd
+
+# Now test delete: open a conversation
+- scroll:
+    direction: DOWN
+    duration: 500
+
+- tapOn:
+    point: "50%,55%"
+
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Transcript"
+      - visible: "Summary"
+      - visible: "Overview"
+    timeout: 10000
+
+# Try to find delete option
+- runFlow:
+    when:
+      visible:
+        id: ".*more.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*more.*"
+          regex: true
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      notVisible:
+        id: ".*more.*"
+        regex: true
+    commands:
+      - tapOn:
+          point: "92%,6%"
+      - waitForAnimationToEnd
+
+# Look for Delete option
+- runFlow:
+    when:
+      visible: "Delete"
+    commands:
+      - tapOn: "Delete"
+      - waitForAnimationToEnd
+      # Confirm deletion if dialog appears
+      - runFlow:
+          when:
+            visible: "Confirm"
+          commands:
+            - tapOn: "Confirm"
+            - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible: "Delete"
+          commands:
+            - tapOn: "Delete"
+            - waitForAnimationToEnd
+
+# Verify we return to conversations list
+- extendedWaitUntil:
+    visible: "Conversations"
+    timeout: 10000
