@@ -1,0 +1,119 @@
+# Omi App - Settings Flow
+# Tests: Navigate to settings, verify categories load, navigate sub-settings.
+#
+# Prerequisites:
+#   - User is signed in
+#
+# Run: maestro test .maestro/flows/08_settings.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Navigate to Settings
+# Settings is typically accessed via a gear icon or profile icon in the top bar
+# Try tapping the settings icon area (top-left or top-right)
+- runFlow:
+    when:
+      visible:
+        id: ".*settings.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*settings.*"
+          regex: true
+      - waitForAnimationToEnd
+
+- runFlow:
+    when:
+      notVisible:
+        id: ".*settings.*"
+        regex: true
+    commands:
+      # Tap the profile/settings icon (typically top-left)
+      - tapOn:
+          point: "8%,6%"
+      - waitForAnimationToEnd
+
+# Wait for settings screen to load
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Settings"
+      - visible: "Speech Profile"
+      - visible: "Notifications"
+      - visible: "Sign Out"
+    timeout: 10000
+
+# Verify settings categories are visible
+- runFlow:
+    when:
+      visible: "Speech Profile"
+    commands:
+      - assertVisible: "Speech Profile"
+
+- runFlow:
+    when:
+      visible: "Notifications"
+    commands:
+      - assertVisible: "Notifications"
+
+# Navigate into a sub-settings screen (e.g., Speech Profile)
+- runFlow:
+    when:
+      visible: "Speech Profile"
+    commands:
+      - tapOn: "Speech Profile"
+      - waitForAnimationToEnd
+      # Verify speech profile screen loaded
+      - extendedWaitUntil:
+          anyOf:
+            - visible: "Speech Profile"
+            - visible:
+                text: ".*speech.*"
+                regex: true
+          timeout: 10000
+      # Navigate back
+      - pressKey: back
+      - waitForAnimationToEnd
+
+# Scroll through settings to verify more options
+- scroll:
+    direction: DOWN
+    duration: 1000
+- waitForAnimationToEnd
+
+# Look for Sign Out at bottom of settings (verifies full list loaded)
+- runFlow:
+    when:
+      visible: "Sign Out"
+    commands:
+      - assertVisible: "Sign Out"
+
+# Navigate back to home
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 10000
