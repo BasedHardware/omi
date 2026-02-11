@@ -15068,6 +15068,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to play audio. The file may be corrupted or missing.'**
   String get audioPlaybackFailed;
+
+  /// Title for rename device dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Device'**
+  String get renameDevice;
+
+  /// Hint text for device name input field
+  ///
+  /// In en, this message translates to:
+  /// **'Enter device name'**
+  String get enterDeviceName;
+
+  /// Error when device name is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Device name cannot be empty'**
+  String get deviceNameCannotBeEmpty;
+
+  /// Snackbar message after device name is updated
+  ///
+  /// In en, this message translates to:
+  /// **'Device name updated'**
+  String get deviceNameUpdated;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

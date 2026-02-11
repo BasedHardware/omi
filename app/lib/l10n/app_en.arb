@@ -9873,5 +9873,21 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
+  "renameDevice": "Rename Device",
+  "@renameDevice": {
+    "description": "Title for rename device dialog"
+  },
+  "enterDeviceName": "Enter device name",
+  "@enterDeviceName": {
+    "description": "Hint text for device name input field"
+  },
+  "deviceNameCannotBeEmpty": "Device name cannot be empty",
+  "@deviceNameCannotBeEmpty": {
+    "description": "Error when device name is empty"
+  },
+  "deviceNameUpdated": "Device name updated",
+  "@deviceNameUpdated": {
+    "description": "Snackbar message after device name is updated"
+  }
 }
