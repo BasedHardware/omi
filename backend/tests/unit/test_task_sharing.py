@@ -121,6 +121,7 @@ class TestShareEndpoint:
         ) as mock_profile, patch("routers.action_items.redis_db") as mock_redis:
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
             mock_profile.return_value = {"name": "Alice"}
+            mock_redis.store_task_share.return_value = True
 
             result = share_action_items(request, uid="uid_alice")
 
@@ -128,6 +129,22 @@ class TestShareEndpoint:
         assert "token" in result
         assert result["url"].startswith("https://h.omi.me/tasks/")
         mock_redis.store_task_share.assert_called_once()
+
+    def test_share_returns_500_on_redis_failure(self):
+        """If Redis store fails (returns None), should raise 500."""
+        request = ShareTasksRequest(task_ids=["t1"])
+        with patch("routers.action_items.action_items_db") as mock_db, patch(
+            "routers.action_items.get_user_profile"
+        ) as mock_profile, patch("routers.action_items.redis_db") as mock_redis:
+            mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
+            mock_profile.return_value = {"name": "Alice"}
+            mock_redis.store_task_share.return_value = None
+
+            try:
+                share_action_items(request, uid="uid_alice")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 500
 
 
 class TestPublicGetEndpoint:
@@ -233,6 +250,18 @@ class TestAcceptEndpoint:
                 assert False, "Should have raised HTTPException"
             except Exception as e:
                 assert e.status_code == 409
+
+    def test_accept_returns_503_on_redis_failure(self):
+        """If Redis has_accepted check fails (returns None), should raise 503."""
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis:
+            mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_redis.has_accepted_task_share.return_value = None
+            try:
+                accept_shared_action_items(request, uid="uid_bob")
+                assert False, "Should have raised HTTPException"
+            except Exception as e:
+                assert e.status_code == 503
 
 
 class TestCompletionNotification:

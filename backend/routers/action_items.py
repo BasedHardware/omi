@@ -248,7 +248,8 @@ def toggle_action_item_completion(
         if sender_uid:
             recipient_profile = get_user_profile(uid)
             recipient_name = recipient_profile.get('name', '') or 'Someone'
-            description = existing_item.get('description', '')[:60]
+            desc = existing_item.get('description', '')
+            description = (desc[:57] + '...') if len(desc) > 60 else desc
             send_notification(
                 sender_uid,
                 "Task completed",
@@ -368,7 +369,9 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
 
     # Generate token and store in Redis
     token = uuid.uuid4().hex
-    redis_db.store_task_share(token, uid, display_name, request.task_ids)
+    result = redis_db.store_task_share(token, uid, display_name, request.task_ids)
+    if result is None:
+        raise HTTPException(status_code=500, detail="Failed to create share link")
 
     return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
 
@@ -414,7 +417,10 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
         raise HTTPException(status_code=400, detail="Cannot accept your own shared tasks")
 
     # Prevent duplicate accept
-    if redis_db.has_accepted_task_share(request.token, uid):
+    accepted = redis_db.has_accepted_task_share(request.token, uid)
+    if accepted is None:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    if accepted:
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
     sender_uid = share_data['uid']

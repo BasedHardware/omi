@@ -802,7 +802,7 @@ TASK_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
 def store_task_share(token: str, uid: str, display_name: str, task_ids: list):
     """Store a task share token in Redis with 30-day TTL."""
     data = json.dumps({"uid": uid, "display_name": display_name, "task_ids": task_ids})
-    r.set(f'task_share:{token}', data, ex=TASK_SHARE_TTL)
+    return r.set(f'task_share:{token}', data, ex=TASK_SHARE_TTL)
 
 
 @try_catch_decorator
