@@ -139,13 +139,14 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    # Always send push notification
-    send_app_notification(uid, app.name, app.id, data['message'])
-
-    # If app has chat_messages enabled in manifest, also store the message in chat
+    # Determine target from manifest (defaults to 'app' if not configured)
+    target = 'app'
     if app.external_integration and app.external_integration.chat_messages_enabled:
         target = app.external_integration.chat_messages_target
         chat_app_id = None if target == 'main' else app.id
         add_app_message(data['message'], chat_app_id, uid)
+
+    # Always send push notification
+    send_app_notification(uid, app.name, app.id, data['message'], target=target)
 
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
