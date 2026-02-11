@@ -88,15 +88,15 @@ export default async function SharedTasksPage({ params }: TasksPageProps) {
   const link = getPlatformLink(userAgent);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black font-system-ui">
+    <div className="min-h-screen overflow-x-hidden bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black font-system-ui">
       <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,rgba(88,28,135,0.2),transparent)]" />
       <section className="relative mx-auto max-w-screen-md px-6 pt-24 pb-16 md:px-12 md:pt-32 md:pb-24">
         {/* Sender info */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-white md:text-4xl">
+          <h1 className="break-words text-2xl font-bold text-white sm:text-3xl md:text-4xl">
             {data.sender_name} shared {data.count} task{data.count === 1 ? '' : 's'}
           </h1>
-          <p className="mt-3 text-lg text-gray-400">
+          <p className="mt-3 break-words text-lg text-gray-400">
             Open in Omi to add {data.count === 1 ? 'it' : 'them'} to your list
           </p>
         </div>
@@ -111,8 +111,8 @@ export default async function SharedTasksPage({ params }: TasksPageProps) {
               <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border border-white/20">
                 {/* Empty checkbox */}
               </div>
-              <div className="flex-1">
-                <p className="text-base text-white">{task.description}</p>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-base text-white">{task.description}</p>
                 {task.due_at && (
                   <p className="mt-1 text-sm text-gray-400">
                     Due {formatDueDate(task.due_at)}
