@@ -670,7 +670,7 @@ def test_multiple_tools_mixed_confidence():
 
 
 def test_process_proactive_notification_tool_delivery():
-    """_process_proactive_notification with tool_uses=True should call tools and send notifications."""
+    """_process_proactive_notification with tool_uses=True sends tool notifications AND the main notification."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -690,6 +690,9 @@ def test_process_proactive_notification_tool_delivery():
         ]
     )
 
+    # Prompt-based path also runs
+    app_int.get_proactive_message = MagicMock(return_value="Main prompt notification")
+
     from models.app import App, ProactiveNotification
 
     mentor_app = App(
@@ -707,7 +710,7 @@ def test_process_proactive_notification_tool_delivery():
     tools = [{"type": "function", "function": {"name": "test"}}]
     data = {
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
-        "prompt": "unused in tool path",
+        "prompt": "Some prompt",
         "params": ["user_name"],
         "context": {"filters": {"topics": ["stress"]}},
     }
@@ -721,11 +724,10 @@ def test_process_proactive_notification_tool_delivery():
             tool_uses=True,
         )
 
-        assert result is not None
-        assert "take a break" in result
-        assert "conflicts with your goal" in result
-        assert mock_send_app.call_count == 2
-        app_int._set_proactive_noti_sent_at.assert_called_once_with("test_uid", mentor_app)
+        # Tool notifications sent as extra (2) + main prompt notification (1) = 3
+        assert mock_send_app.call_count == 3
+        # Result is the main prompt message
+        assert result == "Main prompt notification"
     finally:
         app_int._process_tools = original_process_tools
 
@@ -817,8 +819,8 @@ def test_process_proactive_notification_tool_uses_false_skips_tools():
         app_int._process_tools = original_process_tools
 
 
-def test_process_proactive_notification_tools_fallthrough_to_prompt():
-    """When tools don't fire with tool_uses=True, should fall through to prompt-based path."""
+def test_process_proactive_notification_no_tool_results_still_sends_prompt():
+    """When tools don't fire, only the main prompt notification is sent."""
     _setup_app_integrations_stubs()
 
     import utils.app_integrations as app_int
@@ -829,8 +831,7 @@ def test_process_proactive_notification_tools_fallthrough_to_prompt():
     original_process_tools = app_int._process_tools
     app_int._process_tools = MagicMock(return_value=[])  # No tool results
 
-    # Patch get_proactive_message directly on the module (from-import binding)
-    app_int.get_proactive_message = MagicMock(return_value="Prompt-based fallback advice")
+    app_int.get_proactive_message = MagicMock(return_value="Main prompt advice")
 
     mock_send_app = MagicMock()
     app_int.send_app_notification = mock_send_app
@@ -860,11 +861,9 @@ def test_process_proactive_notification_tools_fallthrough_to_prompt():
     try:
         result = app_int._process_proactive_notification("test_uid", mentor_app, data, tools=tools, tool_uses=True)
 
-        # Should have tried tools
         app_int._process_tools.assert_called_once()
-        # Should fall through to prompt-based path and succeed
-        assert result == "Prompt-based fallback advice"
-        assert mock_send_app.call_count == 1  # One prompt-based notification sent
+        assert result == "Main prompt advice"
+        assert mock_send_app.call_count == 1  # Only the main prompt notification
     finally:
         app_int._process_tools = original_process_tools
 

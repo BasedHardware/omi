@@ -341,24 +341,15 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    # Tool-based proactive notifications.
-    # All tool notifications from one analysis cycle are sent together (up to 3,
-    # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown),
-    # not individual notifications within one cycle. Per CTO request.
+    # Tool-based proactive notifications (extra, does not replace the main notification).
     if tool_uses and tools and data.get('messages'):
         from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 
         system_prompt, user_message = _build_tool_context(uid, app, data)
         tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
-        if tool_results:
-            messages_sent = []
-            for noti in tool_results:
-                send_app_notification(uid, app.name, app.id, noti['notification_text'])
-                logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
-                messages_sent.append(noti['notification_text'])
-            _set_proactive_noti_sent_at(uid, app)
-            return "\n\n".join(messages_sent)
-        # Tools didn't fire — fall through to prompt-based path
+        for noti in tool_results:
+            send_app_notification(uid, app.name, app.id, noti['notification_text'])
+            logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
 
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
