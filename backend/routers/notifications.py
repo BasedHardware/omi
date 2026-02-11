@@ -139,22 +139,13 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    # Check if app has chat_messages capability declared in manifest
-    if not app.external_integration or not app.external_integration.chat_messages_enabled:
-        raise HTTPException(
-            status_code=403,
-            detail='App not authorized for chat messages. Declare chat_messages.enabled in manifest.',
-        )
+    # Always send push notification
+    send_app_notification(uid, app.name, app.id, data['message'])
 
-    # Determine target chat based on manifest config
-    target = app.external_integration.chat_messages_target
-
-    # Add message to chat
-    chat_app_id = None if target == 'main' else app.id
-    add_app_message(data['message'], chat_app_id, uid)
-
-    # Send push notification based on manifest config
-    if app.external_integration.chat_messages_notify:
-        send_app_notification(uid, app.name, app.id, data['message'])
+    # If app has chat_messages enabled in manifest, also store the message in chat
+    if app.external_integration and app.external_integration.chat_messages_enabled:
+        target = app.external_integration.chat_messages_target
+        chat_app_id = None if target == 'main' else app.id
+        add_app_message(data['message'], chat_app_id, uid)
 
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
