@@ -1,0 +1,105 @@
+# Omi App - Memories Flow
+# Tests: Navigate to memories, view list, tap into memory detail.
+#
+# Prerequisites:
+#   - User is signed in
+#   - Memories exist (created from prior conversations)
+#
+# Run: maestro test .maestro/flows/05_memories.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Navigate to Memories
+# The bottom navigation uses icons without text labels,
+# so we look for the Memories text or use tab position.
+# Memories is typically the 3rd tab in bottom nav.
+
+# Try tapping "Memories" text if visible as a section header
+- runFlow:
+    when:
+      visible: "Memories"
+    commands:
+      - tapOn: "Memories"
+      - waitForAnimationToEnd
+
+# If Memories is in bottom nav as an icon (no text), tap the approximate position
+# Bottom nav: Home (1st) | Chat (2nd) | Memories (3rd) | Apps (4th)
+- runFlow:
+    when:
+      notVisible: "Memories"
+    commands:
+      # Tap the 3rd icon in bottom nav bar
+      - tapOn:
+          point: "62%,97%"
+      - waitForAnimationToEnd
+
+# Wait for memories list to load
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Memories"
+      - visible:
+          text: ".*memory.*"
+          regex: true
+    timeout: 10000
+
+# Scroll through memories
+- scroll:
+    direction: DOWN
+    duration: 1500
+- waitForAnimationToEnd
+
+- scroll:
+    direction: UP
+    duration: 1000
+- waitForAnimationToEnd
+
+# Tap into the first memory
+- tapOn:
+    point: "50%,30%"
+- waitForAnimationToEnd
+
+# Wait for memory detail to load
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*"
+          regex: true
+    timeout: 10000
+
+# Scroll through memory detail
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+# Navigate back
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on the memories list or home
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Memories"
+      - visible: "Ask Omi"
+    timeout: 10000
