@@ -1,4 +1,3 @@
-import logging
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -28,8 +27,6 @@ from utils.llms.memory import get_prompt_memories
 from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
-
-logger = logging.getLogger(__name__)
 
 
 def _json_serialize_datetime(obj: Any) -> Any:
@@ -247,7 +244,7 @@ def _process_tools(
         resp = llm_with_tools.invoke(llm_messages)
 
         if not resp.tool_calls:
-            logger.info(f"proactive_tool_decision uid={uid} triggered=false")
+            print(f"proactive_tool_decision triggered=false", uid)
             return []
 
         results = []
@@ -257,18 +254,14 @@ def _process_tools(
             confidence = tool_args.get("confidence", 0)
             notification_text = tool_args.get("notification_text", "")
 
-            logger.info(
-                f"proactive_tool_decision uid={uid} triggered=true "
-                f"tool={tool_name} confidence={confidence:.2f} "
-                f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
-            )
+            print(f"proactive_tool_decision triggered=true tool={tool_name} confidence={confidence:.2f}", uid)
 
             if confidence < confidence_threshold:
-                logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
+                print(f"proactive_tool_below_threshold tool={tool_name} confidence={confidence:.2f}", uid)
                 continue
 
             if not notification_text or len(notification_text) < 5:
-                logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
+                print(f"proactive_tool_empty_text tool={tool_name}", uid)
                 continue
 
             if len(notification_text) > 300:
@@ -282,11 +275,11 @@ def _process_tools(
                 }
             )
 
-        logger.info(f"proactive_tool_results uid={uid} total_calls={len(resp.tool_calls)} accepted={len(results)}")
+        print(f"proactive_tool_results total_calls={len(resp.tool_calls)} accepted={len(results)}", uid)
         return results
 
     except Exception as e:
-        logger.error(f"proactive_tool_error uid={uid} error={e}")
+        print(f"proactive_tool_error error={e}", uid)
         return []
 
 
@@ -327,7 +320,7 @@ def _build_tool_context(
             goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
             context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
     except Exception as e:
-        logger.warning(f"Failed to fetch goals for uid={uid}: {e}")
+        print(f"proactive_tool_goals_fetch_failed error={e}", uid)
 
     # Substitute template placeholders.
     # Mentor prompt uses {{x}} in source, but .format(text=...) converts {{x}} to {x},
@@ -401,7 +394,7 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
         tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
         for noti in tool_results:
             send_app_notification(uid, app.name, app.id, noti['notification_text'])
-            logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
+            print(f"proactive_tool_sent tool={noti.get('tool_name')}", uid)
 
     # Main prompt-based notification
     message = get_proactive_message(uid, prompt, filter_scopes, context, chat_messages, user_name, user_facts)
