@@ -210,3 +210,6 @@ app/macos/DerivedData/
 app/macos/Runner/LocalDev.entitlements
 .env.local
 .backups/
+backend/tests/SPEECH_PROFILE_SHARING_TESTS.md
+TESTING.md
+backend/tests/integration/test_speech_profile_sharing_e2e.py
