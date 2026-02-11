@@ -286,48 +286,53 @@ def _process_tools(
         return []
 
 
-def _build_mentor_tool_context(uid: str, conversation_messages: list[dict]) -> tuple[str, str]:
-    """Build system prompt and user message for mentor tool calling."""
+def _build_tool_context(uid: str, app: App, data: dict) -> tuple[str, str]:
+    """Build system prompt and user message for tool calling, using the same context as get_proactive_message."""
     user_name, user_facts = get_prompt_memories(uid)
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+
+    # Build user context from the same sources as the prompt-based path
+    context_parts = []
+
+    if 'user_name' in filter_scopes:
+        context_parts.append(f"User name: {user_name}")
+
+    if 'user_facts' in filter_scopes:
+        context_parts.append(f"What we know about {user_name}:\n{user_facts}")
+
+    if 'user_context' in filter_scopes:
+        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        if memories:
+            context_parts.append(f"Relevant memories:\n{Conversation.conversations_to_string(memories)}")
+
+    if 'user_chat' in filter_scopes:
+        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
+        if chat_messages:
+            context_parts.append(f"Recent chat:\n{Message.get_messages_as_string(chat_messages)}")
+
+    # Add live conversation if available
+    conversation_messages = data.get('messages', [])
+    if conversation_messages:
+        lines = []
+        for msg in conversation_messages:
+            speaker = user_name if msg.get('is_user') else "other"
+            lines.append(f"[{speaker}]: {msg['text']}")
+        context_parts.append(f"Current conversation:\n" + "\n".join(lines))
+
+    # Goals (mentor-specific but harmless for other apps — empty if no goals)
     goals = get_user_goals(uid)
-    goals_text = (
-        "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
-        if goals
-        else "No goals set."
-    )
+    if goals:
+        goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+        context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
 
-    lines = []
-    for msg in conversation_messages:
-        speaker = user_name if msg.get('is_user') else "other"
-        lines.append(f"[{speaker}]: {msg['text']}")
-    conversation_text = "\n".join(lines)
-
-    system_prompt = (
-        f"You are {user_name}'s proactive AI mentor and trusted friend. "
-        "You may call multiple tools if multiple triggers clearly apply. "
-        "Call a tool ONLY when the conversation clearly matches a trigger. "
-        "If no trigger applies, respond with no tool calls.\n\n"
-        "IMPORTANT RULES:\n"
-        "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
-        "- Reference specific details from the conversation (names, situations, feelings)\n"
-        "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
-        "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
-        "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
-        "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
-        "- Always end with a gentle question or suggestion, never a lecture"
-    )
-
-    user_message = (
-        f"Conversation:\n{conversation_text}\n\n"
-        f"What we know about {user_name}:\n{user_facts}\n\n"
-        f"{user_name}'s active goals:\n{goals_text}"
-    )
+    system_prompt = data.get('prompt', '')
+    user_message = "\n\n".join(context_parts)
 
     return system_prompt, user_message
 
 
-def _process_proactive_notification(uid: str, app: App, tools_data, tools: list = None, tool_uses: bool = False):
-    if not app.has_capability("proactive_notification") or not tools_data:
+def _process_proactive_notification(uid: str, app: App, data, tools: list = None, tool_uses: bool = False):
+    if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
 
@@ -340,10 +345,10 @@ def _process_proactive_notification(uid: str, app: App, tools_data, tools: list 
     # All tool notifications from one analysis cycle are sent together (up to 3,
     # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown),
     # not individual notifications within one cycle. Per CTO request.
-    if tool_uses and tools and tools_data.get('messages'):
+    if tool_uses and tools and data.get('messages'):
         from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 
-        system_prompt, user_message = _build_mentor_tool_context(uid, tools_data['messages'])
+        system_prompt, user_message = _build_tool_context(uid, app, data)
         tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
         if tool_results:
             messages_sent = []
@@ -358,7 +363,7 @@ def _process_proactive_notification(uid: str, app: App, tools_data, tools: list 
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = tools_data.get('prompt', '')
+    prompt = data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -369,12 +374,12 @@ def _process_proactive_notification(uid: str, app: App, tools_data, tools: list 
         print(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(tools_data.get('params', []))
+    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
 
     # context
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, tools_data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
             context = Conversation.conversations_to_string(memories)
 

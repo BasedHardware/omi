@@ -3,7 +3,7 @@ Tests for mentor_notifications.py and the proactive tool calling flow (#4728-#47
 
 mentor_notifications.py: buffering, topic extraction, notification data creation.
 app_integrations._process_tools: generic tool calling with confidence gating.
-app_integrations._build_mentor_tool_context: mentor-specific context building.
+app_integrations._build_tool_context: scope-aware context building for tool calling.
 app_integrations._process_proactive_notification: notification delivery with tool_uses flag.
 """
 
@@ -441,11 +441,27 @@ def test_process_tools_empty_tools_list():
     assert results == []
 
 
-# ── Mentor tool context tests (app_integrations._build_mentor_tool_context) ──
+# ── Tool context tests (app_integrations._build_tool_context) ──
 
 
-def test_build_mentor_tool_context_includes_goals():
-    """_build_mentor_tool_context should include user goals in the user message."""
+def _make_mentor_app():
+    from models.app import App, ProactiveNotification
+
+    return App(
+        id='mentor',
+        name='Omi',
+        category='productivity',
+        author='Omi',
+        description='AI mentor',
+        image='/test.png',
+        capabilities={'proactive_notification'},
+        enabled=True,
+        proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
+    )
+
+
+def test_build_tool_context_includes_goals():
+    """_build_tool_context should include user goals in the user message."""
     _setup_app_integrations_stubs()
 
     mock_get_prompt_memories.return_value = ("Dave", "Dave wants to get fit.")
@@ -453,14 +469,18 @@ def test_build_mentor_tool_context_includes_goals():
 
     import utils.app_integrations as app_int
 
-    messages = [
-        {"text": "I think I'll skip the gym", "timestamp": 1000, "is_user": True},
-        {"text": "You sure?", "timestamp": 1001, "is_user": False},
-    ]
+    data = {
+        "prompt": "You are Dave's proactive AI mentor.",
+        "params": ["user_name", "user_facts"],
+        "messages": [
+            {"text": "I think I'll skip the gym", "timestamp": 1000, "is_user": True},
+            {"text": "You sure?", "timestamp": 1001, "is_user": False},
+        ],
+    }
 
-    system_prompt, user_message = app_int._build_mentor_tool_context("test_uid", messages)
+    system_prompt, user_message = app_int._build_tool_context("test_uid", _make_mentor_app(), data)
 
-    assert "Dave" in system_prompt
+    assert "mentor" in system_prompt.lower()
     assert "Exercise 3x per week" in user_message
     assert "[Dave]: I think I'll skip the gym" in user_message
     mock_get_user_goals.assert_called_with("test_uid")
@@ -524,8 +544,8 @@ def test_process_mentor_notification_falls_back_to_prompt():
     assert "messages" in result
 
 
-def test_build_mentor_tool_context_multiple_goals():
-    """_build_mentor_tool_context should include multiple goals in the user message."""
+def test_build_tool_context_multiple_goals():
+    """_build_tool_context should include multiple goals in the user message."""
     _setup_app_integrations_stubs()
 
     mock_get_prompt_memories.return_value = ("Helen", "Helen is a student.")
@@ -536,16 +556,20 @@ def test_build_mentor_tool_context_multiple_goals():
 
     import utils.app_integrations as app_int
 
-    messages = [{"text": "I should study more", "timestamp": 1000, "is_user": True}]
+    data = {
+        "prompt": "You are a mentor.",
+        "params": ["user_name", "user_facts"],
+        "messages": [{"text": "I should study more", "timestamp": 1000, "is_user": True}],
+    }
 
-    system_prompt, user_message = app_int._build_mentor_tool_context("test_uid_helen", messages)
+    system_prompt, user_message = app_int._build_tool_context("test_uid_helen", _make_mentor_app(), data)
 
     assert "Graduate with honors" in user_message
     assert "Learn Spanish" in user_message
 
 
-def test_build_mentor_tool_context_no_goals():
-    """_build_mentor_tool_context should show placeholder when user has no goals."""
+def test_build_tool_context_no_goals():
+    """_build_tool_context with no goals should not include goals section."""
     _setup_app_integrations_stubs()
 
     mock_get_prompt_memories.return_value = ("Ian", "Ian is new.")
@@ -553,11 +577,15 @@ def test_build_mentor_tool_context_no_goals():
 
     import utils.app_integrations as app_int
 
-    messages = [{"text": "hello world", "timestamp": 1000, "is_user": True}]
+    data = {
+        "prompt": "You are a mentor.",
+        "params": ["user_name", "user_facts"],
+        "messages": [{"text": "hello world", "timestamp": 1000, "is_user": True}],
+    }
 
-    system_prompt, user_message = app_int._build_mentor_tool_context("test_uid_ian", messages)
+    system_prompt, user_message = app_int._build_tool_context("test_uid_ian", _make_mentor_app(), data)
 
-    assert "No goals set" in user_message
+    assert "goals" not in user_message.lower()
 
 
 def test_multiple_tool_calls():
