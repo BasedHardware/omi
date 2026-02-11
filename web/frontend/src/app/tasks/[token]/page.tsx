@@ -1,17 +1,20 @@
 import getSharedTasks from '@/src/actions/tasks/get-shared-tasks';
 import envConfig from '@/src/constants/envConfig';
-import { ParamsTypes } from '@/src/types/params.types';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 
+interface TasksParams {
+  token: string;
+}
+
 interface TasksPageProps {
-  params: ParamsTypes;
+  params: TasksParams;
 }
 
 export async function generateMetadata(
-  { params }: { params: ParamsTypes },
+  { params }: { params: TasksParams },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
   const prevData = (await parent) as Metadata;
@@ -19,7 +22,7 @@ export async function generateMetadata(
 
   try {
     const response = await fetch(
-      `${envConfig.API_URL}/v1/action-items/shared/${params.id}`,
+      `${envConfig.API_URL}/v1/action-items/shared/${params.token}`,
       { next: { revalidate: 60 } },
     );
     if (response.ok) {
@@ -44,7 +47,7 @@ export async function generateMetadata(
       ...prevData.openGraph,
       title: title,
       type: 'website',
-      url: `${prevData.metadataBase}/tasks/${params.id}`,
+      url: `${prevData.metadataBase}/tasks/${params.token}`,
       description: 'Open in Omi to add these tasks to your list.',
     },
     other: {
@@ -75,7 +78,7 @@ function formatDueDate(dateStr: string): string {
 }
 
 export default async function SharedTasksPage({ params }: TasksPageProps) {
-  const token = params.id;
+  const token = params.token;
   const data = await getSharedTasks(token);
   if (!data) {
     notFound();
