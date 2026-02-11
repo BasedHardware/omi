@@ -9873,5 +9873,9 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
+  "dailyReflectionTime": "Daily reflection time",
+  "@dailyReflectionTime": {
+    "description": "Label for daily reflection time setting"
+  }
 }

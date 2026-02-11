@@ -1665,6 +1665,23 @@ class MixpanelManager {
     setUserProperty('Daily Summary Hour', hour);
   }
 
+  void dailyReflectionToggled({required bool enabled}) {
+    track('Daily Reflection Toggled', properties: {'enabled': enabled});
+    setUserProperty('Daily Reflection Enabled', enabled);
+  }
+
+  void dailyReflectionTimeChanged({required int hour}) {
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    track('Daily Reflection Time Changed', properties: {
+      'hour_24': hour,
+      'hour_12': hour12,
+      'period': period,
+      'display_time': '$hour12:00 $period',
+    });
+    setUserProperty('Daily Reflection Hour', hour);
+  }
+
   void dailySummaryDetailViewed({
     required String summaryId,
     required String date,

@@ -521,6 +521,57 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
   return response.statusCode == 200;
 }
 
+// Daily Reflection Settings
+
+class DailyReflectionSettings {
+  final bool enabled;
+  final int hour; // Local hour (0-23)
+
+  DailyReflectionSettings({required this.enabled, required this.hour});
+
+  factory DailyReflectionSettings.fromJson(Map<String, dynamic> json) {
+    return DailyReflectionSettings(
+      enabled: json['enabled'] ?? true,
+      hour: json['hour'] ?? 21, // Default to 9 PM
+    );
+  }
+}
+
+Future<DailyReflectionSettings?> getDailyReflectionSettings() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-reflection-settings',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  Logger.debug('getDailyReflectionSettings response: ${response.body}');
+  if (response.statusCode == 200) {
+    return DailyReflectionSettings.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<bool> setDailyReflectionSettings({bool? enabled, int? hour}) async {
+  Map<String, dynamic> body = {};
+  if (enabled != null) {
+    body['enabled'] = enabled;
+  }
+  if (hour != null) {
+    body['hour'] = hour;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-reflection-settings',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  Logger.debug('setDailyReflectionSettings response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 // Daily Summaries API
 
 Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {

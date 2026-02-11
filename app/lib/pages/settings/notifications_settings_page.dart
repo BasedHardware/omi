@@ -28,6 +28,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   // Daily Reflection settings
   bool _dailyReflectionEnabled = true;
+  int _dailyReflectionHour = 21; // Default to 9 PM
 
   @override
   void initState() {
@@ -40,11 +41,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     // Load Daily Summary settings from API
     final settings = await getDailySummarySettings();
 
+    // Load Daily Reflection settings from API
+    final reflectionSettings = await getDailyReflectionSettings();
+
     // Load Mentor Notification settings from API
     final mentorSettings = await getMentorNotificationSettings();
 
     // Load settings from local prefs
-    final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     final localFrequency = SharedPreferencesUtil().notificationFrequency;
 
     if (mounted) {
@@ -53,13 +56,16 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
           _dailySummaryEnabled = settings.enabled;
           _dailySummaryHour = settings.hour;
         }
+        if (reflectionSettings != null) {
+          _dailyReflectionEnabled = reflectionSettings.enabled;
+          _dailyReflectionHour = reflectionSettings.hour;
+        }
         // Use backend value if available, otherwise use local
         _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
         // Sync local with backend
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
         }
-        _dailyReflectionEnabled = reflectionEnabled;
         _isLoading = false;
       });
     }
@@ -128,17 +134,119 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     MixpanelManager().dailySummaryTimeChanged(hour: hour);
   }
 
-  void _updateDailyReflectionEnabled(bool value) {
-    MixpanelManager().dailyReflectionToggled(enabled: value);
+  Future<void> _updateDailyReflectionEnabled(bool value) async {
     setState(() => _dailyReflectionEnabled = value);
-    SharedPreferencesUtil().dailyReflectionEnabled = value;
+    await setDailyReflectionSettings(enabled: value);
+    MixpanelManager().dailyReflectionToggled(enabled: value);
 
     // Schedule or cancel the notification based on the setting
     if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+      DailyReflectionNotification.scheduleDailyNotification(
+        channelKey: 'channel',
+        hour: _dailyReflectionHour,
+      );
     } else {
       DailyReflectionNotification.cancelNotification();
     }
+  }
+
+  Future<void> _updateDailyReflectionHour(int hour) async {
+    setState(() => _dailyReflectionHour = hour);
+    await setDailyReflectionSettings(hour: hour);
+    MixpanelManager().dailyReflectionTimeChanged(hour: hour);
+
+    // Reschedule notification with new time if enabled
+    if (_dailyReflectionEnabled) {
+      DailyReflectionNotification.scheduleDailyNotification(
+        channelKey: 'channel',
+        hour: hour,
+      );
+    }
+  }
+
+  Future<void> _showReflectionHourPicker() async {
+    if (!_dailyReflectionEnabled) return;
+
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        int tempHour = _dailyReflectionHour;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: 350,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          context.l10n.cancel,
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                        ),
+                      ),
+                      Text(
+                        context.l10n.selectTime,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          _updateDailyReflectionHour(tempHour);
+                          Navigator.pop(context);
+                        },
+                        child: Text(
+                          context.l10n.done,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: CupertinoTheme(
+                      data: const CupertinoThemeData(
+                        brightness: Brightness.dark,
+                      ),
+                      child: CupertinoPicker(
+                        scrollController: FixedExtentScrollController(initialItem: tempHour),
+                        itemExtent: 44,
+                        onSelectedItemChanged: (index) {
+                          setModalState(() => tempHour = index);
+                        },
+                        children: List.generate(24, (index) {
+                          final hour12 = index == 0 ? 12 : (index > 12 ? index - 12 : index);
+                          final period = index >= 12 ? 'PM' : 'AM';
+                          return Center(
+                            child: Text(
+                              '$hour12:00 $period',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _showHourPicker() async {
@@ -571,14 +679,56 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         color: const Color(0xFF1C1C1E),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: _buildSettingRow(
-        icon: FontAwesomeIcons.moon,
-        title: context.l10n.enable,
-        trailing: Switch(
-          value: _dailyReflectionEnabled,
-          onChanged: _updateDailyReflectionEnabled,
-          activeColor: const Color(0xFF6366F1),
-        ),
+      child: Column(
+        children: [
+          // Enable toggle row
+          _buildSettingRow(
+            icon: FontAwesomeIcons.moon,
+            title: context.l10n.enable,
+            trailing: Switch(
+              value: _dailyReflectionEnabled,
+              onChanged: _updateDailyReflectionEnabled,
+              activeColor: const Color(0xFF6366F1),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: Colors.grey.shade800, height: 1),
+          ),
+
+          // Time selector row
+          AnimatedOpacity(
+            opacity: _dailyReflectionEnabled ? 1.0 : 0.4,
+            duration: const Duration(milliseconds: 200),
+            child: GestureDetector(
+              onTap: _showReflectionHourPicker,
+              behavior: HitTestBehavior.opaque,
+              child: _buildSettingRow(
+                icon: FontAwesomeIcons.clock,
+                title: context.l10n.dailyReflectionTime,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatHourDisplay(_dailyReflectionHour),
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey.shade600,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
