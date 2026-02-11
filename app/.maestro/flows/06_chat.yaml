@@ -1,0 +1,143 @@
+# Omi App - Chat (Ask Omi) Flow
+# Tests: Navigate to chat, type a question, send message, verify AI response.
+#
+# Prerequisites:
+#   - User is signed in
+#   - Network connection available (for AI response)
+#
+# Run: maestro test .maestro/flows/06_chat.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Tap the "Ask Omi" button to navigate to chat
+- tapOn: "Ask Omi"
+- waitForAnimationToEnd
+
+# Wait for chat screen to load
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Ask anything"
+      - visible: "Chat with Omi"
+      - visible:
+          id: ".*chat.*"
+          regex: true
+    timeout: 10000
+
+# Tap on the text input field
+- runFlow:
+    when:
+      visible: "Ask anything"
+    commands:
+      - tapOn: "Ask anything"
+
+# Type a question
+- inputText: "What did we talk about recently?"
+
+# Wait briefly for input to register
+- waitForAnimationToEnd
+
+# Send the message
+# The send button is typically a circular button at bottom-right of the input
+# Try finding it by icon or tap the send area
+- runFlow:
+    when:
+      visible:
+        id: ".*send.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*send.*"
+          regex: true
+- runFlow:
+    when:
+      notVisible:
+        id: ".*send.*"
+        regex: true
+    commands:
+      # Tap the send button area (bottom-right of input field)
+      - tapOn:
+          point: "92%,90%"
+
+# Wait for AI response to appear
+# The response may take several seconds depending on network
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*"
+          regex: true
+          below: "What did we talk about recently?"
+    timeout: 30000
+
+# Verify we can see the sent message
+- assertVisible: "What did we talk about recently?"
+
+# Scroll through the chat to see the full response
+- scroll:
+    direction: DOWN
+    duration: 1000
+- waitForAnimationToEnd
+
+# Send another message to test multi-turn conversation
+- runFlow:
+    when:
+      visible: "Ask anything"
+    commands:
+      - tapOn: "Ask anything"
+- inputText: "Tell me more"
+- runFlow:
+    when:
+      visible:
+        id: ".*send.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*send.*"
+          regex: true
+- runFlow:
+    when:
+      notVisible:
+        id: ".*send.*"
+        regex: true
+    commands:
+      - tapOn:
+          point: "92%,90%"
+
+# Wait for second response
+- extendedWaitUntil:
+    anyOf:
+      - visible:
+          text: ".*"
+          regex: true
+          below: "Tell me more"
+    timeout: 30000
+
+# Navigate back to home
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 10000
