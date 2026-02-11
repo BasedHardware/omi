@@ -1,0 +1,84 @@
+# Omi App - Conversations List Flow
+# Tests: Conversations list loads, scrolling, search functionality.
+#
+# Prerequisites:
+#   - User is signed in (run 01_onboarding.yaml first or be pre-authenticated)
+#   - At least one conversation exists (ideally from prior device usage)
+#
+# Run: maestro test .maestro/flows/02_conversations_list.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup that might appear
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# The home screen IS the conversations list in Omi
+# Verify the conversations section is visible
+- assertVisible: "Conversations"
+
+# Scroll down through the conversations list
+- scroll:
+    direction: DOWN
+    duration: 1500
+
+# Wait for any lazy-loaded content
+- waitForAnimationToEnd
+
+# Scroll back up
+- scroll:
+    direction: UP
+    duration: 1500
+
+- waitForAnimationToEnd
+
+# Look for search functionality
+# Omi uses a search icon in the app bar
+- runFlow:
+    when:
+      visible:
+        id: ".*search.*"
+        regex: true
+    commands:
+      - tapOn:
+          id: ".*search.*"
+          regex: true
+      - waitForAnimationToEnd
+      # Type a search query
+      - inputText: "meeting"
+      - waitForAnimationToEnd
+      # Wait for results to filter
+      - extendedWaitUntil:
+          notVisible: "Loading..."
+          timeout: 5000
+      # Clear search and go back
+      - runFlow:
+          when:
+            visible: "Clear"
+          commands:
+            - tapOn: "Clear"
+      - pressKey: back
+
+# Verify we're back on conversations
+- assertVisible: "Conversations"
+
+# Verify the "Ask Omi" button is still accessible
+- assertVisible: "Ask Omi"
