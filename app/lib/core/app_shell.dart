@@ -49,7 +49,14 @@ class _AppShellState extends State<AppShell> {
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
-    // Handle links
+    // Handle initial link (cold start — app launched by deep link)
+    final initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) {
+      Logger.debug('onInitialAppLink: $initialUri');
+      openAppLink(initialUri);
+    }
+
+    // Handle subsequent links (warm start — app already running)
     _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
       Logger.debug('onAppLink: $uri');
       openAppLink(uri);
