@@ -326,8 +326,8 @@ def _build_mentor_tool_context(uid: str, conversation_messages: list[dict]) -> t
     return system_prompt, user_message
 
 
-def _process_proactive_notification(uid: str, app: App, data, tool_uses: bool = False):
-    if not app.has_capability("proactive_notification") or not data:
+def _process_proactive_notification(uid: str, app: App, tools_data, tools: list = None, tool_uses: bool = False):
+    if not app.has_capability("proactive_notification") or not tools_data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
 
@@ -340,11 +340,11 @@ def _process_proactive_notification(uid: str, app: App, data, tool_uses: bool = 
     # All tool notifications from one analysis cycle are sent together (up to 3,
     # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown),
     # not individual notifications within one cycle. Per CTO request.
-    if tool_uses and data.get('tools') and data.get('messages'):
+    if tool_uses and tools and tools_data.get('messages'):
         from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 
-        system_prompt, user_message = _build_mentor_tool_context(uid, data['messages'])
-        tool_results = _process_tools(uid, system_prompt, user_message, data['tools'], PROACTIVE_CONFIDENCE_THRESHOLD)
+        system_prompt, user_message = _build_mentor_tool_context(uid, tools_data['messages'])
+        tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
         if tool_results:
             messages_sent = []
             for noti in tool_results:
@@ -358,7 +358,7 @@ def _process_proactive_notification(uid: str, app: App, data, tool_uses: bool = 
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
-    prompt = data.get('prompt', '')
+    prompt = tools_data.get('prompt', '')
     if len(prompt) > max_prompt_char_limit:
         send_app_notification(
             uid,
@@ -369,12 +369,12 @@ def _process_proactive_notification(uid: str, app: App, data, tool_uses: bool = 
         print(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
         return None
 
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
+    filter_scopes = app.filter_proactive_notification_scopes(tools_data.get('params', []))
 
     # context
     context = None
     if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
+        memories = _retrieve_contextual_memories(uid, tools_data.get('context', {}))
         if len(memories) > 0:
             context = Conversation.conversations_to_string(memories)
 
@@ -450,7 +450,13 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             ),
         )
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification, tool_uses=True)
+            mentor_message = _process_proactive_notification(
+                uid,
+                mentor_app,
+                mentor_notification,
+                tools=mentor_notification.get('tools'),
+                tool_uses=True,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             print(f"Sent mentor notification to user {uid}")

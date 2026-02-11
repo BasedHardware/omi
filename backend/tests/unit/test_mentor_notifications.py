@@ -676,8 +676,8 @@ def test_process_proactive_notification_tool_delivery():
         proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
     )
 
+    tools = [{"type": "function", "function": {"name": "test"}}]
     data = {
-        "tools": [{"type": "function", "function": {"name": "test"}}],
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
         "prompt": "unused in tool path",
         "params": ["user_name"],
@@ -685,7 +685,13 @@ def test_process_proactive_notification_tool_delivery():
     }
 
     try:
-        result = app_int._process_proactive_notification("test_uid", mentor_app, data, tool_uses=True)
+        result = app_int._process_proactive_notification(
+            "test_uid",
+            mentor_app,
+            data,
+            tools=tools,
+            tool_uses=True,
+        )
 
         assert result is not None
         assert "take a break" in result
@@ -722,11 +728,11 @@ def test_process_proactive_notification_tool_rate_limited():
     )
 
     data = {
-        "tools": [{"type": "function", "function": {"name": "test"}}],
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
     }
+    tools = [{"type": "function", "function": {"name": "test"}}]
 
-    result = app_int._process_proactive_notification("test_uid", mentor_app, data, tool_uses=True)
+    result = app_int._process_proactive_notification("test_uid", mentor_app, data, tools=tools, tool_uses=True)
 
     assert result is None
     mock_send.assert_not_called()
@@ -763,15 +769,17 @@ def test_process_proactive_notification_tool_uses_false_skips_tools():
     )
 
     data = {
-        "tools": [{"type": "function", "function": {"name": "test"}}],
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
         "prompt": "Some prompt",
         "params": ["user_name", "user_facts"],
         "context": {"filters": {"topics": []}},
     }
+    tools = [{"type": "function", "function": {"name": "test"}}]
 
     try:
-        result = app_int._process_proactive_notification("test_uid", some_app, data)  # tool_uses defaults to False
+        result = app_int._process_proactive_notification(
+            "test_uid", some_app, data, tools=tools
+        )  # tool_uses defaults to False
 
         # Tools should NOT be called
         mock_process_tools.assert_not_called()
@@ -813,8 +821,8 @@ def test_process_proactive_notification_tools_fallthrough_to_prompt():
         proactive_notification=ProactiveNotification(scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}),
     )
 
+    tools = [{"type": "function", "function": {"name": "test"}}]
     data = {
-        "tools": [{"type": "function", "function": {"name": "test"}}],
         "messages": [{"text": "test", "timestamp": 1000, "is_user": True}],
         "prompt": "Some prompt",
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
@@ -822,7 +830,7 @@ def test_process_proactive_notification_tools_fallthrough_to_prompt():
     }
 
     try:
-        result = app_int._process_proactive_notification("test_uid", mentor_app, data, tool_uses=True)
+        result = app_int._process_proactive_notification("test_uid", mentor_app, data, tools=tools, tool_uses=True)
 
         # Should have tried tools
         app_int._process_tools.assert_called_once()
