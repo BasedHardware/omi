@@ -22,14 +22,13 @@ appId: com.friend.ios.dev
 # Dismiss any popup that might appear
 - runFlow:
     when:
-      visible: "Maybe later"
+      visible:
+        text: "Maybe [Ll]ater"
+        regex: true
     commands:
-      - tapOn: "Maybe later"
-- runFlow:
-    when:
-      visible: "Maybe Later"
-    commands:
-      - tapOn: "Maybe Later"
+      - tapOn:
+          text: "Maybe [Ll]ater"
+          regex: true
 
 # The home screen IS the conversations list in Omi
 # Verify the conversations section is visible
