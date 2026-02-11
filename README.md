@@ -102,3 +102,5 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 ## Licensing
 
 Omi is available under <a href="https://github.com/BasedHardware/omi/blob/main/LICENSE">MIT License</a>
+
+[//]: # "Test PR - verifying CI/CD workflow"
