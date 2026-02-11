@@ -561,7 +561,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               Column(
                 children: [
                   Text(
-                    provider.pairedDevice?.name ?? context.l10n.unknownDevice,
+                    SharedPreferencesUtil().deviceName.isNotEmpty
+                        ? SharedPreferencesUtil().deviceName
+                        : (provider.pairedDevice?.name ?? context.l10n.unknownDevice),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 32,
