@@ -328,7 +328,16 @@ def _build_tool_context(
     except Exception as e:
         logger.warning(f"Failed to fetch goals for uid={uid}: {e}")
 
+    # Substitute template placeholders (same as get_proactive_message)
     system_prompt = data.get('prompt', '')
+    system_prompt = system_prompt.replace("{{user_name}}", user_name or '')
+    system_prompt = system_prompt.replace("{{user_facts}}", user_facts or '')
+    system_prompt = system_prompt.replace("{{user_context}}", context or '')
+    system_prompt = system_prompt.replace(
+        "{{user_chat}}", Message.get_messages_as_string(chat_messages) if chat_messages else ''
+    )
+    system_prompt = system_prompt.replace('    ', '').strip()
+
     user_message = "\n\n".join(context_parts)
 
     return system_prompt, user_message
