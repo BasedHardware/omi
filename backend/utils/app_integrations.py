@@ -220,57 +220,26 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-def _try_mentor_tools(uid: str, data: dict) -> list[dict]:
+def _process_tools(
+    uid: str, system_prompt: str, user_message: str, tools: list, confidence_threshold: float
+) -> list[dict]:
     """
-    Attempt to detect proactive triggers via tool calling.
-    Only called for the Mentor app (app.id == 'mentor').
+    Run LLM tool calling and filter results by confidence threshold.
 
-    Returns a list of notification dicts (one per triggered tool that passes the
-    confidence threshold). Empty list if no triggers apply.
+    Args:
+        uid: User ID (for logging)
+        system_prompt: System prompt for the LLM
+        user_message: User message with conversation context
+        tools: Tool definitions (OpenAI function-calling format)
+        confidence_threshold: Minimum confidence to accept a tool result
+
+    Returns:
+        List of accepted notification dicts. Empty list if no triggers apply.
     """
-    from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
-
-    tools = data.get('tools', [])
-    conversation_messages = data.get('messages', [])
-    if not tools or not conversation_messages:
+    if not tools:
         return []
 
     try:
-        user_name, user_facts = get_prompt_memories(uid)
-        goals = get_user_goals(uid)
-        goals_text = (
-            "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
-            if goals
-            else "No goals set."
-        )
-
-        lines = []
-        for msg in conversation_messages:
-            speaker = user_name if msg.get('is_user') else "other"
-            lines.append(f"[{speaker}]: {msg['text']}")
-        conversation_text = "\n".join(lines)
-
-        system_prompt = (
-            f"You are {user_name}'s proactive AI mentor and trusted friend. "
-            "You may call multiple tools if multiple triggers clearly apply. "
-            "Call a tool ONLY when the conversation clearly matches a trigger. "
-            "If no trigger applies, respond with no tool calls.\n\n"
-            "IMPORTANT RULES:\n"
-            "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
-            "- Reference specific details from the conversation (names, situations, feelings)\n"
-            "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
-            "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
-            "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
-            "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
-            "- Always end with a gentle question or suggestion, never a lecture"
-        )
-
-        user_message = (
-            f"Conversation:\n{conversation_text}\n\n"
-            f"What we know about {user_name}:\n{user_facts}\n\n"
-            f"{user_name}'s active goals:\n{goals_text}"
-        )
-
         llm_messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
 
         llm_with_tools = llm_mini.bind_tools(tools, tool_choice="auto")
@@ -293,7 +262,7 @@ def _try_mentor_tools(uid: str, data: dict) -> list[dict]:
                 f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
             )
 
-            if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
+            if confidence < confidence_threshold:
                 logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
                 continue
 
@@ -317,7 +286,47 @@ def _try_mentor_tools(uid: str, data: dict) -> list[dict]:
         return []
 
 
-def _process_proactive_notification(uid: str, app: App, data):
+def _build_mentor_tool_context(uid: str, conversation_messages: list[dict]) -> tuple[str, str]:
+    """Build system prompt and user message for mentor tool calling."""
+    user_name, user_facts = get_prompt_memories(uid)
+    goals = get_user_goals(uid)
+    goals_text = (
+        "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+        if goals
+        else "No goals set."
+    )
+
+    lines = []
+    for msg in conversation_messages:
+        speaker = user_name if msg.get('is_user') else "other"
+        lines.append(f"[{speaker}]: {msg['text']}")
+    conversation_text = "\n".join(lines)
+
+    system_prompt = (
+        f"You are {user_name}'s proactive AI mentor and trusted friend. "
+        "You may call multiple tools if multiple triggers clearly apply. "
+        "Call a tool ONLY when the conversation clearly matches a trigger. "
+        "If no trigger applies, respond with no tool calls.\n\n"
+        "IMPORTANT RULES:\n"
+        "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
+        "- Reference specific details from the conversation (names, situations, feelings)\n"
+        "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
+        "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
+        "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
+        "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
+        "- Always end with a gentle question or suggestion, never a lecture"
+    )
+
+    user_message = (
+        f"Conversation:\n{conversation_text}\n\n"
+        f"What we know about {user_name}:\n{user_facts}\n\n"
+        f"{user_name}'s active goals:\n{goals_text}"
+    )
+
+    return system_prompt, user_message
+
+
+def _process_proactive_notification(uid: str, app: App, data, tool_uses: bool = False):
     if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
@@ -327,13 +336,15 @@ def _process_proactive_notification(uid: str, app: App, data):
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    # Tool-based proactive notifications — currently limited to Mentor app only.
-    # When tools are present and this is the Mentor app, try tool calling first.
+    # Tool-based proactive notifications.
     # All tool notifications from one analysis cycle are sent together (up to 3,
     # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown),
     # not individual notifications within one cycle. Per CTO request.
-    if data.get('tools') and app.id == 'mentor':
-        tool_results = _try_mentor_tools(uid, data)
+    if tool_uses and data.get('tools') and data.get('messages'):
+        from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
+
+        system_prompt, user_message = _build_mentor_tool_context(uid, data['messages'])
+        tool_results = _process_tools(uid, system_prompt, user_message, data['tools'], PROACTIVE_CONFIDENCE_THRESHOLD)
         if tool_results:
             messages_sent = []
             for noti in tool_results:
@@ -439,7 +450,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             ),
         )
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
+            mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification, tool_uses=True)
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             print(f"Sent mentor notification to user {uid}")
