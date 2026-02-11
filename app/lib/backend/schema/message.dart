@@ -99,6 +99,44 @@ class MessageFile {
   }
 }
 
+enum GenUiBlockType {
+  map,
+  actionButtons,
+  ;
+
+  static GenUiBlockType? fromString(String value) {
+    switch (value) {
+      case 'map':
+        return GenUiBlockType.map;
+      case 'action_buttons':
+        return GenUiBlockType.actionButtons;
+      default:
+        return null;
+    }
+  }
+}
+
+class GenUiBlock {
+  GenUiBlockType type;
+  Map<String, dynamic> props;
+
+  GenUiBlock({required this.type, required this.props});
+
+  static GenUiBlock fromJson(Map<String, dynamic> json) {
+    return GenUiBlock(
+      type: GenUiBlockType.fromString(json['type'] ?? '') ?? GenUiBlockType.map,
+      props: (json['props'] as Map<String, dynamic>?) ?? {},
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'type': type.name == 'actionButtons' ? 'action_buttons' : type.name,
+      'props': props,
+    };
+  }
+}
+
 class ChartDataPoint {
   String label;
   double value;
@@ -186,6 +224,7 @@ class ServerMessage {
 
   List<String> thinkings = [];
   ChartData? chartData;
+  List<GenUiBlock> uiBlocks;
 
   ServerMessage(
     this.id,
@@ -201,6 +240,7 @@ class ServerMessage {
     this.askForNps = true,
     this.rating,
     this.chartData,
+    this.uiBlocks = const [],
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -218,6 +258,7 @@ class ServerMessage {
       askForNps: json['ask_for_nps'] ?? true,
       rating: json['rating'],
       chartData: json['chart_data'] != null ? ChartData.fromJson(json['chart_data']) : null,
+      uiBlocks: ((json['ui_blocks'] ?? []) as List<dynamic>).map((b) => GenUiBlock.fromJson(b)).toList(),
     );
   }
 
@@ -235,6 +276,7 @@ class ServerMessage {
       'ask_for_nps': askForNps,
       'rating': rating,
       'chart_data': chartData?.toJson(),
+      'ui_blocks': uiBlocks.map((b) => b.toJson()).toList(),
     };
   }
 
