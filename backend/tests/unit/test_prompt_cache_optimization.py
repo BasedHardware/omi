@@ -8,6 +8,7 @@ Verifies:
 """
 
 import os
+import re
 import sys
 import types
 from pathlib import Path
@@ -130,12 +131,14 @@ def test_llm_agent_has_prompt_cache_key():
     assert "omi-agent-v1" in source, "prompt_cache_key should be 'omi-agent-v1'"
 
 
-def test_llm_agent_has_no_unsupported_cache_kwargs():
-    """llm_agent clients should not have unsupported kwargs like prompt_cache_retention."""
+def test_llm_agent_uses_extra_body_for_cache_retention():
+    """prompt_cache_retention must use extra_body (not model_kwargs) — SDK rejects it as a direct kwarg."""
     source = _read_clients_source()
-    assert (
-        "prompt_cache_retention" not in source
-    ), "prompt_cache_retention is not supported by the OpenAI SDK and must be removed"
+    assert 'extra_body={"prompt_cache_retention"' in source, "prompt_cache_retention should be set via extra_body"
+    # model_kwargs must NOT contain prompt_cache_retention (SDK rejects it there)
+    mk_blocks = re.findall(r'model_kwargs\s*=\s*\{[^}]*\}', source)
+    for block in mk_blocks:
+        assert "prompt_cache_retention" not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
 
 
 def test_core_tools_constant_exists():
@@ -159,8 +162,6 @@ def test_no_duplicate_inline_tool_lists():
     # Count occurrences of the module-level constant pattern vs inline assignment pattern
     assert source.count("CORE_TOOLS = [") == 1, "CORE_TOOLS should be defined exactly once"
     # There should be no `tools = [` followed by tool names (old inline pattern)
-    import re
-
     inline_lists = re.findall(r"tools\s*=\s*\[\s*\n\s*get_conversations_tool", source)
     assert len(inline_lists) == 0, f"Found {len(inline_lists)} inline tool list assignments — should use CORE_TOOLS"
 
