@@ -46,6 +46,8 @@ from utils.retrieval.tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    create_map_ui,
+    create_action_buttons_ui,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -99,6 +101,8 @@ CORE_TOOLS = [
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    create_map_ui,
+    create_action_buttons_ui,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -136,6 +140,8 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
         'save_user_preference_tool': 'Saving preference',
+        'create_map_ui': 'Building map UI',
+        'create_action_buttons_ui': 'Building action buttons UI',
     }
 
     if tool_name in tool_display_map:
@@ -607,6 +613,10 @@ async def execute_agentic_chat_stream(
             chart_data_from_config = configurable.get('chart_data')
             if chart_data_from_config:
                 callback_data['chart_data'] = chart_data_from_config
+            # Extract UI blocks if any genui tools were used
+            ui_blocks_from_config = configurable.get('ui_blocks')
+            if ui_blocks_from_config:
+                callback_data['ui_blocks'] = ui_blocks_from_config
             logger.info(f"Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.CancelledError:
