@@ -8,6 +8,8 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:omi/main.dart' as app;
 
+import 'test_helpers.dart';
+
 /// Battery Drain Estimation Test
 ///
 /// Measures battery level before and after a simulated usage session.
@@ -56,15 +58,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
 
-      await _handleOnboardingIfNeeded(tester);
-      await _pumpFor(tester, 3000);
-      await _dismissAnyPopup(tester);
+      await handleOnboardingIfNeeded(tester);
+      await pumpFor(tester, 3000);
+      await dismissAnyPopup(tester);
 
       // Stabilize
       debugPrint('[2/5] Stabilizing (15s)...');
       for (int i = 0; i < 15; i++) {
         await tester.pump(const Duration(seconds: 1));
-        await _dismissAnyPopup(tester);
+        await dismissAnyPopup(tester);
       }
 
       // Read initial battery level
@@ -106,9 +108,9 @@ void main() {
             if (scrollable.evaluate().isNotEmpty) {
               final size = tester.view.physicalSize / tester.view.devicePixelRatio;
               await tester.fling(scrollable.first, Offset(0, -size.height * 0.2), 500);
-              await _pumpFor(tester, 2000);
+              await pumpFor(tester, 2000);
               await tester.fling(scrollable.first, Offset(0, size.height * 0.2), 500);
-              await _pumpFor(tester, 2000);
+              await pumpFor(tester, 2000);
             }
             for (int i = 0; i < 6 && elapsed < sessionSeconds; i++) {
               await tester.pump(const Duration(seconds: 1));
@@ -120,13 +122,13 @@ void main() {
             final askOmi = find.text('Ask Omi');
             if (askOmi.evaluate().isNotEmpty) {
               await tester.tap(askOmi);
-              await _pumpFor(tester, 2000);
+              await pumpFor(tester, 2000);
               for (int i = 0; i < 5 && elapsed < sessionSeconds; i++) {
                 await tester.pump(const Duration(seconds: 1));
                 elapsed++;
               }
               await tester.pageBack();
-              await _pumpFor(tester, 1000);
+              await pumpFor(tester, 1000);
             }
             for (int i = 0; i < 5 && elapsed < sessionSeconds; i++) {
               await tester.pump(const Duration(seconds: 1));
@@ -137,7 +139,7 @@ void main() {
             // Idle with popup dismissal
             for (int i = 0; i < 10 && elapsed < sessionSeconds; i++) {
               await tester.pump(const Duration(seconds: 1));
-              await _dismissAnyPopup(tester);
+              await dismissAnyPopup(tester);
               elapsed++;
             }
             break;
@@ -200,7 +202,7 @@ void main() {
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       // Write results
-      _writeResults({
+      writeResults('battery', {
         'test': 'battery',
         'session_minutes': actualMinutes,
         'start_battery': startBattery,
@@ -236,11 +238,7 @@ Future<int> _getBatteryLevel() async {
   } catch (_) {
     // Fallback: try the standard device_info battery channel
     try {
-      if (Platform.isIOS) {
-        const iosChannel = MethodChannel('dev.fluttercommunity.plus/device_info');
-        // On iOS we can try ProcessInfo
-        return -1; // Battery level not easily accessible without a plugin
-      } else if (Platform.isAndroid) {
+      if (Platform.isAndroid) {
         const androidChannel = MethodChannel('plugins.flutter.io/battery');
         final int result = await androidChannel.invokeMethod('getBatteryLevel');
         return result;
@@ -250,99 +248,4 @@ Future<int> _getBatteryLevel() async {
     }
   }
   return -1;
-}
-
-void _writeResults(Map<String, dynamic> results) {
-  try {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_perf_battery_$timestamp.json');
-    final buffer = StringBuffer();
-    buffer.writeln('{');
-    final entries = results.entries.toList();
-    for (int i = 0; i < entries.length; i++) {
-      final key = entries[i].key;
-      final value = entries[i].value;
-      if (value is String) {
-        buffer.writeln('  "$key": "$value"${i < entries.length - 1 ? "," : ""}');
-      } else if (value is bool) {
-        buffer.writeln('  "$key": $value${i < entries.length - 1 ? "," : ""}');
-      } else {
-        buffer.writeln('  "$key": $value${i < entries.length - 1 ? "," : ""}');
-      }
-    }
-    buffer.writeln('}');
-    file.writeAsStringSync(buffer.toString());
-    debugPrint('Results saved to: ${file.path}');
-  } catch (e) {
-    debugPrint('Could not save results: $e');
-  }
-}
-
-// ─── Shared helpers ──────────────────────────────────────────────────
-
-Future<void> _pumpFor(WidgetTester tester, int milliseconds) async {
-  final iterations = milliseconds ~/ 100;
-  for (int i = 0; i < iterations; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-}
-
-Future<void> _dismissAnyPopup(WidgetTester tester) async {
-  await tester.pump(const Duration(milliseconds: 100));
-  if (find.text('Loving Omi?').evaluate().isNotEmpty) {
-    for (final text in ['Maybe later', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first, warnIfMissed: false);
-        await _pumpFor(tester, 500);
-        return;
-      }
-    }
-  }
-  for (final text in ['Skip for now', 'Skip', 'Not now']) {
-    final btn = find.text(text);
-    if (btn.evaluate().isNotEmpty) {
-      await tester.tap(btn.first, warnIfMissed: false);
-      await _pumpFor(tester, 500);
-      return;
-    }
-  }
-}
-
-Future<void> _handleOnboardingIfNeeded(WidgetTester tester) async {
-  debugPrint('      Checking for onboarding...');
-  if (find.text('Ask Omi').evaluate().isNotEmpty) {
-    debugPrint('      Already on home screen');
-    return;
-  }
-
-  final signIn = find.text('Sign in with Google');
-  if (signIn.evaluate().isNotEmpty) {
-    debugPrint('      Found auth screen');
-    await tester.tap(signIn);
-    await _pumpFor(tester, 2000);
-    debugPrint('      >>> Please complete sign-in on device <<<');
-    for (int i = 0; i < 120; i++) {
-      await tester.pump(const Duration(milliseconds: 500));
-      if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-      final cont = find.text('Continue');
-      if (cont.evaluate().isNotEmpty) {
-        await tester.tap(cont.first);
-        await _pumpFor(tester, 2000);
-      }
-    }
-  }
-
-  for (int attempt = 0; attempt < 20; attempt++) {
-    await _pumpFor(tester, 500);
-    if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-    for (final text in ['Continue', 'Skip for now', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first);
-        await _pumpFor(tester, 2000);
-        break;
-      }
-    }
-  }
 }
