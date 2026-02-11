@@ -11,7 +11,7 @@ from database import redis_db
 from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
 from database.redis_db import get_generic_cache, set_generic_cache
-from models.app import App, UsageHistoryType
+from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
@@ -325,7 +325,9 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             image='https://raw.githubusercontent.com/BasedHardware/Omi/main/assets/images/app_logo.png',
             capabilities={'proactive_notification'},
             enabled=True,
-            proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat'],
+            proactive_notification=ProactiveNotification(
+                scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}
+            ),
         )
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
             mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
