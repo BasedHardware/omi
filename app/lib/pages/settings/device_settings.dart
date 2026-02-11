@@ -14,6 +14,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -77,6 +78,108 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     _debounce?.cancel();
     _micGainDebounce?.cancel();
     super.dispose();
+  }
+
+  void _showRenameDeviceDialog(BtDevice? device) {
+    final storedName = SharedPreferencesUtil().deviceName;
+    final currentName = storedName.isNotEmpty ? storedName : (device?.name ?? 'Omi DevKit');
+    final controller = TextEditingController(text: currentName);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.renameDevice,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2E),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  decoration: InputDecoration(
+                    hintText: context.l10n.enterDeviceName,
+                    hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.white24, width: 1),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2E),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(
+                            context.l10n.cancel,
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        final newName = controller.text.trim();
+                        if (newName.isEmpty) {
+                          AppSnackbar.showSnackbarError(context.l10n.deviceNameCannotBeEmpty);
+                          return;
+                        }
+                        SharedPreferencesUtil().deviceName = newName;
+                        Navigator.of(ctx).pop();
+                        setState(() {});
+                        AppSnackbar.showSnackbar(context.l10n.deviceNameUpdated);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(
+                            context.l10n.save,
+                            style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).then((_) => controller.dispose());
   }
 
   void _loadInitialDimRatio() async {
@@ -211,6 +314,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       ),
     );
 
+    if (copyValue != null && onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        onLongPress: () {
+          Clipboard.setData(ClipboardData(text: copyValue));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.itemCopiedToClipboard(title))));
+        },
+        child: content,
+      );
+    }
+
     if (copyValue != null) {
       return GestureDetector(
         onTap: () {
@@ -230,7 +346,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
-    final deviceName = device?.name ?? 'Omi DevKit';
+    final storedName = SharedPreferencesUtil().deviceName;
+    final deviceName = storedName.isNotEmpty ? storedName : (device?.name ?? 'Omi DevKit');
     final deviceId = device?.id ?? '12AB34CD:56EF78GH';
 
     String truncateId(String id) {
@@ -249,7 +366,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
-            showChevron: false,
+            showChevron: true,
+            onTap: () => _showRenameDeviceDialog(device),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
@@ -767,7 +885,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             GestureDetector(
               onTap: () async {
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-                SharedPreferencesUtil().deviceName = '';
                 if (provider.connectedDevice != null) {
                   await _bleDisconnectDevice(provider.connectedDevice!);
                 }
