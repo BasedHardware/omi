@@ -7,7 +7,9 @@ export interface SharedTaskData {
   count: number;
 }
 
-export default async function getSharedTasks(token: string): Promise<SharedTaskData | undefined> {
+export default async function getSharedTasks(
+  token: string,
+): Promise<SharedTaskData | undefined> {
   try {
     const response = await fetch(`${envConfig.API_URL}/v1/action-items/shared/${token}`, {
       headers: {
