@@ -11,12 +11,8 @@ import logging
 from typing import List, Dict, Any
 import json
 
-from langchain_core.messages import SystemMessage, HumanMessage
-
-from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
 from utils.llm.clients import llm_mini
-from utils.llms.memory import get_prompt_memories
 
 logger = logging.getLogger(__name__)
 
@@ -181,97 +177,6 @@ PROACTIVE_TOOLS = [
 ]
 
 
-def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], frequency: int) -> List[Dict[str, Any]]:
-    """
-    Attempt to detect proactive triggers via tool calling.
-
-    Returns a list of notification dicts (one per triggered tool that passes the
-    confidence threshold). Empty list if no triggers apply.
-    """
-    try:
-        # Load user context
-        user_name, user_facts = get_prompt_memories(uid)
-        goals = get_user_goals(uid)
-        goals_text = (
-            "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
-            if goals
-            else "No goals set."
-        )
-
-        # Format conversation
-        lines = []
-        for msg in sorted_messages:
-            speaker = user_name if msg.get('is_user') else "other"
-            lines.append(f"[{speaker}]: {msg['text']}")
-        conversation_text = "\n".join(lines)
-
-        system_prompt = (
-            f"You are {user_name}'s proactive AI mentor and trusted friend. "
-            "You may call multiple tools if multiple triggers clearly apply. "
-            "Call a tool ONLY when the conversation clearly matches a trigger. "
-            "If no trigger applies, respond with no tool calls.\n\n"
-            "IMPORTANT RULES:\n"
-            "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
-            "- Reference specific details from the conversation (names, situations, feelings)\n"
-            "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
-            "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
-            "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
-            "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
-            "- Always end with a gentle question or suggestion, never a lecture"
-        )
-
-        user_message = (
-            f"Conversation:\n{conversation_text}\n\n"
-            f"What we know about {user_name}:\n{user_facts}\n\n"
-            f"{user_name}'s active goals:\n{goals_text}"
-        )
-
-        messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
-
-        llm_with_tools = llm_mini.bind_tools(PROACTIVE_TOOLS, tool_choice="auto")
-        resp = llm_with_tools.invoke(messages)
-
-        if not resp.tool_calls:
-            logger.info(f"proactive_tool_decision uid={uid} triggered=false")
-            return []
-
-        results = []
-        for tool_call in resp.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
-            confidence = tool_args.get("confidence", 0)
-            notification_text = tool_args.get("notification_text", "")
-
-            logger.info(
-                f"proactive_tool_decision uid={uid} triggered=true "
-                f"tool={tool_name} confidence={confidence:.2f} "
-                f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
-            )
-
-            if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
-                logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
-                continue
-
-            if not notification_text or len(notification_text) < 5:
-                logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
-                continue
-
-            results.append(
-                {
-                    "notification_text": notification_text,
-                    "tool_name": tool_name,
-                    "tool_args": tool_args,
-                }
-            )
-
-        logger.info(f"proactive_tool_results uid={uid} total_calls={len(resp.tool_calls)} accepted={len(results)}")
-        return results
-
-    except Exception as e:
-        logger.error(f"proactive_tool_error uid={uid} error={e}")
-        return []
-
-
 def extract_topics(discussion_text: str) -> List[str]:
     """Extract topics from the discussion using LLM."""
     try:
@@ -409,6 +314,8 @@ Remember: First evaluate silently, then either respond with empty string OR give
         "prompt": adjusted_prompt,
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
         "context": {"filters": {"people": [], "entities": [], "topics": topics}},
+        "tools": PROACTIVE_TOOLS,
+        "messages": messages,
     }
 
 
@@ -474,17 +381,9 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
         buffer_data['last_analysis_time'] = current_time
         buffer_data['messages'] = []  # Clear buffer after analysis
 
-        # Try proactive tool calling
-        tool_results = _try_proactive_tools(uid, sorted_messages, frequency)
-
-        # Always generate prompt-based notification data (topics, context filters, prompt)
+        # Create notification data with prompt, tools, and conversation messages.
+        # Tool calling is handled downstream by _process_proactive_notification.
         notification_data = create_notification_data(sorted_messages, frequency)
-
-        if tool_results:
-            tools_str = ", ".join(r['tool_name'] for r in tool_results)
-            logger.info(f"Proactive tools triggered for user {uid} ({len(tool_results)} tools: {tools_str})")
-            notification_data["source"] = "tool"
-            notification_data["notifications"] = tool_results
 
         logger.info(f"Mentor notification ready for user {uid} (frequency: {frequency})")
         return notification_data

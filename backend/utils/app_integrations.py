@@ -1,3 +1,4 @@
+import logging
 import threading
 from typing import List, Any
 from datetime import datetime
@@ -5,11 +6,14 @@ import os
 import requests
 import time
 
+from langchain_core.messages import SystemMessage, HumanMessage
+
 import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
+from database.goals import get_user_goals
 from database.redis_db import get_generic_cache, set_generic_cache
 from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
@@ -17,11 +21,14 @@ from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.llm.clients import generate_embedding, llm_mini
 from utils.llm.proactive_notification import get_proactive_message
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
+
+logger = logging.getLogger(__name__)
 
 
 def _json_serialize_datetime(obj: Any) -> Any:
@@ -213,6 +220,103 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
+def _try_mentor_tools(uid: str, data: dict) -> list[dict]:
+    """
+    Attempt to detect proactive triggers via tool calling.
+    Only called for the Mentor app (app.id == 'mentor').
+
+    Returns a list of notification dicts (one per triggered tool that passes the
+    confidence threshold). Empty list if no triggers apply.
+    """
+    from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
+
+    tools = data.get('tools', [])
+    conversation_messages = data.get('messages', [])
+    if not tools or not conversation_messages:
+        return []
+
+    try:
+        user_name, user_facts = get_prompt_memories(uid)
+        goals = get_user_goals(uid)
+        goals_text = (
+            "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+            if goals
+            else "No goals set."
+        )
+
+        lines = []
+        for msg in conversation_messages:
+            speaker = user_name if msg.get('is_user') else "other"
+            lines.append(f"[{speaker}]: {msg['text']}")
+        conversation_text = "\n".join(lines)
+
+        system_prompt = (
+            f"You are {user_name}'s proactive AI mentor and trusted friend. "
+            "You may call multiple tools if multiple triggers clearly apply. "
+            "Call a tool ONLY when the conversation clearly matches a trigger. "
+            "If no trigger applies, respond with no tool calls.\n\n"
+            "IMPORTANT RULES:\n"
+            "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
+            "- Reference specific details from the conversation (names, situations, feelings)\n"
+            "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
+            "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
+            "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
+            "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
+            "- Always end with a gentle question or suggestion, never a lecture"
+        )
+
+        user_message = (
+            f"Conversation:\n{conversation_text}\n\n"
+            f"What we know about {user_name}:\n{user_facts}\n\n"
+            f"{user_name}'s active goals:\n{goals_text}"
+        )
+
+        llm_messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
+
+        llm_with_tools = llm_mini.bind_tools(tools, tool_choice="auto")
+        resp = llm_with_tools.invoke(llm_messages)
+
+        if not resp.tool_calls:
+            logger.info(f"proactive_tool_decision uid={uid} triggered=false")
+            return []
+
+        results = []
+        for tool_call in resp.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call["args"]
+            confidence = tool_args.get("confidence", 0)
+            notification_text = tool_args.get("notification_text", "")
+
+            logger.info(
+                f"proactive_tool_decision uid={uid} triggered=true "
+                f"tool={tool_name} confidence={confidence:.2f} "
+                f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
+            )
+
+            if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
+                logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
+                continue
+
+            if not notification_text or len(notification_text) < 5:
+                logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
+                continue
+
+            results.append(
+                {
+                    "notification_text": notification_text,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                }
+            )
+
+        logger.info(f"proactive_tool_results uid={uid} total_calls={len(resp.tool_calls)} accepted={len(results)}")
+        return results
+
+    except Exception as e:
+        logger.error(f"proactive_tool_error uid={uid} error={e}")
+        return []
+
+
 def _process_proactive_notification(uid: str, app: App, data):
     if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
@@ -223,19 +327,22 @@ def _process_proactive_notification(uid: str, app: App, data):
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    # Short-circuit for tool-based proactive notifications (already have notification text).
-    # By design, all tool notifications from one analysis cycle are sent together (up to 3,
-    # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown), not
-    # individual notifications within one cycle. This is per CTO request to allow multiple
-    # tool calls per analysis.
-    if data.get('source') == 'tool' and data.get('notifications'):
-        messages_sent = []
-        for noti in data['notifications']:
-            send_app_notification(uid, app.name, app.id, noti['notification_text'])
-            print(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
-            messages_sent.append(noti['notification_text'])
-        _set_proactive_noti_sent_at(uid, app)
-        return "\n\n".join(messages_sent)
+    # Tool-based proactive notifications — currently limited to Mentor app only.
+    # When tools are present and this is the Mentor app, try tool calling first.
+    # All tool notifications from one analysis cycle are sent together (up to 3,
+    # one per tool type). The rate limit above blocks the NEXT cycle (30s cooldown),
+    # not individual notifications within one cycle. Per CTO request.
+    if data.get('tools') and app.id == 'mentor':
+        tool_results = _try_mentor_tools(uid, data)
+        if tool_results:
+            messages_sent = []
+            for noti in tool_results:
+                send_app_notification(uid, app.name, app.id, noti['notification_text'])
+                logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
+                messages_sent.append(noti['notification_text'])
+            _set_proactive_noti_sent_at(uid, app)
+            return "\n\n".join(messages_sent)
+        # Tools didn't fire — fall through to prompt-based path
 
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
@@ -264,8 +371,6 @@ def _process_proactive_notification(uid: str, app: App, data):
     messages = []
     if 'user_chat' in filter_scopes:
         messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
-
-    # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
 
     # retrive message
     message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
