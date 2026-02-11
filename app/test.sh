@@ -47,3 +47,16 @@ fi
 flutter test test/providers/capture_provider_test.dart
 flutter test test/widgets/transcript_test.dart
 flutter test test/unit/audio_player_utils_test.dart
+
+# Run Maestro E2E tests if --e2e flag is passed and Maestro is installed
+if [[ "${1:-}" == "--e2e" ]]; then
+  if command -v maestro &> /dev/null; then
+    echo ""
+    echo "Running Maestro E2E functional tests..."
+    bash "$ROOT_DIR/.maestro/scripts/run_all.sh"
+  else
+    echo ""
+    echo "Maestro CLI not found - skipping E2E tests."
+    echo "Install with: brew install maestro"
+  fi
+fi
