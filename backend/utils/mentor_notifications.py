@@ -11,8 +11,12 @@ import logging
 from typing import List, Dict, Any
 import json
 
+from langchain_core.messages import SystemMessage, HumanMessage
+
+from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
 from utils.llm.clients import llm_mini
+from utils.llms.memory import get_prompt_memories
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +82,181 @@ message_buffer = MessageBuffer()
 
 # Minimum segments needed before analysis (real-time processing)
 MIN_SEGMENTS_FOR_ANALYSIS = 3
+
+# Minimum confidence to trigger a proactive notification
+PROACTIVE_CONFIDENCE_THRESHOLD = 0.7
+
+# Proactive tool definitions (OpenAI function-calling format)
+PROACTIVE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_argument_perspective",
+            "description": (
+                "User is in a disagreement with someone. Offer an honest outside perspective "
+                "on who might be right and why, based on what you know about the user."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "other_person": {
+                        "type": "string",
+                        "description": "Who the user is disagreeing with",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "rationale": {
+                        "type": "string",
+                        "description": "Why this notification is warranted",
+                    },
+                },
+                "required": ["notification_text", "confidence", "rationale"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_goal_misalignment",
+            "description": (
+                "User is discussing plans that contradict their stored goals. "
+                "Alert them to the conflict so they can course-correct."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "goal_name": {
+                        "type": "string",
+                        "description": "Which goal is conflicted",
+                    },
+                    "conflict_description": {
+                        "type": "string",
+                        "description": "How the plan conflicts with the goal",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "goal_name", "conflict_description", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_emotional_support",
+            "description": (
+                "User is expressing complaints or negative emotions. "
+                "Suggest a concrete, actionable step they can take right now."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "detected_emotion": {
+                        "type": "string",
+                        "description": "Primary emotion detected (e.g. frustration, loneliness, anxiety)",
+                    },
+                    "suggested_action": {
+                        "type": "string",
+                        "description": "Concrete actionable suggestion",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "detected_emotion", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+
+def _try_proactive_tools(uid: str, sorted_messages: List[Dict[str, Any]], frequency: int) -> Dict[str, Any] | None:
+    """
+    Attempt to detect proactive triggers via tool calling.
+
+    Returns a dict with notification_text + metadata if a tool fires with sufficient
+    confidence, or None if no trigger applies.
+    """
+    try:
+        # Load user context
+        user_name, user_facts = get_prompt_memories(uid)
+        goals = get_user_goals(uid)
+        goals_text = (
+            "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+            if goals
+            else "No goals set."
+        )
+
+        # Format conversation
+        lines = []
+        for msg in sorted_messages:
+            speaker = user_name if msg.get('is_user') else "other"
+            lines.append(f"[{speaker}]: {msg['text']}")
+        conversation_text = "\n".join(lines)
+
+        system_prompt = (
+            f"You are {user_name}'s proactive AI mentor. "
+            "Call a tool ONLY when the conversation clearly matches a trigger. "
+            "If no trigger applies, respond with no tool calls. "
+            "Be direct and empathetic. Notification text must be <300 chars."
+        )
+
+        user_message = (
+            f"Conversation:\n{conversation_text}\n\n"
+            f"What we know about {user_name}:\n{user_facts}\n\n"
+            f"{user_name}'s active goals:\n{goals_text}"
+        )
+
+        messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
+
+        llm_with_tools = llm_mini.bind_tools(PROACTIVE_TOOLS, tool_choice="auto")
+        resp = llm_with_tools.invoke(messages)
+
+        if not resp.tool_calls:
+            logger.info(f"proactive_tool_decision uid={uid} triggered=false")
+            return None
+
+        tool_call = resp.tool_calls[0]
+        tool_name = tool_call["name"]
+        tool_args = tool_call["args"]
+        confidence = tool_args.get("confidence", 0)
+        notification_text = tool_args.get("notification_text", "")
+
+        logger.info(
+            f"proactive_tool_decision uid={uid} triggered=true "
+            f"tool={tool_name} confidence={confidence:.2f} "
+            f"rationale={tool_args.get('rationale', tool_args.get('conflict_description', ''))[:100]}"
+        )
+
+        if confidence < PROACTIVE_CONFIDENCE_THRESHOLD:
+            logger.info(f"proactive_tool_below_threshold uid={uid} tool={tool_name} confidence={confidence:.2f}")
+            return None
+
+        if not notification_text or len(notification_text) < 5:
+            logger.warning(f"proactive_tool_empty_text uid={uid} tool={tool_name}")
+            return None
+
+        return {
+            "notification_text": notification_text,
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+            "source": "tool",
+        }
+
+    except Exception as e:
+        logger.error(f"proactive_tool_error uid={uid} error={e}")
+        return None
 
 
 def extract_topics(discussion_text: str) -> List[str]:
@@ -279,12 +458,17 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
         # Sort messages by timestamp
         sorted_messages = sorted(buffer_data['messages'], key=lambda x: x['timestamp'])
 
-        # Create notification with formatted discussion
-        notification_data = create_notification_data(sorted_messages, frequency)
-
         buffer_data['last_analysis_time'] = current_time
         buffer_data['messages'] = []  # Clear buffer after analysis
 
+        # Try proactive tool calling first
+        tool_result = _try_proactive_tools(uid, sorted_messages, frequency)
+        if tool_result:
+            logger.info(f"Proactive tool triggered for user {uid} (tool: {tool_result['tool_name']})")
+            return tool_result
+
+        # Fall back to existing prompt-based mentor notification
+        notification_data = create_notification_data(sorted_messages, frequency)
         logger.info(f"Mentor notification ready for user {uid} (frequency: {frequency})")
         return notification_data
 

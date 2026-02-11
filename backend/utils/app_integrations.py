@@ -223,6 +223,14 @@ def _process_proactive_notification(uid: str, app: App, data):
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
+    # Short-circuit for tool-based proactive notifications (already have notification text)
+    if data.get('source') == 'tool' and data.get('notification_text'):
+        message = data['notification_text']
+        send_app_notification(uid, app.name, app.id, message)
+        _set_proactive_noti_sent_at(uid, app)
+        print(f"Sent proactive tool notification to user {uid} (tool: {data.get('tool_name')})")
+        return message
+
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
