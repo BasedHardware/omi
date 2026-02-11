@@ -477,3 +477,114 @@ def test_threaded_tracking_context_isolation():
 
     # Main thread should have no context set
     assert usage_tracker.get_current_context() is None
+
+
+# ---------------------------------------------------------------------------
+# Tests for _trigger_apps preferred-app shortcut (PR #4683, issue #4639)
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_app(app_id, name="TestApp"):
+    """Create a minimal App-like mock for _trigger_apps tests."""
+    app = MagicMock()
+    app.id = app_id
+    app.name = name
+    app.works_with_memories.return_value = True
+    app.enabled = True
+    return app
+
+
+def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, available_apps=None):
+    """Set up the module-level mocks needed by _trigger_apps."""
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_user_preferred_app = MagicMock(return_value=preferred_app_id)
+
+    apps_mod = sys.modules["database.apps"]
+    apps_mod.record_app_usage = MagicMock()
+
+    utils_apps_mod = sys.modules["utils.apps"]
+    utils_apps_mod.get_available_apps = MagicMock(return_value=available_apps or [])
+
+    llm_conv_mod = sys.modules["utils.llm.conversation_processing"]
+    llm_conv_mod.get_app_result = MagicMock(return_value="App result content")
+    llm_conv_mod.get_suggested_apps_for_conversation = MagicMock(return_value=(["suggested-app"], "reasoning"))
+
+    return llm_conv_mod, default_apps or []
+
+
+def _make_trigger_conversation(suggested_apps=None):
+    """Create a minimal conversation mock for _trigger_apps tests."""
+    conv = MagicMock()
+    conv.id = "conv-trigger-test"
+    conv.get_transcript.return_value = "Speaker 0: Hello"
+    conv.photos = []
+    conv.apps_results = []
+    conv.suggested_summarization_apps = suggested_apps
+    return conv
+
+
+def _trigger_apps_context(default_apps=None):
+    """Context manager that patches all external dependencies of _trigger_apps."""
+    suggestion_mock = MagicMock(return_value=(["suggested-app"], "reasoning"))
+    app_result_mock = MagicMock(return_value="App result content")
+    record_mock = MagicMock()
+    return (
+        suggestion_mock,
+        app_result_mock,
+        patch.object(process_conversation, "get_default_conversation_summarized_apps", return_value=default_apps or []),
+        patch.object(process_conversation, "get_available_apps", return_value=[]),
+        patch.object(process_conversation, "get_suggested_apps_for_conversation", suggestion_mock),
+        patch.object(process_conversation, "get_app_result", app_result_mock),
+        patch.object(process_conversation, "record_app_usage", record_mock),
+    )
+
+
+def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
+    """When user has a valid preferred app, use it and skip the suggestion LLM call."""
+    preferred = _make_mock_app("preferred-app-1", "PreferredApp")
+    _setup_trigger_apps_mocks(preferred_app_id="preferred-app-1", available_apps=[preferred])
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context()
+    # Override get_available_apps to return the preferred app
+    p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
+
+    with p1, p2, p3, p4, p5:
+        process_conversation._trigger_apps("user-preferred", conv)
+
+    # The suggestion LLM call must NOT have been invoked
+    suggestion_mock.assert_not_called()
+    # The preferred app should have been executed
+    app_result_mock.assert_called_once()
+    # The app result should be stored on the conversation
+    assert len(conv.apps_results) == 1
+
+
+def test_trigger_apps_stale_preferred_app_falls_through_to_suggestion():
+    """When preferred app ID exists in Redis but not in apps dict, fall through to LLM suggestion."""
+    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+    _setup_trigger_apps_mocks(preferred_app_id="deleted-app-999")
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+
+    with p1, p2, p3, p4, p5:
+        process_conversation._trigger_apps("user-stale", conv)
+
+    # The suggestion LLM call SHOULD have been invoked since preferred app was invalid
+    suggestion_mock.assert_called_once()
+
+
+def test_trigger_apps_no_preferred_app_runs_suggestion():
+    """When no preferred app is set, the suggestion LLM call should run."""
+    suggestion_app = _make_mock_app("suggested-app", "SuggestedApp")
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5 = _trigger_apps_context(default_apps=[suggestion_app])
+
+    with p1, p2, p3, p4, p5:
+        process_conversation._trigger_apps("user-no-pref", conv)
+
+    # The suggestion LLM call SHOULD have been invoked
+    suggestion_mock.assert_called_once()

@@ -300,30 +300,30 @@ def _trigger_apps(
 
     app_to_run = None
 
-    # Always generate/update suggestions if not already set (even during reprocessing)
-    if not conversation.suggested_summarization_apps:
-        with track_usage(uid, Features.CONVERSATION_APPS):
-            suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
-        conversation.suggested_summarization_apps = suggested_apps
-        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
         app_to_run = all_apps_dict.get(app_id)
     else:
-        # Check if user has a preferred app set
+        # Check preferred app first — skip the suggestion LLM call if user has one
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
             print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        elif conversation.suggested_summarization_apps:
-            # Use the first suggested app if available
-            first_suggested_app_id = conversation.suggested_summarization_apps[0]
-            app_to_run = all_apps_dict.get(first_suggested_app_id)
-            if app_to_run:
-                print(f"Using first suggested app: {app_to_run.name}")
-            else:
-                print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+        else:
+            # Only run suggestion LLM call when no preferred app is set
+            if not conversation.suggested_summarization_apps:
+                with track_usage(uid, Features.CONVERSATION_APPS):
+                    suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+                conversation.suggested_summarization_apps = suggested_apps
+                print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+
+            if conversation.suggested_summarization_apps:
+                first_suggested_app_id = conversation.suggested_summarization_apps[0]
+                app_to_run = all_apps_dict.get(first_suggested_app_id)
+                if app_to_run:
+                    print(f"Using first suggested app: {app_to_run.name}")
+                else:
+                    print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
