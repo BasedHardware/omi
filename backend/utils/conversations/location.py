@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional
 
@@ -11,8 +12,8 @@ from models.conversation import Geolocation
 def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geolocation]:
     print('get_google_maps_location', latitude, longitude)
 
-    # Round to ~1km precision for cache key
-    rounded = f"{latitude:.2f},{longitude:.2f}"
+    # Round to ~100m precision for cache key
+    rounded = f"{latitude:.3f},{longitude:.3f}"
     cache_key = f"geocode:{rounded}"
 
     # Check Redis cache
@@ -21,8 +22,8 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
         if cached:
             data = json.loads(cached)
             return Geolocation(**data)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.warning('Failed to read geocode cache for key %s: %s', cache_key, e)
 
     key = os.getenv('GOOGLE_MAPS_API_KEY')
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
@@ -44,15 +45,8 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
 
     # Cache in Redis (48h TTL)
     try:
-        cache_data = {
-            'google_place_id': geo.google_place_id,
-            'latitude': geo.latitude,
-            'longitude': geo.longitude,
-            'address': geo.address,
-            'location_type': geo.location_type,
-        }
-        r.set(cache_key, json.dumps(cache_data), ex=172800)
-    except Exception:
-        pass
+        r.set(cache_key, json.dumps(geo.model_dump()), ex=172800)
+    except Exception as e:
+        logging.warning('Failed to cache geocode for key %s: %s', cache_key, e)
 
     return geo
