@@ -824,3 +824,112 @@ def test_process_proactive_notification_tool_rate_limited():
     assert result is None
     # send_app_notification should NOT have been called
     mock_send.assert_not_called()
+
+
+# ── Boundary tests (tester feedback) ──
+
+
+def test_confidence_at_exact_threshold():
+    """Tool call with confidence == PROACTIVE_CONFIDENCE_THRESHOLD should be accepted."""
+    from utils.mentor_notifications import _try_proactive_tools, PROACTIVE_CONFIDENCE_THRESHOLD
+
+    mock_get_prompt_memories.return_value = ("Boundary", "Boundary user.")
+    mock_get_user_goals.return_value = []
+
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Hey, you seem stressed. Take a moment.",
+                "detected_emotion": "stress",
+                "confidence": PROACTIVE_CONFIDENCE_THRESHOLD,  # Exactly at threshold (0.7)
+            },
+        }
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    messages = [{"text": "I'm stressed", "timestamp": 1000, "is_user": True}]
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
+
+    # Confidence == threshold should pass (>= check)
+    assert len(results) == 1
+    assert results[0]["tool_args"]["confidence"] == PROACTIVE_CONFIDENCE_THRESHOLD
+
+
+def test_notification_text_too_short():
+    """Tool call with notification_text < 5 chars should be rejected."""
+    from utils.mentor_notifications import _try_proactive_tools
+
+    mock_get_prompt_memories.return_value = ("Short", "Short user.")
+    mock_get_user_goals.return_value = []
+
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Hey",  # Only 3 chars — below min of 5
+                "detected_emotion": "stress",
+                "confidence": 0.9,
+            },
+        }
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    messages = [{"text": "I'm stressed", "timestamp": 1000, "is_user": True}]
+    results = _try_proactive_tools("test_uid", messages, frequency=3)
+
+    # Text too short — should be filtered out
+    assert results == []
+
+
+def test_empty_notifications_falls_through_to_prompt():
+    """When tool results list is empty, process_mentor_notification should return prompt-based data."""
+    from utils.mentor_notifications import process_mentor_notification, message_buffer
+
+    message_buffer.buffers.clear()
+
+    mock_get_prompt_memories.return_value = ("Faye", "Faye is a writer.")
+    mock_get_user_goals.return_value = []
+
+    # Tools return a response but all filtered out (low confidence)
+    mock_tool_response = MagicMock()
+    mock_tool_response.tool_calls = [
+        {
+            "name": "trigger_emotional_support",
+            "args": {
+                "notification_text": "Hey Faye",
+                "detected_emotion": "stress",
+                "confidence": 0.3,  # Below threshold — will be filtered
+            },
+        }
+    ]
+
+    mock_bound = MagicMock()
+    mock_bound.invoke = MagicMock(return_value=mock_tool_response)
+    mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
+
+    # Mock extract_topics for create_notification_data
+    mock_llm_mini.invoke.reset_mock()
+    mock_llm_mini.invoke.return_value = MagicMock(content='["writing"]')
+
+    segments = [
+        {"text": "I should write more", "start": 1000, "is_user": True},
+        {"text": "You should", "start": 1001, "is_user": False},
+        {"text": "But I have no inspiration", "start": 1002, "is_user": True},
+    ]
+
+    result = process_mentor_notification("test_uid_faye", segments)
+
+    # No tool results passed threshold → no "source" key → prompt-based fallback
+    assert result is not None
+    assert "source" not in result
+    assert "prompt" in result
+    assert "params" in result
