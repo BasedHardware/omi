@@ -392,7 +392,7 @@ def test_try_proactive_tools_empty_notification_text():
 
 
 def test_process_mentor_notification_tries_tools_first():
-    """process_mentor_notification should try proactive tools before fallback to prompt."""
+    """process_mentor_notification should try proactive tools and always include notification_data."""
     from utils.mentor_notifications import process_mentor_notification, message_buffer
 
     # Reset buffer
@@ -418,6 +418,10 @@ def test_process_mentor_notification_tries_tools_first():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
+    # Mock extract_topics (called by create_notification_data)
+    mock_llm_mini.invoke.reset_mock()
+    mock_llm_mini.invoke.return_value = MagicMock(content='["work-life balance", "priorities"]')
+
     segments = [
         {"text": "She keeps saying I work too much", "start": 1000, "is_user": True},
         {"text": "Do you think she's right?", "start": 1001, "is_user": False},
@@ -433,6 +437,10 @@ def test_process_mentor_notification_tries_tools_first():
     assert result["notifications"][0]["tool_name"] == "trigger_argument_perspective"
     noti_text = result["notifications"][0]["notification_text"]
     assert "deadline" in noti_text or "valid point" in noti_text
+    # create_notification_data always called — prompt/params/context present
+    assert "prompt" in result
+    assert "params" in result
+    assert "context" in result
 
 
 def test_process_mentor_notification_falls_back_to_prompt():
@@ -642,6 +650,10 @@ def test_process_mentor_notification_multiple_tools():
     mock_bound.invoke = MagicMock(return_value=mock_tool_response)
     mock_llm_mini.bind_tools = MagicMock(return_value=mock_bound)
 
+    # Mock extract_topics (called by create_notification_data)
+    mock_llm_mini.invoke.reset_mock()
+    mock_llm_mini.invoke.return_value = MagicMock(content='["parenting", "work-life balance"]')
+
     segments = [
         {"text": "I have to work late again tonight", "start": 1000, "is_user": True},
         {"text": "The kids will miss you", "start": 1001, "is_user": False},
@@ -655,3 +667,6 @@ def test_process_mentor_notification_multiple_tools():
     assert len(result["notifications"]) == 2
     assert result["notifications"][0]["tool_name"] == "trigger_goal_misalignment"
     assert result["notifications"][1]["tool_name"] == "trigger_emotional_support"
+    # create_notification_data always called — prompt/params/context present
+    assert "prompt" in result
+    assert "params" in result

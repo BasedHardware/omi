@@ -474,15 +474,18 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
         buffer_data['last_analysis_time'] = current_time
         buffer_data['messages'] = []  # Clear buffer after analysis
 
-        # Try proactive tool calling first
+        # Try proactive tool calling
         tool_results = _try_proactive_tools(uid, sorted_messages, frequency)
+
+        # Always generate prompt-based notification data (topics, context filters, prompt)
+        notification_data = create_notification_data(sorted_messages, frequency)
+
         if tool_results:
             tools_str = ", ".join(r['tool_name'] for r in tool_results)
             logger.info(f"Proactive tools triggered for user {uid} ({len(tool_results)} tools: {tools_str})")
-            return {"source": "tool", "notifications": tool_results}
+            notification_data["source"] = "tool"
+            notification_data["notifications"] = tool_results
 
-        # Fall back to existing prompt-based mentor notification
-        notification_data = create_notification_data(sorted_messages, frequency)
         logger.info(f"Mentor notification ready for user {uid} (frequency: {frequency})")
         return notification_data
 
