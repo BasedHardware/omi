@@ -1,0 +1,118 @@
+# Omi App - Apps/Plugins Flow
+# Tests: Navigate to apps section, browse list, view app detail, enable/disable.
+#
+# Prerequisites:
+#   - User is signed in
+#
+# Run: maestro test .maestro/flows/07_apps.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+- launchApp:
+    appId: com.friend.ios.dev
+
+# Wait for home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 15000
+
+# Dismiss any popup
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+
+# Navigate to Apps tab
+# Try tapping "Apps" text if visible
+- runFlow:
+    when:
+      visible: "Apps"
+    commands:
+      - tapOn: "Apps"
+      - waitForAnimationToEnd
+
+# If Apps is in bottom nav as icon (4th tab), tap approximate position
+- runFlow:
+    when:
+      notVisible: "Apps"
+    commands:
+      # Tap the 4th (rightmost) icon in bottom nav
+      - tapOn:
+          point: "87%,97%"
+      - waitForAnimationToEnd
+
+# Wait for apps list to load
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Apps"
+      - visible:
+          text: ".*app.*"
+          regex: true
+    timeout: 10000
+
+# Scroll through the apps list
+- scroll:
+    direction: DOWN
+    duration: 1500
+- waitForAnimationToEnd
+
+- scroll:
+    direction: UP
+    duration: 1000
+- waitForAnimationToEnd
+
+# Tap into the first app to view its detail
+- tapOn:
+    point: "50%,35%"
+- waitForAnimationToEnd
+
+# Wait for app detail screen to load
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Enable"
+      - visible: "Disable"
+      - visible: "Enabled"
+      - visible:
+          text: ".*install.*"
+          regex: true
+    timeout: 10000
+
+# Try to enable/disable the app
+- runFlow:
+    when:
+      visible: "Enable"
+    commands:
+      - tapOn: "Enable"
+      - waitForAnimationToEnd
+      # Verify it changed to enabled state
+      - extendedWaitUntil:
+          anyOf:
+            - visible: "Enabled"
+            - visible: "Disable"
+          timeout: 5000
+      # Disable it again to restore state
+      - runFlow:
+          when:
+            visible: "Disable"
+          commands:
+            - tapOn: "Disable"
+            - waitForAnimationToEnd
+
+# Navigate back to apps list
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify we're back on apps
+- extendedWaitUntil:
+    anyOf:
+      - visible: "Apps"
+      - visible: "Ask Omi"
+    timeout: 10000
