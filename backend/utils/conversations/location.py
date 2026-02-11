@@ -32,7 +32,7 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
     if data['status'] != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]
-    if not place['place_id']:
+    if not place.get('place_id'):
         return None
 
     geo = Geolocation(

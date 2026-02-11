@@ -220,6 +220,22 @@ class TestApiEdgeCases:
 
         assert result is None
 
+    def test_missing_place_id_key_returns_none(self):
+        """Result with no place_id key at all returns None."""
+        with patch("utils.conversations.location.r") as mock_r:
+            mock_r.get.return_value = None
+            with patch("utils.conversations.location.requests") as mock_req:
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = {
+                    "status": "OK",
+                    "results": [{"formatted_address": "No ID St", "types": ["route"]}],
+                }
+                mock_req.get.return_value = mock_resp
+
+                result = get_google_maps_location(37.785, -122.409)
+
+        assert result is None
+
     def test_empty_types_gives_none_location_type(self):
         """Result with no types gives location_type=None."""
         with patch("utils.conversations.location.r") as mock_r:
