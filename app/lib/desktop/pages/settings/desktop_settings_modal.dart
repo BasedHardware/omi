@@ -212,13 +212,19 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     MixpanelManager().dailySummaryTimeChanged(hour: hour);
   }
 
-  void _updateDailyReflectionEnabled(bool value) {
+  Future<void> _updateDailyReflectionEnabled(bool value) async {
     setState(() => _dailyReflectionEnabled = value);
-    SharedPreferencesUtil().dailyReflectionEnabled = value;
+    await setDailyReflectionSettings(enabled: value);
+    MixpanelManager().dailyReflectionToggled(enabled: value);
 
     // Schedule or cancel the notification based on the setting
     if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+      final settings = await getDailyReflectionSettings();
+      final hour = settings?.hour ?? 21; // Default to 9 PM
+      DailyReflectionNotification.scheduleDailyNotification(
+        channelKey: 'channel',
+        hour: hour,
+      );
     } else {
       DailyReflectionNotification.cancelNotification();
     }

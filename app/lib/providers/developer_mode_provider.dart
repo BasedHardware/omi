@@ -249,13 +249,18 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onDailyReflectionChanged(var value) {
+  Future<void> onDailyReflectionChanged(var value) async {
     dailyReflectionEnabled = value;
-    SharedPreferencesUtil().dailyReflectionEnabled = value; // Save immediately
+    await setDailyReflectionSettings(enabled: value);
 
     // Schedule or cancel the notification based on the setting
     if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+      final settings = await getDailyReflectionSettings();
+      final hour = settings?.hour ?? 21; // Default to 9 PM
+      DailyReflectionNotification.scheduleDailyNotification(
+        channelKey: 'channel',
+        hour: hour,
+      );
     } else {
       DailyReflectionNotification.cancelNotification();
     }
