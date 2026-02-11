@@ -154,8 +154,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                           return;
                         }
                         SharedPreferencesUtil().deviceName = newName;
+                        if (device != null) {
+                          SharedPreferencesUtil().deviceNameDeviceId = device.id;
+                        }
                         Navigator.of(ctx).pop();
-                        setState(() {});
+                        if (mounted) setState(() {});
                         AppSnackbar.showSnackbar(context.l10n.deviceNameUpdated);
                       },
                       child: Container(
