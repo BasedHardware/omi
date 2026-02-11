@@ -60,6 +60,16 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'widgets/battery_info_widget.dart';
 
+Future<void> _scheduleDailyReflectionIfEnabled() async {
+  final settings = await getDailyReflectionSettings();
+  if (settings != null && settings.enabled) {
+    DailyReflectionNotification.scheduleDailyNotification(
+      channelKey: 'channel',
+      hour: settings.hour,
+    );
+  }
+}
+
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
   final String? autoMessage;
@@ -84,9 +94,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
         NotificationService.instance.saveNotificationToken();
 
         // Schedule daily reflection notification if enabled
-        if (SharedPreferencesUtil().dailyReflectionEnabled) {
-          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-        }
+        _scheduleDailyReflectionIfEnabled();
       }
     });
     _navigateToRoute = widget.navigateToRoute;

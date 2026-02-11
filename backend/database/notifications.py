@@ -136,6 +136,58 @@ def set_daily_summary_enabled(uid: str, enabled: bool) -> bool:
 
 
 # **************************************
+# *** Daily Reflection Time Preferences ***
+# **************************************
+
+# Default: 21:00 local time (9 PM)
+DEFAULT_DAILY_REFLECTION_HOUR_LOCAL = 21
+
+
+def get_daily_reflection_hour_local(uid: str) -> int | None:
+    """Get user's preferred daily reflection hour in local time. Returns None if not set."""
+    user_ref = db.collection('users').document(uid).get()
+    if user_ref.exists:
+        user_data = user_ref.to_dict()
+        return user_data.get('daily_reflection_hour_local')
+    return None
+
+
+def set_daily_reflection_hour_local(uid: str, hour_local: int) -> bool:
+    """
+    Set user's preferred daily reflection hour in local time.
+
+    Args:
+        uid: User ID
+        hour_local: Hour in local timezone (0-23)
+
+    Returns:
+        True if successful
+    """
+    if not (0 <= hour_local <= 23):
+        raise ValueError(f"Invalid hour: {hour_local}. Must be 0-23.")
+
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'daily_reflection_hour_local': hour_local}, merge=True)
+    return True
+
+
+def get_daily_reflection_enabled(uid: str) -> bool:
+    """Check if daily reflection is enabled for user. Enabled by default."""
+    user_ref = db.collection('users').document(uid).get()
+    if user_ref.exists:
+        user_data = user_ref.to_dict()
+        return user_data.get('daily_reflection_enabled', True)
+    return True
+
+
+def set_daily_reflection_enabled(uid: str, enabled: bool) -> bool:
+    """Enable or disable daily reflection for user."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'daily_reflection_enabled': enabled}, merge=True)
+    return True
+
+
+# **************************************
 # *** Mentor Notification Frequency ***
 # **************************************
 

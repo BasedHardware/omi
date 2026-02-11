@@ -1044,6 +1044,68 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
     return {'status': 'ok'}
 
 
+# **************************************
+# **** Daily Reflection Settings ****
+# **************************************
+
+
+class DailyReflectionSettingsResponse(BaseModel):
+    enabled: bool
+    hour: int  # Local hour (0-23) in user's timezone
+
+
+class DailyReflectionSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    hour: Optional[int] = None  # Local hour (0-23), e.g., 21 for 9 PM, 20 for 8 PM
+
+
+@router.get('/v1/users/daily-reflection-settings', tags=['v1'], response_model=DailyReflectionSettingsResponse)
+def get_daily_reflection_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's daily reflection notification settings.
+
+    Returns:
+        - enabled: Whether daily reflection notifications are enabled (default: True)
+        - hour: Preferred hour in user's local timezone (0-23, default: 21 for 9 PM)
+    """
+    enabled = notification_db.get_daily_reflection_enabled(uid)
+    local_hour = notification_db.get_daily_reflection_hour_local(uid)
+
+    # Default to 21 (9 PM) local time if not set
+    if local_hour is None:
+        local_hour = notification_db.DEFAULT_DAILY_REFLECTION_HOUR_LOCAL
+
+    return DailyReflectionSettingsResponse(enabled=enabled, hour=local_hour)
+
+
+@router.patch('/v1/users/daily-reflection-settings', tags=['v1'])
+def update_daily_reflection_settings(data: DailyReflectionSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Update user's daily reflection notification settings.
+
+    Parameters:
+        - enabled: Enable/disable daily reflection notifications
+        - hour: Preferred hour in local timezone (0-23).
+                Examples: 21 (9 PM), 20 (8 PM), 22 (10 PM)
+
+    Note: Hour is stored as local time. The notification will be scheduled
+    on the device using the specified local time.
+    """
+    if data.enabled is not None:
+        notification_db.set_daily_reflection_enabled(uid, data.enabled)
+
+    if data.hour is not None:
+        if not (0 <= data.hour <= 23):
+            raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
+
+        try:
+            notification_db.set_daily_reflection_hour_local(uid, data.hour)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}
+
+
 # ***********************************
 # *** Mentor Notification Settings ***
 # ***********************************

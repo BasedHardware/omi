@@ -20,9 +20,10 @@ class DailyReflectionNotification {
   /// Unique notification ID for daily reflection
   static const int notificationId = 9021; // 9 PM + 21 = 9021
 
-  /// Schedule the daily reflection notification at 9 PM local time
+  /// Schedule the daily reflection notification at the specified hour (default: 9 PM)
   static Future<void> scheduleDailyNotification({
     required String channelKey,
+    int hour = 21, // Default to 9 PM (21:00)
   }) async {
     try {
       final allowed = await _awesomeNotifications.isNotificationAllowed();
@@ -31,10 +32,16 @@ class DailyReflectionNotification {
         return;
       }
 
+      // Validate hour
+      if (hour < 0 || hour > 23) {
+        Logger.debug('[DailyReflection] Invalid hour: $hour, using default 21');
+        hour = 21;
+      }
+
       // Cancel any existing scheduled notification first
       await cancelNotification();
 
-      // Schedule notification for 9 PM every day
+      // Schedule notification for specified hour every day
       final ctx = MyApp.navigatorKey.currentContext;
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
@@ -52,7 +59,7 @@ class DailyReflectionNotification {
           category: NotificationCategory.Reminder,
         ),
         schedule: NotificationCalendar(
-          hour: 21, // 9 PM
+          hour: hour,
           minute: 0,
           second: 0,
           millisecond: 0,
@@ -62,7 +69,7 @@ class DailyReflectionNotification {
         ),
       );
 
-      Logger.debug('[DailyReflection] Scheduled daily notification for 9 PM');
+      Logger.debug('[DailyReflection] Scheduled daily notification for $hour:00');
     } catch (e) {
       Logger.debug('[DailyReflection] Error scheduling notification: $e');
     }
