@@ -559,14 +559,15 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str):
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+    navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
         app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
-        navigate_to=f'/chat/{app_id}',
+        navigate_to=navigate_to,
     )
 
     send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
