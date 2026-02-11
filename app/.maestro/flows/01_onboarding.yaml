@@ -105,16 +105,13 @@ appId: com.friend.ios.dev
 # Handle "Loving Omi?" review prompt
 - runFlow:
     when:
-      visible: "Maybe Later"
+      visible:
+        text: "Maybe [Ll]ater"
+        regex: true
     commands:
-      - tapOn: "Maybe Later"
-      - waitForAnimationToEnd
-
-- runFlow:
-    when:
-      visible: "Maybe later"
-    commands:
-      - tapOn: "Maybe later"
+      - tapOn:
+          text: "Maybe [Ll]ater"
+          regex: true
       - waitForAnimationToEnd
 
 # Handle speech profile screen
