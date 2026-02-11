@@ -37,7 +37,9 @@ export async function generateMetadata(
 
   const title = !data
     ? 'Shared Tasks Not Found'
-    : `${data.sender_name} shared ${data.count} task${data.count === 1 ? '' : 's'} with you`;
+    : `${data.sender_name} shared ${data.count} task${
+        data.count === 1 ? '' : 's'
+      } with you`;
 
   return {
     title: title,
@@ -57,15 +59,20 @@ export async function generateMetadata(
   };
 }
 
-function getPlatformLink(userAgent: string) {
+function getPlatformLink(userAgent: string, token: string) {
   const isAndroid = /android/i.test(userAgent);
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
+  // Deep link into the app if installed; App Links / Universal Links handle interception
+  const deepLink = `https://h.omi.me/tasks/${token}`;
+
   return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
+    ? `intent://h.omi.me/tasks/${token}#Intent;scheme=https;package=com.friend.ios.dev;S.browser_fallback_url=${encodeURIComponent(
+        'https://play.google.com/store/apps/details?id=com.friend.ios',
+      )};end`
     : isIOS
-      ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-      : 'https://omi.me';
+    ? deepLink
+    : 'https://omi.me';
 }
 
 function formatDueDate(dateStr: string): string {
@@ -85,12 +92,12 @@ export default async function SharedTasksPage({ params }: TasksPageProps) {
   }
 
   const userAgent = headers().get('user-agent') || '';
-  const link = getPlatformLink(userAgent);
+  const link = getPlatformLink(userAgent, token);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black font-system-ui">
+    <div className="font-system-ui min-h-screen overflow-x-hidden bg-gradient-to-b from-[#1a0a1f] via-[#0a0a2f] to-black">
       <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,rgba(88,28,135,0.2),transparent)]" />
-      <section className="relative mx-auto max-w-screen-md px-6 pt-24 pb-16 md:px-12 md:pt-32 md:pb-24">
+      <section className="relative mx-auto max-w-screen-md px-6 pb-16 pt-24 md:px-12 md:pb-24 md:pt-32">
         {/* Sender info */}
         <div className="mb-8 text-center">
           <h1 className="break-words text-2xl font-bold text-white sm:text-3xl md:text-4xl">
