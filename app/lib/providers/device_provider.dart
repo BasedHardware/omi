@@ -284,7 +284,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       if (connectedDevice == null) {
         connectedDevice = await _getConnectedDevice();
-        SharedPreferencesUtil().deviceName = connectedDevice!.name;
+        var previousDeviceId = SharedPreferencesUtil().btDevice.id;
+        if (previousDeviceId.isNotEmpty && previousDeviceId != connectedDevice!.id) {
+          SharedPreferencesUtil().deviceName = connectedDevice!.name;
+        } else {
+          var storedName = SharedPreferencesUtil().deviceName;
+          if (storedName.isEmpty) {
+            SharedPreferencesUtil().deviceName = connectedDevice!.name;
+          }
+        }
         MixpanelManager().deviceConnected();
       }
 
@@ -302,7 +310,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (cDevice != null) {
         setConnectedDevice(cDevice);
         setisDeviceStorageSupport();
-        SharedPreferencesUtil().deviceName = cDevice.name;
+        var previousDeviceId2 = SharedPreferencesUtil().btDevice.id;
+        if (previousDeviceId2.isNotEmpty && previousDeviceId2 != cDevice.id) {
+          SharedPreferencesUtil().deviceName = cDevice.name;
+        } else {
+          var storedName2 = SharedPreferencesUtil().deviceName;
+          if (storedName2.isEmpty) {
+            SharedPreferencesUtil().deviceName = cDevice.name;
+          }
+        }
         MixpanelManager().deviceConnected();
         setIsConnected(true);
       }
@@ -413,7 +429,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     await captureProvider?.streamDeviceRecording(device: device);
 
     await getDeviceInfo();
-    SharedPreferencesUtil().deviceName = device.name;
+    var previousDeviceId3 = SharedPreferencesUtil().btDevice.id;
+    if (previousDeviceId3.isNotEmpty && previousDeviceId3 != device.id) {
+      SharedPreferencesUtil().deviceName = device.name;
+    } else {
+      var storedDeviceName = SharedPreferencesUtil().deviceName;
+      if (storedDeviceName.isEmpty) {
+        SharedPreferencesUtil().deviceName = device.name;
+      }
+    }
 
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
