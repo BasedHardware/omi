@@ -25,6 +25,7 @@ from utils.llm.clients import generate_embedding, llm_mini
 from utils.llm.proactive_notification import get_proactive_message
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 
@@ -328,14 +329,18 @@ def _build_tool_context(
     except Exception as e:
         logger.warning(f"Failed to fetch goals for uid={uid}: {e}")
 
-    # Substitute template placeholders (same as get_proactive_message)
+    # Substitute template placeholders.
+    # Mentor prompt uses {{x}} in source, but .format(text=...) converts {{x}} to {x},
+    # so we replace both double-brace and single-brace variants.
     system_prompt = data.get('prompt', '')
-    system_prompt = system_prompt.replace("{{user_name}}", user_name or '')
-    system_prompt = system_prompt.replace("{{user_facts}}", user_facts or '')
-    system_prompt = system_prompt.replace("{{user_context}}", context or '')
-    system_prompt = system_prompt.replace(
-        "{{user_chat}}", Message.get_messages_as_string(chat_messages) if chat_messages else ''
-    )
+    chat_str = Message.get_messages_as_string(chat_messages) if chat_messages else ''
+    for double, single, val in [
+        ("{{user_name}}", "{user_name}", user_name or ''),
+        ("{{user_facts}}", "{user_facts}", user_facts or ''),
+        ("{{user_context}}", "{user_context}", context or ''),
+        ("{{user_chat}}", "{user_chat}", chat_str),
+    ]:
+        system_prompt = system_prompt.replace(double, val).replace(single, val)
     system_prompt = system_prompt.replace('    ', '').strip()
 
     user_message = "\n\n".join(context_parts)
@@ -384,8 +389,6 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
 
     # Tool-based proactive notifications (extra, does not replace the main notification).
     if tool_uses and tools and data.get('messages'):
-        from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
-
         system_prompt, user_message = _build_tool_context(
             uid,
             user_name,
