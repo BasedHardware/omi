@@ -1,0 +1,2 @@
+web: python main.py
+
