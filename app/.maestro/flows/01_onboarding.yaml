@@ -1,0 +1,133 @@
+# Omi App - Onboarding & Sign-in Flow
+# Tests: App launch, authentication, name entry, language selection,
+#         permissions, speech profile skip, landing on home screen.
+#
+# Prerequisites:
+#   - App installed on device (com.friend.ios.dev)
+#   - Google or Apple account available for sign-in
+#
+# Note: Google/Apple sign-in involves native OS dialogs that Maestro
+#       cannot fully automate. The flow pauses to allow manual sign-in
+#       completion, then continues with the remaining onboarding steps.
+#
+# Run: maestro test .maestro/flows/01_onboarding.yaml
+
+appId: com.friend.ios.dev
+
+---
+
+# Launch the app fresh
+- launchApp:
+    appId: com.friend.ios.dev
+    clearState: true
+
+# Wait for the app to fully load
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Sign in with Google"
+        - "Sign in with Apple"
+        - "Ask Omi"
+        - "Get Started"
+    timeout: 15000
+
+# Handle splash/welcome screen if present
+- runFlow:
+    when:
+      visible: "Get Started"
+    commands:
+      - tapOn: "Get Started"
+      - waitForAnimationToEnd
+
+# If already signed in (on home screen), the test passes
+- runFlow:
+    when:
+      visible: "Ask Omi"
+    commands:
+      - assertVisible: "Ask Omi"
+
+# Sign in with Google (primary auth path)
+- runFlow:
+    when:
+      visible: "Sign in with Google"
+    commands:
+      - tapOn: "Sign in with Google"
+
+      # Wait for Google sign-in to complete
+      # This may require manual interaction with the Google auth dialog
+      - extendedWaitUntil:
+          anyOf:
+            - visible: "Continue"
+            - visible: "Ask Omi"
+          timeout: 60000
+
+# Handle name entry screen ("What do you want to go by?")
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      # Accept the default name (pre-filled from Google account)
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+
+# Handle primary language selection
+- runFlow:
+    when:
+      visible:
+        text: ".*primary language.*"
+        regex: true
+    commands:
+      # English is auto-selected from device locale
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+
+# Handle permissions screen
+- runFlow:
+    when:
+      visible:
+        text: ".*Grant.*"
+        regex: true
+    commands:
+      - tapOn: "Continue"
+      - waitForAnimationToEnd
+      # Handle iOS permission dialogs
+      - runFlow:
+          when:
+            visible: "Allow"
+          commands:
+            - tapOn: "Allow"
+      - runFlow:
+          when:
+            visible: "Allow While Using App"
+          commands:
+            - tapOn: "Allow While Using App"
+
+# Handle "Loving Omi?" review prompt
+- runFlow:
+    when:
+      visible: "Maybe Later"
+    commands:
+      - tapOn: "Maybe Later"
+      - waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible: "Maybe later"
+    commands:
+      - tapOn: "Maybe later"
+      - waitForAnimationToEnd
+
+# Handle speech profile screen
+- runFlow:
+    when:
+      visible: "Skip for now"
+    commands:
+      - tapOn: "Skip for now"
+      - waitForAnimationToEnd
+
+# Verify we've reached the home screen
+- extendedWaitUntil:
+    visible: "Ask Omi"
+    timeout: 30000
+
+- assertVisible: "Ask Omi"
