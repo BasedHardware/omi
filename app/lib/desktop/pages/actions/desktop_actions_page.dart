@@ -79,6 +79,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     _scrollController.addListener(_onScroll);
     _focusNode = FocusNode();
     _loadCategoryOrder();
+    _loadIndentLevels();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -137,6 +138,19 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       toSave[entry.key.name] = entry.value;
     }
     SharedPreferencesUtil().taskCategoryOrder = toSave;
+  }
+
+  void _loadIndentLevels() {
+    final savedIndents = SharedPreferencesUtil().taskIndentLevels;
+    setState(() {
+      _indentLevels
+        ..clear()
+        ..addAll(savedIndents);
+    });
+  }
+
+  void _saveIndentLevels() {
+    SharedPreferencesUtil().taskIndentLevels = Map<String, int>.from(_indentLevels);
   }
 
   @override
@@ -343,6 +357,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         _indentLevels[itemId] = current + 1;
       }
     });
+    _saveIndentLevels();
     HapticFeedback.lightImpact();
   }
 
@@ -353,6 +368,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         _indentLevels[itemId] = current - 1;
       }
     });
+    _saveIndentLevels();
     HapticFeedback.lightImpact();
   }
 
