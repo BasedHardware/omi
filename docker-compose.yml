@@ -65,6 +65,12 @@ services:
       - "8080:8080"
     env_file:
       - backend/.env.local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       firebase-emulator:
         condition: service_healthy
