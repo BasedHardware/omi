@@ -86,9 +86,14 @@ class SharedPreferencesUtil {
   /// Resets to hardware name when switching to a different device.
   void updateDeviceNameOnConnect(String newDeviceId, String hardwareName) {
     final previousId = deviceNameDeviceId;
-    if (previousId.isNotEmpty && previousId != newDeviceId) {
+    if (previousId.isEmpty) {
+      // Migration: no ownership info yet — reset to hardware name
+      deviceName = hardwareName;
+    } else if (previousId != newDeviceId) {
+      // Different device — reset to hardware name
       deviceName = hardwareName;
     } else if (deviceName.isEmpty) {
+      // Same device, no name set — initialize from hardware
       deviceName = hardwareName;
     }
     deviceNameDeviceId = newDeviceId;
