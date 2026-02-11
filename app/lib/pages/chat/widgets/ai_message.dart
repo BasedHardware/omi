@@ -32,6 +32,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
+import 'genui_widgets.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -267,6 +268,7 @@ Widget buildMessageWidget(
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
       onAskOmi: onAskOmi,
+      sendMessage: sendMessage,
     );
   }
 }
@@ -402,6 +404,7 @@ class NormalMessageWidget extends StatefulWidget {
   final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
+  final Function(String)? sendMessage;
 
   const NormalMessageWidget({
     super.key,
@@ -413,6 +416,7 @@ class NormalMessageWidget extends StatefulWidget {
     this.showThinkingAfterText = false,
     this.thinkings = const [],
     this.onAskOmi,
+    this.sendMessage,
   });
 
   @override
@@ -452,6 +456,25 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         timeoutSeconds: 15,
         child: Container(
           height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 220,
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A20),
             borderRadius: BorderRadius.circular(16),
@@ -597,6 +620,15 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
           _buildChartShimmer(),
+        if (widget.message.uiBlocks.isNotEmpty)
+          GenUiBlocksWidget(
+            blocks: widget.message.uiBlocks,
+            sendMessage: widget.sendMessage ?? (_) {},
+          )
+        else if (widget.showTypingIndicator &&
+            widget.message.thinkings
+                .any((t) => t.toLowerCase().contains('map') || t.toLowerCase().contains('location')))
+          _buildMapShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
