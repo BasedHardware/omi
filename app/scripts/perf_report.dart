@@ -1,0 +1,145 @@
+#!/usr/bin/env dart
+
+/// Performance Report Generator
+///
+/// Parses JSON results from performance tests (written to /tmp/) and
+/// generates a combined markdown summary table.
+///
+/// Usage:
+///   dart scripts/perf_report.dart [output_file]
+///
+/// If output_file is not specified, prints to stdout.
+
+import 'dart:convert';
+import 'dart:io';
+
+void main(List<String> args) {
+  final outputFile = args.isNotEmpty ? args[0] : null;
+
+  final results = <String, Map<String, dynamic>>{};
+
+  // Find the most recent JSON result files
+  final tmpDir = Directory('/tmp');
+  if (!tmpDir.existsSync()) {
+    stderr.writeln('Error: /tmp directory not found');
+    exit(1);
+  }
+
+  final prefixes = ['omi_perf_memory_', 'omi_perf_cpu_', 'omi_perf_responsiveness_', 'omi_perf_battery_'];
+
+  for (final prefix in prefixes) {
+    final files =
+        tmpDir.listSync().whereType<File>().where((f) => f.path.contains(prefix) && f.path.endsWith('.json')).toList()
+          ..sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+
+    if (files.isNotEmpty) {
+      try {
+        final content = files.first.readAsStringSync();
+        final data = jsonDecode(content) as Map<String, dynamic>;
+        final testName = prefix.replaceAll('omi_perf_', '').replaceAll('_', '');
+        results[testName] = data;
+      } catch (e) {
+        stderr.writeln('Warning: Could not parse ${files.first.path}: $e');
+      }
+    }
+  }
+
+  if (results.isEmpty) {
+    stderr.writeln('No performance test results found in /tmp/');
+    stderr.writeln('Run the performance tests first:');
+    stderr.writeln('  bash scripts/run_performance_tests.sh');
+    exit(1);
+  }
+
+  // Generate report
+  final report = StringBuffer();
+  report.writeln('# Omi App Performance Report');
+  report.writeln('');
+  report.writeln('**Generated:** ${DateTime.now().toIso8601String()}');
+  report.writeln('');
+  report.writeln('## Summary');
+  report.writeln('');
+  report.writeln('| Metric | Value | Threshold | Status |');
+  report.writeln('|--------|-------|-----------|--------|');
+
+  // Memory metrics
+  if (results.containsKey('memory')) {
+    final mem = results['memory']!;
+    final growth = (mem['growth_per_cycle_mb'] as num?)?.toDouble() ?? 0;
+    final threshold = (mem['threshold_mb'] as num?)?.toDouble() ?? 5.0;
+    final pass = growth < threshold;
+    report.writeln(
+      '| Memory growth/cycle | ${growth.toStringAsFixed(1)} MB | < ${threshold.toStringAsFixed(0)} MB | ${pass ? "PASS" : "FAIL"} |',
+    );
+
+    final peak = (mem['peak_heap_mb'] as num?)?.toDouble() ?? 0;
+    report.writeln('| Peak heap | ${peak.toStringAsFixed(1)} MB | - | INFO |');
+  }
+
+  // CPU metrics
+  if (results.containsKey('cpu')) {
+    final cpu = results['cpu']!;
+    final scenarios = cpu['scenarios'] as Map<String, dynamic>?;
+    if (scenarios != null) {
+      if (scenarios.containsKey('idle')) {
+        final idle = scenarios['idle'] as Map<String, dynamic>;
+        final fps = (idle['fps'] as num?)?.toDouble() ?? 0;
+        report.writeln('| Idle FPS | ${fps.toStringAsFixed(1)} | < 120 | ${fps < 120 ? "PASS" : "FAIL"} |');
+        final janky = (idle['janky_percent'] as num?)?.toDouble() ?? 0;
+        report.writeln('| Idle janky % | ${janky.toStringAsFixed(1)}% | < 5% | ${janky < 5 ? "PASS" : "FAIL"} |');
+      }
+      if (scenarios.containsKey('active')) {
+        final active = scenarios['active'] as Map<String, dynamic>;
+        final janky = (active['janky_percent'] as num?)?.toDouble() ?? 0;
+        report.writeln('| Active janky % | ${janky.toStringAsFixed(1)}% | < 10% | ${janky < 10 ? "PASS" : "FAIL"} |');
+      }
+    }
+  }
+
+  // Responsiveness metrics
+  if (results.containsKey('responsiveness')) {
+    final resp = results['responsiveness']!;
+    final avgFrame = (resp['overall_avg_frame_ms'] as num?)?.toDouble() ?? 0;
+    final jankyPct = (resp['overall_janky_percent'] as num?)?.toDouble() ?? 0;
+    report.writeln(
+      '| Avg frame time | ${avgFrame.toStringAsFixed(2)} ms | < 16 ms | ${avgFrame < 16 ? "PASS" : "FAIL"} |',
+    );
+    report.writeln('| Janky frames | ${jankyPct.toStringAsFixed(1)}% | < 5% | ${jankyPct < 5 ? "PASS" : "FAIL"} |');
+  }
+
+  // Battery metrics
+  if (results.containsKey('battery')) {
+    final bat = results['battery']!;
+    final drain = (bat['drain_per_hour'] as num?)?.toDouble() ?? -1;
+    if (drain >= 0) {
+      report.writeln('| Battery drain/hr | ${drain.toStringAsFixed(1)}% | < 10% | ${drain < 10 ? "PASS" : "FAIL"} |');
+    } else {
+      report.writeln('| Battery drain/hr | N/A | < 10% | SKIPPED |');
+    }
+  }
+
+  report.writeln('');
+  report.writeln('## Details');
+  report.writeln('');
+
+  for (final entry in results.entries) {
+    report.writeln('### ${entry.key.toUpperCase()} Test');
+    report.writeln('');
+    report.writeln('```json');
+    report.writeln(const JsonEncoder.withIndent('  ').convert(entry.value));
+    report.writeln('```');
+    report.writeln('');
+  }
+
+  report.writeln('---');
+  report.writeln('*Generated by `dart scripts/perf_report.dart`*');
+
+  // Output
+  final output = report.toString();
+  if (outputFile != null) {
+    File(outputFile).writeAsStringSync(output);
+    print('Report saved to: $outputFile');
+  } else {
+    print(output);
+  }
+}
