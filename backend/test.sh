@@ -24,5 +24,6 @@ pytest tests/unit/test_app_uid_keyerror.py -v
 pytest tests/unit/test_daily_summary_race_condition.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
+pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
