@@ -1,6 +1,7 @@
 'use server';
+import envConfig from '@/src/constants/envConfig';
 
-const DESKTOP_API_URL = process.env.DESKTOP_API_URL || 'https://desktop-backend-hhibjajaja-uc.a.run.app';
+const DESKTOP_API_URL = envConfig.DESKTOP_API_URL;
 
 export interface SharedTaskInfo {
   description: string;
