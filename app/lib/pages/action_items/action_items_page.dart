@@ -63,6 +63,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     _scrollController.addListener(_onScroll);
     _loadCategoryOrder();
     _loadTaskGoalLinks();
+    _loadTaskIndentLevels();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
@@ -98,6 +99,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     // Prune orphaned links after loading
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _pruneTaskGoalLinks();
+    });
+  }
+
+  void _loadTaskIndentLevels() {
+    final savedIndents = SharedPreferencesUtil().taskIndentLevels;
+    setState(() {
+      _indentLevels
+        ..clear()
+        ..addAll(savedIndents);
     });
   }
 
@@ -138,6 +148,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       toSave[entry.key.name] = entry.value;
     }
     SharedPreferencesUtil().taskCategoryOrder = toSave;
+  }
+
+  void _saveTaskIndentLevels() {
+    SharedPreferencesUtil().taskIndentLevels = Map<String, int>.from(_indentLevels);
   }
 
   @override
@@ -313,6 +327,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         _indentLevels[itemId] = current + 1;
       }
     });
+    _saveTaskIndentLevels();
     HapticFeedback.lightImpact();
   }
 
@@ -323,6 +338,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         _indentLevels[itemId] = current - 1;
       }
     });
+    _saveTaskIndentLevels();
     HapticFeedback.lightImpact();
   }
 
