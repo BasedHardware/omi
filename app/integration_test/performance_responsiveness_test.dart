@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:omi/main.dart' as app;
+
+import 'test_helpers.dart';
 
 /// Responsiveness & Jank Detection Test
 ///
@@ -16,9 +17,6 @@ import 'package:omi/main.dart' as app;
 ///   - 95th percentile frame time
 ///   - Janky frame count (frames > 16ms = below 60fps target)
 ///   - Per-interaction breakdown
-///
-/// Extends the pattern from app_performance_test.dart with more granular
-/// interaction-level measurements.
 ///
 /// Run with:
 /// ```bash
@@ -48,15 +46,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
 
-      await _handleOnboardingIfNeeded(tester);
-      await _pumpFor(tester, 3000);
-      await _dismissAnyPopup(tester);
+      await handleOnboardingIfNeeded(tester);
+      await pumpFor(tester, 3000);
+      await dismissAnyPopup(tester);
 
       // Stabilize
       debugPrint('[2/7] Stabilizing (30s)...');
       for (int i = 0; i < 30; i++) {
         await tester.pump(const Duration(seconds: 1));
-        await _dismissAnyPopup(tester);
+        await dismissAnyPopup(tester);
       }
 
       final allInteractions = <String, _InteractionMetrics>{};
@@ -74,9 +72,9 @@ void main() {
         if (scrollable.evaluate().isNotEmpty) {
           final size = tester.view.physicalSize / tester.view.devicePixelRatio;
           await tester.fling(scrollable.first, Offset(0, -size.height * 0.3), 1000);
-          await _pumpFor(tester, 1000);
+          await pumpFor(tester, 1000);
           await tester.fling(scrollable.first, Offset(0, size.height * 0.3), 1000);
-          await _pumpFor(tester, 1000);
+          await pumpFor(tester, 1000);
         }
       }
 
@@ -96,7 +94,7 @@ void main() {
       final askOmi = find.text('Ask Omi');
       if (askOmi.evaluate().isNotEmpty) {
         await tester.tap(askOmi);
-        await _pumpFor(tester, 2000);
+        await pumpFor(tester, 2000);
       }
 
       WidgetsBinding.instance.removeTimingsCallback(transCallback);
@@ -115,7 +113,7 @@ void main() {
       final textField = find.byType(TextField);
       if (textField.evaluate().isNotEmpty) {
         await tester.enterText(textField.first, 'test message');
-        await _pumpFor(tester, 500);
+        await pumpFor(tester, 500);
 
         final sendButton = find.byIcon(Icons.send);
         if (sendButton.evaluate().isNotEmpty) {
@@ -131,7 +129,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 100));
         }
       } else {
-        await _pumpFor(tester, 10000);
+        await pumpFor(tester, 10000);
       }
 
       WidgetsBinding.instance.removeTimingsCallback(chatCallback);
@@ -148,7 +146,7 @@ void main() {
       WidgetsBinding.instance.addTimingsCallback(backCallback);
 
       await tester.pageBack();
-      await _pumpFor(tester, 2000);
+      await pumpFor(tester, 2000);
 
       WidgetsBinding.instance.removeTimingsCallback(backCallback);
       final backMetrics = _calculateInteraction('Chat->Home', timings);
@@ -167,7 +165,6 @@ void main() {
 
       int totalFrames = 0;
       int totalJanky = 0;
-      double totalBuildUs = 0;
 
       for (final entry in allInteractions.entries) {
         final m = entry.value;
@@ -203,7 +200,24 @@ void main() {
       );
 
       // Write results
-      _writeResults(allInteractions, overallAvgFrame, overallJankyPct);
+      final jsonResults = <String, dynamic>{
+        'test': 'responsiveness',
+        'overall_avg_frame_ms': double.parse(overallAvgFrame.toStringAsFixed(3)),
+        'overall_janky_percent': double.parse(overallJankyPct.toStringAsFixed(2)),
+        'interactions': {
+          for (final entry in allInteractions.entries)
+            entry.key: {
+              'label': entry.value.label,
+              'total_frames': entry.value.totalFrames,
+              'avg_frame_ms': double.parse(entry.value.avgFrameMs.toStringAsFixed(3)),
+              'p95_frame_ms': double.parse(entry.value.p95FrameMs.toStringAsFixed(3)),
+              'peak_frame_ms': double.parse(entry.value.peakFrameMs.toStringAsFixed(3)),
+              'janky_frames': entry.value.jankyFrames,
+              'janky_percent': double.parse(entry.value.jankyPercent.toStringAsFixed(2)),
+            },
+        },
+      };
+      writeResults('responsiveness', jsonResults);
 
       // Assertions
       expect(
@@ -279,105 +293,4 @@ void _printInteraction(_InteractionMetrics m) {
   debugPrint('      │ Peak frame: ${m.peakFrameMs.toStringAsFixed(2).padLeft(6)} ms');
   debugPrint('      │ Janky:      ${m.jankyFrames.toString().padLeft(6)} (${m.jankyPercent.toStringAsFixed(1)}%)');
   debugPrint('      └─────────────────────────────────────');
-}
-
-void _writeResults(Map<String, _InteractionMetrics> results, double overallAvgFrame, double overallJankyPct) {
-  try {
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('/tmp/omi_perf_responsiveness_$timestamp.json');
-    final buffer = StringBuffer();
-    buffer.writeln('{');
-    buffer.writeln('  "test": "responsiveness",');
-    buffer.writeln('  "overall_avg_frame_ms": ${overallAvgFrame.toStringAsFixed(3)},');
-    buffer.writeln('  "overall_janky_percent": ${overallJankyPct.toStringAsFixed(2)},');
-    buffer.writeln('  "interactions": {');
-    final entries = results.entries.toList();
-    for (int i = 0; i < entries.length; i++) {
-      final m = entries[i].value;
-      buffer.writeln('    "${entries[i].key}": {');
-      buffer.writeln('      "label": "${m.label}",');
-      buffer.writeln('      "total_frames": ${m.totalFrames},');
-      buffer.writeln('      "avg_frame_ms": ${m.avgFrameMs.toStringAsFixed(3)},');
-      buffer.writeln('      "p95_frame_ms": ${m.p95FrameMs.toStringAsFixed(3)},');
-      buffer.writeln('      "peak_frame_ms": ${m.peakFrameMs.toStringAsFixed(3)},');
-      buffer.writeln('      "janky_frames": ${m.jankyFrames},');
-      buffer.writeln('      "janky_percent": ${m.jankyPercent.toStringAsFixed(2)}');
-      buffer.writeln('    }${i < entries.length - 1 ? "," : ""}');
-    }
-    buffer.writeln('  }');
-    buffer.writeln('}');
-    file.writeAsStringSync(buffer.toString());
-    debugPrint('Results saved to: ${file.path}');
-  } catch (e) {
-    debugPrint('Could not save results: $e');
-  }
-}
-
-// ─── Shared helpers ──────────────────────────────────────────────────
-
-Future<void> _pumpFor(WidgetTester tester, int milliseconds) async {
-  final iterations = milliseconds ~/ 100;
-  for (int i = 0; i < iterations; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-}
-
-Future<void> _dismissAnyPopup(WidgetTester tester) async {
-  await tester.pump(const Duration(milliseconds: 100));
-  if (find.text('Loving Omi?').evaluate().isNotEmpty) {
-    for (final text in ['Maybe later', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first, warnIfMissed: false);
-        await _pumpFor(tester, 500);
-        return;
-      }
-    }
-  }
-  for (final text in ['Skip for now', 'Skip', 'Not now']) {
-    final btn = find.text(text);
-    if (btn.evaluate().isNotEmpty) {
-      await tester.tap(btn.first, warnIfMissed: false);
-      await _pumpFor(tester, 500);
-      return;
-    }
-  }
-}
-
-Future<void> _handleOnboardingIfNeeded(WidgetTester tester) async {
-  debugPrint('      Checking for onboarding...');
-  if (find.text('Ask Omi').evaluate().isNotEmpty) {
-    debugPrint('      Already on home screen');
-    return;
-  }
-
-  final signIn = find.text('Sign in with Google');
-  if (signIn.evaluate().isNotEmpty) {
-    debugPrint('      Found auth screen');
-    await tester.tap(signIn);
-    await _pumpFor(tester, 2000);
-    debugPrint('      >>> Please complete sign-in on device <<<');
-    for (int i = 0; i < 120; i++) {
-      await tester.pump(const Duration(milliseconds: 500));
-      if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-      final cont = find.text('Continue');
-      if (cont.evaluate().isNotEmpty) {
-        await tester.tap(cont.first);
-        await _pumpFor(tester, 2000);
-      }
-    }
-  }
-
-  for (int attempt = 0; attempt < 20; attempt++) {
-    await _pumpFor(tester, 500);
-    if (find.text('Ask Omi').evaluate().isNotEmpty) return;
-    for (final text in ['Continue', 'Skip for now', 'Maybe Later']) {
-      final btn = find.text(text);
-      if (btn.evaluate().isNotEmpty) {
-        await tester.tap(btn.first);
-        await _pumpFor(tester, 2000);
-        break;
-      }
-    }
-  }
 }
