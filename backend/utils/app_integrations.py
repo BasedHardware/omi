@@ -286,32 +286,30 @@ def _process_tools(
         return []
 
 
-def _build_tool_context(uid: str, app: App, data: dict) -> tuple[str, str]:
-    """Build system prompt and user message for tool calling, using the same context as get_proactive_message."""
-    user_name, user_facts = get_prompt_memories(uid)
-    filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
-
-    # Build user context from the same sources as the prompt-based path
+def _build_tool_context(
+    uid: str,
+    user_name: str,
+    user_facts: str,
+    context: str,
+    chat_messages: list,
+    conversation_messages: list[dict],
+    data: dict,
+) -> tuple[str, str]:
+    """Build system prompt and user message for tool calling from pre-fetched context."""
     context_parts = []
 
-    if 'user_name' in filter_scopes:
+    if user_name:
         context_parts.append(f"User name: {user_name}")
 
-    if 'user_facts' in filter_scopes:
+    if user_facts:
         context_parts.append(f"What we know about {user_name}:\n{user_facts}")
 
-    if 'user_context' in filter_scopes:
-        memories = _retrieve_contextual_memories(uid, data.get('context', {}))
-        if memories:
-            context_parts.append(f"Relevant memories:\n{Conversation.conversations_to_string(memories)}")
+    if context:
+        context_parts.append(f"Relevant memories:\n{context}")
 
-    if 'user_chat' in filter_scopes:
-        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
-        if chat_messages:
-            context_parts.append(f"Recent chat:\n{Message.get_messages_as_string(chat_messages)}")
+    if chat_messages:
+        context_parts.append(f"Recent chat:\n{Message.get_messages_as_string(chat_messages)}")
 
-    # Add live conversation if available
-    conversation_messages = data.get('messages', [])
     if conversation_messages:
         lines = []
         for msg in conversation_messages:
@@ -319,7 +317,6 @@ def _build_tool_context(uid: str, app: App, data: dict) -> tuple[str, str]:
             lines.append(f"[{speaker}]: {msg['text']}")
         context_parts.append(f"Current conversation:\n" + "\n".join(lines))
 
-    # Goals (mentor-specific but harmless for other apps — empty if no goals)
     goals = get_user_goals(uid)
     if goals:
         goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
@@ -341,16 +338,6 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
         print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
         return None
 
-    # Tool-based proactive notifications (extra, does not replace the main notification).
-    if tool_uses and tools and data.get('messages'):
-        from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
-
-        system_prompt, user_message = _build_tool_context(uid, app, data)
-        tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
-        for noti in tool_results:
-            send_app_notification(uid, app.name, app.id, noti['notification_text'])
-            logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
-
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
@@ -367,28 +354,45 @@ def _process_proactive_notification(uid: str, app: App, data, tools: list = None
 
     filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
 
-    # context
+    # Fetch context once — shared by both tool and prompt paths
+    user_name, user_facts = get_prompt_memories(uid)
+
     context = None
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
             context = Conversation.conversations_to_string(memories)
 
-    # messages
-    messages = []
+    chat_messages = []
     if 'user_chat' in filter_scopes:
-        messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
+        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    # retrive message
-    message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
+    # Tool-based proactive notifications (extra, does not replace the main notification).
+    if tool_uses and tools and data.get('messages'):
+        from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
+
+        system_prompt, user_message = _build_tool_context(
+            uid,
+            user_name,
+            user_facts,
+            context,
+            chat_messages,
+            data.get('messages', []),
+            data,
+        )
+        tool_results = _process_tools(uid, system_prompt, user_message, tools, PROACTIVE_CONFIDENCE_THRESHOLD)
+        for noti in tool_results:
+            send_app_notification(uid, app.name, app.id, noti['notification_text'])
+            logger.info(f"Sent proactive tool notification to user {uid} (tool: {noti.get('tool_name')})")
+
+    # Main prompt-based notification
+    message = get_proactive_message(uid, prompt, filter_scopes, context, chat_messages, user_name, user_facts)
     if not message or len(message) < min_message_char_limit:
         print(f"Plugins {app.id}, message too short", uid)
         return None
 
-    # send notification
     send_app_notification(uid, app.name, app.id, message)
 
-    # set rate
     _set_proactive_noti_sent_at(uid, app)
     return message
 

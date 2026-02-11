@@ -464,21 +464,27 @@ def test_build_tool_context_includes_goals():
     """_build_tool_context should include user goals in the user message."""
     _setup_app_integrations_stubs()
 
-    mock_get_prompt_memories.return_value = ("Dave", "Dave wants to get fit.")
     mock_get_user_goals.return_value = [{"title": "Exercise 3x per week", "is_active": True}]
 
     import utils.app_integrations as app_int
 
     data = {
         "prompt": "You are Dave's proactive AI mentor.",
-        "params": ["user_name", "user_facts"],
         "messages": [
             {"text": "I think I'll skip the gym", "timestamp": 1000, "is_user": True},
             {"text": "You sure?", "timestamp": 1001, "is_user": False},
         ],
     }
 
-    system_prompt, user_message = app_int._build_tool_context("test_uid", _make_mentor_app(), data)
+    system_prompt, user_message = app_int._build_tool_context(
+        "test_uid",
+        "Dave",
+        "Dave wants to get fit.",
+        None,
+        [],
+        data.get('messages', []),
+        data,
+    )
 
     assert "mentor" in system_prompt.lower()
     assert "Exercise 3x per week" in user_message
@@ -548,7 +554,6 @@ def test_build_tool_context_multiple_goals():
     """_build_tool_context should include multiple goals in the user message."""
     _setup_app_integrations_stubs()
 
-    mock_get_prompt_memories.return_value = ("Helen", "Helen is a student.")
     mock_get_user_goals.return_value = [
         {"title": "Graduate with honors", "is_active": True},
         {"title": "Learn Spanish", "is_active": True},
@@ -558,11 +563,18 @@ def test_build_tool_context_multiple_goals():
 
     data = {
         "prompt": "You are a mentor.",
-        "params": ["user_name", "user_facts"],
         "messages": [{"text": "I should study more", "timestamp": 1000, "is_user": True}],
     }
 
-    system_prompt, user_message = app_int._build_tool_context("test_uid_helen", _make_mentor_app(), data)
+    system_prompt, user_message = app_int._build_tool_context(
+        "test_uid_helen",
+        "Helen",
+        "Helen is a student.",
+        None,
+        [],
+        data.get('messages', []),
+        data,
+    )
 
     assert "Graduate with honors" in user_message
     assert "Learn Spanish" in user_message
@@ -572,18 +584,24 @@ def test_build_tool_context_no_goals():
     """_build_tool_context with no goals should not include goals section."""
     _setup_app_integrations_stubs()
 
-    mock_get_prompt_memories.return_value = ("Ian", "Ian is new.")
     mock_get_user_goals.return_value = []
 
     import utils.app_integrations as app_int
 
     data = {
         "prompt": "You are a mentor.",
-        "params": ["user_name", "user_facts"],
         "messages": [{"text": "hello world", "timestamp": 1000, "is_user": True}],
     }
 
-    system_prompt, user_message = app_int._build_tool_context("test_uid_ian", _make_mentor_app(), data)
+    system_prompt, user_message = app_int._build_tool_context(
+        "test_uid_ian",
+        "Ian",
+        "Ian is new.",
+        None,
+        [],
+        data.get('messages', []),
+        data,
+    )
 
     assert "goals" not in user_message.lower()
 

@@ -2,15 +2,19 @@ from typing import List
 
 from models.chat import Message
 from utils.llm.clients import llm_mini
-from utils.llms.memory import get_prompt_memories
 
 
 def get_proactive_message(
-    uid: str, plugin_prompt: str, params: [str], context: str, chat_messages: List[Message]
+    uid: str,
+    plugin_prompt: str,
+    params: [str],
+    context: str,
+    chat_messages: List[Message],
+    user_name: str = '',
+    user_facts: str = '',
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
-
     prompt = plugin_prompt
+    memories_str = user_facts
     for param in params:
         if param == "user_name":
             prompt = prompt.replace("{{user_name}}", user_name)
