@@ -1,0 +1,82 @@
+services:
+  firebase-emulator:
+    build:
+      context: docker/firebase-emulator
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"   # Emulator UI
+      - "8081:8080"   # Firestore (host 8081 to avoid conflict with backend)
+      - "9099:9099"   # Auth
+      - "9199:9199"   # Storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    volumes:
+      - firebase-data:/firebase/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+  typesense:
+    image: typesense/typesense:27.1
+    ports:
+      - "8108:8108"
+    environment:
+      TYPESENSE_API_KEY: local-dev-key
+      TYPESENSE_DATA_DIR: /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8108/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - typesense-data:/data
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  omi-backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - backend/.env.local
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  firebase-data:
+  redis-data:
+  typesense-data:
+  qdrant-data:
