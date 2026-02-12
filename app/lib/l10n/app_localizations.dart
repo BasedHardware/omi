@@ -14943,29 +14943,23 @@ abstract class AppLocalizations {
   /// **'Add MCP Server'**
   String get addMcpServer;
 
-  /// No description provided for @connectExternalAiTools.
+  /// No description provided for @appStore.
   ///
   /// In en, this message translates to:
-  /// **'Connect external AI tools'**
-  String get connectExternalAiTools;
+  /// **'App Store'**
+  String get appStore;
 
-  /// No description provided for @mcpServerUrl.
+  /// No description provided for @audioPlaybackFailed.
   ///
   /// In en, this message translates to:
-  /// **'MCP Server URL'**
-  String get mcpServerUrl;
+  /// **'Unable to play audio. The file may be corrupted or missing.'**
+  String get audioPlaybackFailed;
 
-  /// No description provided for @mcpServerConnected.
+  /// No description provided for @audioPlaybackUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'{count} tools connected successfully'**
-  String mcpServerConnected(int count);
-
-  /// No description provided for @mcpConnectionFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to connect to MCP server'**
-  String get mcpConnectionFailed;
+  /// **'Audio file is not available for playback'**
+  String get audioPlaybackUnavailable;
 
   /// No description provided for @authorizingMcpServer.
   ///
@@ -14973,23 +14967,35 @@ abstract class AppLocalizations {
   /// **'Authorizing...'**
   String get authorizingMcpServer;
 
-  /// No description provided for @whereDidYouHearAboutOmi.
+  /// No description provided for @connectExternalAiTools.
   ///
   /// In en, this message translates to:
-  /// **'How did you find us?'**
-  String get whereDidYouHearAboutOmi;
+  /// **'Connect external AI tools'**
+  String get connectExternalAiTools;
 
-  /// No description provided for @tiktok.
+  /// No description provided for @coworker.
   ///
   /// In en, this message translates to:
-  /// **'TikTok'**
-  String get tiktok;
+  /// **'Coworker'**
+  String get coworker;
 
-  /// No description provided for @youtube.
+  /// No description provided for @event.
   ///
   /// In en, this message translates to:
-  /// **'YouTube'**
-  String get youtube;
+  /// **'Event'**
+  String get event;
+
+  /// No description provided for @friendWordOfMouth.
+  ///
+  /// In en, this message translates to:
+  /// **'Friend'**
+  String get friendWordOfMouth;
+
+  /// No description provided for @googleSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Search'**
+  String get googleSearch;
 
   /// No description provided for @instagram.
   ///
@@ -14997,23 +15003,29 @@ abstract class AppLocalizations {
   /// **'Instagram'**
   String get instagram;
 
-  /// No description provided for @xTwitter.
+  /// No description provided for @linkedIn.
   ///
   /// In en, this message translates to:
-  /// **'X (Twitter)'**
-  String get xTwitter;
+  /// **'LinkedIn'**
+  String get linkedIn;
 
-  /// No description provided for @reddit.
+  /// No description provided for @mcpConnectionFailed.
   ///
   /// In en, this message translates to:
-  /// **'Reddit'**
-  String get reddit;
+  /// **'Failed to connect to MCP server'**
+  String get mcpConnectionFailed;
 
-  /// No description provided for @friendWordOfMouth.
+  /// No description provided for @mcpServerConnected.
   ///
   /// In en, this message translates to:
-  /// **'Friend'**
-  String get friendWordOfMouth;
+  /// **'{count} tools connected successfully'**
+  String mcpServerConnected(int count);
+
+  /// No description provided for @mcpServerUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP Server URL'**
+  String get mcpServerUrl;
 
   /// No description provided for @otherSource.
   ///
@@ -15027,47 +15039,35 @@ abstract class AppLocalizations {
   /// **'Please specify'**
   String get pleaseSpecify;
 
-  /// No description provided for @event.
+  /// No description provided for @reddit.
   ///
   /// In en, this message translates to:
-  /// **'Event'**
-  String get event;
+  /// **'Reddit'**
+  String get reddit;
 
-  /// No description provided for @coworker.
+  /// No description provided for @tiktok.
   ///
   /// In en, this message translates to:
-  /// **'Coworker'**
-  String get coworker;
+  /// **'TikTok'**
+  String get tiktok;
 
-  /// No description provided for @linkedIn.
+  /// No description provided for @whereDidYouHearAboutOmi.
   ///
   /// In en, this message translates to:
-  /// **'LinkedIn'**
-  String get linkedIn;
+  /// **'How did you find us?'**
+  String get whereDidYouHearAboutOmi;
 
-  /// No description provided for @appStore.
+  /// No description provided for @xTwitter.
   ///
   /// In en, this message translates to:
-  /// **'App Store'**
-  String get appStore;
+  /// **'X (Twitter)'**
+  String get xTwitter;
 
-  /// No description provided for @googleSearch.
+  /// No description provided for @youtube.
   ///
   /// In en, this message translates to:
-  /// **'Google Search'**
-  String get googleSearch;
-
-  /// No description provided for @audioPlaybackUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Audio file is not available for playback'**
-  String get audioPlaybackUnavailable;
-
-  /// No description provided for @audioPlaybackFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Unable to play audio. The file may be corrupted or missing.'**
-  String get audioPlaybackFailed;
+  /// **'YouTube'**
+  String get youtube;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

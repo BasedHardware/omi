@@ -1018,7 +1018,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get vocabularyHint => 'Nooto, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Connecter';
 
   @override
   String get comingSoon => 'Bientôt disponible';
@@ -1666,7 +1666,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get whatShouldWeMake => 'Que devrions-nous créer ?';
 
   @override
-  String get appName => 'App Name';
+  String get appName => 'Nom de l\'application';
 
   @override
   String get description => 'Description';
@@ -2286,7 +2286,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get folderName => 'Nom du dossier';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Description (facultatif)';
 
   @override
   String get failedToDeleteFolder => 'Échec de la suppression du dossier';
@@ -8076,10 +8076,40 @@ class AppLocalizationsFr extends AppLocalizations {
   String get addMcpServer => 'Add MCP Server';
 
   @override
+  String get appStore => 'App Store';
+
+  @override
+  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
   String get connectExternalAiTools => 'Connect external AI tools';
 
   @override
-  String get mcpServerUrl => 'MCP Server URL';
+  String get coworker => 'Coworker';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
 
   @override
   String mcpServerConnected(int count) {
@@ -8087,31 +8117,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
-
-  @override
-  String get authorizingMcpServer => 'Authorizing...';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
-
-  @override
-  String get tiktok => 'TikTok';
-
-  @override
-  String get youtube => 'YouTube';
-
-  @override
-  String get instagram => 'Instagram';
-
-  @override
-  String get xTwitter => 'X (Twitter)';
-
-  @override
-  String get reddit => 'Reddit';
-
-  @override
-  String get friendWordOfMouth => 'Friend';
+  String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String get otherSource => 'Other';
@@ -8120,23 +8126,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String get pleaseSpecify => 'Please specify';
 
   @override
-  String get event => 'Event';
+  String get reddit => 'Reddit';
 
   @override
-  String get coworker => 'Coworker';
+  String get tiktok => 'TikTok';
 
   @override
-  String get linkedIn => 'LinkedIn';
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
 
   @override
-  String get appStore => 'App Store';
+  String get xTwitter => 'X (Twitter)';
 
   @override
-  String get googleSearch => 'Google Search';
-
-  @override
-  String get audioPlaybackUnavailable => 'Le fichier audio n\'est pas disponible pour la lecture';
-
-  @override
-  String get audioPlaybackFailed => 'Impossible de lire l\'audio. Le fichier est peut-être corrompu ou manquant.';
+  String get youtube => 'YouTube';
 }
