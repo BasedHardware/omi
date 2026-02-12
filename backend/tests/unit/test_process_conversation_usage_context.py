@@ -588,3 +588,93 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
 
     # The suggestion LLM call SHOULD have been invoked
     suggestion_mock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests for action item dedup query parameters (PR #4684, issue #4640)
+# ---------------------------------------------------------------------------
+
+
+def test_get_structured_fetches_only_pending_action_items_for_dedup():
+    """Verify get_action_items is called with completed=False and limit=10."""
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "short transcript"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mock = MagicMock(return_value=[])
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = action_items_mock
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=True)):
+        process_conversation._get_structured("user-dedup", "en", conversation)
+
+    # Verify get_action_items was called with the correct dedup parameters
+    action_items_mock.assert_called_once()
+    call_kwargs = action_items_mock.call_args
+    assert call_kwargs.kwargs.get("completed") is False, "Should filter to pending items only"
+    assert call_kwargs.kwargs.get("limit") == 10, "Should cap dedup context to 10 items"
+    assert call_kwargs.kwargs.get("uid") == "user-dedup"
+
+
+def test_get_structured_passes_pending_items_to_extract_action_items():
+    """Verify fetched pending items are forwarded to extract_action_items."""
+    fake_items = [{"description": "Follow up with client", "completed": False}]
+
+    conversation = MagicMock()
+    conversation.source = "phone"
+    conversation.get_transcript.return_value = "a transcript with enough words to pass discard check"
+    conversation.photos = []
+    conversation.get_person_ids.return_value = []
+    conversation.external_data = None
+    conversation.started_at = None
+    conversation.structured = MagicMock()
+    conversation.structured.title = "Test"
+    conversation.structured.overview = "Test overview"
+    conversation.structured.category = MagicMock()
+    conversation.structured.category.value = "other"
+    conversation.structured.action_items = []
+    conversation.structured.events = []
+    conversation.apps_results = []
+    conversation.discarded = False
+    conversation.id = "test-conv-dedup"
+    conversation.folder_id = None
+    conversation.suggested_summarization_apps = []
+    conversation.is_locked = False
+
+    notifications_mod = sys.modules["database.notifications"]
+    notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
+
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items = MagicMock(return_value=fake_items)
+
+    extract_mock = MagicMock(return_value=[])
+
+    redis_mod = sys.modules["database.redis_db"]
+    redis_mod.get_user_preferred_app = MagicMock(return_value=None)
+    redis_mod.get_conversation_summary_app_ids = MagicMock(return_value=[])
+
+    folders_mod = sys.modules["database.folders"]
+    folders_mod.get_folders = MagicMock(return_value=[{"id": "f1", "name": "Default", "is_default": True}])
+
+    with patch.object(process_conversation, "should_discard_conversation", MagicMock(return_value=False)), patch.object(
+        process_conversation, "get_transcript_structure", MagicMock()
+    ), patch.object(process_conversation, "extract_action_items", extract_mock), patch.object(
+        process_conversation, "assign_conversation_to_folder", MagicMock(return_value=("f1", 0.9, "match"))
+    ):
+        try:
+            process_conversation._get_structured("user-dedup-2", "en", conversation)
+        except Exception:
+            pass
+
+    # Verify extract_action_items received the fetched pending items
+    extract_mock.assert_called_once()
+    call_kwargs = extract_mock.call_args
+    assert (
+        call_kwargs.kwargs.get("existing_action_items") == fake_items
+    ), "Fetched pending items should be passed to extract_action_items"
