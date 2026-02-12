@@ -1,6 +1,7 @@
 from typing import List, Tuple, Optional
 
 import database.memories as memories_db
+import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
@@ -11,6 +12,7 @@ def process_external_integration_memory(
 ) -> List[MemoryDB]:
     memory_data.app_id = app_id
     saved_memories = []
+    language = users_db.get_user_language_preference(uid)
 
     # Process explicit memories if provided
     if memory_data.memories and len(memory_data.memories) > 0:
@@ -34,6 +36,7 @@ def process_external_integration_memory(
             uid,
             memory_data.text,
             memory_data.text_source_spec if memory_data.text_source_spec else memory_data.text_source.value,
+            language=language,
         )
 
         if extracted_memories and len(extracted_memories) > 0:
@@ -53,7 +56,8 @@ def process_external_integration_memory(
 
 def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> List[MemoryDB]:
     # Extract memories from tweets using the LLM
-    extracted_memories = extract_memories_from_text(uid, tweets_text, "twitter_tweets")
+    language = users_db.get_user_language_preference(uid)
+    extracted_memories = extract_memories_from_text(uid, tweets_text, "twitter_tweets", language=language)
 
     if not extracted_memories or len(extracted_memories) == 0:
         print(f"No memories extracted from tweets for user {uid}")
