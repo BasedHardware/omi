@@ -22,6 +22,7 @@ class TaskCard extends StatelessWidget {
 
   String get _meta {
     final parts = <String>[];
+    parts.add(data.priority.displayName);
     if (data.hasSteps) {
       parts.add('${data.steps.length} steps');
     }
@@ -45,25 +46,28 @@ class TaskCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withOpacity(0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header row
+              // Title with priority dot
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.check_circle_outline_rounded,
-                    color: data.priority.color,
-                    size: 20,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 10),
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: data.priority.color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       data.title,
@@ -72,56 +76,40 @@ class TaskCard extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: data.priority.backgroundColor,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      data.priority.displayName,
-                      style: TextStyle(
-                        color: data.priority.color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.white.withOpacity(0.3),
-                    size: 20,
                   ),
                 ],
               ),
               // Summary
               if (data.summary != null && data.summary!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  data.summary!,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 13,
-                    height: 1.4,
+                Padding(
+                  padding: const EdgeInsets.only(left: 18),
+                  child: Text(
+                    data.summary!,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
               // Meta info
               if (_meta.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(
-                  _meta,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
+                Padding(
+                  padding: const EdgeInsets.only(left: 18),
+                  child: Text(
+                    _meta,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.4),
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
