@@ -16,11 +16,11 @@ router = APIRouter()
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
-    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto
+    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}-{cm|auto}
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)-(?:cm|auto)$'
+    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
@@ -166,11 +166,12 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
         tag_name = release.get("tag_name", "")
 
-        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, or -desktop-auto)
+        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, -desktop-auto, or -{platform})
         if not (
             tag_name.endswith("-desktop-cm")
             or tag_name.endswith(f"-{platform}-cm")
             or tag_name.endswith("-desktop-auto")
+            or tag_name.endswith(f"-{platform}")
         ):
             continue
 
