@@ -1,85 +1,78 @@
 import 'package:flutter/material.dart';
 
-import 'package:intl/intl.dart';
-
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopProcessingConversationWidget extends StatelessWidget {
-  final ServerConversation conversation;
+  final ServerConversation? conversation;
 
   const DesktopProcessingConversationWidget({
     super.key,
-    required this.conversation,
+    this.conversation,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.maxFinite,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(20),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
           width: 1,
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          // Header row
-          Row(
-            children: [
-              // Icon circle
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundQuaternary,
-                  borderRadius: BorderRadius.circular(14),
+          // Shimmer emoji placeholder (matches DesktopConversationCard 44x44 rounded square)
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: ResponsiveHelper.textTertiary,
                 ),
               ),
-              const SizedBox(width: 12),
-              // Processing label
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                child: Text(
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Title and subtitle placeholders
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
                   context.l10n.processing,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
+                    color: ResponsiveHelper.textTertiary,
+                    height: 1.3,
                   ),
                 ),
-              ),
-              const Spacer(),
-              // Timestamp
-              Text(
-                DateFormat.jm(Localizations.localeOf(context).languageCode)
-                    .format(conversation.startedAt ?? conversation.createdAt),
-                style: const TextStyle(
-                  color: ResponsiveHelper.textTertiary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 6),
+                // Shimmer bar for subtitle
+                Container(
+                  width: 80,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Title placeholder bar
-          Container(
-            width: double.maxFinite,
-            height: 12,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundQuaternary,
-              borderRadius: BorderRadius.circular(6),
+              ],
             ),
           ),
         ],
