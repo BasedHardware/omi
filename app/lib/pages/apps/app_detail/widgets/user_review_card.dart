@@ -4,6 +4,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 class UserReviewCard extends StatelessWidget {
@@ -37,7 +38,7 @@ class UserReviewCard extends StatelessWidget {
                 itemSize: 20,
                 tapOnlyMode: false,
                 itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                itemBuilder: (context, _) => Icon(Icons.star, color: context.primaryColor),
                 maxRating: 5.0,
                 onRatingUpdate: (rating) {},
               ),

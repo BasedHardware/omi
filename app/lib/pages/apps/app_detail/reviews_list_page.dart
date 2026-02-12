@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -138,7 +139,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
+                  backgroundColor: context.primaryColor,
                   foregroundColor: Colors.white,
                 ),
                 child: submitting
@@ -294,10 +295,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.deepPurple : Colors.grey.shade800.withOpacity(0.5),
+          color: selected ? context.primaryColor : Colors.grey.shade800.withOpacity(0.5),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? Colors.deepPurple : Colors.grey.shade700,
+            color: selected ? context.primaryColor : Colors.grey.shade700,
             width: 1,
           ),
         ),
@@ -400,7 +401,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                           child: Icon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? context.primaryColor : Colors.grey.shade700,
                           ),
                         );
                       }),
@@ -479,11 +480,11 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                 icon: Icon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                 ),
                 label: Text(
                   review.response.isNotEmpty ? context.l10n.editReply : context.l10n.reply,
-                  style: const TextStyle(color: Colors.deepPurple, fontSize: 13),
+                  style: TextStyle(color: context.primaryColor, fontSize: 13),
                 ),
               ),
             ),

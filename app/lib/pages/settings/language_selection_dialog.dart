@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -146,7 +147,7 @@ class LanguageSelectionDialog {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.deepPurple),
+                          borderSide: BorderSide(color: context.primaryColor),
                         ),
                       ),
                     ),
@@ -171,10 +172,9 @@ class LanguageSelectionDialog {
                                     language.key,
                                     style: const TextStyle(color: Colors.white),
                                   ),
-                                  trailing:
-                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                                  trailing: isSelected ? Icon(Icons.check_circle, color: context.primaryColor) : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                                  selectedTileColor: context.primaryColor.withOpacity(0.2),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -223,26 +223,28 @@ class LanguageSelectionDialog {
                     ),
                     child: Text(context.l10n.skip),
                   ),
-                ElevatedButton(
-                  onPressed: selectedLanguage == null
-                      ? null
-                      : () async {
-                          final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
-                          if (success && context.mounted) {
-                            Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
-                            Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
-                          } else {
-                            AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withOpacity(0.3),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(context.l10n.confirm),
-                ),
+                Builder(builder: (context) {
+                  return ElevatedButton(
+                    onPressed: selectedLanguage == null
+                        ? null
+                        : () async {
+                            final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+                            if (success && context.mounted) {
+                              Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
+                              Navigator.of(context).pop();
+                              AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
+                            } else {
+                              AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.primaryColor,
+                      disabledBackgroundColor: context.primaryColor.withOpacity(0.3),
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(context.l10n.confirm),
+                  );
+                }),
               ],
             );
           },

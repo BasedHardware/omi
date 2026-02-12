@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import '../models/study_data.dart';
 import 'study_screen.dart';
 
@@ -38,13 +39,13 @@ class StudyCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF8B5CF6).withOpacity(0.15),
-                const Color(0xFF6366F1).withOpacity(0.1),
+                context.primaryColor.withOpacity(0.15),
+                context.accentColor.withOpacity(0.1),
               ],
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF8B5CF6).withOpacity(0.3),
+              color: context.primaryColor.withOpacity(0.3),
               width: 1,
             ),
           ),
@@ -58,12 +59,12 @@ class StudyCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                      color: context.primaryColor.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.school_outlined,
-                      color: Color(0xFF8B5CF6),
+                      color: context.primaryColor,
                       size: 20,
                     ),
                   ),
@@ -117,8 +118,7 @@ class StudyCard extends StatelessWidget {
                       label: '${data.flashcardCount} flashcards',
                       color: const Color(0xFF10B981),
                     ),
-                  if (data.flashcardCount > 0 && data.abcCount > 0)
-                    const SizedBox(width: 8),
+                  if (data.flashcardCount > 0 && data.abcCount > 0) const SizedBox(width: 8),
                   if (data.abcCount > 0)
                     _QuestionChip(
                       icon: Icons.quiz_outlined,

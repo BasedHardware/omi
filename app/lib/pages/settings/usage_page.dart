@@ -18,6 +18,7 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -294,7 +295,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.deepPurple,
+          indicatorColor: context.primaryColor,
           isScrollable: true,
           indicatorWeight: 3,
           labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -315,7 +316,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               provider.allTimeUsage != null;
 
           if (provider.isLoading && !hasAnyData) {
-            return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+            return Center(child: CircularProgressIndicator(color: context.primaryColor));
           }
 
           if (provider.error != null && !hasAnyData) {
@@ -507,7 +508,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     if (stats == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+      return Center(child: CircularProgressIndicator(color: context.primaryColor));
     }
 
     if (stats.transcriptionSeconds == 0 &&
@@ -516,7 +517,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         stats.memoriesCreated == 0) {
       return RefreshIndicator(
         onRefresh: onRefresh,
-        color: Colors.deepPurple,
+        color: context.primaryColor,
         child: RepaintBoundary(
           key: key,
           child: Container(
@@ -540,7 +541,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: Colors.deepPurple,
+      color: context.primaryColor,
       child: RepaintBoundary(
         key: key,
         child: Container(

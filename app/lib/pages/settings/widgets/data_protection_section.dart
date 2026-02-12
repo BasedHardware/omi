@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 extension StringExtension on String {
@@ -37,7 +38,8 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
           children: [
             const Icon(Icons.lock_person_outlined, color: Colors.white),
             const SizedBox(width: 10),
-            Text(context.l10n.maximumSecurityE2ee, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(context.l10n.maximumSecurityE2ee,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
         content: RichText(
@@ -156,9 +158,9 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: Color(0xFF35343B).withOpacity(0.5),
+        color: const Color(0xFF35343B).withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.shade300),
+        border: Border.all(color: context.accentColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +178,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                       ? provider.migrationProcessedCount / provider.migrationTotalCount
                       : 0.0,
                   backgroundColor: Colors.grey.shade700,
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   minHeight: 6,
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -199,7 +201,8 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               Text(
-                context.l10n.objectsCount(provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
+                context.l10n
+                    .objectsCount(provider.migrationProcessedCount.toString(), provider.migrationTotalCount.toString()),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ],
@@ -213,7 +216,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.15),
+        color: context.primaryColor.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Theme.of(context).colorScheme.secondary,

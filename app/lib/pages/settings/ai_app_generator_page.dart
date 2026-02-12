@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -299,14 +300,16 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                           color: const Color(0xFF6366F1).withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          provider.getCategoryDisplayName(),
-                          style: const TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                        child: Builder(builder: (context) {
+                          return Text(
+                            provider.getCategoryDisplayName(),
+                            style: TextStyle(
+                              color: context.primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        }),
                       )
                     : ShimmerWithTimeout(
                         baseColor: const Color(0xFF2A2A2E),
@@ -929,14 +932,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                               children: [
                                 FaIcon(
                                   provider.makePublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
-                                  color: const Color(0xFF8B5CF6),
+                                  color: context.primaryColor,
                                   size: 12,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   provider.makePublic ? context.l10n.publicLabel : context.l10n.privateLabel,
-                                  style: const TextStyle(
-                                    color: Color(0xFF8B5CF6),
+                                  style: TextStyle(
+                                    color: context.primaryColor,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),

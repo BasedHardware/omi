@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -146,13 +147,13 @@ class _MemoryDialogState extends State<MemoryDialog> {
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
+                  backgroundColor: _saveFailed ? Colors.orange : context.accentColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
+                  disabledBackgroundColor: context.accentColor.withOpacity(0.5),
                   disabledForegroundColor: Colors.white.withOpacity(0.7),
                 ),
                 child: _isSaving

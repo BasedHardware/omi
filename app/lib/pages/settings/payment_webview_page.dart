@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/env/env.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -78,8 +79,8 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
         children: [
           WebViewWidget(controller: _controller),
           if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.deepPurple),
+            Center(
+              child: CircularProgressIndicator(color: context.primaryColor),
             ),
         ],
       ),

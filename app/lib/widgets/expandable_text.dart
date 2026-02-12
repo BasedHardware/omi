@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ExpandableTextWidget extends StatefulWidget {
@@ -12,7 +13,7 @@ class ExpandableTextWidget extends StatefulWidget {
   final int maxLines;
   final String? expandText;
   final String? collapseText;
-  final Color linkColor;
+  final Color? linkColor;
 
   const ExpandableTextWidget({
     super.key,
@@ -21,7 +22,7 @@ class ExpandableTextWidget extends StatefulWidget {
     this.maxLines = 3,
     this.expandText,
     this.collapseText,
-    this.linkColor = Colors.deepPurple,
+    this.linkColor,
     required this.isExpanded,
     required this.toggleExpand,
   });
@@ -91,7 +92,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 child: Text(
                   widget.isExpanded ? collapseLabel : expandLabel,
                   style: TextStyle(
-                    color: Colors.deepPurple,
+                    color: widget.linkColor ?? context.primaryColor,
                     fontWeight: FontWeight.w500,
                     fontSize: widget.style.fontSize,
                   ),

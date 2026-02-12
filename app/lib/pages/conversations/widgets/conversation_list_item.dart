@@ -19,6 +19,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -157,13 +158,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   width: double.maxFinite,
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? Colors.deepPurple.withValues(alpha: 0.3)
+                        ? context.primaryColor.withValues(alpha: 0.3)
                         : (isSelectionMode && !isEligible)
                             ? Colors.grey.shade800
                             : const Color(0xFF1F1F25),
                     borderRadius: BorderRadius.circular(24.0),
                     border: isSelected
-                        ? Border.all(color: Colors.deepPurple, width: 2)
+                        ? Border.all(color: context.primaryColor, width: 2)
                         : (isSelectionMode && !isEligible)
                             ? Border.all(color: Colors.grey.shade600, width: 1)
                             : null,

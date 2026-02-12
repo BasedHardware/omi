@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PrivateCloudSyncPage extends StatefulWidget {
@@ -70,7 +71,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.enable, style: TextStyle(color: context.accentColor, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -122,7 +123,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                           children: [
                             Row(
                               children: [
-                                _buildFaIcon(FontAwesomeIcons.cloud, size: 20, color: Colors.deepPurpleAccent),
+                                _buildFaIcon(FontAwesomeIcons.cloud, size: 20, color: context.accentColor),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
@@ -179,7 +180,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                                   child: CupertinoSwitch(
                                     value: isEnabled,
                                     onChanged: _isSaving ? null : _togglePrivateCloudSync,
-                                    activeTrackColor: Colors.deepPurpleAccent,
+                                    activeTrackColor: context.accentColor,
                                   ),
                                 ),
                               ],

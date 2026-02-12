@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -307,13 +308,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple,
+                      color: context.primaryColor,
                       borderRadius: BorderRadius.circular(28),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.flag_outlined,
                           color: Colors.white,
                           size: 20,
@@ -355,13 +356,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple,
+                      color: context.primaryColor,
                       borderRadius: BorderRadius.circular(28),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.add_task,
                           color: Colors.white,
                           size: 20,
@@ -386,7 +387,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           FloatingActionButton(
             heroTag: 'action_items_fab',
             onPressed: _toggleFabMenu,
-            backgroundColor: Colors.deepPurple,
+            backgroundColor: context.primaryColor,
             child: AnimatedRotation(
               turns: _isFabMenuOpen ? 0.125 : 0.0,
               duration: const Duration(milliseconds: 200),
@@ -595,7 +596,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 HapticFeedback.mediumImpact();
                 return provider.forceRefreshActionItems();
               },
-              color: Colors.deepPurple,
+              color: context.primaryColor,
               backgroundColor: Colors.white,
               child: provider.isLoading && provider.actionItems.isEmpty
                   ? _buildLoadingState()
@@ -610,8 +611,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(color: Colors.deepPurple),
+    return Center(
+      child: CircularProgressIndicator(color: context.primaryColor),
     );
   }
 
@@ -636,13 +637,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.withOpacity(0.1),
+                      color: context.primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Icon(
                       Icons.check_circle_outline,
                       size: 40,
-                      color: Colors.deepPurple.withOpacity(0.6),
+                      color: context.primaryColor.withOpacity(0.6),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -917,7 +918,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurple : Colors.transparent,
+            color: showIndicator ? context.primaryColor : Colors.transparent,
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -1013,7 +1014,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -1024,7 +1025,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),

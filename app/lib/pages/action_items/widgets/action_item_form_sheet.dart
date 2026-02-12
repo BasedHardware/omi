@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -287,7 +288,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                       width: 24,
                       child: Checkbox(
                         value: _isCompleted,
-                        activeColor: Colors.deepPurpleAccent,
+                        activeColor: context.accentColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(5),
                         ),

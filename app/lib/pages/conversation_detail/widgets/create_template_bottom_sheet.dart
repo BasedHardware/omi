@@ -10,12 +10,13 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class CreateTemplateBottomSheet extends StatefulWidget {
@@ -252,8 +253,8 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                      gradient: LinearGradient(
+                        colors: [context.primaryColor, context.accentColor],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -438,7 +439,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                         _isPublic = value;
                                       });
                                     },
-                              activeColor: const Color(0xFF6366F1),
+                              activeColor: context.primaryColor,
                             ),
                           ],
                         ),

@@ -6,6 +6,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -118,7 +119,7 @@ class AppListItem extends StatelessWidget {
                           children: [
                             Icon(
                               Icons.star_rounded,
-                              color: Color(0xFF8B5CF6),
+                              color: context.primaryColor,
                               size: 14,
                             ),
                             const SizedBox(width: 4),
@@ -202,7 +203,7 @@ class AppListItem extends StatelessWidget {
                           width: 72,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: state.enabled ? Colors.grey.shade700 : Color(0xFF8B5CF6),
+                            color: state.enabled ? Colors.grey.shade700 : context.primaryColor,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Center(

@@ -9,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -779,16 +780,16 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
           height: showIndicator ? 36 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurpleAccent.withOpacity(0.15) : Colors.transparent,
+            color: showIndicator ? context.accentColor.withOpacity(0.15) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: showIndicator ? Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5), width: 1.5) : null,
+            border: showIndicator ? Border.all(color: context.accentColor.withOpacity(0.5), width: 1.5) : null,
           ),
           child: showIndicator
               ? Center(
                   child: Text(
                     'Drop here for first position',
                     style: TextStyle(
-                      color: Colors.deepPurpleAccent.withOpacity(0.8),
+                      color: context.accentColor.withOpacity(0.8),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -890,7 +891,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: context.accentColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -901,7 +902,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: context.accentColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),

@@ -12,11 +12,12 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Available folder colors for selection.
+/// Note: Purple (index 3) matches the brand primary color
 const List<Color> folderColors = [
   Color(0xFF3B82F6), // Blue
   Color(0xFFEF4444), // Red
   Color(0xFF10B981), // Green
-  Color(0xFF8B5CF6), // Purple
+  Color(0xFF8B5CF6), // Purple (matches brand primary)
   Color(0xFFF59E0B), // Amber
   Color(0xFF06B6D4), // Cyan
   Color(0xFFEC4899), // Pink

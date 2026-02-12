@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -448,9 +449,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         point: LatLng(loc.latitude, loc.longitude),
         width: 32,
         height: 32,
-        child: const FaIcon(
+        child: FaIcon(
           FontAwesomeIcons.locationDot,
-          color: Colors.deepPurple,
+          color: context.primaryColor,
           size: 28,
         ),
       );
@@ -812,19 +813,19 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   Container(
                     width: 2,
                     height: 12,
-                    color: isFirst ? Colors.transparent : Colors.deepPurple.withOpacity(0.4),
+                    color: isFirst ? Colors.transparent : context.primaryColor.withOpacity(0.4),
                   ),
                   // Dot
                   Container(
                     width: 14,
                     height: 14,
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple,
+                      color: context.primaryColor,
                       shape: BoxShape.circle,
                       border: Border.all(color: const Color(0xFF0A0A0A), width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.deepPurple.withOpacity(0.4),
+                          color: context.primaryColor.withOpacity(0.4),
                           blurRadius: 6,
                           spreadRadius: 1,
                         ),
@@ -835,7 +836,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: isLast ? Colors.transparent : Colors.deepPurple.withOpacity(0.4),
+                      color: isLast ? Colors.transparent : context.primaryColor.withOpacity(0.4),
                     ),
                   ),
                 ],

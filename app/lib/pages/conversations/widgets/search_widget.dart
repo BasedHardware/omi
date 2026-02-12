@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -98,8 +99,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                         },
                         child: Text(
                           context.l10n.done,
-                          style: const TextStyle(
-                            color: Colors.deepPurple,
+                          style: TextStyle(
+                            color: context.primaryColor,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -221,7 +222,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 height: 48,
                 decoration: BoxDecoration(
                   color: convoProvider.selectedDate != null
-                      ? Colors.deepPurple.withValues(alpha: 0.5)
+                      ? context.primaryColor.withValues(alpha: 0.5)
                       : const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(24),
                 ),

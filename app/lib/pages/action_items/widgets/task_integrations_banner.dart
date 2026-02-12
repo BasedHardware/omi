@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -24,101 +25,103 @@ class TaskIntegrationsBanner extends StatelessWidget {
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.deepPurple.withOpacity(0.3),
-              Colors.purple.withOpacity(0.3),
+      child: Builder(
+        builder: (context) => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                context.primaryColor.withOpacity(0.3),
+                context.primaryColor.withOpacity(0.3),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: context.accentColor.withOpacity(0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Overlapping app logos (stacked)
+              SizedBox(
+                width: 80, // Width for 3 overlapping logos
+                height: 28,
+                child: Stack(
+                  children: [
+                    // First logo - Todoist
+                    Positioned(
+                      left: 0,
+                      child: Hero(
+                        tag: 'task_integration_todoist_icon',
+                        child: _buildOverlappingLogo(
+                          Assets.integrationAppLogos.todoistLogo.path,
+                          28,
+                        ),
+                      ),
+                    ),
+                    // Second logo - ClickUp
+                    Positioned(
+                      left: 22,
+                      child: Hero(
+                        tag: 'task_integration_clickup_icon',
+                        child: _buildOverlappingLogo(
+                          Assets.integrationAppLogos.clickupLogo.path,
+                          28,
+                        ),
+                      ),
+                    ),
+                    // Third logo - Asana
+                    Positioned(
+                      left: 44,
+                      child: Hero(
+                        tag: 'task_integration_asana_icon',
+                        child: _buildOverlappingLogo(
+                          Assets.integrationAppLogos.asanaLogo.path,
+                          28,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // const SizedBox(width: 20),
+
+              // Message
+              Expanded(
+                child: Text(
+                  context.l10n.exportTasksWithOneTap,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+
+              // NEW badge (moved to right)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  context.l10n.newTag,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
             ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.deepPurpleAccent.withOpacity(0.2),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Overlapping app logos (stacked)
-            SizedBox(
-              width: 80, // Width for 3 overlapping logos
-              height: 28,
-              child: Stack(
-                children: [
-                  // First logo - Todoist
-                  Positioned(
-                    left: 0,
-                    child: Hero(
-                      tag: 'task_integration_todoist_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.todoistLogo.path,
-                        28,
-                      ),
-                    ),
-                  ),
-                  // Second logo - ClickUp
-                  Positioned(
-                    left: 22,
-                    child: Hero(
-                      tag: 'task_integration_clickup_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.clickupLogo.path,
-                        28,
-                      ),
-                    ),
-                  ),
-                  // Third logo - Asana
-                  Positioned(
-                    left: 44,
-                    child: Hero(
-                      tag: 'task_integration_asana_icon',
-                      child: _buildOverlappingLogo(
-                        Assets.integrationAppLogos.asanaLogo.path,
-                        28,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // const SizedBox(width: 20),
-
-            // Message
-            Expanded(
-              child: Text(
-                context.l10n.exportTasksWithOneTap,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-
-            // NEW badge (moved to right)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                context.l10n.newTag,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );

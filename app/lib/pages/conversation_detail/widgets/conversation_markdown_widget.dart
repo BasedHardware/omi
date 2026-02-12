@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/widgets/generative_ui/generative_ui.dart';
 
 class ConversationMarkdownWidget extends StatefulWidget {
@@ -251,7 +252,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
       shrinkWrap: true,
       builders: searchQuery.isNotEmpty
           ? {
-              'highlight': _SearchHighlightBuilder(),
+              'highlight': _SearchHighlightBuilder(highlightColor: context.primaryColor),
             }
           : {},
       inlineSyntaxes: searchQuery.isNotEmpty
@@ -296,21 +297,20 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
 
             // Count matches in this segment to track offset
             final matchCount = _countMatches(preprocessed, searchQuery);
-            final localIndex = currentResultIndex >= currentMatchOffset &&
-                    currentResultIndex < currentMatchOffset + matchCount
-                ? currentResultIndex - currentMatchOffset
-                : -1;
+            final localIndex =
+                currentResultIndex >= currentMatchOffset && currentResultIndex < currentMatchOffset + matchCount
+                    ? currentResultIndex - currentMatchOffset
+                    : -1;
 
             currentMatchOffset += matchCount;
 
             // Apply search highlighting to markdown content
-            final processedContent =
-                _highlightSearchInMarkdown(preprocessed, searchQuery, localIndex);
+            final processedContent = _highlightSearchInMarkdown(preprocessed, searchQuery, localIndex);
 
             return MarkdownBody(
               selectable: false,
               shrinkWrap: true,
-              builders: {'highlight': _SearchHighlightBuilder()},
+              builders: {'highlight': _SearchHighlightBuilder(highlightColor: context.primaryColor)},
               inlineSyntaxes: [_SearchHighlightSyntax()],
               styleSheet: MarkdownStyleHelper.getStyleSheet(context),
               data: processedContent,
@@ -392,6 +392,10 @@ class _SearchHighlightSyntax extends md.InlineSyntax {
 
 // Custom builder for search highlighting
 class _SearchHighlightBuilder extends MarkdownElementBuilder {
+  final Color highlightColor;
+
+  _SearchHighlightBuilder({required this.highlightColor});
+
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
     if (element.tag != 'highlight') return null;
@@ -402,7 +406,7 @@ class _SearchHighlightBuilder extends MarkdownElementBuilder {
       text: TextSpan(
         text: element.textContent,
         style: (preferredStyle ?? const TextStyle()).copyWith(
-          backgroundColor: isCurrent ? Colors.orange : Colors.deepPurple,
+          backgroundColor: isCurrent ? Colors.orange : highlightColor,
           color: Colors.white,
         ),
       ),

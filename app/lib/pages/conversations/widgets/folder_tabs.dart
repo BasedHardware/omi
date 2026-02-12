@@ -298,8 +298,8 @@ class _AddFolderButton extends StatelessWidget {
           await showCreateFolderBottomSheet(context);
         },
         child: Container(
-          width: 32,
-          height: 32,
+          width: 44,
+          height: 44,
           decoration: BoxDecoration(
             color: Colors.grey.withValues(alpha: 0.12),
             shape: BoxShape.circle,

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -580,7 +581,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 HapticFeedback.mediumImpact();
                 await context.read<AppProvider>().forceRefreshApps();
               },
-              color: Colors.deepPurpleAccent,
+              color: context.accentColor,
               backgroundColor: Colors.white,
               child: CustomScrollView(
                 controller: widget.scrollController,
@@ -781,7 +782,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                           curve: Curves.easeInOut,
                                           height: 44,
                                           decoration: BoxDecoration(
-                                            color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                            color: context.accentColor.withValues(alpha: 0.5),
                                             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                           ),
                                           child: TextButton.icon(
@@ -851,7 +852,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                           curve: Curves.easeInOut,
                                           height: 44,
                                           decoration: BoxDecoration(
-                                            color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                            color: context.accentColor.withValues(alpha: 0.5),
                                             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                           ),
                                           child: TextButton.icon(
@@ -923,7 +924,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                           curve: Curves.easeInOut,
                                           height: 44,
                                           decoration: BoxDecoration(
-                                            color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                                            color: context.accentColor.withValues(alpha: 0.5),
                                             borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                           ),
                                           child: TextButton.icon(
@@ -935,7 +936,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 shape: const RoundedRectangleBorder(
                                                   borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                                 ),
-                                                builder: (context) => const FilterBottomSheet(),
+                                                builder: (context) => FilterBottomSheet(),
                                               );
                                             },
                                             icon: const Icon(
@@ -968,7 +969,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               curve: Curves.easeInOut,
                                               decoration: BoxDecoration(
                                                 color: state.visibleFilterCount > 0
-                                                    ? Colors.deepPurpleAccent.withValues(alpha: 0.5)
+                                                    ? context.accentColor.withValues(alpha: 0.5)
                                                     : AppStyles.backgroundSecondary,
                                                 borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
                                               ),
@@ -981,7 +982,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                     shape: const RoundedRectangleBorder(
                                                       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                                     ),
-                                                    builder: (context) => const FilterBottomSheet(),
+                                                    builder: (context) => FilterBottomSheet(),
                                                   );
                                                 },
                                                 icon: const Icon(

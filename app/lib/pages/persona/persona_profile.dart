@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -319,7 +320,7 @@ class _PersonaProfilePageState extends State<PersonaProfilePage> {
                                           onChanged: (value) {
                                             provider.setPersonaPublic(value);
                                           },
-                                          activeColor: Colors.deepPurple,
+                                          activeColor: context.primaryColor,
                                         );
                                       },
                                     ),

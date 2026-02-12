@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
 class FilterBottomSheet extends StatelessWidget {
-  const FilterBottomSheet({super.key});
+  FilterBottomSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +41,7 @@ class FilterBottomSheet extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Color(0xFF8B5CF6),
+                          color: context.primaryColor,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -83,7 +84,7 @@ class FilterBottomSheet extends StatelessWidget {
                       // Rating
                       _buildSectionTitle(AppLocalizations.of(context)!.rating),
                       const SizedBox(height: 12),
-                      _buildRatingSelector(provider),
+                      _buildRatingSelector(context, provider),
 
                       const SizedBox(height: 32),
 
@@ -193,7 +194,7 @@ class FilterBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildRatingSelector(AppProvider provider) {
+  Widget _buildRatingSelector(BuildContext context, AppProvider provider) {
     final ratings = ['1', '2', '3', '4', '5'];
 
     return Row(
@@ -211,7 +212,7 @@ class FilterBottomSheet extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: isSelected ? Color(0xFF8B5CF6) : Color(0xFF35343B),
+                color: isSelected ? context.primaryColor : Color(0xFF35343B),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -246,7 +247,7 @@ class FilterBottomSheet extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isSelected ? Color(0xFF8B5CF6) : Color(0xFF35343B),
+              color: isSelected ? context.primaryColor : Color(0xFF35343B),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -289,7 +290,7 @@ class FilterBottomSheet extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1F25).withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
-                border: isSelected ? Border.all(color: Color(0xFF8B5CF6), width: 2) : null,
+                border: isSelected ? Border.all(color: context.primaryColor, width: 2) : null,
               ),
               child: Row(
                 children: [
@@ -298,9 +299,9 @@ class FilterBottomSheet extends StatelessWidget {
                     height: 20,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isSelected ? Color(0xFF8B5CF6) : Colors.transparent,
+                      color: isSelected ? context.primaryColor : Colors.transparent,
                       border: Border.all(
-                        color: isSelected ? Color(0xFF8B5CF6) : Colors.grey.shade500,
+                        color: isSelected ? context.primaryColor : Colors.grey.shade500,
                         width: 2,
                       ),
                     ),
@@ -345,7 +346,7 @@ class FilterBottomSheet extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: isSelected ? Color(0xFF8B5CF6) : Color(0xFF35343B),
+              color: isSelected ? context.primaryColor : Color(0xFF35343B),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(

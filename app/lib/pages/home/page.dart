@@ -56,8 +56,10 @@ import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/header_icon_button.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -653,7 +655,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(32),
-                                        color: Colors.deepPurple,
+                                        color: context.primaryColor,
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -734,7 +736,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.primary,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -762,23 +764,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           MaterialPageRoute(builder: (context) => const SyncPage()),
                         );
                       },
-                      child: Container(
-                        width: 36,
-                        height: 36,
+                      child: HeaderIconButton(
                         margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: isSyncing
-                              ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
+                        backgroundColor: isSyncing
+                            ? context.primaryColor.withValues(alpha: 0.2)
+                            : hasPendingOnDevice
+                                ? Colors.orange.withValues(alpha: 0.15)
+                                : const Color(0xFF1F1F25),
+                        icon: Icon(
                           Icons.cloud_rounded,
                           size: 18,
                           color: isSyncing
-                              ? Colors.deepPurpleAccent
+                              ? context.accentColor
                               : hasPendingOnDevice
                                   ? Colors.orangeAccent
                                   : Colors.white70,
@@ -803,168 +800,137 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: homeProvider.showConvoSearchBar
-                                ? Colors.deepPurple.withValues(alpha: 0.5)
-                                : const Color(0xFF1F1F25),
-                            shape: BoxShape.circle,
+                        HeaderIconButton(
+                          isActive: homeProvider.showConvoSearchBar,
+                          icon: const Icon(
+                            Icons.search,
+                            size: 18,
+                            color: Colors.white70,
                           ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.search,
-                              size: 18,
-                              color: Colors.white70,
-                            ),
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              // Toggle search bar visibility
-                              homeProvider.toggleConvoSearchBar();
-                            },
-                          ),
+                          onPressed: () {
+                            // Toggle search bar visibility
+                            homeProvider.toggleConvoSearchBar();
+                          },
                         ),
                       if (shouldShowSearchButton) const SizedBox(width: 8),
                       // Daily Recaps toggle button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: convoProvider.showDailySummaries
-                              ? Colors.deepPurple.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderIconButton(
+                        isActive: convoProvider.showDailySummaries,
+                        icon: Icon(
+                          FontAwesomeIcons.clockRotateLeft,
+                          size: 16,
+                          color: convoProvider.showDailySummaries ? Colors.white : Colors.white70,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            FontAwesomeIcons.clockRotateLeft,
-                            size: 16,
-                            color: convoProvider.showDailySummaries ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            convoProvider.toggleDailySummaries();
-                          },
-                        ),
+                        onPressed: () {
+                          convoProvider.toggleDailySummaries();
+                        },
                       ),
                       // Calendar button - only show when date filter is active
                       if (convoProvider.selectedDate != null) ...[
                         const SizedBox(width: 8),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
+                        HeaderIconButton(
+                          isActive: true,
+                          icon: const Icon(
+                            FontAwesomeIcons.calendarDay,
+                            size: 16,
+                            color: Colors.white,
                           ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              FontAwesomeIcons.calendarDay,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              // Open date picker to change date, cancel clears filter
-                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
-                              await showCupertinoModalPopup<void>(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return Container(
-                                    height: 420,
-                                    padding: const EdgeInsets.only(top: 6.0),
-                                    margin: EdgeInsets.only(
-                                      bottom: MediaQuery.of(context).viewInsets.bottom,
-                                    ),
-                                    color: const Color(0xFF1F1F25),
-                                    child: SafeArea(
-                                      top: false,
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF1F1F25),
-                                              border: Border(
-                                                bottom: BorderSide(
-                                                  color: Color(0xFF35343B),
-                                                  width: 0.5,
-                                                ),
+                          onPressed: () async {
+                            // Open date picker to change date, cancel clears filter
+                            DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
+                            await showCupertinoModalPopup<void>(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return Container(
+                                  height: 420,
+                                  padding: const EdgeInsets.only(top: 6.0),
+                                  margin: EdgeInsets.only(
+                                    bottom: MediaQuery.of(context).viewInsets.bottom,
+                                  ),
+                                  color: const Color(0xFF1F1F25),
+                                  child: SafeArea(
+                                    top: false,
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF1F1F25),
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Color(0xFF35343B),
+                                                width: 0.5,
                                               ),
                                             ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    // Get provider before pop to avoid using invalid context
-                                                    final provider =
-                                                        Provider.of<ConversationProvider>(context, listen: false);
-                                                    Navigator.of(context).pop();
-                                                    await provider.clearDateFilter();
-                                                    MixpanelManager().calendarFilterCleared();
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.removeFilter,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const Spacer(),
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    final provider =
-                                                        Provider.of<ConversationProvider>(context, listen: false);
-                                                    Navigator.of(context).pop();
-                                                    await provider.filterConversationsByDate(selectedDate);
-                                                    MixpanelManager().calendarFilterApplied(selectedDate);
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.done,
-                                                    style: const TextStyle(
-                                                      color: Colors.deepPurple,
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
                                           ),
-                                          Expanded(
-                                            child: Material(
-                                              color: ResponsiveHelper.backgroundSecondary,
-                                              child: CalendarDatePicker2(
-                                                config: getDefaultCalendarConfig(
-                                                  firstDate: DateTime(2020),
-                                                  lastDate: DateTime.now(),
-                                                  currentDate: DateTime.now(),
-                                                ),
-                                                value: [selectedDate],
-                                                onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty) {
-                                                    selectedDate = dates[0];
-                                                  }
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              CupertinoButton(
+                                                padding: EdgeInsets.zero,
+                                                onPressed: () async {
+                                                  // Get provider before pop to avoid using invalid context
+                                                  final provider =
+                                                      Provider.of<ConversationProvider>(context, listen: false);
+                                                  Navigator.of(context).pop();
+                                                  await provider.clearDateFilter();
+                                                  MixpanelManager().calendarFilterCleared();
                                                 },
+                                                child: Text(
+                                                  context.l10n.removeFilter,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
                                               ),
+                                              const Spacer(),
+                                              CupertinoButton(
+                                                padding: EdgeInsets.zero,
+                                                onPressed: () async {
+                                                  final provider =
+                                                      Provider.of<ConversationProvider>(context, listen: false);
+                                                  Navigator.of(context).pop();
+                                                  await provider.filterConversationsByDate(selectedDate);
+                                                  MixpanelManager().calendarFilterApplied(selectedDate);
+                                                },
+                                                child: Text(
+                                                  context.l10n.done,
+                                                  style: TextStyle(
+                                                    color: context.primaryColor,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Material(
+                                            color: ResponsiveHelper.backgroundSecondary,
+                                            child: CalendarDatePicker2(
+                                              config: getDefaultCalendarConfig(
+                                                firstDate: DateTime(2020),
+                                                lastDate: DateTime.now(),
+                                                currentDate: DateTime.now(),
+                                              ),
+                                              value: [selectedDate],
+                                              onValueChanged: (dates) {
+                                                if (dates.isNotEmpty) {
+                                                  selectedDate = dates[0];
+                                                }
+                                              },
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
                       const SizedBox(width: 8),
@@ -982,51 +948,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return Row(
                     children: [
                       // Export button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderIconButton(
+                        icon: const Icon(
+                          FontAwesomeIcons.arrowUpFromBracket,
+                          size: 16,
+                          color: Colors.white70,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(
-                            FontAwesomeIcons.arrowUpFromBracket,
-                            size: 16,
-                            color: Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const TaskIntegrationsPage(),
-                              ),
-                            );
-                          },
-                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const TaskIntegrationsPage(),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(width: 8),
                       // Completed toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderIconButton(
+                        isActive: showCompleted,
+                        icon: Icon(
+                          FontAwesomeIcons.solidCircleCheck,
+                          size: 16,
+                          color: showCompleted ? Colors.white : Colors.white70,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            FontAwesomeIcons.solidCircleCheck,
-                            size: 16,
-                            color: showCompleted ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleShowCompletedView();
-                          },
-                        ),
+                        onPressed: () {
+                          actionItemsProvider.toggleShowCompletedView();
+                        },
                       ),
                       const SizedBox(width: 8),
                     ],
@@ -1034,36 +981,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 },
               ),
               // Settings button - always visible
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F25),
-                  shape: BoxShape.circle,
+              HeaderIconButton(
+                icon: const Icon(
+                  FontAwesomeIcons.gear,
+                  size: 16,
+                  color: Colors.white70,
                 ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gear,
-                    size: 16,
-                    color: Colors.white70,
-                  ),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
+                onPressed: () {
+                  MixpanelManager().pageOpened('Settings');
+                  String language = SharedPreferencesUtil().userPrimaryLanguage;
+                  bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                  String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                  SettingsDrawer.show(context);
+                  if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                      hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                      transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                    if (context.mounted) {
+                      context.read<CaptureProvider>().onRecordProfileSettingChanged();
                     }
-                  },
-                ),
+                  }
+                },
               ),
             ],
           ),

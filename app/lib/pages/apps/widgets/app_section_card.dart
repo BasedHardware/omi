@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -161,7 +162,7 @@ class SectionAppItemCard extends StatelessWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Icon(Icons.star, color: Colors.deepPurple.shade300, size: 14),
+                            Icon(Icons.star, color: context.primaryColor.withOpacity(0.7), size: 14),
                             const SizedBox(width: 3),
                             Text(
                               app.getRatingAvg()!,

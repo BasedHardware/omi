@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -237,7 +238,7 @@ class SectionAppItemCard extends StatelessWidget {
                           children: [
                             FaIcon(
                               FontAwesomeIcons.solidStar,
-                              color: Color(0xFF8B5CF6),
+                              color: context.primaryColor,
                               size: 9,
                             ),
                             const SizedBox(width: 4),

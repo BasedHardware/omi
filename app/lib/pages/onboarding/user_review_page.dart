@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -135,12 +136,12 @@ class _UserReviewPageState extends State<UserReviewPage> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _requestReview,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: context.primaryColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(28),
                       ),
-                      disabledBackgroundColor: Colors.deepPurple.withOpacity(0.5),
+                      disabledBackgroundColor: context.primaryColor.withOpacity(0.5),
                     ),
                     child: _isLoading
                         ? const SizedBox(

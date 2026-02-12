@@ -30,8 +30,10 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/widgets/header_icon_button.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'conversation_detail_provider.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -601,29 +603,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           appBar: AppBar(
             automaticallyImplyLeading: false,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            leading: Container(
-              width: 36,
-              height: 36,
+            leading: HeaderIconButton(
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  if (widget.isFromOnboarding) {
-                    SchedulerBinding.instance.addPostFrameCallback((_) {
-                      Navigator.pushAndRemoveUntil(
-                          context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
-                    });
-                  } else {
-                    Navigator.pop(context);
-                  }
-                },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-              ),
+              backgroundColor: Colors.grey.withOpacity(0.3),
+              onPressed: () {
+                if (widget.isFromOnboarding) {
+                  SchedulerBinding.instance.addPostFrameCallback((_) {
+                    Navigator.pushAndRemoveUntil(
+                        context, MaterialPageRoute(builder: (context) => const HomePageWrapper()), (route) => false);
+                  });
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
             ),
             title: Align(
               alignment: Alignment.centerLeft,
@@ -648,185 +641,159 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Star button (first) - toggle starred status
-                      Container(
-                        width: 36,
-                        height: 36,
+                      HeaderIconButton(
                         margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: provider.conversation.starred
-                              ? Colors.amber.withValues(alpha: 0.3)
-                              : Colors.grey.withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: _isTogglingStarred
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    _isTogglingStarred = true;
-                                  });
-                                  HapticFeedback.mediumImpact();
-                                  try {
-                                    final newStarredState = !provider.conversation.starred;
-                                    bool success = await setConversationStarred(
-                                      provider.conversation.id,
-                                      newStarredState,
+                        backgroundColor: provider.conversation.starred
+                            ? Colors.amber.withValues(alpha: 0.3)
+                            : Colors.grey.withValues(alpha: 0.3),
+                        onPressed: _isTogglingStarred
+                            ? null
+                            : () async {
+                                setState(() {
+                                  _isTogglingStarred = true;
+                                });
+                                try {
+                                  final newStarredState = !provider.conversation.starred;
+                                  bool success = await setConversationStarred(
+                                    provider.conversation.id,
+                                    newStarredState,
+                                  );
+                                  if (!mounted) return;
+                                  if (success) {
+                                    provider.conversation.starred = newStarredState;
+                                    // Update in conversation provider
+                                    context.read<ConversationProvider>().updateConversationInSortedList(
+                                          provider.conversation,
+                                        );
+                                    // Track star/unstar action
+                                    MixpanelManager().conversationStarToggled(
+                                      conversation: provider.conversation,
+                                      starred: newStarredState,
+                                      source: 'detail_page_button',
                                     );
-                                    if (!mounted) return;
-                                    if (success) {
-                                      provider.conversation.starred = newStarredState;
-                                      // Update in conversation provider
-                                      context.read<ConversationProvider>().updateConversationInSortedList(
-                                            provider.conversation,
-                                          );
-                                      // Track star/unstar action
-                                      MixpanelManager().conversationStarToggled(
-                                        conversation: provider.conversation,
-                                        starred: newStarredState,
-                                        source: 'detail_page_button',
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(context.l10n.failedToUpdateStarred)),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    Logger.debug('Failed to toggle starred status: $e');
-                                  } finally {
-                                    if (mounted) {
-                                      setState(() {
-                                        _isTogglingStarred = false;
-                                      });
-                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(context.l10n.failedToUpdateStarred)),
+                                    );
                                   }
-                                },
-                          icon: _isTogglingStarred
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : FaIcon(
-                                  provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-                                  size: 16.0,
-                                  color: provider.conversation.starred ? Colors.amber : Colors.white,
+                                } catch (e) {
+                                  Logger.debug('Failed to toggle starred status: $e');
+                                } finally {
+                                  if (mounted) {
+                                    setState(() {
+                                      _isTogglingStarred = false;
+                                    });
+                                  }
+                                }
+                              },
+                        icon: _isTogglingStarred
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
-                        ),
+                              )
+                            : FaIcon(
+                                provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                                size: 16.0,
+                                color: provider.conversation.starred ? Colors.amber : Colors.white,
+                              ),
                       ),
                       // Share button (second) - directly share summary link
-                      Container(
+                      HeaderIconButton(
                         key: _shareButtonKey,
-                        width: 36,
-                        height: 36,
                         margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: _isSharing
-                              ? null
-                              : () async {
-                                  setState(() {
-                                    _isSharing = true;
-                                  });
-                                  HapticFeedback.mediumImpact();
-                                  try {
-                                    // Directly share the summary link
-                                    bool shared = await setConversationVisibility(provider.conversation.id);
-                                    if (!shared) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
-                                      );
-                                      setState(() {
-                                        _isSharing = false;
-                                      });
-                                      return;
-                                    }
-                                    String content = 'https://h.omi.me/memories/${provider.conversation.id}';
-                                    // Track share event
-                                    MixpanelManager().conversationShared(
-                                      conversation: provider.conversation,
-                                      shareMethod: 'url_share',
+                        backgroundColor: Colors.grey.withOpacity(0.3),
+                        onPressed: _isSharing
+                            ? null
+                            : () async {
+                                setState(() {
+                                  _isSharing = true;
+                                });
+                                try {
+                                  // Directly share the summary link
+                                  bool shared = await setConversationVisibility(provider.conversation.id);
+                                  if (!shared) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
                                     );
-                                    // Start sharing and get the position for iOS
-                                    final RenderBox? box =
-                                        _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                    if (box != null) {
-                                      final Offset position = box.localToGlobal(Offset.zero);
-                                      final Size size = box.size;
-                                      Share.share(
-                                        content,
-                                        subject: provider.conversation.structured.title,
-                                        sharePositionOrigin:
-                                            Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
-                                      );
-                                    } else {
-                                      Share.share(content, subject: provider.conversation.structured.title);
-                                    }
-                                    // Small delay to let share sheet appear, then clear loading
-                                    await Future.delayed(const Duration(milliseconds: 150));
                                     setState(() {
                                       _isSharing = false;
                                     });
-                                  } catch (e) {
-                                    setState(() {
-                                      _isSharing = false;
-                                    });
+                                    return;
                                   }
-                                },
-                          icon: _isSharing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
-                        ),
+                                  String content = 'https://h.omi.me/memories/${provider.conversation.id}';
+                                  // Track share event
+                                  MixpanelManager().conversationShared(
+                                    conversation: provider.conversation,
+                                    shareMethod: 'url_share',
+                                  );
+                                  // Start sharing and get the position for iOS
+                                  final RenderBox? box =
+                                      _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+                                  if (box != null) {
+                                    final Offset position = box.localToGlobal(Offset.zero);
+                                    final Size size = box.size;
+                                    Share.share(
+                                      content,
+                                      subject: provider.conversation.structured.title,
+                                      sharePositionOrigin:
+                                          Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
+                                    );
+                                  } else {
+                                    Share.share(content, subject: provider.conversation.structured.title);
+                                  }
+                                  // Small delay to let share sheet appear, then clear loading
+                                  await Future.delayed(const Duration(milliseconds: 150));
+                                  setState(() {
+                                    _isSharing = false;
+                                  });
+                                } catch (e) {
+                                  setState(() {
+                                    _isSharing = false;
+                                  });
+                                }
+                              },
+                        icon: _isSharing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                       ),
                       // Search button (second) - only show on transcript and summary tabs
                       if (_controller?.index != 2)
-                        Container(
-                          width: 36,
-                          height: 36,
+                        HeaderIconButton(
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: _isSearching ? Colors.deepPurple.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () {
-                              setState(() {
-                                _isSearching = !_isSearching;
-                                if (!_isSearching) {
-                                  _searchQuery = '';
-                                  _searchController.clear();
-                                  _searchFocusNode.unfocus();
-                                } else {
-                                  _searchFocusNode.requestFocus();
-                                  MixpanelManager().conversationDetailSearchClicked(
-                                    conversationId: provider.conversation.id,
-                                  );
-                                }
-                              });
-                              HapticFeedback.mediumImpact();
-                            },
-                            icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
-                          ),
+                          backgroundColor:
+                              _isSearching ? context.primaryColor.withOpacity(0.8) : Colors.grey.withOpacity(0.3),
+                          onPressed: () {
+                            setState(() {
+                              _isSearching = !_isSearching;
+                              if (!_isSearching) {
+                                _searchQuery = '';
+                                _searchController.clear();
+                                _searchFocusNode.unfocus();
+                              } else {
+                                _searchFocusNode.requestFocus();
+                                MixpanelManager().conversationDetailSearchClicked(
+                                  conversationId: provider.conversation.id,
+                                );
+                              }
+                            });
+                          },
+                          icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                         ),
                       // Developer Tools button (third) - iOS style pull-down menu
                       Container(
-                        width: 36,
-                        height: 36,
+                        width: 44,
+                        height: 44,
                         margin: const EdgeInsets.only(right: 8),
                         child: PullDownButton(
                           itemBuilder: (context) => [
@@ -879,8 +846,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               showMenu();
                             },
                             child: Container(
-                              width: 36,
-                              height: 36,
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
                                 color: Colors.grey.withOpacity(0.3),
                                 shape: BoxShape.circle,

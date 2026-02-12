@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -234,8 +235,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
+        child: Center(
+          child: CircularProgressIndicator(color: context.accentColor),
         ),
       );
     }
@@ -269,7 +270,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
               icon: const Icon(Icons.refresh, size: 18),
               label: Text(context.l10n.retry),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.deepPurpleAccent,
+                foregroundColor: context.accentColor,
               ),
             ),
           ],
@@ -323,7 +324,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                       _totalDuration.inMilliseconds.toDouble(),
                                     ),
                                 max: _totalDuration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
-                                activeColor: Colors.deepPurpleAccent,
+                                activeColor: context.accentColor,
                                 inactiveColor: Colors.grey.shade700,
                                 onChanged: (value) {
                                   _seekToCombinedPosition(Duration(milliseconds: value.toInt()));
@@ -413,8 +414,8 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
           return Container(
             width: 48,
             height: 48,
-            decoration: const BoxDecoration(
-              color: Colors.deepPurpleAccent,
+            decoration: BoxDecoration(
+              color: context.accentColor,
               shape: BoxShape.circle,
             ),
             child: const Center(
@@ -438,7 +439,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
             size: 32,
           ),
           style: IconButton.styleFrom(
-            backgroundColor: Colors.deepPurpleAccent,
+            backgroundColor: context.accentColor,
             shape: const CircleBorder(),
             fixedSize: const Size(48, 48),
           ),
@@ -454,7 +455,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurpleAccent : const Color(0xFF35343B),
+          color: isSelected ? context.accentColor : const Color(0xFF35343B),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(

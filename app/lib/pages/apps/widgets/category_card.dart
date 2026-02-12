@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
 class CategoryCard extends StatelessWidget {

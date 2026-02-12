@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Shows a dialog suggesting Fast Transfer when user has BLE selected but device supports WiFi.
@@ -79,10 +80,10 @@ class FastTransferSuggestionDialog {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.2),
+                          color: context.primaryColor.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.bluetooth, color: Colors.deepPurpleAccent, size: 22),
+                        child: Icon(Icons.bluetooth, color: context.accentColor, size: 22),
                       ),
                       const SizedBox(width: 14),
                       Expanded(

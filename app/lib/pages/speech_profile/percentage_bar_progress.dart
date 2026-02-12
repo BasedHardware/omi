@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/theme/app_theme.dart';
+
 class ProgressBarWithPercentage extends StatefulWidget {
   final double progressValue;
 
@@ -43,7 +45,7 @@ class _ProgressBarWithPercentageState extends State<ProgressBarWithPercentage> {
               child: LinearProgressIndicator(
                 value: double.parse(widget.progressValue.toStringAsFixed(2)),
                 backgroundColor: Colors.grey.shade300,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                valueColor: AlwaysStoppedAnimation<Color>(context.primaryColor),
               ),
             ),
           ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DevApiKeyListItem extends StatelessWidget {
@@ -28,7 +29,7 @@ class DevApiKeyListItem extends StatelessWidget {
 
     final chips = <Widget>[];
     if (hasRead) chips.add(_buildChip(context.l10n.readScope, const Color(0xFF3B82F6)));
-    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope, const Color(0xFF8B5CF6)));
+    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope, context.primaryColor));
 
     return chips;
   }
@@ -70,10 +71,10 @@ class DevApiKeyListItem extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  color: context.primaryColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.key, color: Color(0xFF8B5CF6), size: 18),
+                child: Icon(Icons.key, color: context.primaryColor, size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -152,7 +153,8 @@ class DevApiKeyListItem extends StatelessWidget {
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(context.l10n.revoke,
+                  style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

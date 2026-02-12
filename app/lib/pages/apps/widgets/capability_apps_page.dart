@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
@@ -211,7 +212,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                 HapticFeedback.mediumImpact();
                 await _loadCapabilityApps();
               },
-              color: Colors.deepPurpleAccent,
+              color: context.accentColor,
               backgroundColor: Colors.white,
               child: _totalCount == 0
                   ? Center(

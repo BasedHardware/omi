@@ -16,6 +16,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
@@ -455,7 +456,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   color: isPaused
                       ? isDeviceRecording
                           ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
+                          : context.accentColor
                       : isDeviceRecording
                           ? const Color(0xFF35343B)
                           : const Color(0xFFFF9500),
@@ -657,8 +658,8 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Color(0xFF7C3AED), // Deep purple
+        decoration: BoxDecoration(
+          color: context.accentColor,
           shape: BoxShape.circle,
         ),
         child: const Center(

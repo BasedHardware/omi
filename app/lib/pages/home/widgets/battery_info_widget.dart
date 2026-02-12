@@ -13,6 +13,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
   const BatteryInfoWidget({super.key});
@@ -38,11 +39,11 @@ class BatteryInfoWidget extends StatelessWidget {
                   MixpanelManager().batteryIndicatorClicked();
                 },
                 child: Container(
-                    height: 36,
+                    height: AppStyles.touchTargetMinimum,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(AppStyles.touchTargetMinimum / 2),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -50,8 +51,8 @@ class BatteryInfoWidget extends StatelessWidget {
                       children: [
                         // Add device icon
                         SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 20,
+                          height: 20,
                           child: Image.asset(
                             DeviceUtils.getDeviceImagePath(
                               deviceType: connectedDevice.type,
@@ -79,7 +80,7 @@ class BatteryInfoWidget extends StatelessWidget {
                           const SizedBox(width: 6.0),
                           Text(
                             '$batteryLevel%',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ],
@@ -92,11 +93,11 @@ class BatteryInfoWidget extends StatelessWidget {
                   await routeToPage(context, const ConnectedDevice());
                 },
                 child: Container(
-                  height: 36,
+                  height: AppStyles.touchTargetMinimum,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(AppStyles.touchTargetMinimum / 2),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -104,8 +105,8 @@ class BatteryInfoWidget extends StatelessWidget {
                     children: [
                       // Device icon with slash line
                       SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 20,
+                        height: 20,
                         child: Stack(
                           children: [
                             Image.asset(
@@ -124,7 +125,7 @@ class BatteryInfoWidget extends StatelessWidget {
                       const SizedBox(width: 6.0),
                       Text(
                         context.l10n.disconnected,
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 14),
                       ),
                     ],
                   ),
@@ -141,11 +142,11 @@ class BatteryInfoWidget extends StatelessWidget {
                   }
                 },
                 child: Container(
-                  height: 36,
+                  height: AppStyles.touchTargetMinimum,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(AppStyles.touchTargetMinimum / 2),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -153,15 +154,15 @@ class BatteryInfoWidget extends StatelessWidget {
                     children: [
                       Image.asset(
                         Assets.images.logoTransparent.path,
-                        width: 16,
-                        height: 16,
+                        width: 20,
+                        height: 20,
                       ),
                       isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
                       isConnecting && isMemoriesPage
                           ? Text(
                               context.l10n.searching,
                               style:
-                                  Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                  Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 14),
                             )
                           : isMemoriesPage
                               ? Text(
@@ -169,7 +170,7 @@ class BatteryInfoWidget extends StatelessWidget {
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium!
-                                      .copyWith(color: Colors.white, fontSize: 12),
+                                      .copyWith(color: Colors.white, fontSize: 14),
                                 )
                               : const SizedBox.shrink(),
                     ],

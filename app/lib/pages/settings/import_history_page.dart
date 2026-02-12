@@ -10,6 +10,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -301,7 +302,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(12),
-          border: isAvailable ? Border.all(color: Colors.deepPurple.withValues(alpha: 0.3), width: 1) : null,
+          border: isAvailable ? Border.all(color: context.primaryColor.withValues(alpha: 0.3), width: 1) : null,
         ),
         child: Row(
           children: [
@@ -378,19 +379,19 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             // Arrow or upload indicator
             if (isAvailable)
               _isUploading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.deepPurple,
+                        color: context.primaryColor,
                       ),
                     )
                   : Container(
                       width: 30,
                       height: 30,
                       decoration: BoxDecoration(
-                        color: Colors.deepPurple.withValues(alpha: 0.8),
+                        color: context.primaryColor.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(

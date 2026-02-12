@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import '../models/task_data.dart';
 import 'task_create_sheet.dart';
 
@@ -191,11 +192,11 @@ class _TaskDetailView extends StatelessWidget {
                 _buildSectionHeader('Transcript References'),
                 const SizedBox(height: 12),
                 ...task.transcriptRefs.asMap().entries.map(
-                  (entry) => _TranscriptRefItem(
-                    key: ValueKey('task_ref_${entry.key}'),
-                    ref: entry.value,
-                  ),
-                ),
+                      (entry) => _TranscriptRefItem(
+                        key: ValueKey('task_ref_${entry.key}'),
+                        ref: entry.value,
+                      ),
+                    ),
               ],
 
               // Bottom spacing
@@ -253,7 +254,7 @@ class _TaskDetailView extends StatelessWidget {
             icon: const Icon(Icons.add_task_rounded, size: 20),
             label: const Text('Create Task'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B5CF6),
+              backgroundColor: context.primaryColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -329,9 +330,8 @@ class _StepItem extends StatelessWidget {
                   width: 22,
                   height: 22,
                   decoration: BoxDecoration(
-                    color: step.status == TaskStatus.completed
-                        ? const Color(0xFF22C55E)
-                        : Colors.white.withOpacity(0.1),
+                    color:
+                        step.status == TaskStatus.completed ? const Color(0xFF22C55E) : Colors.white.withOpacity(0.1),
                     shape: BoxShape.circle,
                     border: step.status != TaskStatus.completed
                         ? Border.all(
@@ -382,9 +382,7 @@ class _StepItem extends StatelessWidget {
                       ),
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
-                      decoration: step.status == TaskStatus.completed
-                          ? TextDecoration.lineThrough
-                          : null,
+                      decoration: step.status == TaskStatus.completed ? TextDecoration.lineThrough : null,
                     ),
                   ),
                   if (step.hasTranscriptRefs) ...[
@@ -426,14 +424,14 @@ class _TranscriptRefItem extends StatelessWidget {
             width: compact ? 28 : 32,
             height: compact ? 28 : 32,
             decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withOpacity(0.2),
+              color: context.primaryColor.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 ref.speaker.isNotEmpty ? ref.speaker[0].toUpperCase() : '?',
                 style: TextStyle(
-                  color: const Color(0xFF8B5CF6),
+                  color: context.primaryColor,
                   fontSize: compact ? 12 : 14,
                   fontWeight: FontWeight.w600,
                 ),

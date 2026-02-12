@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -148,7 +149,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.deepPurple),
+                borderSide: BorderSide(color: context.primaryColor),
               ),
             ),
           ),
@@ -174,9 +175,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                           language.key,
                           style: const TextStyle(color: Colors.white),
                         ),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                        trailing: isSelected ? Icon(Icons.check_circle, color: context.primaryColor) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                        selectedTileColor: context.primaryColor.withOpacity(0.2),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),

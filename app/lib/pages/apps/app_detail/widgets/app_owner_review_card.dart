@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -77,7 +78,7 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                   itemSize: 20,
                   tapOnlyMode: false,
                   itemPadding: const EdgeInsets.symmetric(horizontal: 0),
-                  itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+                  itemBuilder: (context, _) => Icon(Icons.star, color: context.primaryColor),
                   maxRating: 5.0,
                   onRatingUpdate: (rating) {},
                 ),
@@ -178,8 +179,8 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                                         onPressed: () {
                                           updateShowReplyField(false);
                                         },
-                                        child:
-                                            Text(context.l10n.cancel, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                                        child: Text(context.l10n.cancel,
+                                            style: const TextStyle(color: Colors.white, fontSize: 16)),
                                       ),
                                     ),
                                     const SizedBox(

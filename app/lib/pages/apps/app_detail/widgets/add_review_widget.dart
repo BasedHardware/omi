@@ -4,6 +4,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -95,7 +96,8 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
             children: [
               Padding(
                 padding: const EdgeInsets.only(left: 6.0),
-                child: Text(widget.app.userReview?.score == null ? context.l10n.rateAndReviewThisApp : context.l10n.yourReview,
+                child: Text(
+                    widget.app.userReview?.score == null ? context.l10n.rateAndReviewThisApp : context.l10n.yourReview,
                     style: const TextStyle(color: Colors.white, fontSize: 16)),
               ),
             ],
@@ -124,7 +126,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                   return dynamicPadding.clamp(8.0, 24.0); // Clamp between reasonable values
                 }(),
               ),
-              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+              itemBuilder: (context, _) => Icon(Icons.star, color: context.primaryColor),
               maxRating: 5.0,
               onRatingUpdate: (rating) {
                 if (isLoading) return;
@@ -196,7 +198,9 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                           showButton
                               ? AnimatedLoadingButton(
                                   loaderColor: Colors.black,
-                                  text: widget.app.userReview != null ? context.l10n.updateReview : context.l10n.submitReview,
+                                  text: widget.app.userReview != null
+                                      ? context.l10n.updateReview
+                                      : context.l10n.submitReview,
                                   textStyle: const TextStyle(color: Colors.black, fontSize: 16),
                                   onPressed: () async {
                                     FocusScope.of(context).unfocus();

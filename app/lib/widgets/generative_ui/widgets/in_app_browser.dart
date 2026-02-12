@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -116,7 +117,7 @@ class _InAppBrowserState extends State<InAppBrowser> {
             LinearProgressIndicator(
               value: _progress,
               backgroundColor: Colors.transparent,
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
+              valueColor: AlwaysStoppedAnimation<Color>(context.primaryColor),
               minHeight: 2,
             )
           else
@@ -175,13 +176,9 @@ class _InAppBrowserState extends State<InAppBrowser> {
               child: Row(
                 children: [
                   Icon(
-                    _currentUrl.startsWith('https')
-                        ? Icons.lock_outline
-                        : Icons.lock_open_outlined,
+                    _currentUrl.startsWith('https') ? Icons.lock_outline : Icons.lock_open_outlined,
                     size: 14,
-                    color: _currentUrl.startsWith('https')
-                        ? const Color(0xFF10B981)
-                        : Colors.white.withOpacity(0.5),
+                    color: _currentUrl.startsWith('https') ? const Color(0xFF10B981) : Colors.white.withOpacity(0.5),
                   ),
                   const SizedBox(width: 6),
                   Expanded(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
@@ -182,18 +183,18 @@ class WalListItem extends StatelessWidget {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.2),
+                                          color: context.primaryColor.withOpacity(0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(Icons.sd_card, size: 10, color: Colors.deepPurpleAccent),
+                                            Icon(Icons.sd_card, size: 10, color: context.accentColor),
                                             const SizedBox(width: 3),
                                             Text(
                                               context.l10n.sdCard,
-                                              style: const TextStyle(
-                                                color: Colors.deepPurpleAccent,
+                                              style: TextStyle(
+                                                color: context.accentColor,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -206,18 +207,18 @@ class WalListItem extends StatelessWidget {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.15),
+                                          color: context.primaryColor.withOpacity(0.15),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(Icons.sd_card, size: 10, color: Colors.deepPurple.shade300),
+                                            Icon(Icons.sd_card, size: 10, color: context.secondaryColor),
                                             const SizedBox(width: 3),
                                             Text(
                                               context.l10n.fromSd,
                                               style: TextStyle(
-                                                color: Colors.deepPurple.shade300,
+                                                color: context.secondaryColor,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -719,7 +720,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            _buildFaIcon(FontAwesomeIcons.sdCard, size: 20, color: Colors.deepPurpleAccent),
+            _buildFaIcon(FontAwesomeIcons.sdCard, size: 20, color: context.accentColor),
             const SizedBox(width: 12),
             Text(context.l10n.sdCardProcessing, style: const TextStyle(color: Colors.white, fontSize: 18)),
           ],
@@ -738,7 +739,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               _startSyncWithWifiSheet(context, syncProvider);
             },
             child: Text(context.l10n.process,
-                style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+                style: TextStyle(color: context.accentColor, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -876,12 +877,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isWifiSync ? Colors.blue.withOpacity(0.2) : Colors.deepPurple.withOpacity(0.2),
+                      color: isWifiSync ? Colors.blue.withOpacity(0.2) : context.primaryColor.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       isWifiSync ? Icons.bolt : Icons.bluetooth,
-                      color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
+                      color: isWifiSync ? Colors.blue : context.accentColor,
                       size: 20,
                     ),
                   ),
@@ -940,7 +941,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 child: LinearProgressIndicator(
                   value: progress,
                   backgroundColor: const Color(0xFF3C3C43),
-                  color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
+                  color: isWifiSync ? Colors.blue : context.accentColor,
                   minHeight: 4,
                 ),
               ),
@@ -1011,7 +1012,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           child: Row(
             children: [
               SizedBox(
-                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.bolt, color: Colors.deepPurpleAccent)),
+                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.bolt, color: context.accentColor)),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -1030,7 +1031,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent,
+                  color: context.accentColor,
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(context.l10n.start,

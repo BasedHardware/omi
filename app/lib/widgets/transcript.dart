@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -394,18 +395,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       final matchKey = currentGlobalIndex < _matchKeys.length ? _matchKeys[currentGlobalIndex] : null;
 
       spans.add(WidgetSpan(
-        child: Container(
-          key: matchKey,
-          decoration: BoxDecoration(
-            color: isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 1),
-          child: Text(
-            text.substring(matchStart, matchEnd),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
+        child: Builder(
+          builder: (context) => Container(
+            key: matchKey,
+            decoration: BoxDecoration(
+              color:
+                  isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : context.primaryColor.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Text(
+              text.substring(matchStart, matchEnd),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),

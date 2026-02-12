@@ -37,7 +37,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'maps_util.dart';
 
 // Highlight search matches with current result highlighting
-List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
+List<TextSpan> highlightSearchMatches(String text, String searchQuery,
+    {int currentResultIndex = -1, Color? highlightColor}) {
   if (searchQuery.isEmpty) {
     return [TextSpan(text: text)];
   }
@@ -50,6 +51,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
   int index = lowerText.indexOf(lowerQuery, start);
   int matchCount = 0;
 
+  // Default to a purple color if none provided
+  final effectiveHighlightColor = highlightColor ?? const Color(0xFF8B5CF6);
+
   while (index != -1) {
     if (index > start) {
       spans.add(TextSpan(text: text.substring(start, index)));
@@ -61,7 +65,7 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       text: text.substring(index, index + searchQuery.length),
       style: TextStyle(
         backgroundColor:
-            isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+            isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : effectiveHighlightColor.withValues(alpha: 0.6),
         color: Colors.white,
         fontWeight: FontWeight.bold,
       ),
@@ -272,7 +276,10 @@ class GetSummaryWidgets extends StatelessWidget {
     category = category.toLowerCase();
 
     // Dark mode colors matching the reference
-    if (category.contains('work') || category.contains('business') || category.contains('meeting') || category.contains('project')) {
+    if (category.contains('work') ||
+        category.contains('business') ||
+        category.contains('meeting') ||
+        category.contains('project')) {
       return {'color': const Color(0xFF60a5fa), 'bgColor': const Color(0xFF1e3a5f)};
     } else if (category.contains('personal') || category.contains('family')) {
       return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
@@ -377,7 +384,10 @@ class GetSummaryWidgets extends StatelessWidget {
                     focusNode: data.item3,
                     controller: data.item2,
                     content: conversation.structured.title.decodeString,
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge!
+                        .copyWith(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
                   ),
             const SizedBox(height: 16),
             _buildInfoChips(context, conversation),

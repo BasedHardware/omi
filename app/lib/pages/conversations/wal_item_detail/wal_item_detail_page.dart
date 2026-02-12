@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
@@ -157,7 +158,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final storageLabel =
         isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
-    final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
+    final storageColor = isFlashPage ? Colors.teal : context.accentColor;
 
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
@@ -241,14 +242,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withOpacity(0.1),
+                          color: context.primaryColor.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
                             size: 56,
-                            color: Colors.deepPurpleAccent,
+                            color: context.accentColor,
                           ),
                         ),
                       ),
@@ -282,7 +283,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
                             backgroundColor: Colors.grey.shade800,
-                            color: Colors.deepPurpleAccent,
+                            color: context.accentColor,
                             minHeight: 6,
                           ),
                         ),
@@ -336,7 +337,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 child: ElevatedButton(
                   onPressed: isTransferring ? _handleCancelTransfer : _handleTransferToPhone,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
+                    backgroundColor: isTransferring ? Colors.orange : context.accentColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),

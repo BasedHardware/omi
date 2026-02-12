@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import '../models/flow_data.dart';
 
 /// Card showing a flow/use case with numbered steps
@@ -38,12 +39,12 @@ class FlowCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                      color: context.primaryColor.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.account_tree_rounded,
-                      color: Color(0xFF8B5CF6),
+                      color: context.primaryColor,
                       size: 16,
                     ),
                   ),

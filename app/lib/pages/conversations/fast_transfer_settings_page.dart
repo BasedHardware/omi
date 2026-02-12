@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FastTransferSettingsPage extends StatefulWidget {
@@ -92,7 +93,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.enable, style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.enable, style: TextStyle(color: context.accentColor, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -269,7 +270,7 @@ class _FastTransferSettingsPageState extends State<FastTransferSettingsPage> {
               title: context.l10n.bluetooth,
               speed: context.l10n.bleSpeed,
               icon: Icons.bluetooth,
-              iconColor: Colors.deepPurpleAccent,
+              iconColor: context.accentColor,
               selectedLabel: context.l10n.selected,
               selectLabel: context.l10n.selectOption,
               description: context.l10n.bluetoothMethodDescription,

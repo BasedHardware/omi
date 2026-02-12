@@ -15,6 +15,7 @@ import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -642,7 +643,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFF8B5CF6).withValues(alpha: 0.8) : const Color(0xFF2A2A32),
+                  color: isUser ? context.primaryColor.withValues(alpha: 0.8) : const Color(0xFF2A2A32),
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
@@ -671,7 +672,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    backgroundColor: context.primaryColor.withValues(alpha: 0.3),
                     child: const Icon(Icons.person, size: 16, color: Colors.white70),
                   ),
                   const SizedBox(height: 2),

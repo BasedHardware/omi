@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/pages/settings/ai_app_generator_page.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
 class AiAppGeneratorBanner extends StatelessWidget {
@@ -30,15 +31,15 @@ class AiAppGeneratorBanner extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              const Color(0xFF6366F1).withOpacity(0.3),
-              const Color(0xFF8B5CF6).withOpacity(0.3),
+              context.accentColor.withOpacity(0.3),
+              context.primaryColor.withOpacity(0.3),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(18.0),
           border: Border.all(
-            color: const Color(0xFF8B5CF6).withOpacity(0.3),
+            color: context.primaryColor.withOpacity(0.3),
             width: 1,
           ),
         ),
@@ -49,8 +50,8 @@ class AiAppGeneratorBanner extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                gradient: LinearGradient(
+                  colors: [context.accentColor, context.primaryColor],
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),

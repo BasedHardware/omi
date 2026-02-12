@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/widgets/dev_api_key_created_dialog.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -114,7 +115,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     return _scopes.values.every((v) => v);
   }
 
-  Widget _buildPresetChip(String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildPresetChip(BuildContext context, String label, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -122,7 +123,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: isSelected ? const Color(0xFF8B5CF6) : const Color(0xFF252525),
+          color: isSelected ? context.primaryColor : const Color(0xFF252525),
         ),
         child: Text(
           label,
@@ -156,7 +157,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                 color: const Color(0xFF252525),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: const Color(0xFF8B5CF6), size: 20),
+              child: Icon(icon, color: context.primaryColor, size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -239,7 +240,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: rightRadius,
-                color: rightSelected ? const Color(0xFF8B5CF6) : Colors.transparent,
+                color: rightSelected ? context.primaryColor : Colors.transparent,
               ),
               child: Text(
                 rightLabel,
@@ -294,8 +295,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                          gradient: LinearGradient(
+                            colors: [context.primaryColor, context.accentColor],
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -375,7 +376,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5),
+                            borderSide: BorderSide(color: context.primaryColor, width: 1.5),
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                         ),
@@ -407,9 +408,9 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                       ),
                       Row(
                         children: [
-                          _buildPresetChip(context.l10n.readOnlyScope, _isReadOnly, _selectReadOnly),
+                          _buildPresetChip(context, context.l10n.readOnlyScope, _isReadOnly, _selectReadOnly),
                           const SizedBox(width: 8),
-                          _buildPresetChip(context.l10n.fullAccessScope, _isFullAccess, _selectFullAccess),
+                          _buildPresetChip(context, context.l10n.fullAccessScope, _isFullAccess, _selectFullAccess),
                         ],
                       ),
                     ],
@@ -421,9 +422,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
+                      _buildPermissionTile(context.l10n.conversations, 'conversations:read', 'conversations:write',
+                          Icons.chat_bubble_outline),
                       _buildPermissionTile(
-                          context.l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
-                      _buildPermissionTile(context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
+                          context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
                       _buildPermissionTile(
                           context.l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
                     ],
@@ -454,8 +456,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                     child: ElevatedButton(
                       onPressed: _isCreating ? null : _createKey,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        disabledBackgroundColor: const Color(0xFF8B5CF6).withOpacity(0.5),
+                        backgroundColor: context.primaryColor,
+                        disabledBackgroundColor: context.primaryColor.withOpacity(0.5),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(

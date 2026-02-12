@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/task_data.dart';
 import '../services/task_integration_service.dart';
@@ -76,12 +77,12 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                color: context.primaryColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.add_task_rounded,
-                color: Color(0xFF8B5CF6),
+                color: context.primaryColor,
                 size: 22,
               ),
             ),
@@ -189,8 +190,7 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
         const SizedBox(height: 12),
 
         ...TaskIntegration.values.map((integration) {
-          final config = _service.availableIntegrations
-              .firstWhere((c) => c.integration == integration);
+          final config = _service.availableIntegrations.firstWhere((c) => c.integration == integration);
           return _IntegrationTile(
             integration: integration,
             isConnected: config.isConnected,
@@ -202,8 +202,7 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
   }
 
   Widget _buildProjectSelector() {
-    final config = _service.availableIntegrations
-        .firstWhere((c) => c.integration == _selectedIntegration);
+    final config = _service.availableIntegrations.firstWhere((c) => c.integration == _selectedIntegration);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,9 +305,7 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
                         child: Icon(
                           Icons.folder_rounded,
                           size: 18,
-                          color: isSelected
-                              ? _selectedIntegration!.brandColor
-                              : Colors.white.withOpacity(0.6),
+                          color: isSelected ? _selectedIntegration!.brandColor : Colors.white.withOpacity(0.6),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -318,8 +315,7 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
                           style: TextStyle(
                             color: Colors.white.withOpacity(isSelected ? 1 : 0.8),
                             fontSize: 14,
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w400,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                           ),
                         ),
                       ),
@@ -342,14 +338,11 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _selectedProject != null && !_isCreating
-                ? _createTask
-                : null,
+            onPressed: _selectedProject != null && !_isCreating ? _createTask : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: _selectedIntegration!.brandColor,
               foregroundColor: Colors.white,
-              disabledBackgroundColor:
-                  _selectedIntegration!.brandColor.withOpacity(0.3),
+              disabledBackgroundColor: _selectedIntegration!.brandColor.withOpacity(0.3),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -398,9 +391,7 @@ class _TaskCreateSheetState extends State<TaskCreateSheet> {
           child: Icon(
             _result!.success ? Icons.check_rounded : Icons.error_outline,
             size: 40,
-            color: _result!.success
-                ? const Color(0xFF22C55E)
-                : const Color(0xFFEF4444),
+            color: _result!.success ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
           ),
         ),
 
@@ -625,9 +616,7 @@ class _IntegrationTile extends StatelessWidget {
                     Text(
                       isConnected ? 'Connected' : 'Tap to connect',
                       style: TextStyle(
-                        color: isConnected
-                            ? const Color(0xFF22C55E)
-                            : Colors.white.withOpacity(0.4),
+                        color: isConnected ? const Color(0xFF22C55E) : Colors.white.withOpacity(0.4),
                         fontSize: 12,
                       ),
                     ),
@@ -635,13 +624,9 @@ class _IntegrationTile extends StatelessWidget {
                 ),
               ),
               Icon(
-                isConnected
-                    ? Icons.check_circle
-                    : Icons.arrow_forward_ios_rounded,
+                isConnected ? Icons.check_circle : Icons.arrow_forward_ios_rounded,
                 size: isConnected ? 22 : 16,
-                color: isConnected
-                    ? const Color(0xFF22C55E)
-                    : Colors.white.withOpacity(0.3),
+                color: isConnected ? const Color(0xFF22C55E) : Colors.white.withOpacity(0.3),
               ),
             ],
           ),

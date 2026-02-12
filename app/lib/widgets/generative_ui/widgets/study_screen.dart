@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/theme/app_theme.dart';
 import '../models/study_data.dart';
 
 /// Screen states for the study session
@@ -23,8 +24,7 @@ class StudyScreen extends StatefulWidget {
   State<StudyScreen> createState() => _StudyScreenState();
 }
 
-class _StudyScreenState extends State<StudyScreen>
-    with TickerProviderStateMixin {
+class _StudyScreenState extends State<StudyScreen> with TickerProviderStateMixin {
   _StudyState _state = _StudyState.modeSelection;
   StudyMode? _selectedMode;
   int _currentIndex = 0;
@@ -68,10 +68,8 @@ class _StudyScreenState extends State<StudyScreen>
       _activeQuestions = _getQuestionsForMode(mode);
       _score = StudyScore(
         totalQuestions: _activeQuestions.length,
-        flashcardsTotal:
-            _activeQuestions.where((q) => q.isFlashcard).length,
-        abcTotal:
-            _activeQuestions.where((q) => q.isMultipleChoice).length,
+        flashcardsTotal: _activeQuestions.where((q) => q.isFlashcard).length,
+        abcTotal: _activeQuestions.where((q) => q.isMultipleChoice).length,
       );
       _currentIndex = 0;
       _state = _StudyState.studying;
@@ -138,8 +136,7 @@ class _StudyScreenState extends State<StudyScreen>
     if (_selectedOption == null || _isRevealed) return;
 
     final question = _activeQuestions[_currentIndex];
-    final isCorrect =
-        _shuffledOptions![_selectedOption!] == question.correctAnswer;
+    final isCorrect = _shuffledOptions![_selectedOption!] == question.correctAnswer;
 
     setState(() {
       _isRevealed = true;
@@ -218,8 +215,7 @@ class _StudyScreenState extends State<StudyScreen>
             // Streak indicator
             if (_score.currentStreak >= 2)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
@@ -229,8 +225,7 @@ class _StudyScreenState extends State<StudyScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.local_fire_department,
-                        size: 16, color: Colors.white),
+                    const Icon(Icons.local_fire_department, size: 16, color: Colors.white),
                     const SizedBox(width: 4),
                     Text(
                       '${_score.currentStreak}',
@@ -311,9 +306,8 @@ class _StudyScreenState extends State<StudyScreen>
             _ModeCard(
               icon: Icons.shuffle,
               title: 'Mixed Mode',
-              subtitle:
-                  '${widget.data.questions.length} total · All question types',
-              color: const Color(0xFF8B5CF6),
+              subtitle: '${widget.data.questions.length} total · All question types',
+              color: context.primaryColor,
               onTap: () => _selectMode(StudyMode.mixed),
             ),
         ],
@@ -331,9 +325,7 @@ class _StudyScreenState extends State<StudyScreen>
 
         // Question content
         Expanded(
-          child: question.isFlashcard
-              ? _buildFlashcard(question)
-              : _buildAbcQuestion(question),
+          child: question.isFlashcard ? _buildFlashcard(question) : _buildAbcQuestion(question),
         ),
       ],
     );
@@ -359,8 +351,8 @@ class _StudyScreenState extends State<StudyScreen>
               ),
               Text(
                 '${(progress * 100).toInt()}%',
-                style: const TextStyle(
-                  color: Color(0xFF8B5CF6),
+                style: TextStyle(
+                  color: context.primaryColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -379,8 +371,8 @@ class _StudyScreenState extends State<StudyScreen>
               widthFactor: progress,
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                  gradient: LinearGradient(
+                    colors: [context.primaryColor, context.accentColor],
                   ),
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -476,14 +468,10 @@ class _StudyScreenState extends State<StudyScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: isBack
-            ? Colors.white.withOpacity(0.1)
-            : Colors.white.withOpacity(0.05),
+        color: isBack ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isBack
-              ? const Color(0xFF10B981).withOpacity(0.3)
-              : Colors.white.withOpacity(0.15),
+          color: isBack ? const Color(0xFF10B981).withOpacity(0.3) : Colors.white.withOpacity(0.15),
           width: 1,
         ),
       ),
@@ -492,9 +480,7 @@ class _StudyScreenState extends State<StudyScreen>
         children: [
           Icon(
             isBack ? Icons.lightbulb_outline : Icons.help_outline,
-            color: isBack
-                ? const Color(0xFF10B981).withOpacity(0.6)
-                : Colors.white.withOpacity(0.3),
+            color: isBack ? const Color(0xFF10B981).withOpacity(0.6) : Colors.white.withOpacity(0.3),
             size: 32,
           ),
           const SizedBox(height: 24),
@@ -558,7 +544,7 @@ class _StudyScreenState extends State<StudyScreen>
               child: ElevatedButton(
                 onPressed: _checkAnswer,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B5CF6),
+                  backgroundColor: context.primaryColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -588,9 +574,7 @@ class _StudyScreenState extends State<StudyScreen>
                   ),
                 ),
                 child: Text(
-                  _currentIndex < _activeQuestions.length - 1
-                      ? 'Next Question'
-                      : 'See Results',
+                  _currentIndex < _activeQuestions.length - 1 ? 'Next Question' : 'See Results',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -623,8 +607,8 @@ class _StudyScreenState extends State<StudyScreen>
         trailingIcon = Icons.cancel;
       }
     } else if (isSelected) {
-      borderColor = const Color(0xFF8B5CF6);
-      bgColor = const Color(0xFF8B5CF6).withOpacity(0.1);
+      borderColor = context.primaryColor;
+      bgColor = context.primaryColor.withOpacity(0.1);
     }
 
     return GestureDetector(
@@ -643,18 +627,14 @@ class _StudyScreenState extends State<StudyScreen>
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF8B5CF6).withOpacity(0.2)
-                    : Colors.white.withOpacity(0.1),
+                color: isSelected ? context.primaryColor.withOpacity(0.2) : Colors.white.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
                 child: Text(
                   letter,
                   style: TextStyle(
-                    color: isSelected
-                        ? const Color(0xFF8B5CF6)
-                        : Colors.white.withOpacity(0.7),
+                    color: isSelected ? context.primaryColor : Colors.white.withOpacity(0.7),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -673,9 +653,7 @@ class _StudyScreenState extends State<StudyScreen>
             if (trailingIcon != null)
               Icon(
                 trailingIcon,
-                color: isCorrect
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFEF4444),
+                color: isCorrect ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                 size: 24,
               ),
           ],
@@ -686,7 +664,7 @@ class _StudyScreenState extends State<StudyScreen>
 
   Widget _buildResults() {
     final percentage = _score.percentage;
-    final tier = _getTier(percentage);
+    final tier = _getTier(context, percentage);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -764,8 +742,7 @@ class _StudyScreenState extends State<StudyScreen>
                     'Flashcards',
                     '${_score.flashcardsKnown}/${_score.flashcardsTotal}',
                   ),
-                if (_score.flashcardsTotal > 0 && _score.abcTotal > 0)
-                  const SizedBox(height: 12),
+                if (_score.flashcardsTotal > 0 && _score.abcTotal > 0) const SizedBox(height: 12),
                 if (_score.abcTotal > 0)
                   _statRow(
                     Icons.quiz_outlined,
@@ -806,7 +783,7 @@ class _StudyScreenState extends State<StudyScreen>
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
+                    backgroundColor: context.primaryColor,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -849,7 +826,7 @@ class _StudyScreenState extends State<StudyScreen>
     );
   }
 
-  _PerformanceTier _getTier(double percentage) {
+  _PerformanceTier _getTier(BuildContext context, double percentage) {
     if (percentage >= 90) {
       return _PerformanceTier(
         label: 'Excellent!',
@@ -859,7 +836,7 @@ class _StudyScreenState extends State<StudyScreen>
     } else if (percentage >= 70) {
       return _PerformanceTier(
         label: 'Great!',
-        color: const Color(0xFF8B5CF6),
+        color: context.primaryColor,
         message: 'Great progress! Just a few concepts to reinforce.',
       );
     } else if (percentage >= 50) {

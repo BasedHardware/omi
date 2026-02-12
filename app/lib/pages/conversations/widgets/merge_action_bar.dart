@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/conversations/widgets/merge_confirmation_dialog.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MergeActionBar extends StatefulWidget {
@@ -120,7 +121,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           decoration: BoxDecoration(
-                            color: canMerge ? const Color(0xFF7C3AED) : const Color(0xFF2C2C2E),
+                            color: canMerge ? context.accentColor : const Color(0xFF2C2C2E),
                             borderRadius: BorderRadius.circular(22),
                           ),
                           child: Row(

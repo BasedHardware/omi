@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MergeConfirmationDialog extends StatelessWidget {
@@ -129,8 +130,8 @@ class MergeConfirmationDialog extends StatelessWidget {
           onPressed: onConfirm,
           child: Text(
             context.l10n.merge,
-            style: const TextStyle(
-              color: Color(0xFF7C3AED),
+            style: TextStyle(
+              color: context.accentColor,
               fontSize: 17,
               fontWeight: FontWeight.w600,
             ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/theme/brand_colors.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -176,7 +177,7 @@ class AppReviewService {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: BrandColors.getColorsForFlavor().primary,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 48),
                         shape: RoundedRectangleBorder(

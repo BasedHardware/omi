@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -173,16 +174,18 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SelectableText(
-                      widget.apiKey.key,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
-                    ),
+                    Builder(builder: (context) {
+                      return SelectableText(
+                        widget.apiKey.key,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          color: _copied ? const Color(0xFF10B981) : context.primaryColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -194,36 +197,38 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             child: Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _copyKey(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                      side: BorderSide(
-                        color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                        width: 1.5,
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(_copied ? Icons.check : Icons.copy, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          _copied ? context.l10n.copied : context.l10n.copyKey,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                Builder(builder: (context) {
+                  return Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _copyKey(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _copied ? const Color(0xFF10B981) : context.primaryColor,
+                        side: BorderSide(
+                          color: _copied ? const Color(0xFF10B981) : context.primaryColor,
+                          width: 1.5,
                         ),
-                      ],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(_copied ? Icons.check : Icons.copy, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            _copied ? context.l10n.copied : context.l10n.copyKey,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                }),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(

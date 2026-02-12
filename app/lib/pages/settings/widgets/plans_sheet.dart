@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -487,7 +488,7 @@ class _PlansSheetState extends State<PlansSheet> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.payment, color: Colors.deepPurple, size: 24),
+              Icon(Icons.payment, color: context.primaryColor, size: 24),
               const SizedBox(width: 8),
               Text(
                 context.l10n.upgradeToAnnualPlan,
@@ -530,19 +531,19 @@ class _PlansSheetState extends State<PlansSheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.1),
+                  color: context.primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                  border: Border.all(color: context.primaryColor.withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.deepPurple, size: 20),
+                    Icon(Icons.info_outline, color: context.primaryColor, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         context.l10n.thirteenMonthsCoverage,
                         style: TextStyle(
-                          color: Colors.deepPurple.shade300,
+                          color: context.primaryColor.withOpacity(0.7),
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -564,7 +565,7 @@ class _PlansSheetState extends State<PlansSheet> {
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
+                backgroundColor: context.primaryColor,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
@@ -714,8 +715,8 @@ class _PlansSheetState extends State<PlansSheet> {
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
                 colors: [
-                  Colors.deepPurple.withOpacity(0.5),
-                  Colors.deepPurple.withOpacity(0.3),
+                  context.primaryColor.withOpacity(0.5),
+                  context.primaryColor.withOpacity(0.3),
                   Colors.black.withOpacity(0.8),
                   Colors.black,
                 ],
@@ -1063,7 +1064,7 @@ class _PlansSheetState extends State<PlansSheet> {
                               'Your annual plan will start automatically when your monthly plan ends.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.deepPurple.shade400,
+                                color: context.primaryColor.withOpacity(0.8),
                                 fontSize: 14,
                               ),
                             );
@@ -1140,18 +1141,18 @@ class _PlansSheetState extends State<PlansSheet> {
                             return Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.1),
+                                color: context.primaryColor.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                                border: Border.all(color: context.primaryColor.withOpacity(0.3)),
                               ),
                               child: Column(
                                 children: [
-                                  const Icon(Icons.schedule, color: Colors.deepPurple, size: 32),
+                                  Icon(Icons.schedule, color: context.primaryColor, size: 32),
                                   const SizedBox(height: 8),
                                   Text(
                                     'Upgrade Scheduled!',
                                     style: TextStyle(
-                                      color: Colors.deepPurple.shade300,
+                                      color: context.primaryColor.withOpacity(0.7),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -1161,7 +1162,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                     'Your annual plan will start automatically when your monthly plan ends.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                      color: Colors.deepPurple.shade400,
+                                      color: context.primaryColor.withOpacity(0.8),
                                       fontSize: 14,
                                     ),
                                   ),

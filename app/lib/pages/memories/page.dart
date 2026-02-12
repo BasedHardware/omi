@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -162,7 +163,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                   showMemoryDialog(context, provider);
                   MixpanelManager().memoriesPageCreateMemoryBtn();
                 },
-                backgroundColor: Colors.deepPurpleAccent,
+                backgroundColor: context.accentColor,
                 tooltip: context.l10n.createMemoryTooltip,
                 child: const Icon(
                   Icons.add,

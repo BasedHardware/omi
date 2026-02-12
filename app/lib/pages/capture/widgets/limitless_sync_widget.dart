@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LimitlessSyncCardWidget extends StatelessWidget {
@@ -63,7 +64,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                     ElevatedButton(
                       onPressed: () => syncProvider.syncWals(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: context.primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(
@@ -91,7 +92,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: progress > 0 ? progress : null,
                     backgroundColor: Colors.grey.shade800,
-                    color: Colors.deepPurple,
+                    color: context.primaryColor,
                     minHeight: 4,
                   ),
                 ),

@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
@@ -898,10 +899,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     if (app.official) ...[
                                       const SizedBox(width: 4),
-                                      const FaIcon(
+                                      FaIcon(
                                         FontAwesomeIcons.solidCircleCheck,
                                         size: 14,
-                                        color: Colors.deepPurpleAccent,
+                                        color: context.accentColor,
                                       ),
                                     ],
                                   ],
@@ -1940,7 +1941,7 @@ class RatingDistributionWidget extends StatelessWidget {
                   child: Icon(
                     FontAwesomeIcons.solidStar,
                     size: 14,
-                    color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
+                    color: index < ratingAvg.round() ? context.primaryColor : Colors.grey.shade700,
                   ),
                 );
               }),
@@ -1976,10 +1977,10 @@ class RatingDistributionWidget extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(
+                    Icon(
                       FontAwesomeIcons.solidStar,
                       size: 10,
-                      color: Colors.deepPurple,
+                      color: context.primaryColor,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1994,7 +1995,7 @@ class RatingDistributionWidget extends StatelessWidget {
                           widthFactor: percentage,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.deepPurple,
+                              color: context.primaryColor,
                               borderRadius: BorderRadius.circular(4),
                             ),
                           ),
@@ -2205,9 +2206,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.1),
+        color: context.primaryColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+        border: Border.all(color: context.primaryColor.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2255,7 +2256,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                   child: Icon(
                     FontAwesomeIcons.solidStar,
                     size: 24,
-                    color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
+                    color: index < editRating ? context.primaryColor : Colors.grey.shade600,
                   ),
                 ),
               );
@@ -2288,7 +2289,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             child: ElevatedButton(
               onPressed: isSubmitting ? null : _submitReview,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
+                backgroundColor: context.primaryColor,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -2345,14 +2346,14 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: isUserReview ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade800,
+                          color: isUserReview ? context.primaryColor.withOpacity(0.2) : Colors.grey.shade800,
                           shape: BoxShape.circle,
                         ),
                         child: Center(
                           child: Text(
                             initial,
                             style: TextStyle(
-                              color: isUserReview ? Colors.deepPurple : Colors.white,
+                              color: isUserReview ? context.primaryColor : Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
@@ -2374,7 +2375,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         Text(
                           displayName,
                           style: TextStyle(
-                            color: isUserReview ? Colors.deepPurple : Colors.grey,
+                            color: isUserReview ? context.primaryColor : Colors.grey,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -2406,7 +2407,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                           child: Icon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? context.primaryColor : Colors.grey.shade700,
                           ),
                         );
                       }),
