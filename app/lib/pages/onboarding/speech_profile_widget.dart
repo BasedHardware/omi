@@ -49,8 +49,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
         await LanguageSelectionDialog.show(context);
       }
     });
-    SharedPreferencesUtil().onboardingCompleted = true;
-    updateUserOnboardingState(completed: true);
+    // Onboarding completion is now handled by the completion screen
   }
 
   @override
