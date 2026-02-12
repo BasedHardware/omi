@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/conversations/conversation_icon_mapper.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -267,19 +268,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!widget.conversation.discarded)
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
+                  Builder(builder: (context) {
+                    final iconStyle = getConversationIconStyle(
+                      widget.conversation.structured.category,
                       widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
-                    ),
-                  ),
+                      widget.conversation.structured.title,
+                    );
+                    return Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: iconStyle.background,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(iconStyle.icon, size: 20, color: iconStyle.foreground),
+                    );
+                  }),
                 if (!widget.conversation.discarded) const SizedBox(width: 12),
                 Expanded(
                   child: Column(
