@@ -79,13 +79,20 @@ Use the `/ui-review` skill to check screens for UI inconsistencies. Always follo
 | Touch Target | 44×44pt | Minimum for all interactive elements |
 | Navigation Bar | 44pt | Standard header height |
 | Tab Bar | 49pt | Content area (+ safe area) |
-| Home Indicator | 34pt | Bottom safe area on notched devices |
+| Home Indicator | ~34pt | Bottom safe area on notched devices |
 
 ```dart
 // Touch targets - ALWAYS 44×44pt minimum
+// Use HeaderIconButton for header icons (auto 44×44pt)
+HeaderIconButton(
+  icon: Icon(Icons.search, size: 18),
+  onPressed: () {},
+)
+
+// Or manually ensure 44×44pt
 Container(
-  width: 44,  // Not 36!
-  height: 44,
+  width: AppStyles.touchTargetMinimum,  // 44pt
+  height: AppStyles.touchTargetMinimum,
   child: IconButton(...),
 )
 
@@ -94,6 +101,56 @@ Positioned(
   bottom: MediaQuery.of(context).padding.bottom + 8,  // Not bottom: 40
   child: ...,
 )
+```
+
+#### Tab Bar (Bottom Navigation)
+
+| Component | Value | Notes |
+|-----------|-------|-------|
+| Content Height | 49pt | Apple HIG standard |
+| Safe Area | Dynamic | Use `MediaQuery.of(context).padding.bottom` |
+| Total Height | 49pt + safe area | Calculate dynamically |
+| Icon Size | 25-31pt | 26pt recommended |
+
+```dart
+// CORRECT - Dynamic height with safe area
+final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+final totalHeight = 20 + 49 + bottomSafeArea;  // fade + content + safe
+
+// BAD - Hardcoded values
+height: 100,  // Don't hardcode!
+bottom: 40,   // Don't hardcode!
+```
+
+#### Touch Target Constants
+
+| Constant | Value | Usage |
+|----------|-------|-------|
+| `AppStyles.touchTargetMinimum` | 44pt | Minimum interactive element size |
+| `AppStyles.headerIconSize` | 18pt | Icon size inside header buttons |
+
+**Reusable Widget:** `HeaderIconButton` from `app/lib/widgets/header_icon_button.dart`
+
+#### Typography (Apple HIG Compliance)
+
+| Text Style | Size | Usage |
+|------------|------|-------|
+| `labelLarge` | 14pt | **Button labels, interactive elements** |
+| `bodyLarge` | 16pt | Primary body text |
+| `bodyMedium` | 14pt | Secondary body text |
+| `bodySmall` | 12pt | Captions, tertiary text only |
+
+**Rules:**
+- Button/chip text: **minimum 14pt** (use `labelLarge`)
+- Never use 12pt for interactive element labels
+- Text in 44pt touch targets should be 14-16pt for visual balance
+
+```dart
+// GOOD - Button label
+Text('Connect', style: TextStyle(fontSize: 14))
+
+// BAD - Too small for button
+Text('Connect', style: TextStyle(fontSize: 12))
 ```
 
 #### Spacing Constants (use AppStyles)

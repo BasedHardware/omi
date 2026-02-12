@@ -210,3 +210,4 @@ app/macos/DerivedData/
 app/macos/Runner/LocalDev.entitlements
 .env.local
 .backups/
+.claude/worktrees/
