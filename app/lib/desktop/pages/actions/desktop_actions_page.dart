@@ -5,7 +5,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -39,11 +38,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   bool _isReloading = false;
   late FocusNode _focusNode;
 
-  // Track indent levels for each task (task id -> indent level 0-3)
-  final Map<String, int> _indentLevels = {};
-
-  // Track custom order for each category (category -> list of item ids)
-  final Map<TaskCategory, List<String>> _categoryOrder = {};
 
   // Track the item being hovered over during drag
   String? _hoveredItemId;
@@ -78,7 +72,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     super.initState();
     _scrollController.addListener(_onScroll);
     _focusNode = FocusNode();
-    _loadCategoryOrder();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -114,29 +107,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         _requestFocusIfPossible();
       });
     }).withPostFrameCallback();
-  }
-
-  void _loadCategoryOrder() {
-    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
-    setState(() {
-      for (final entry in savedOrder.entries) {
-        try {
-          final category = TaskCategory.values.firstWhere(
-            (c) => c.name == entry.key,
-            orElse: () => TaskCategory.noDeadline,
-          );
-          _categoryOrder[category] = entry.value;
-        } catch (_) {}
-      }
-    });
-  }
-
-  void _saveCategoryOrder() {
-    final Map<String, List<String>> toSave = {};
-    for (final entry in _categoryOrder.entries) {
-      toSave[entry.key.name] = entry.value;
-    }
-    SharedPreferencesUtil().taskCategoryOrder = toSave;
   }
 
   @override
@@ -201,32 +171,29 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     return categorized;
   }
 
-  // Get ordered items for a category, respecting custom order
+  // Get ordered items for a category, respecting sort_order from model
   List<ActionItemWithMetadata> _getOrderedItems(
     TaskCategory category,
     List<ActionItemWithMetadata> items,
   ) {
-    final order = _categoryOrder[category];
-    if (order == null || order.isEmpty) {
-      return items;
-    }
-
-    // Sort items based on custom order, new items go at the end
-    final orderedItems = <ActionItemWithMetadata>[];
-    final itemMap = {for (var item in items) item.id: item};
-
-    // Add items in custom order
-    for (final id in order) {
-      if (itemMap.containsKey(id)) {
-        orderedItems.add(itemMap[id]!);
-        itemMap.remove(id);
+    final sorted = List<ActionItemWithMetadata>.from(items);
+    sorted.sort((a, b) {
+      // Items with sortOrder > 0 come first, sorted ascending
+      if (a.sortOrder > 0 && b.sortOrder > 0) {
+        return a.sortOrder.compareTo(b.sortOrder);
       }
-    }
-
-    // Add any remaining items (new ones not in custom order)
-    orderedItems.addAll(itemMap.values);
-
-    return orderedItems;
+      if (a.sortOrder > 0) return -1;
+      if (b.sortOrder > 0) return 1;
+      // Fallback: sort by dueAt then createdAt
+      final aDue = a.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDue = b.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dueCmp = aDue.compareTo(bDue);
+      if (dueCmp != 0) return dueCmp;
+      final aCreated = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bCreated = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aCreated.compareTo(bCreated);
+    });
+    return sorted;
   }
 
   // Reorder item within category
@@ -237,40 +204,30 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+
+    final targetIndex = order.indexOf(targetItemId);
+    if (targetIndex != -1) {
+      final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+      order.insert(insertIndex, draggedItem.id);
+    } else {
+      order.add(draggedItem.id);
+    }
+
+    // Assign sequential sort_order values
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
     setState(() {
-      // Remove from old category
-      final oldCategory = _getCategoryForItem(draggedItem);
-      if (oldCategory != category) {
-        _categoryOrder[oldCategory]?.remove(draggedItem.id);
-      }
-
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position (handles same-category reorders)
-      order.remove(draggedItem.id);
-
-      // Find target position
-      final targetIndex = order.indexOf(targetItemId);
-      if (targetIndex != -1) {
-        // Insert above or below target
-        final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
-        order.insert(insertIndex, draggedItem.id);
-      } else {
-        // Target not found, add at end
-        order.add(draggedItem.id);
-      }
-
-      // Clear hover and drag state
       _hoveredItemId = null;
       _hoveredFirstPositionCategory = null;
       _isDragging = false;
     });
-    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 
@@ -332,27 +289,27 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     });
   }
 
-  int _getIndentLevel(String itemId) {
-    return _indentLevels[itemId] ?? 0;
+  int _getIndentLevel(ActionItemWithMetadata item) {
+    return item.indentLevel;
   }
 
   void _incrementIndent(String itemId) {
-    setState(() {
-      final current = _indentLevels[itemId] ?? 0;
-      if (current < 3) {
-        _indentLevels[itemId] = current + 1;
-      }
-    });
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.firstWhere((i) => i.id == itemId, orElse: () => throw StateError('not found'));
+    final current = item.indentLevel;
+    if (current < 3) {
+      provider.updateItemIndentLevel(itemId, current + 1);
+    }
     HapticFeedback.lightImpact();
   }
 
   void _decrementIndent(String itemId) {
-    setState(() {
-      final current = _indentLevels[itemId] ?? 0;
-      if (current > 0) {
-        _indentLevels[itemId] = current - 1;
-      }
-    });
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.firstWhere((i) => i.id == itemId, orElse: () => throw StateError('not found'));
+    final current = item.indentLevel;
+    if (current > 0) {
+      provider.updateItemIndentLevel(itemId, current - 1);
+    }
     HapticFeedback.lightImpact();
   }
 
@@ -805,29 +762,22 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+    order.insert(0, draggedItem.id);
+
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
     setState(() {
-      final oldCategory = _getCategoryForItem(draggedItem);
-      if (oldCategory != category) {
-        _categoryOrder[oldCategory]?.remove(draggedItem.id);
-      }
-
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      order.remove(draggedItem.id);
-
-      // Insert at first position
-      order.insert(0, draggedItem.id);
-
-      // Clear hover and drag state
       _hoveredItemId = null;
       _hoveredFirstPositionCategory = null;
       _isDragging = false;
     });
-    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 
@@ -912,7 +862,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   }
 
   Widget _buildTaskItem(ActionItemWithMetadata item, ActionItemsProvider provider) {
-    final indentLevel = _getIndentLevel(item.id);
+    final indentLevel = _getIndentLevel(item);
     final indentWidth = indentLevel * 28.0;
 
     return LongPressDraggable<ActionItemWithMetadata>(
@@ -984,7 +934,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     ActionItemsProvider provider,
     double indentWidth,
   ) {
-    final indentLevel = _getIndentLevel(item.id);
+    final indentLevel = _getIndentLevel(item);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
