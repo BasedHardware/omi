@@ -4,6 +4,10 @@ Extracted from transcribe.py for testability.
 """
 
 from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+
+from database import users as user_db
 from models.transcript_segment import TranscriptSegment
 
 
@@ -90,3 +94,26 @@ def should_update_speaker_to_person_map(speaker_id: Optional[int]) -> bool:
         True if map should be updated, False otherwise
     """
     return speaker_id is not None and speaker_id > 0
+
+
+def load_person_embeddings_cache(uid: str) -> Dict[str, dict]:
+    """Load stored speaker embeddings for all known people.
+
+    Returns dict of person_id -> {'embedding': np.ndarray, 'name': str}
+    suitable for populating person_embeddings_cache in _stream_handler.
+    """
+    people = user_db.get_people_with_embeddings(uid)
+    cache = {}
+    for person in people:
+        try:
+            embedding = np.array(person['speaker_embedding'], dtype=np.float32)
+            if embedding.ndim == 1:
+                embedding = embedding.reshape(1, -1)
+            cache[person['id']] = {
+                'embedding': embedding,
+                'name': person['name'],
+            }
+        except Exception as e:
+            print(f"Error loading embedding for person {person['id']}: {e}")
+            continue
+    return cache

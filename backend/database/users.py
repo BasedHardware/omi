@@ -67,6 +67,25 @@ def get_people(uid: str):
     return [person.to_dict() for person in people]
 
 
+def get_people_with_embeddings(uid: str) -> list:
+    """Get all people who have stored speaker embeddings.
+
+    Returns list of dicts with 'id', 'name', and 'speaker_embedding' fields.
+    """
+    people_ref = db.collection('users').document(uid).collection('people')
+    people = people_ref.stream()
+    result = []
+    for person in people:
+        data = person.to_dict()
+        if data.get('speaker_embedding'):
+            result.append({
+                'id': data['id'],
+                'name': data.get('name', ''),
+                'speaker_embedding': data['speaker_embedding'],
+            })
+    return result
+
+
 def get_person_by_name(uid: str, name: str):
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)

@@ -28,6 +28,7 @@ from utils.speaker_assignment import (
     process_speaker_assigned_segments,
     update_speaker_assignment_maps,
     should_update_speaker_to_person_map,
+    load_person_embeddings_cache,
 )
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
@@ -452,6 +453,13 @@ async def _stream_handler(
     speaker_id_enabled = not use_custom_stt and private_cloud_sync_enabled
     if speaker_id_enabled:
         audio_ring_buffer = AudioRingBuffer(RING_BUFFER_DURATION, sample_rate)
+        # Preload stored speaker embeddings for cross-conversation persistence
+        try:
+            person_embeddings_cache = await asyncio.to_thread(load_person_embeddings_cache, uid)
+            if person_embeddings_cache:
+                print(f"Loaded {len(person_embeddings_cache)} stored speaker embeddings", uid, session_id)
+        except Exception as e:
+            print(f"Error preloading speaker embeddings: {e}", uid, session_id)
 
     # Conversation timeout (to process the conversation after x seconds of silence)
     # Max: 4h, min 2m
