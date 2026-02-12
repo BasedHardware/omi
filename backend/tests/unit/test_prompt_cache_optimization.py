@@ -61,6 +61,7 @@ sys.modules["database.notifications"].get_mentor_notification_frequency = MagicM
 sys.modules["database.notifications"].get_user_time_zone = MagicMock(return_value="America/Los_Angeles")
 sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
+sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
