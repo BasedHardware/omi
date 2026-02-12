@@ -15,6 +15,7 @@ import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
+import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -45,9 +46,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kWelcomePage = 6;
   static const int kFindDevicesPage = 7;
   static const int kSpeechProfilePage = 8; // Speech profile with questions (requires device)
+  static const int kCompletePage = 9; // "You're all set" completion screen
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -60,7 +62,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void initState() {
     _speechProfileProvider = SpeechProfileProvider();
     _controller = TabController(
-        length: 9, vsync: this); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile
+        length: 10, vsync: this); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, Complete
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -147,6 +149,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kSpeechProfilePage:
         newImage = Assets.images.onboardingBg3.path;
         break;
+      case kCompletePage:
+        newImage = Assets.images.onboardingBg6.path;
+        break;
       default:
         newImage = Assets.images.onboardingBg1.path;
         break;
@@ -193,6 +198,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return Assets.images.onboardingBg6.path;
       case kSpeechProfilePage:
         return Assets.images.onboardingBg3.path;
+      case kCompletePage:
+        return Assets.images.onboardingBg6.path;
       default:
         return null;
     }
@@ -252,22 +259,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         value: _speechProfileProvider!,
         child: SpeechProfileWidget(
           goNext: () {
-            // Speech profile complete, finish onboarding
-            SharedPreferencesUtil().onboardingCompleted = true;
-            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile');
-            PaintingBinding.instance.imageCache.clear();
-            routeToPage(context, const HomePageWrapper(), replace: true);
+            _controller!.animateTo(kCompletePage);
           },
           onSkip: () {
-            // Skip speech profile, finish onboarding
-            SharedPreferencesUtil().onboardingCompleted = true;
-            updateUserOnboardingState(completed: true);
             MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
-            PaintingBinding.instance.imageCache.clear();
-            routeToPage(context, const HomePageWrapper(), replace: true);
+            _controller!.animateTo(kCompletePage);
           },
         ),
+      ),
+      OnboardingCompleteScreen(
+        onComplete: () {
+          SharedPreferencesUtil().onboardingCompleted = true;
+          updateUserOnboardingState(completed: true);
+          MixpanelManager().onboardingCompleted();
+          PaintingBinding.instance.imageCache.clear();
+          routeToPage(context, const HomePageWrapper(), replace: true);
+        },
       ),
     ];
 
@@ -307,11 +315,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     _controller!.index == kPermissionsPage ||
                     _controller!.index == kUserReviewPage ||
                     _controller!.index == kWelcomePage ||
-                    _controller!.index == kSpeechProfilePage
+                    _controller!.index == kSpeechProfilePage ||
+                    _controller!.index == kCompletePage
                 ? Stack(
                     children: [
-                      // Animated background image (skip for welcome page)
-                      if (_controller!.index != kWelcomePage)
+                      // Animated background image (skip for welcome and complete pages)
+                      if (_controller!.index != kWelcomePage && _controller!.index != kCompletePage)
                         FadeTransition(
                           opacity: _backgroundFadeAnimation,
                           child: Container(
@@ -332,32 +341,33 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         ),
                       // Page component (no transition for content)
                       pages[_controller!.index],
-                      // Progress dots for name, language, permissions, user review, and welcome pages
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            8,
-                            (index) {
-                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                decoration: BoxDecoration(
-                                  color: pageIndex <= _controller!.index
-                                      ? Theme.of(context).colorScheme.secondary
-                                      : Colors.grey.shade400,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            },
+                      // Progress dots (hidden on complete page)
+                      if (_controller!.index != kCompletePage)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              8,
+                              (index) {
+                                int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                  width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  decoration: BoxDecoration(
+                                    color: pageIndex <= _controller!.index
+                                        ? Theme.of(context).colorScheme.secondary
+                                        : Colors.grey.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
-                      ),
-                      // Back button for language and permissions pages
-                      if (_controller!.index > kNamePage)
+                      // Back button (hidden on complete page)
+                      if (_controller!.index > kNamePage && _controller!.index != kCompletePage)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
                           child: Align(
