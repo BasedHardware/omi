@@ -74,6 +74,7 @@ sys.modules["database.notifications"].get_mentor_notification_frequency = MagicM
 sys.modules["database.notifications"].get_user_time_zone = MagicMock(return_value="America/Los_Angeles")
 sys.modules["database.auth"].get_user_name = MagicMock(return_value="Alice")
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
+sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_filter_category_items = MagicMock(return_value=[])
 sys.modules["database.redis_db"].add_filter_category_item = MagicMock()
@@ -218,6 +219,7 @@ def _set_user(chat_mod, name: str, tz: str, goal=None):
     chat_mod.get_user_name = MagicMock(return_value=name)
     chat_mod.notification_db.get_user_time_zone = MagicMock(return_value=tz)
     chat_mod.goals_db.get_user_goal = MagicMock(return_value=goal)
+    chat_mod.goals_db.get_user_goals = MagicMock(return_value=[goal] if goal else [])
 
 
 def _get_agentic_module():
@@ -323,8 +325,8 @@ def test_static_prefix_identical_with_and_without_goal():
 
     # But the full prompts should differ (goal section is dynamic)
     assert prompt_no_goal != prompt_with_goal, "Full prompts should differ when goal is set"
-    assert "<user_goal>" in prompt_with_goal
-    assert "<user_goal>" not in prompt_no_goal
+    assert "<user_goals>" in prompt_with_goal
+    assert "<user_goals>" not in prompt_no_goal
 
 
 def test_dynamic_sections_actually_vary_per_user():
