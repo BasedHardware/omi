@@ -6,6 +6,7 @@
 
 #include "rtc.h"
 #include "lib/core/settings.h"
+#include "lib/core/sd_card.h"
 
 LOG_MODULE_REGISTER(rtc, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -122,6 +123,11 @@ int rtc_set_utc_time(uint64_t utc_epoch_s)
     if (err) {
         return err;
     }
+
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    /* Update SD card filename with correct timestamp after time sync */
+    sd_update_filename_after_timesync((uint32_t)utc_epoch_s);
+#endif
 
     /* Persist seconds for compatibility. */
     return app_settings_save_rtc_epoch(utc_epoch_s);
