@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import database.action_items as action_items_db
 import database.redis_db as redis_db
-from database.users import get_user_profile
+from utils.users import get_user_display_name
 from utils.other import endpoints as auth
 from utils.notifications import (
     send_notification,
@@ -246,8 +246,7 @@ def toggle_action_item_completion(
         shared_from = existing_item['shared_from']
         sender_uid = shared_from.get('sender_uid')
         if sender_uid:
-            recipient_profile = get_user_profile(uid)
-            recipient_name = recipient_profile.get('name', '') or 'Someone'
+            recipient_name = get_user_display_name(uid)
             desc = existing_item.get('description', '')
             description = (desc[:57] + '...') if len(desc) > 60 else desc
             send_notification(
@@ -364,8 +363,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
             raise HTTPException(status_code=404, detail=f"Action item {task_id} not found")
 
     # Get sender display name
-    profile = get_user_profile(uid)
-    display_name = profile.get('name', '') or profile.get('display_name', '') or 'Someone'
+    display_name = get_user_display_name(uid)
 
     # Generate token and store in Redis
     token = uuid.uuid4().hex
