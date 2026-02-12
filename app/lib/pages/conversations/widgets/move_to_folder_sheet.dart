@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -30,11 +31,11 @@ class MoveToFolderSheet extends StatelessWidget {
       child: Consumer<FolderProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
-            return const SizedBox(
+            return SizedBox(
               height: 200,
               child: Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+                  valueColor: AlwaysStoppedAnimation<Color>(context.primaryColor),
                 ),
               ),
             );
@@ -115,9 +116,7 @@ class MoveToFolderSheet extends StatelessWidget {
     String folderId,
   ) {
     HapticFeedback.selectionClick();
-    // Close sheet immediately with the folder ID
     Navigator.of(context).pop(folderId);
-    // Fire and forget - API call in background
     provider.moveConversation(conversationId, folderId);
   }
 }
@@ -138,10 +137,10 @@ class _FolderListItem extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: isCurrentFolder ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.1) : Colors.transparent,
+        color: isCurrentFolder ? context.primaryColor.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: isCurrentFolder
-            ? Border.all(color: ResponsiveHelper.purplePrimary, width: 1.5)
+            ? Border.all(color: context.primaryColor, width: 1.5)
             : Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
       ),
       child: Material(
@@ -181,7 +180,7 @@ class _FolderListItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: isCurrentFolder ? FontWeight.w600 : FontWeight.w500,
-                          color: isCurrentFolder ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textPrimary,
+                          color: isCurrentFolder ? context.primaryColor : ResponsiveHelper.textPrimary,
                         ),
                       ),
                       if (folder.description != null && folder.description!.isNotEmpty)
@@ -202,7 +201,7 @@ class _FolderListItem extends StatelessWidget {
                 ),
 
                 // Check mark for current folder
-                if (isCurrentFolder) const Icon(Icons.check_circle, color: ResponsiveHelper.purplePrimary, size: 22),
+                if (isCurrentFolder) Icon(Icons.check_circle, color: context.primaryColor, size: 22),
               ],
             ),
           ),
