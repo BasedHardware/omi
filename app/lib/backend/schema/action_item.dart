@@ -11,6 +11,8 @@ class ActionItemWithMetadata {
   final bool exported;
   final DateTime? exportDate;
   final String? exportPlatform;
+  final int sortOrder;
+  final int indentLevel;
 
   ActionItemWithMetadata({
     required this.id,
@@ -25,6 +27,8 @@ class ActionItemWithMetadata {
     this.exported = false,
     this.exportDate,
     this.exportPlatform,
+    this.sortOrder = 0,
+    this.indentLevel = 0,
   });
 
   factory ActionItemWithMetadata.fromJson(Map<String, dynamic> json) {
@@ -41,6 +45,8 @@ class ActionItemWithMetadata {
       exported: json['exported'] ?? false,
       exportDate: json['export_date'] != null ? DateTime.parse(json['export_date']).toLocal() : null,
       exportPlatform: json['export_platform'],
+      sortOrder: json['sort_order'] as int? ?? 0,
+      indentLevel: json['indent_level'] as int? ?? 0,
     );
   }
 
@@ -58,6 +64,8 @@ class ActionItemWithMetadata {
       'exported': exported,
       'export_date': exportDate?.toUtc().toIso8601String(),
       'export_platform': exportPlatform,
+      'sort_order': sortOrder,
+      'indent_level': indentLevel,
     };
   }
 
@@ -74,6 +82,8 @@ class ActionItemWithMetadata {
     bool? exported,
     DateTime? exportDate,
     String? exportPlatform,
+    int? sortOrder,
+    int? indentLevel,
   }) {
     return ActionItemWithMetadata(
       id: id ?? this.id,
@@ -88,6 +98,8 @@ class ActionItemWithMetadata {
       exported: exported ?? this.exported,
       exportDate: exportDate ?? this.exportDate,
       exportPlatform: exportPlatform ?? this.exportPlatform,
+      sortOrder: sortOrder ?? this.sortOrder,
+      indentLevel: indentLevel ?? this.indentLevel,
     );
   }
 }

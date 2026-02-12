@@ -102,6 +102,8 @@ Future<ActionItemWithMetadata?> updateActionItem(
   bool? exported,
   DateTime? exportDate,
   String? exportPlatform,
+  int? sortOrder,
+  int? indentLevel,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -125,6 +127,12 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
   if (exportPlatform != null) {
     requestBody['export_platform'] = exportPlatform;
+  }
+  if (sortOrder != null) {
+    requestBody['sort_order'] = sortOrder;
+  }
+  if (indentLevel != null) {
+    requestBody['indent_level'] = indentLevel;
   }
 
   var response = await makeApiCall(
@@ -271,6 +279,25 @@ Future<Map<String, dynamic>?> acceptSharedActionItems(String token) async {
   } else {
     Logger.debug('acceptSharedActionItems error ${response.statusCode}');
     return null;
+  }
+}
+
+// Batch update sort_order/indent_level
+Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/batch',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'items': items}),
+  );
+
+  if (response == null) return false;
+
+  if (response.statusCode == 200) {
+    return true;
+  } else {
+    Logger.debug('batchUpdateActionItems error ${response.statusCode}');
+    return false;
   }
 }
 
