@@ -127,28 +127,29 @@ class GetSummaryWidgets extends StatelessWidget {
       builder: (context, folderProvider, _) {
         final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
 
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        final date = _getDateFormat(context, conversation.startedAt ?? conversation.createdAt);
+        final time = conversation.source == ConversationSource.sdcard
+            ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+            : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
+        final duration = conversation.transcriptSegments.isNotEmpty ? _getDuration(context, conversation) : '';
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date chip
-            _buildChip(
-              label: _getDateFormat(context, conversation.startedAt ?? conversation.createdAt),
-              icon: Icons.calendar_today,
-            ),
-            // Time chip
-            _buildChip(
-              label: conversation.source == ConversationSource.sdcard
-                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-              icon: Icons.access_time,
-            ),
-            // Duration chip
-            if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
-              _buildChip(
-                label: _getDuration(context, conversation),
-                icon: Icons.timelapse,
+            // Date, time, duration, category
+            Text(
+              [
+                date,
+                time,
+                if (duration.isNotEmpty) duration,
+                if (conversation.structured.category.isNotEmpty && !conversation.discarded) conversation.getTag(),
+              ].join('  ·  '),
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withOpacity(0.5),
               ),
+            ),
+            const SizedBox(height: 10),
             // Folder chip
             _buildFolderChip(
               context: context,
@@ -330,49 +331,6 @@ class GetSummaryWidgets extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 16),
-            // Category badge with icon
-            if (conversation.structured.category.isNotEmpty && !conversation.discarded)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: categoryColors['bgColor'],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _getCategoryIcon(conversation.structured.category),
-                            size: 16,
-                            color: categoryColors['color'],
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            conversation.getTag(),
-                            style: TextStyle(
-                              color: categoryColors['color'],
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Check icon for completed conversations
-                    if (conversation.status == ConversationStatus.completed)
-                      const Icon(
-                        Icons.check_circle,
-                        size: 10,
-                        color: Color(0xFF34d399),
-                      ),
-                  ],
-                ),
-              ),
             // Title
             conversation.discarded
                 ? Text(
