@@ -63,15 +63,15 @@ function getPlatformLink(userAgent: string, token: string) {
   const isAndroid = /android/i.test(userAgent);
   const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
-  // Deep link into the app if installed; App Links / Universal Links handle interception
-  const deepLink = `https://h.omi.me/tasks/${token}`;
-
+  // iOS: Use custom URL scheme because Universal Links don't trigger for same-domain navigation
+  // (user is already on h.omi.me, so tapping https://h.omi.me/... just reloads the page)
+  // Android: Use intent:// with fallback to Google Play if app not installed
   return isAndroid
-    ? `intent://h.omi.me/tasks/${token}#Intent;scheme=https;package=com.friend.ios.dev;S.browser_fallback_url=${encodeURIComponent(
+    ? `intent://h.omi.me/tasks/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
         'https://play.google.com/store/apps/details?id=com.friend.ios',
       )};end`
     : isIOS
-    ? deepLink
+    ? `omi://tasks/${token}`
     : 'https://omi.me';
 }
 
