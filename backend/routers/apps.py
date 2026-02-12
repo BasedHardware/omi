@@ -119,6 +119,55 @@ from utils.social import (
 router = APIRouter()
 
 
+def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
+    """Fetch and process chat tools manifest, updating and returning app_dict.
+
+    Fetches the manifest from chat_tools_manifest_url, resolves relative endpoints
+    to absolute URLs using app_home_url, and stores chat_messages config.
+
+    Args:
+        external_integration: The external_integration dict from app data
+        app_dict: The app dict to update with chat_tools and chat_messages config
+
+    Returns:
+        The updated app_dict
+    """
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        return app_dict
+
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+    if not manifest_result:
+        return app_dict
+
+    fetched_tools = manifest_result.get('tools')
+    if fetched_tools:
+        # Resolve relative endpoints to absolute URLs
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        if base_url:
+            for tool in fetched_tools:
+                endpoint = tool.get('endpoint', '')
+                if endpoint.startswith('/') and not endpoint.startswith('//'):
+                    tool['endpoint'] = f"{base_url}{endpoint}"
+        app_dict['chat_tools'] = fetched_tools
+
+    # Store chat_messages config in external_integration
+    chat_messages = manifest_result.get('chat_messages')
+    if 'external_integration' not in app_dict:
+        app_dict['external_integration'] = {}
+    if chat_messages:
+        app_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        app_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
+        app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', False)
+    else:
+        # Reset all chat_messages fields to defaults when not in manifest
+        app_dict['external_integration']['chat_messages_enabled'] = False
+        app_dict['external_integration']['chat_messages_target'] = 'app'
+        app_dict['external_integration']['chat_messages_notify'] = False
+
+    return app_dict
+
+
 def _get_categories():
     return [
         {'title': 'Popular', 'id': 'popular'},
@@ -468,18 +517,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # Fetch chat tools from manifest URL (only way to add chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                app_dict['chat_tools'] = fetched_tools
+        app_dict = _process_chat_tools_manifest(external_integration, app_dict)
 
     add_app_to_db(app_dict)
 
@@ -703,18 +741,7 @@ def update_app(
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                update_dict['chat_tools'] = fetched_tools
+        update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     update_app_in_db(update_dict)
 
