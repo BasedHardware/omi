@@ -650,7 +650,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       );
                                     },
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(32),
                                         color: context.primaryColor,
@@ -660,15 +660,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         children: [
                                           const Icon(
                                             FontAwesomeIcons.solidComment,
-                                            size: 22,
+                                            size: 16,
                                             color: Colors.white,
                                           ),
-                                          const SizedBox(width: 10),
+                                          const SizedBox(width: 6),
                                           Text(
                                             context.l10n.askOmi,
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 17,
+                                              fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
