@@ -25,8 +25,8 @@ class MarkdownStyleHelper {
       // Links
       a: style.copyWith(decoration: TextDecoration.underline),
 
-      // Emphasis (italic) - IMPORTANT: Keep same font style as regular text
-      em: style.copyWith(fontStyle: FontStyle.italic),
+      // Emphasis - subtle color shift instead of heavy italic slant
+      em: style.copyWith(color: Colors.white.withOpacity(0.7)),
 
       // Strong (bold)
       strong: style.copyWith(fontWeight: FontWeight.bold),
