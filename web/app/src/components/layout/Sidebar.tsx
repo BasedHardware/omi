@@ -25,6 +25,7 @@ import {
   Mic,
   MessageSquare,
   Smartphone,
+  Apple,
 } from 'lucide-react';
 
 // Discord icon SVG component
@@ -387,44 +388,51 @@ export function Sidebar({
         {/* Spacer to push footer to bottom */}
         <div className="flex-1" />
 
-        {/* Take Omi with you - Mobile App Banner */}
-        {!mobileAppDismissed && (
-          <div className={cn('px-3 pb-2', !showText && 'px-2')}>
-            <a
-              href="https://apps.apple.com/us/app/omi-ai-wearable/id6502156163"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
-                showText ? 'p-3 pr-9' : 'justify-center p-3'
-              )}
-            >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
-                <Smartphone className="w-4 h-4 text-text-tertiary" />
-              </div>
-              {showText && (
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Take Omi with you</p>
-                  <p className="text-xs text-text-quaternary">Try Omi on your phone</p>
+        {/* Platform-aware app download banner */}
+        {!mobileAppDismissed && (() => {
+          const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+          const bannerHref = isMac ? 'https://macos.omi.me/' : 'https://onelink.to/rbsrxc';
+          const bannerTitle = isMac ? 'Omi is 10x more useful on macOS' : 'Take Omi with you';
+          const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
+          const BannerIcon = isMac ? Apple : Smartphone;
+          return (
+            <div className={cn('px-3 pb-2', !showText && 'px-2')}>
+              <a
+                href={bannerHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
+                  showText ? 'p-3 pr-9' : 'justify-center p-3'
+                )}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+                  <BannerIcon className="w-4 h-4 text-text-tertiary" />
                 </div>
-              )}
-              {showText && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setMobileAppDismissed(true);
-                    localStorage.setItem('mobile-app-banner-dismissed', 'true');
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
-                  aria-label="Dismiss"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </a>
-          </div>
-        )}
+                {showText && (
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text-primary">{bannerTitle}</p>
+                    <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                  </div>
+                )}
+                {showText && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMobileAppDismissed(true);
+                      localStorage.setItem('mobile-app-banner-dismissed', 'true');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </a>
+            </div>
+          );
+        })()}
 
         {/* Feedback & Discord links */}
         <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>
