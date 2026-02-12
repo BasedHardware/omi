@@ -93,6 +93,13 @@ class _AppShellState extends State<AppShell> {
         PlatformManager.instance.mixpanel.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
         _handleSharedTasksDeepLink(token);
       }
+    } else if (uri.host == 'tasks' && uri.pathSegments.isNotEmpty) {
+      // Handle omi://tasks/{token} custom scheme (host = "tasks", pathSegments = [token])
+      if (mounted) {
+        final token = uri.pathSegments.first;
+        PlatformManager.instance.mixpanel.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
+        _handleSharedTasksDeepLink(token);
+      }
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
