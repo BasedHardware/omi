@@ -318,11 +318,6 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                               hasConversations: true,
                                               onStartRecording: _showExpandedRecordingView,
                                             ),
-                                            if (convoProvider.processingConversations.isNotEmpty) ...[
-                                              const SizedBox(height: 16),
-                                              getDesktopProcessingConversationsWidget(
-                                                  convoProvider.processingConversations),
-                                            ],
                                           ],
                                         ),
                                       ),
@@ -358,6 +353,17 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                             ),
                                           ],
                                         ),
+                                      ),
+                                    ),
+                                  ),
+                                if (convoProvider.processingConversations.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                        child: getDesktopProcessingConversationsWidget(
+                                            convoProvider.processingConversations),
                                       ),
                                     ),
                                   ),
