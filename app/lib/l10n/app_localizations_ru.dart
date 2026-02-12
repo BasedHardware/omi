@@ -8090,4 +8090,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Не удалось воспроизвести аудио. Файл может быть повреждён или отсутствовать.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }

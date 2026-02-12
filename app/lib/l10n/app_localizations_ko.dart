@@ -7933,4 +7933,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }

@@ -8097,4 +8097,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }

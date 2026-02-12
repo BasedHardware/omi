@@ -8060,4 +8060,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nelze přehrát zvuk. Soubor může být poškozený nebo chybět.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }

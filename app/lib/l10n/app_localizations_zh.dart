@@ -7921,4 +7921,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '无法播放音频。文件可能已损坏或丢失。';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }

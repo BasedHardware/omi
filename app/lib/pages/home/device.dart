@@ -359,7 +359,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
           GestureDetector(
             onTap: () async {
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-              SharedPreferencesUtil().deviceName = '';
               if (provider.connectedDevice != null) {
                 await _bleDisconnectDevice(provider.connectedDevice!);
               }
@@ -411,6 +410,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       await SharedPreferencesUtil()
                           .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                       SharedPreferencesUtil().deviceName = '';
+                      SharedPreferencesUtil().deviceNameDeviceId = '';
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
@@ -562,7 +562,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               Column(
                 children: [
                   Text(
-                    provider.pairedDevice?.name ?? context.l10n.unknownDevice,
+                    SharedPreferencesUtil().deviceName.isNotEmpty
+                        ? SharedPreferencesUtil().deviceName
+                        : (provider.pairedDevice?.name ?? context.l10n.unknownDevice),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 32,

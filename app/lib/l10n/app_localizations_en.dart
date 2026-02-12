@@ -8062,4 +8062,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get enterDeviceName => 'Enter device name';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String get deviceNameUpdated => 'Device name updated';
 }
