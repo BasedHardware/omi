@@ -71,7 +71,7 @@ function getPlatformLink(userAgent: string, token: string) {
         'https://play.google.com/store/apps/details?id=com.friend.ios',
       )};end`
     : isIOS
-    ? `omi://tasks/${token}`
+    ? `omi://h.omi.me/tasks/${token}`
     : 'https://omi.me';
 }
 
