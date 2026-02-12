@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:omi/theme/app_theme.dart';
 import '../models/flow_data.dart';
 
 /// Card showing a flow/use case with numbered steps
@@ -20,76 +19,51 @@ class FlowCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Container(
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
-          ),
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: context.primaryColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Icon(
-                      Icons.account_tree_rounded,
-                      color: context.primaryColor,
-                      size: 16,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    data.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      data.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                ),
+                Text(
+                  '${data.steps.length} steps',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 12,
                   ),
-                  Text(
-                    '${data.steps.length} steps',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.4),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            // Divider
-            Container(
-              height: 1,
-              color: Colors.white.withOpacity(0.08),
-            ),
+            const SizedBox(height: 12),
             // Steps
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: data.steps.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final step = entry.value;
-                  final isLast = index == data.steps.length - 1;
-                  return _FlowStepItem(
-                    key: ValueKey('flow_step_$index'),
-                    step: step,
-                    index: index,
-                    isLast: isLast,
-                  );
-                }).toList(),
-              ),
+            Column(
+              children: data.steps.asMap().entries.map((entry) {
+                final index = entry.key;
+                final step = entry.value;
+                final isLast = index == data.steps.length - 1;
+                return _FlowStepItem(
+                  key: ValueKey('flow_step_$index'),
+                  step: step,
+                  index: index,
+                  isLast: isLast,
+                );
+              }).toList(),
             ),
           ],
         ),
@@ -118,12 +92,12 @@ class _FlowStepItem extends StatelessWidget {
         children: [
           // Step indicator with connecting line
           SizedBox(
-            width: 28,
+            width: 26,
             child: Column(
               children: [
                 Container(
-                  width: 22,
-                  height: 22,
+                  width: 20,
+                  height: 20,
                   decoration: BoxDecoration(
                     color: step.type.backgroundColor,
                     shape: BoxShape.circle,
