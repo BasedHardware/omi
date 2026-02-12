@@ -7995,13 +7995,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nauja užduotis';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Peržiūrėti viską';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Pridėti užduotį';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8070,4 +8070,85 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nepavyksta atkurti garso. Failas gali būti pažeistas arba trūkstamas.';
+
+  @override
+  String get connectionGuide => 'Prisijungimo vadovas';
+
+  @override
+  String get iveDoneThis => 'Tai padariau';
+
+  @override
+  String get pairNewDevice => 'Susieti naują įrenginį';
+
+  @override
+  String get dontSeeYourDevice => 'Nematote savo įrenginio?';
+
+  @override
+  String get reportAnIssue => 'Pranešti apie problemą';
+
+  @override
+  String get pairingTitleOmi => 'Įjunkite Omi';
+
+  @override
+  String get pairingDescOmi => 'Paspauskite ir palaikykite įrenginį, kol jis suvibruos, kad įjungtumėte.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Įjunkite Omi DevKit susiejimo režimą';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Paspauskite mygtuką vieną kartą, kad įjungtumėte. LED mirksės violetine spalva susiejimo režimu.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Įjunkite Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Paspauskite ir palaikykite šoninį mygtuką 3 sekundes, kad įjungtumėte.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Įjunkite Plaud Note susiejimo režimą';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Paspauskite ir palaikykite šoninį mygtuką 2 sekundes. Raudonas LED mirksės, kai bus paruoštas susiejimui.';
+
+  @override
+  String get pairingTitleBee => 'Įjunkite Bee susiejimo režimą';
+
+  @override
+  String get pairingDescBee => 'Paspauskite mygtuką 5 kartus iš eilės. Šviesa pradės mirksėti mėlynai ir žaliai.';
+
+  @override
+  String get pairingTitleLimitless => 'Įjunkite Limitless susiejimo režimą';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kai matoma bet kokia šviesa, paspauskite vieną kartą, tada paspauskite ir palaikykite, kol įrenginys parodys rožinę šviesą, tada atleiskite.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Įjunkite Friend Pendant susiejimo režimą';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Paspauskite mygtuką ant pakabuko, kad jį įjungtumėte. Jis automatiškai persijungs į susiejimo režimą.';
+
+  @override
+  String get pairingTitleFieldy => 'Įjunkite Fieldy susiejimo režimą';
+
+  @override
+  String get pairingDescFieldy => 'Paspauskite ir palaikykite įrenginį, kol pasirodys šviesa, kad jį įjungtumėte.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Prijunkite Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Įdiekite ir atidarykite Omi programėlę savo Apple Watch, tada bakstelėkite Prisijungti programėlėje.';
+
+  @override
+  String get pairingTitleNeoOne => 'Įjunkite Neo One susiejimo režimą';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Paspauskite ir palaikykite maitinimo mygtuką, kol LED pradės mirksėti. Įrenginys bus aptinkamas.';
 }

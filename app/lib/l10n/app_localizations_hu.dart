@@ -8027,13 +8027,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get couldNotOpenUrl => 'Az URL nem nyitható meg. Kérjük, próbálja újra.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Új feladat';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Összes megtekintése';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Feladat hozzáadása';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8102,4 +8102,85 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nem sikerült lejátszani a hangot. A fájl sérült vagy hiányzik.';
+
+  @override
+  String get connectionGuide => 'Csatlakozási útmutató';
+
+  @override
+  String get iveDoneThis => 'Megcsináltam';
+
+  @override
+  String get pairNewDevice => 'Új eszköz párosítása';
+
+  @override
+  String get dontSeeYourDevice => 'Nem látja az eszközét?';
+
+  @override
+  String get reportAnIssue => 'Probléma jelentése';
+
+  @override
+  String get pairingTitleOmi => 'Kapcsolja be az Omi-t';
+
+  @override
+  String get pairingDescOmi => 'Tartsa nyomva az eszközt, amíg rezeg, a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Állítsa Omi DevKit-et párosítási módba';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nyomja meg a gombot egyszer a bekapcsoláshoz. A LED lilán villog párosítási módban.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Kapcsolja be az Omi Glass-t';
+
+  @override
+  String get pairingDescOmiGlass => 'Tartsa nyomva az oldalgombot 3 másodpercig a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Állítsa Plaud Note-ot párosítási módba';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tartsa nyomva az oldalgombot 2 másodpercig. A piros LED villogni kezd, amikor párosításra kész.';
+
+  @override
+  String get pairingTitleBee => 'Állítsa Bee-t párosítási módba';
+
+  @override
+  String get pairingDescBee => 'Nyomja meg a gombot 5-ször egymás után. A fény kéken és zölden villogni kezd.';
+
+  @override
+  String get pairingTitleLimitless => 'Állítsa Limitless-t párosítási módba';
+
+  @override
+  String get pairingDescLimitless =>
+      'Amikor bármilyen fény látható, nyomja meg egyszer, majd tartsa nyomva, amíg az eszköz rózsaszín fényt nem mutat, majd engedje el.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Állítsa Friend Pendant-et párosítási módba';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nyomja meg a gombot a medálon a bekapcsoláshoz. Automatikusan párosítási módba lép.';
+
+  @override
+  String get pairingTitleFieldy => 'Állítsa Fieldy-t párosítási módba';
+
+  @override
+  String get pairingDescFieldy => 'Tartsa nyomva az eszközt, amíg a fény meg nem jelenik a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch csatlakoztatása';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Telepítse és nyissa meg az Omi alkalmazást Apple Watch-ján, majd koppintson a Csatlakozás gombra az alkalmazásban.';
+
+  @override
+  String get pairingTitleNeoOne => 'Állítsa Neo One-t párosítási módba';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Tartsa nyomva a bekapcsoló gombot, amíg a LED villogni nem kezd. Az eszköz felfedezhető lesz.';
 }

@@ -1906,6 +1906,17 @@ class MixpanelManager {
 
   void connectDevicePageOpened() => track('Connect Device Page Opened');
 
+  void connectionGuideOpened() => track('Connection Guide Opened');
+
+  void connectionGuideDeviceTapped(String deviceId) =>
+      track('Connection Guide Device Tapped', properties: {'device_id': deviceId});
+
+  void connectionGuideDismissed(String deviceId) =>
+      track('Connection Guide Dismissed', properties: {'device_id': deviceId});
+
+  void connectionGuideReportIssue(String deviceId) =>
+      track('Connection Guide Report Issue', properties: {'device_id': deviceId});
+
   void dataPrivacyPageOpened() => track('Data Privacy Page Opened');
 
   void aiAppGeneratorPageOpened() => track('AI App Generator Page Opened');

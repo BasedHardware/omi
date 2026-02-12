@@ -8015,13 +8015,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get couldNotOpenUrl => 'Не удалось открыть URL. Пожалуйста, попробуйте снова.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Новая задача';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Показать все';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Добавить задачу';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8090,4 +8090,85 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Не удалось воспроизвести аудио. Файл может быть повреждён или отсутствовать.';
+
+  @override
+  String get connectionGuide => 'Руководство по подключению';
+
+  @override
+  String get iveDoneThis => 'Я это сделал';
+
+  @override
+  String get pairNewDevice => 'Подключить новое устройство';
+
+  @override
+  String get dontSeeYourDevice => 'Не видите своё устройство?';
+
+  @override
+  String get reportAnIssue => 'Сообщить о проблеме';
+
+  @override
+  String get pairingTitleOmi => 'Включите Omi';
+
+  @override
+  String get pairingDescOmi => 'Нажмите и удерживайте устройство, пока оно не завибрирует, чтобы включить его.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Переведите Omi DevKit в режим сопряжения';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Нажмите кнопку один раз для включения. Светодиод будет мигать фиолетовым в режиме сопряжения.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Включите Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Нажмите и удерживайте боковую кнопку 3 секунды для включения.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Переведите Plaud Note в режим сопряжения';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Нажмите и удерживайте боковую кнопку 2 секунды. Красный светодиод замигает, когда устройство будет готово к сопряжению.';
+
+  @override
+  String get pairingTitleBee => 'Переведите Bee в режим сопряжения';
+
+  @override
+  String get pairingDescBee => 'Нажмите кнопку 5 раз подряд. Индикатор начнёт мигать синим и зелёным.';
+
+  @override
+  String get pairingTitleLimitless => 'Переведите Limitless в режим сопряжения';
+
+  @override
+  String get pairingDescLimitless =>
+      'Когда горит любой индикатор, нажмите один раз, затем нажмите и удерживайте, пока устройство не покажет розовый свет, затем отпустите.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Переведите Friend Pendant в режим сопряжения';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Нажмите кнопку на кулоне, чтобы включить его. Он автоматически перейдёт в режим сопряжения.';
+
+  @override
+  String get pairingTitleFieldy => 'Переведите Fieldy в режим сопряжения';
+
+  @override
+  String get pairingDescFieldy => 'Нажмите и удерживайте устройство, пока не появится индикатор, чтобы включить его.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Подключить Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Установите и откройте приложение Omi на Apple Watch, затем нажмите Подключить в приложении.';
+
+  @override
+  String get pairingTitleNeoOne => 'Переведите Neo One в режим сопряжения';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Нажмите и удерживайте кнопку питания, пока не замигает светодиод. Устройство станет обнаруживаемым.';
 }
