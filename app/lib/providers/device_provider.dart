@@ -69,7 +69,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  void setConnectedDevice(BtDevice? device) async {
+  Future<void> setConnectedDevice(BtDevice? device) async {
     connectedDevice = device;
     pairedDevice = device;
     await getDeviceInfo();
@@ -80,6 +80,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future getDeviceInfo() async {
     if (connectedDevice != null) {
       if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+        SharedPreferencesUtil().btDevice = pairedDevice!;
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
@@ -283,9 +284,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     updateConnectingStatus(true);
     if (isConnected) {
       if (connectedDevice == null) {
-        connectedDevice = await _getConnectedDevice();
-        SharedPreferencesUtil().deviceName = connectedDevice!.name;
-        MixpanelManager().deviceConnected();
+        var device = await _getConnectedDevice();
+        if (device != null) {
+          await setConnectedDevice(device);
+          SharedPreferencesUtil().deviceName = device.name;
+          MixpanelManager().deviceConnected();
+        }
       }
 
       setIsConnected(true);
@@ -300,7 +304,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (device != null) {
       var cDevice = await _getConnectedDevice();
       if (cDevice != null) {
-        setConnectedDevice(cDevice);
+        await setConnectedDevice(cDevice);
         setisDeviceStorageSupport();
         SharedPreferencesUtil().deviceName = cDevice.name;
         MixpanelManager().deviceConnected();
