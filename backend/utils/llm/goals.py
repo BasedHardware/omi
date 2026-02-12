@@ -182,8 +182,9 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
     """
     try:
         # Get the goal
-        goal = goals_db.get_user_goal(uid)
-        if not goal or goal.get('id') != goal_id:
+        goals = goals_db.get_user_goals(uid)
+        goal = next((g for g in goals if g.get('id') == goal_id), None)
+        if not goal:
             raise ValueError("Goal not found")
 
         goal_title = goal.get('title', 'Unknown')
@@ -237,19 +238,21 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
     """
     Extract goal progress from text and update if found.
-    Returns dict with update info if successful, None otherwise.
+    Checks all active goals. Returns dict with update info if successful, None otherwise.
     """
     try:
-        goal = goals_db.get_user_goal(uid)
-        if not goal or not text or len(text) < 5:
+        goals = goals_db.get_user_goals(uid)
+        if not goals or not text or len(text) < 5:
             return None
 
-        goal_title = goal.get('title', '')
-        current_value = goal.get('current_value', 0)
-        target_value = goal.get('target_value', 10)
-        goal_type = goal.get('goal_type', 'numeric')
+        updates = []
+        for goal in goals:
+            goal_title = goal.get('title', '')
+            current_value = goal.get('current_value', 0)
+            target_value = goal.get('target_value', 10)
+            goal_type = goal.get('goal_type', 'numeric')
 
-        prompt = f"""Analyze this message to see if it mentions progress toward this goal:
+            prompt = f"""Analyze this message to see if it mentions progress toward this goal:
 
 Goal: "{goal_title}"
 Goal Type: {goal_type}
@@ -257,7 +260,7 @@ Current Progress: {current_value} / {target_value}
 
 User Message: "{text[:500]}"
 
-If the message mentions a NEW progress value for this goal, extract it. 
+If the message mentions a NEW progress value for this goal, extract it.
 Handle formats like:
 - "1k users" → 1000
 - "500k" → 500000
@@ -268,27 +271,33 @@ Handle formats like:
 Return JSON only: {{"found": true/false, "value": number_or_null, "reasoning": "brief explanation"}}
 Only return found=true if you're confident this is about the SPECIFIC goal mentioned above."""
 
-        with track_usage(uid, Features.GOALS):
-            response = llm_mini.invoke(prompt).content
+            with track_usage(uid, Features.GOALS):
+                response = llm_mini.invoke(prompt).content
 
-        # Extract JSON from response
-        match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
-        if match:
-            result = json.loads(match.group())
-            if result.get('found') and result.get('value') is not None:
-                new_value = float(result['value'])
-                old_value = current_value
-                if new_value != old_value:
-                    goals_db.update_goal_progress(uid, goal['id'], new_value)
-                    print(
-                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
-                    )
-                    return {
-                        "status": "updated",
-                        "old_value": old_value,
-                        "new_value": new_value,
-                        "reasoning": result.get('reasoning'),
-                    }
+            # Extract JSON from response
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+            if match:
+                result = json.loads(match.group())
+                if result.get('found') and result.get('value') is not None:
+                    new_value = float(result['value'])
+                    old_value = current_value
+                    if new_value != old_value:
+                        goals_db.update_goal_progress(uid, goal['id'], new_value)
+                        print(
+                            f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                        )
+                        updates.append(
+                            {
+                                "goal_id": goal['id'],
+                                "goal_title": goal_title,
+                                "old_value": old_value,
+                                "new_value": new_value,
+                                "reasoning": result.get('reasoning'),
+                            }
+                        )
+
+        if updates:
+            return {"status": "updated", "updates": updates}
         return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
     except Exception as e:
         print(f"Error in extract_and_update_goal_progress: {e}")
