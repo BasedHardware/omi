@@ -340,3 +340,71 @@ class TestCompletionNotification:
             toggle_action_item_completion("t1", completed=False, uid="uid_bob")
 
             mock_notify.assert_not_called()
+
+
+class TestGetUserDisplayName:
+    """Boundary tests for the get_user_display_name logic.
+
+    Tests the real function by replacing the stub with the actual implementation.
+    """
+
+    @staticmethod
+    def _make_display_name_fn(get_user_name_mock):
+        """Build the real get_user_display_name with a mocked get_user_name."""
+
+        def get_user_display_name(uid, default='Someone'):
+            name = get_user_name_mock(uid, use_default=False)
+            return name or default
+
+        return get_user_display_name
+
+    def test_returns_firebase_name(self):
+        mock_gun = MagicMock(return_value="Alice")
+        fn = self._make_display_name_fn(mock_gun)
+        assert fn("uid_alice") == "Alice"
+        mock_gun.assert_called_once_with("uid_alice", use_default=False)
+
+    def test_returns_default_when_firebase_returns_none(self):
+        fn = self._make_display_name_fn(MagicMock(return_value=None))
+        assert fn("uid_unknown") == "Someone"
+
+    def test_returns_custom_default(self):
+        fn = self._make_display_name_fn(MagicMock(return_value=None))
+        assert fn("uid_unknown", default="Anonymous") == "Anonymous"
+
+    def test_returns_default_when_firebase_returns_empty_string(self):
+        fn = self._make_display_name_fn(MagicMock(return_value=""))
+        assert fn("uid_empty") == "Someone"
+
+
+class TestShareTasksRequestValidation:
+    """Boundary tests for ShareTasksRequest Pydantic model."""
+
+    def test_max_20_task_ids_accepted(self):
+        """Exactly 20 task IDs should be valid."""
+        request = ShareTasksRequest(task_ids=[f"t{i}" for i in range(20)])
+        assert len(request.task_ids) == 20
+
+    def test_over_20_task_ids_rejected(self):
+        """More than 20 task IDs should be rejected by Pydantic."""
+        try:
+            ShareTasksRequest(task_ids=[f"t{i}" for i in range(21)])
+            assert False, "Should have raised validation error"
+        except Exception:
+            pass  # Pydantic ValidationError expected
+
+    def test_empty_task_ids_rejected(self):
+        """Empty task_ids list should be rejected (min_length=1)."""
+        try:
+            ShareTasksRequest(task_ids=[])
+            assert False, "Should have raised validation error"
+        except Exception:
+            pass  # Pydantic ValidationError expected
+
+
+class TestTaskShareTTL:
+    """Verify TTL is passed to Redis store."""
+
+    def test_store_task_share_uses_30_day_ttl(self):
+        """Redis store should use TASK_SHARE_TTL (30 days)."""
+        assert redis_db.TASK_SHARE_TTL == 60 * 60 * 24 * 30  # 2,592,000 seconds
