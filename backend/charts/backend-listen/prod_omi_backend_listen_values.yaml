@@ -308,7 +308,7 @@ startupProbe:
 autoscaling:
   enabled: true
   minReplicas: 26
-  maxReplicas: 60
+  maxReplicas: 50
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -317,7 +317,7 @@ autoscaling:
         value: 20
         periodSeconds: 300
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 30
       policies:
       - type: Percent
         value: 100
@@ -328,8 +328,8 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 8
-  failedResponseCode: 10
+  requestsPerPod: 10
+  # failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []
