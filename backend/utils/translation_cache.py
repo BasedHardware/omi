@@ -1,6 +1,6 @@
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional
 
-from utils.translation import split_into_sentences, detect_language
+from utils.translation import detect_language
 
 
 class TranscriptSegmentLanguageCache:
