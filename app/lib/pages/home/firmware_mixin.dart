@@ -31,6 +31,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
   final mcumgr.FirmwareUpdateManagerFactory? managerFactory = mcumgr.FirmwareUpdateManagerFactory();
+  mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
 
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
@@ -89,6 +90,17 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
   }
 
+  Future<void> killMcuUpdateManager() async {
+    if (_mcuUpdateManager != null) {
+      try {
+        await _mcuUpdateManager!.kill();
+      } catch (e) {
+        Logger.debug('Error killing update manager: $e');
+      }
+      _mcuUpdateManager = null;
+    }
+  }
+
   Future<void> startMCUDfu(BtDevice btDevice, {bool fileInAssets = false, String? zipFilePath}) async {
     setState(() {
       isInstalling = true;
@@ -113,7 +125,10 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       eraseAppSettings: true,
       pipelineDepth: 1,
     );
+
+    await killMcuUpdateManager();
     final updateManager = await managerFactory!.getUpdateManager(btDevice.id);
+    _mcuUpdateManager = updateManager;
     final images = await processZipFile(bytes);
 
     final updateStream = updateManager.setup();
@@ -121,6 +136,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateStream.listen((state) {
       if (state == mcumgr.FirmwareUpgradeState.success) {
         Logger.debug('update success');
+        killMcuUpdateManager();
         setState(() {
           isInstalling = false;
           isInstalled = true;
