@@ -20,11 +20,11 @@ class BrandColors {
   static BrandColors getColorsForFlavor() {
     switch (F.env) {
       case Environment.prod:
-        return _nootoPurple;
+        return _omiBlue;
       case Environment.dev:
-        return _nootoPurple; // Dev uses same colors as prod by default
+        return _omiBlue; // Dev uses same colors as prod by default
       default:
-        return _nootoPurple;
+        return _omiBlue;
     }
   }
 
@@ -36,13 +36,13 @@ class BrandColors {
     light: Color(0xFFC4B5FD),      // Light purple
   );
 
-  // Legacy Omi blue color scheme (kept for reference)
-  // static const BrandColors _omiBlue = BrandColors(
-  //   primary: Color(0xFF3B82F6),    // Blue (same as GPT button)
-  //   secondary: Color(0xFF60A5FA),  // Lighter blue
-  //   accent: Color(0xFF2563EB),     // Darker blue
-  //   light: Color(0xFF93C5FD),      // Light blue
-  // );
+  // Omi blue color scheme (original brand colors)
+  static const BrandColors _omiBlue = BrandColors(
+    primary: Color(0xFF3B82F6),    // Blue (same as GPT button)
+    secondary: Color(0xFF60A5FA),  // Lighter blue
+    accent: Color(0xFF2563EB),     // Darker blue
+    light: Color(0xFF93C5FD),      // Light blue
+  );
 
   // Example: Add more white-label configurations here
   // static const BrandColors _clientA = BrandColors(

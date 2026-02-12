@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/theme/brand_colors.dart';
 
+/// Extension to easily access brand colors from BuildContext
+extension BrandColorsExtension on BuildContext {
+  BrandColors get brandColors => BrandColors.getColorsForFlavor();
+  Color get primaryColor => brandColors.primary;
+  Color get secondaryColor => brandColors.secondary;
+  Color get accentColor => brandColors.accent;
+  Color get lightColor => brandColors.light;
+}
+
 /// App color palette - provides a consistent color system across the app
 /// These colors are independent of brand colors and represent the UI foundation
 class AppColors {

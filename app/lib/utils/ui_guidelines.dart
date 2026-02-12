@@ -65,6 +65,10 @@ class AppStyles {
   static const double radiusLarge = 12.0;
   static const double radiusCircular = 100.0;
 
+  // Touch targets (Apple HIG compliance)
+  static const double touchTargetMinimum = 44.0;
+  static const double headerIconSize = 18.0;
+
   // Widget specific
   static final cardDecoration = BoxDecoration(
     color: backgroundSecondary,
