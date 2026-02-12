@@ -8,7 +8,8 @@ export type NotificationType =
   | 'merge_completed'
   | 'plugin'
   | 'daily_summary'
-  | 'announcement';
+  | 'announcement'
+  | 'proactive_advice';
 
 /**
  * A notification stored in the notification center
