@@ -6,6 +6,7 @@ import WatchConnectivity
 import AVFoundation
 import Speech
 import EventKit
+import WidgetKit
 
 extension FlutterError: Error {}
 
@@ -14,6 +15,7 @@ extension FlutterError: Error {}
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
+  private var widgetChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private static let iso8601DateFormatter = ISO8601DateFormatter()
@@ -76,6 +78,12 @@ extension FlutterError: Error {}
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
+    }
+
+    // Create Widget method channel for battery lock screen widget
+    widgetChannel = FlutterMethodChannel(name: "com.omi.widget", binaryMessenger: controller!.binaryMessenger)
+    widgetChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleWidgetCall(call, result: result)
     }
 
     // Create WiFi Network plugin for device AP connection
@@ -208,6 +216,16 @@ extension FlutterError: Error {}
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
+    // Update widget to show disconnected when app terminates
+    let groupId = "group.omi.shared.data"
+    if let sharedDefaults = UserDefaults(suiteName: groupId) {
+      sharedDefaults.set(false, forKey: "omi_is_connected")
+      sharedDefaults.set(Date().timeIntervalSince1970, forKey: "omi_last_updated")
+    }
+    if #available(iOS 14.0, *) {
+      WidgetCenter.shared.reloadAllTimelines()
+    }
+
     // If title and body are nil, then we don't need to show notification.
     if notificationTitleOnKill == nil || notificationBodyOnKill == nil {
       return
@@ -228,6 +246,49 @@ extension FlutterError: Error {}
         NSLog("Show notification on kill now")
       }
     }
+    }
+
+    private func handleWidgetCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        switch call.method {
+        case "updateBatteryWidget":
+            guard let args = call.arguments as? [String: Any],
+                  let batteryLevel = args["batteryLevel"] as? Int,
+                  let isConnected = args["isConnected"] as? Bool else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
+                return
+            }
+
+            let groupId = "group.omi.shared.data"
+            NSLog("[OmiWidget] updateBatteryWidget called: battery=%d, connected=%@", batteryLevel, isConnected ? "true" : "false")
+
+            // Diagnostic: check if container directory exists
+            if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupId) {
+                NSLog("[OmiWidget] Container URL: %@", containerURL.path)
+            } else {
+                NSLog("[OmiWidget] ERROR: containerURL is nil - App Group NOT provisioned!")
+            }
+
+            if let sharedDefaults = UserDefaults(suiteName: groupId) {
+                sharedDefaults.set(batteryLevel, forKey: "omi_battery_level")
+                sharedDefaults.set(isConnected, forKey: "omi_is_connected")
+                sharedDefaults.set(Date().timeIntervalSince1970, forKey: "omi_last_updated")
+                sharedDefaults.synchronize()
+                // Read back to verify
+                let readBack = sharedDefaults.integer(forKey: "omi_battery_level")
+                NSLog("[OmiWidget] Wrote to shared defaults OK, readback battery=%d", readBack)
+            } else {
+                NSLog("[OmiWidget] ERROR: Failed to open shared UserDefaults for group: %@", groupId)
+            }
+
+            if #available(iOS 14.0, *) {
+                WidgetCenter.shared.reloadAllTimelines()
+                NSLog("[OmiWidget] Reloaded all timelines")
+            }
+
+            result(nil)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
     }
 
     private func handleAudioChunk(_ message: [String: Any]) {
