@@ -80,9 +80,18 @@ redis_mod.try_catch_decorator = lambda f: f
 redis_mod.TASK_SHARE_TTL = 60 * 60 * 24 * 30
 redis_mod.json = __import__("json")
 
-# Stub database.users with get_user_profile
+# Stub database.users with get_user_profile (legacy — still needed by other imports)
 users_mod = sys.modules["database.users"]
 users_mod.get_user_profile = MagicMock(return_value={"name": "TestUser"})
+
+# Stub database.auth with get_user_name (used by utils.users.get_user_display_name)
+auth_db_mod = _stub_module("database.auth")
+auth_db_mod.get_user_name = MagicMock(return_value="TestUser")
+auth_db_mod.get_user_from_uid = MagicMock()
+
+# Stub utils.users
+utils_users_mod = _stub_module("utils.users")
+utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
@@ -117,10 +126,10 @@ class TestShareEndpoint:
         """Valid share returns URL with token."""
         request = ShareTasksRequest(task_ids=["t1", "t2"])
         with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_profile"
-        ) as mock_profile, patch("routers.action_items.redis_db") as mock_redis:
+            "routers.action_items.get_user_display_name"
+        ) as mock_name, patch("routers.action_items.redis_db") as mock_redis:
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
-            mock_profile.return_value = {"name": "Alice"}
+            mock_name.return_value = "Alice"
             mock_redis.store_task_share.return_value = True
 
             result = share_action_items(request, uid="uid_alice")
@@ -134,10 +143,10 @@ class TestShareEndpoint:
         """If Redis store fails (returns None), should raise 500."""
         request = ShareTasksRequest(task_ids=["t1"])
         with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_profile"
-        ) as mock_profile, patch("routers.action_items.redis_db") as mock_redis:
+            "routers.action_items.get_user_display_name"
+        ) as mock_name, patch("routers.action_items.redis_db") as mock_redis:
             mock_db.get_action_item.return_value = {"id": "t1", "description": "Test"}
-            mock_profile.return_value = {"name": "Alice"}
+            mock_name.return_value = "Alice"
             mock_redis.store_task_share.return_value = None
 
             try:
@@ -269,8 +278,8 @@ class TestCompletionNotification:
 
     def test_completion_sends_notification_to_sender(self):
         with patch("routers.action_items.action_items_db") as mock_db, patch(
-            "routers.action_items.get_user_profile"
-        ) as mock_profile, patch("routers.action_items.send_notification") as mock_notify:
+            "routers.action_items.get_user_display_name"
+        ) as mock_name, patch("routers.action_items.send_notification") as mock_notify:
             mock_db.get_action_item.side_effect = [
                 # First call: _get_valid_action_item
                 {
@@ -288,7 +297,7 @@ class TestCompletionNotification:
                 {"id": "t1", "description": "Review PR #4711", "completed": True},
             ]
             mock_db.mark_action_item_completed.return_value = True
-            mock_profile.return_value = {"name": "Bob"}
+            mock_name.return_value = "Bob"
 
             toggle_action_item_completion("t1", completed=True, uid="uid_bob")
 
