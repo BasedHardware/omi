@@ -71,17 +71,21 @@ class _BasicNotificationService implements NotificationInterface {
     if (!allowed) {
       return;
     }
-    _awesomeNotifications.createNotification(
-      content: NotificationContent(
-        id: id,
-        channelKey: channel.channelKey!,
-        actionType: ActionType.Default,
-        title: title,
-        body: body,
-        payload: payload,
-        notificationLayout: layout,
-      ),
-    );
+    try {
+      await _awesomeNotifications.createNotification(
+        content: NotificationContent(
+          id: id,
+          channelKey: channel.channelKey!,
+          actionType: ActionType.Default,
+          title: title,
+          body: body,
+          payload: payload,
+          notificationLayout: layout,
+        ),
+      );
+    } catch (e) {
+      Logger.debug('Failed to create notification (channel may be disabled): $e');
+    }
   }
 
   @override

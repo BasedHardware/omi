@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -158,6 +159,7 @@ class _DesktopOnboardingWrapperState extends State<DesktopOnboardingWrapper> wit
 
   void _completeOnboarding() {
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
     routeToPage(context, const DesktopHomePage(), replace: true);
   }
 

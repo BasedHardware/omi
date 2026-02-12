@@ -5,20 +5,26 @@ import os
 import requests
 import time
 
+from langchain_core.messages import SystemMessage, HumanMessage
+
 import database.notifications as notification_db
 from database import mem_db
 from database import redis_db
 from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
+from database.goals import get_user_goals
 from database.redis_db import get_generic_cache, set_generic_cache
-from models.app import App, UsageHistoryType
+from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.llm.clients import generate_embedding, llm_mini
 from utils.llm.proactive_notification import get_proactive_message
+from utils.llm.usage_tracker import track_usage, Features
+from utils.llms.memory import get_prompt_memories
+from utils.mentor_notifications import PROACTIVE_CONFIDENCE_THRESHOLD
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
 
@@ -212,7 +218,130 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-def _process_proactive_notification(uid: str, app: App, data):
+def _process_triggers(
+    uid: str, system_prompt: str, user_message: str, triggers: list, confidence_threshold: float
+) -> list[dict]:
+    """
+    Run LLM trigger evaluation and filter results by confidence threshold.
+
+    Args:
+        uid: User ID (for logging)
+        system_prompt: System prompt for the LLM
+        user_message: User message with conversation context
+        triggers: Trigger definitions (OpenAI function-calling format)
+        confidence_threshold: Minimum confidence to accept a trigger result
+
+    Returns:
+        List of accepted notification dicts. Empty list if no triggers apply.
+    """
+    if not triggers:
+        return []
+
+    try:
+        llm_messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
+
+        llm_with_tools = llm_mini.bind_tools(triggers, tool_choice="auto")
+        resp = llm_with_tools.invoke(llm_messages)
+
+        if not resp.tool_calls:
+            print(f"proactive_trigger triggered=false", uid)
+            return []
+
+        results = []
+        for tool_call in resp.tool_calls:
+            trigger_name = tool_call["name"]
+            trigger_args = tool_call["args"]
+            confidence = trigger_args.get("confidence", 0)
+            notification_text = trigger_args.get("notification_text", "")
+
+            print(f"proactive_trigger triggered=true trigger={trigger_name} confidence={confidence:.2f}", uid)
+
+            if confidence < confidence_threshold:
+                print(f"proactive_trigger_below_threshold trigger={trigger_name} confidence={confidence:.2f}", uid)
+                continue
+
+            if not notification_text or len(notification_text) < 5:
+                print(f"proactive_trigger_empty_text trigger={trigger_name}", uid)
+                continue
+
+            if len(notification_text) > 300:
+                notification_text = notification_text[:300]
+
+            results.append(
+                {
+                    "notification_text": notification_text,
+                    "trigger_name": trigger_name,
+                    "trigger_args": trigger_args,
+                }
+            )
+
+        print(f"proactive_trigger_results total_calls={len(resp.tool_calls)} accepted={len(results)}", uid)
+        return results
+
+    except Exception as e:
+        print(f"proactive_trigger_error error={e}", uid)
+        return []
+
+
+def _build_trigger_context(
+    uid: str,
+    user_name: str,
+    user_facts: str,
+    context: str,
+    chat_messages: list,
+    conversation_messages: list[dict],
+    data: dict,
+) -> tuple[str, str]:
+    """Build system prompt and user message for trigger evaluation from pre-fetched context."""
+    context_parts = []
+
+    if user_name:
+        context_parts.append(f"User name: {user_name}")
+
+    if user_facts:
+        context_parts.append(f"What we know about {user_name}:\n{user_facts}")
+
+    if context:
+        context_parts.append(f"Relevant memories:\n{context}")
+
+    if chat_messages:
+        context_parts.append(f"Recent chat:\n{Message.get_messages_as_string(chat_messages)}")
+
+    if conversation_messages:
+        lines = []
+        for msg in conversation_messages:
+            speaker = user_name if msg.get('is_user') else "other"
+            lines.append(f"[{speaker}]: {msg['text']}")
+        context_parts.append(f"Current conversation:\n" + "\n".join(lines))
+
+    try:
+        goals = get_user_goals(uid)
+        if goals:
+            goals_text = "\n".join(f"- {g.get('title', g.get('description', 'Unnamed goal'))}" for g in goals)
+            context_parts.append(f"{user_name}'s active goals:\n{goals_text}")
+    except Exception as e:
+        print(f"proactive_trigger_goals_fetch_failed error={e}", uid)
+
+    # Substitute template placeholders.
+    # Mentor prompt uses {{x}} in source, but .format(text=...) converts {{x}} to {x},
+    # so we replace both double-brace and single-brace variants.
+    system_prompt = data.get('prompt', '')
+    chat_str = Message.get_messages_as_string(chat_messages) if chat_messages else ''
+    for double, single, val in [
+        ("{{user_name}}", "{user_name}", user_name or ''),
+        ("{{user_facts}}", "{user_facts}", user_facts or ''),
+        ("{{user_context}}", "{user_context}", context or ''),
+        ("{{user_chat}}", "{user_chat}", chat_str),
+    ]:
+        system_prompt = system_prompt.replace(double, val).replace(single, val)
+    system_prompt = system_prompt.replace('    ', '').strip()
+
+    user_message = "\n\n".join(context_parts)
+
+    return system_prompt, user_message
+
+
+def _process_proactive_notification(uid: str, app: App, data, triggers: list = None, has_triggers: bool = False):
     if not app.has_capability("proactive_notification") or not data:
         print(f"App {app.id} is not proactive_notification or data invalid", uid)
         return None
@@ -238,30 +367,43 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
 
-    # context
+    # Fetch context once — shared by both trigger and prompt paths
+    user_name, user_facts = get_prompt_memories(uid)
+
     context = None
     if 'user_context' in filter_scopes:
         memories = _retrieve_contextual_memories(uid, data.get('context', {}))
         if len(memories) > 0:
             context = Conversation.conversations_to_string(memories)
 
-    # messages
-    messages = []
+    chat_messages = []
     if 'user_chat' in filter_scopes:
-        messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
+        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
-    # print(f'_process_proactive_notification context {context[:100] if context else "empty"}')
+    # Trigger-based proactive notifications (extra, does not replace the main notification).
+    if has_triggers and triggers and data.get('messages'):
+        system_prompt, user_message = _build_trigger_context(
+            uid,
+            user_name,
+            user_facts,
+            context,
+            chat_messages,
+            data.get('messages', []),
+            data,
+        )
+        trigger_results = _process_triggers(uid, system_prompt, user_message, triggers, PROACTIVE_CONFIDENCE_THRESHOLD)
+        for noti in trigger_results:
+            send_app_notification(uid, app.name, app.id, noti['notification_text'])
+            print(f"proactive_trigger_sent trigger={noti.get('trigger_name')}", uid)
 
-    # retrive message
-    message = get_proactive_message(uid, prompt, filter_scopes, context, messages)
+    # Main prompt-based notification
+    message = get_proactive_message(uid, prompt, filter_scopes, context, chat_messages, user_name, user_facts)
     if not message or len(message) < min_message_char_limit:
         print(f"Plugins {app.id}, message too short", uid)
         return None
 
-    # send notification
     send_app_notification(uid, app.name, app.id, message)
 
-    # set rate
     _set_proactive_noti_sent_at(uid, app)
     return message
 
@@ -314,9 +456,18 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             image='https://raw.githubusercontent.com/BasedHardware/Omi/main/assets/images/app_logo.png',
             capabilities={'proactive_notification'},
             enabled=True,
-            proactive_notification_scopes=['user_name', 'user_facts', 'user_context', 'user_chat']
+            proactive_notification=ProactiveNotification(
+                scopes={'user_name', 'user_facts', 'user_context', 'user_chat'}
+            ),
         )
-        mentor_message = _process_proactive_notification(uid, mentor_app, mentor_notification)
+        with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+            mentor_message = _process_proactive_notification(
+                uid,
+                mentor_app,
+                mentor_notification,
+                triggers=mentor_notification.get('triggers'),
+                has_triggers=True,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             print(f"Sent mentor notification to user {uid}")
@@ -381,7 +532,8 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             noti = response_data.get('notification', None)
             # print('Plugin', plugin.id, 'response notification:', noti)
             if app.has_capability("proactive_notification"):
-                message = _process_proactive_notification(uid, app, noti)
+                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                    message = _process_proactive_notification(uid, app, noti)
                 if message:
                     results[app.id] = message
 
@@ -407,14 +559,15 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str):
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+    navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
         app_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',
-        navigate_to=f'/chat/{app_id}',
+        navigate_to=navigate_to,
     )
 
     send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

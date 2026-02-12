@@ -9,21 +9,12 @@ import time
 import threading
 import logging
 from typing import List, Dict, Any
-from collections import defaultdict
-from openai import OpenAI
 import json
-import os
 
 from database.notifications import get_mentor_notification_frequency
+from utils.llm.clients import llm_mini
 
 logger = logging.getLogger(__name__)
-
-# Initialize OpenAI client
-client = None
-if os.getenv('OPENAI_API_KEY'):
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-else:
-    logger.warning("OPENAI_API_KEY not found - mentor notifications will be disabled")
 
 
 class MessageBuffer:
@@ -52,7 +43,7 @@ class MessageBuffer:
                     'last_analysis_time': time.time(),
                     'last_activity': current_time,
                     'words_after_silence': 0,
-                    'silence_detected': False
+                    'silence_detected': False,
                 }
             else:
                 # Check for silence period
@@ -71,7 +62,8 @@ class MessageBuffer:
         current_time = time.time()
         with self.lock:
             expired_sessions = [
-                session_id for session_id, data in self.buffers.items()
+                session_id
+                for session_id, data in self.buffers.items()
                 if current_time - data['last_activity'] > 3600  # Remove sessions older than 1 hour
             ]
             for session_id in expired_sessions:
@@ -87,31 +79,114 @@ message_buffer = MessageBuffer()
 # Minimum segments needed before analysis (real-time processing)
 MIN_SEGMENTS_FOR_ANALYSIS = 3
 
+# Minimum confidence to trigger a proactive notification
+PROACTIVE_CONFIDENCE_THRESHOLD = 0.7
+
+# Proactive trigger definitions (OpenAI function-calling format)
+PROACTIVE_TRIGGERS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_argument_perspective",
+            "description": (
+                "User is in a disagreement with someone. Offer an honest outside perspective "
+                "on who might be right and why, based on what you know about the user."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "other_person": {
+                        "type": "string",
+                        "description": "Who the user is disagreeing with",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "rationale": {
+                        "type": "string",
+                        "description": "Why this notification is warranted",
+                    },
+                },
+                "required": ["notification_text", "confidence", "rationale"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_goal_misalignment",
+            "description": (
+                "User is discussing plans that contradict their stored goals. "
+                "Alert them to the conflict so they can course-correct."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "goal_name": {
+                        "type": "string",
+                        "description": "Which goal is conflicted",
+                    },
+                    "conflict_description": {
+                        "type": "string",
+                        "description": "How the plan conflicts with the goal",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "goal_name", "conflict_description", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_emotional_support",
+            "description": (
+                "User is expressing complaints or negative emotions. "
+                "Suggest a concrete, actionable step they can take right now."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "detected_emotion": {
+                        "type": "string",
+                        "description": "Primary emotion detected (e.g. frustration, loneliness, anxiety)",
+                    },
+                    "suggested_action": {
+                        "type": "string",
+                        "description": "Concrete actionable suggestion",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "detected_emotion", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 
 def extract_topics(discussion_text: str) -> List[str]:
-    """Extract topics from the discussion using OpenAI."""
-    if not client:
-        return []
-
+    """Extract topics from the discussion using LLM."""
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a topic extraction specialist. Extract all relevant topics from the conversation. Return ONLY a JSON array of topic strings, nothing else. Example format: [\"topic1\", \"topic2\"]"
-                },
-                {
-                    "role": "user",
-                    "content": f"Extract all topics from this conversation:\n{discussion_text}"
-                }
-            ],
-            temperature=0.3,
-            max_tokens=150
+        prompt = (
+            "You are a topic extraction specialist. Extract all relevant topics from the conversation. "
+            "Return ONLY a JSON array of topic strings, nothing else. "
+            'Example format: ["topic1", "topic2"]\n\n'
+            f"Extract all topics from this conversation:\n{discussion_text}"
         )
-
-        # Parse the response text as JSON
-        response_text = response.choices[0].message.content.strip()
+        response_text = llm_mini.invoke(prompt).content.strip()
         topics = json.loads(response_text)
         logger.info(f"Extracted topics: {topics}")
         return topics
@@ -228,7 +303,9 @@ Previous discussions and context: {{user_context}}
 
 Chat history: {{user_chat}}
 
-Remember: First evaluate silently, then either respond with empty string OR give experience-backed advice.""".format(text=discussion_text)
+Remember: First evaluate silently, then either respond with empty string OR give experience-backed advice.""".format(
+        text=discussion_text
+    )
 
     # Adjust prompt based on frequency level
     adjusted_prompt = adjust_prompt_for_frequency(base_system_prompt, frequency)
@@ -236,13 +313,9 @@ Remember: First evaluate silently, then either respond with empty string OR give
     return {
         "prompt": adjusted_prompt,
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
-        "context": {
-            "filters": {
-                "people": [],
-                "entities": [],
-                "topics": topics
-            }
-        }
+        "context": {"filters": {"people": [], "entities": [], "topics": topics}},
+        "triggers": PROACTIVE_TRIGGERS,
+        "messages": messages,
     }
 
 
@@ -260,10 +333,6 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
     # Check if mentor notifications are enabled for this user
     frequency = get_mentor_notification_frequency(uid)
     if frequency == 0:
-        return None
-
-    if not client:
-        logger.warning("OpenAI client not initialized - cannot process mentor notification")
         return None
 
     current_time = time.time()
@@ -291,33 +360,30 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
                     logger.info(f"Silence period ended for user {uid}, starting fresh conversation")
 
             can_append = (
-                buffer_data['messages'] and
-                abs(buffer_data['messages'][-1]['timestamp'] - timestamp) < 2.0 and
-                buffer_data['messages'][-1].get('is_user') == is_user
+                buffer_data['messages']
+                and abs(buffer_data['messages'][-1]['timestamp'] - timestamp) < 2.0
+                and buffer_data['messages'][-1].get('is_user') == is_user
             )
 
             if can_append:
                 buffer_data['messages'][-1]['text'] += ' ' + text
             else:
-                buffer_data['messages'].append({
-                    'text': text,
-                    'timestamp': timestamp,
-                    'is_user': is_user
-                })
+                buffer_data['messages'].append({'text': text, 'timestamp': timestamp, 'is_user': is_user})
 
     # Real-time analysis: Process immediately when we have enough segments
     # Rate limiting is handled by app_integrations.py (1 notification per 300s)
-    if (len(buffer_data['messages']) >= MIN_SEGMENTS_FOR_ANALYSIS and
-        not buffer_data['silence_detected']):  # Only analyze if not in silence period
-
+    if (
+        len(buffer_data['messages']) >= MIN_SEGMENTS_FOR_ANALYSIS and not buffer_data['silence_detected']
+    ):  # Only analyze if not in silence period
         # Sort messages by timestamp
         sorted_messages = sorted(buffer_data['messages'], key=lambda x: x['timestamp'])
 
-        # Create notification with formatted discussion
-        notification_data = create_notification_data(sorted_messages, frequency)
-
         buffer_data['last_analysis_time'] = current_time
         buffer_data['messages'] = []  # Clear buffer after analysis
+
+        # Create notification data with prompt, tools, and conversation messages.
+        # Tool calling is handled downstream by _process_proactive_notification.
+        notification_data = create_notification_data(sorted_messages, frequency)
 
         logger.info(f"Mentor notification ready for user {uid} (frequency: {frequency})")
         return notification_data

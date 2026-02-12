@@ -6,6 +6,7 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
@@ -30,6 +31,7 @@ class SpeechProfileWidget extends StatefulWidget {
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
   late AnimationController _questionAnimationController;
   late Animation<double> _questionFadeAnimation;
+  SpeechProfileProvider? _speechProvider;
 
   @override
   void initState() {
@@ -50,15 +52,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       }
     });
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _speechProvider ??= context.read<SpeechProfileProvider>();
   }
 
   @override
   void dispose() {
-    final speechProvider = context.read<SpeechProfileProvider>();
-
-    speechProvider.forceCompletionTimer?.cancel();
-    speechProvider.forceCompletionTimer = null;
-    speechProvider.close();
+    _speechProvider?.forceCompletionTimer?.cancel();
+    _speechProvider?.forceCompletionTimer = null;
 
     _scrollController.dispose();
     _questionAnimationController.dispose();

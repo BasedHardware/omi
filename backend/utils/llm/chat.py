@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
-from utils.config import get_app_name
 import database.notifications as notification_db
 import database.goals as goals_db
 from database.redis_db import add_filter_category_item
@@ -21,7 +20,6 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 
-
 # ****************************************
 # ************* CHAT BASICS **************
 # ****************************************
@@ -31,7 +29,7 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_s
     user_name, memories_str = get_prompt_memories(uid)
     if plugin is None:
         prompt = f"""
-You are '{get_app_name()}', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
 You know the following about {user_name}: {memories_str}.
 
 {prev_messages_str}
@@ -74,22 +72,8 @@ class DatesContext(BaseModel):
 
 def requires_context(question: str) -> bool:
     prompt = f'''
-    Your task is to determine whether the user is asking a question that requires retrieving context from their personal data (conversations, memories, history) to be answered.
-
-    Return TRUE if the question:
-    - Asks about the user's past conversations, discussions, or what they talked about
-    - Asks about the user's activities, experiences, or what they did
-    - Asks about the user's memories, preferences, habits, or personal details
-    - Asks to summarize, recall, or retrieve any of their personal data
-    - References time periods like "today", "yesterday", "last week", "this month"
-    - Uses personal pronouns asking about stored data (e.g., "my conversations", "what did I discuss")
-
-    Return FALSE only if the question:
-    - Is a simple greeting like "Hi", "Hello", "How are you?", "Good morning"
-    - Is a purely general knowledge question with no personal data component
-    - Is about capabilities, features, or how something works (not about user's personal data)
-
-    When in doubt, return TRUE to ensure the user's personal data is retrieved.
+    Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
+    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
 
     User's Question:
     {question}
@@ -103,31 +87,30 @@ def requires_context(question: str) -> bool:
 
 
 class IsAnOmiQuestion(BaseModel):
-    value: bool = Field(description=f"If the message is a {get_app_name()}/Friend related question")
+    value: bool = Field(description="If the message is an Omi/Friend related question")
 
 
 def retrieve_is_an_omi_question(question: str) -> bool:
-    app_name = get_app_name()
     prompt = f'''
-    Task: Determine if the user is asking about the {app_name}/Friend app itself (product features, functionality, purchasing)
+    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
     OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
     CRITICAL DISTINCTION:
-    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does {app_name} work?", "What features does {app_name} have?")
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
     - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
     - ACTION/TASK REQUESTS = False (e.g., "Remind me to...", "Create a task...", "Set an alarm...")
 
-    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.),
-    it should ALWAYS return False, even if "{app_name}" or "Friend" is mentioned in the task content.
+    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.), 
+    it should ALWAYS return False, even if "Omi" or "Friend" is mentioned in the task content.
 
-    Examples of {app_name}/Friend App Questions (return True):
-    - "How does {app_name} work?"
-    - "What can {app_name} do?"
+    Examples of Omi/Friend App Questions (return True):
+    - "How does Omi work?"
+    - "What can Omi do?"
     - "How can I buy the device?"
     - "Where do I get Friend?"
     - "What features does the app have?"
-    - "How do I set up {app_name}?"
-    - "Does {app_name} support multiple languages?"
+    - "How do I set up Omi?"
+    - "Does Omi support multiple languages?"
     - "What is the battery life?"
     - "How do I connect my device?"
 
@@ -142,25 +125,23 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     - "When did I last talk to John?"
 
     Examples of Action/Task Requests (return False):
-    - "Can you remind me to check the {app_name} chat discussion on GitHub?"
-    - "Remind me to update the {app_name} firmware"
+    - "Can you remind me to check the Omi chat discussion on GitHub?"
+    - "Remind me to update the Omi firmware"
     - "Create a task to review Friend documentation"
-    - "Set an alarm for my {app_name} meeting"
-    - "Add to my list: check {app_name} updates"
+    - "Set an alarm for my Omi meeting"
+    - "Add to my list: check Omi updates"
     - "Schedule a reminder about the Friend app launch"
 
-    KEY RULES:
+    KEY RULES: 
     1. If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
     2. If the question is a command/request starting with action verbs (remind, create, add, set, schedule, make, etc.), return False.
-    3. Only return True if asking about the {app_name}/Friend app's features, capabilities, or purchasing information.
+    3. Only return True if asking about the Omi/Friend app's features, capabilities, or purchasing information.
 
     User's Question:
-    {{question}}
-
-    Is this asking about the {app_name}/Friend app product itself?
-    '''.replace(
-        '    ', ''
-    ).strip()
+    {question}
+    
+    Is this asking about the Omi/Friend app product itself?
+    '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -211,9 +192,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -268,9 +247,7 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     {conversation_history}
 
     Answer:
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -289,7 +266,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     )
 
     return f"""
-    You are an assistant for answering questions about the app {get_app_name()}, also known as Friend.
+    You are an assistant for answering questions about the app Omi, also known as Friend.
     Continue the conversation, answering the question based on the context provided.
 
     Context:
@@ -301,9 +278,7 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -343,8 +318,7 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return (
-        f"""
+    return f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -403,12 +377,7 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace(
-            '    ', ''
-        )
-        .replace('\n\n\n', '\n\n')
-        .strip()
-    )
+    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
 def _get_agentic_qa_prompt(
@@ -504,10 +473,6 @@ Keep this context in mind when answering their question.
 
 """
 
-    base_prompt = f"""<assistant_role>
-You are {get_app_name()}, {user_name}'s AI mentor and advisor. Like a smart friend who actually pushes back.
-Default: helpful, honest, and concise. Talk like a real person texting.
-</assistant_role>
     # Build conditional instruction hints for the template
     plugin_instruction_hint = "- Regard the <plugin_instructions>" if plugin_info else ""
     plugin_personality_hint = f"- Reflect {app.name}'s personality" if app else ""
@@ -543,26 +508,14 @@ Default: helpful, honest, and concise. Talk like a real person texting.
         print(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
 
     # Inline fallback prompt - used when LangSmith is unavailable
-    base_prompt = f"""<assistant_role>
-You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
-</assistant_role>
-{goal_section}{file_context_section}{context_section}
+    #
+    # PROMPT CACHE OPTIMIZATION: OpenAI serializes requests as [tools][system][messages].
+    # Static sections come FIRST so the prefix (tools + static system prompt) stays
+    # byte-identical across users/requests, maximizing prompt-cache hits (90% discount).
+    # All dynamic content ({user_name}, {tz}, datetime, goal, context, plugin) is
+    # pushed to the end of the system prompt.
 
-<current_datetime>
-Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
-Current date time ISO format: {current_datetime_iso}
-</current_datetime>
-
-<mentor_behavior>
-You're a mentor, not a yes-man. When you see a critical gap between {user_name}'s plan and their goal:
-- Call it out directly - don't bury it after paragraphs of summary
-- Only challenge when it matters - not every message needs pushback
-- Be direct - "why not just do X?" rather than "Have you considered the alternative approach of X?"
-- Never summarize what they just said - jump straight to your reaction/advice
-- Give one clear recommendation, not 10 options
-</mentor_behavior>
-
-<response_style>
+    base_prompt = f"""<response_style>
 Write like a real human texting - not an AI writing an essay.
 
 Length:
@@ -580,102 +533,14 @@ Format:
 - NEVER say "in the logs", "captured calls", "recorded conversations" - sound human, not robotic
 </response_style>
 
-<tool_instructions>
-**DateTime Formatting Rules for Tool Calls:**
-When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
-
-**CRITICAL: All datetime calculations must be done in {user_name}'s timezone ({tz}), then formatted as ISO with timezone offset.**
-
-**When user asks about specific dates/times (e.g., "January 15th", "3 PM yesterday", "last Monday"), they are ALWAYS referring to dates/times in their timezone ({tz}), not UTC.**
-
-1. **Always use ISO format with timezone:**
-   - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
-   - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
-   - The timezone offset must match {user_name}'s timezone ({tz})
-   - Current time reference: {current_datetime_iso}
-
-2. **For "X hours ago" or "X minutes ago" queries:**
-   - Work in {user_name}'s timezone: {tz}
-   - Identify the specific hour that was X hours/minutes ago
-   - start_date: Beginning of that hour (HH:00:00)
-   - end_date: End of that hour (HH:59:59)
-   - This captures all conversations during that specific hour
-   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
-     * Calculate: {current_datetime_iso} minus 3 hours
-     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
-     * start_date = "2024-01-19T14:00:00-08:00"
-     * end_date = "2024-01-19T14:59:59-08:00"
-   - Format both with the timezone offset for {tz}
-
-3. **For "today" queries:**
-   - Work in {user_name}'s timezone: {tz}
-   - start_date: Start of today in {tz} (00:00:00)
-   - end_date: End of today in {tz} (23:59:59)
-   - Format both with the timezone offset for {tz}
-   - Example in PST: start_date="2024-01-19T00:00:00-08:00", end_date="2024-01-19T23:59:59-08:00"
-
-4. **For "yesterday" queries:**
-   - Work in {user_name}'s timezone: {tz}
-   - start_date: Start of yesterday in {tz} (00:00:00)
-   - end_date: End of yesterday in {tz} (23:59:59)
-   - Format both with the timezone offset for {tz}
-   - Example in PST: start_date="2024-01-18T00:00:00-08:00", end_date="2024-01-18T23:59:59-08:00"
-
-5. **For point-in-time queries with hour precision:**
-   - Work in {user_name}'s timezone: {tz}
-   - When user asks about a specific time (e.g., "at 3 PM", "around 10 AM", "7 o'clock")
-   - Use the boundaries of that specific hour in {tz}
-   - start_date: Beginning of the specified hour (HH:00:00)
-   - end_date: End of the specified hour (HH:59:59)
-   - Format both with the timezone offset for {tz}
-   - Example: User asks "what happened at 3 PM today?" in PST
-     * 3 PM = hour 15 in 24-hour format
-     * start_date = "2024-01-19T15:00:00-08:00"
-     * end_date = "2024-01-19T15:59:59-08:00"
-   - This captures all conversations during that specific hour
-
-**Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
-
-**Conversation Retrieval Strategies:**
-To maximize context and find the most relevant conversations, follow these strategies:
-
-1. **Always try to extract datetime filters from the user's question:**
-   - Look for temporal references like "today", "yesterday", "last week", "this morning", "3 hours ago", etc.
-   - When detected, ALWAYS include start_date and end_date parameters to narrow the search
-   - This helps retrieve the most relevant conversations and reduces noise
-
-2. **Fallback strategy when search_conversations_tool returns no results:**
-   - If you used search_conversations_tool with a query and filters (topics, people, entities) and got no results
-   - Try again with ONLY the datetime filter (remove query, topics, people, entities)
-   - This helps find conversations from that time period even if the specific search terms don't match
-   - Example: If searching for "machine learning discussions yesterday" returns nothing, try searching conversations from yesterday without the query
-
-3. **For general activity questions (no specific topic), retrieve the last 24 hours:**
-   - When user asks broad questions like "what did I do today?", "summarize my day", "what have I been up to?"
-   - Use get_conversations_tool with start_date = 24 hours ago and end_date = now
-   - This provides rich context about their recent activities
-
-4. **Balance specificity with breadth:**
-   - Start with specific filters (datetime + query + topics/people) for targeted questions
-   - If no results, progressively remove filters (keep datetime, drop query/topics/people)
-   - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
-
-5. **When to use each retrieval tool:**
-   - Use **search_conversations_tool** for:
-     * Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations")
-     * **CRITICAL: Questions about SPECIFIC EVENTS or INCIDENTS** that happened to the user (e.g., "when did a dog bite me?", "what happened at the party?", "when did I get injured?", "when did I meet John?", "what did I say about the accident?")
-     * Finding conversations about specific people, places, or things (e.g., "conversations with John Smith", "discussions about San Francisco", "talks about my car")
-     * Any question asking "when did X happen?" or "what happened when Y?" - these are EVENT queries, not memory queries
-   - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views (e.g., "what did I do today?", "conversations from last week")
-   - Use **get_memories_tool** for: ONLY static facts/preferences about the user (name, age, preferences, habits, goals, relationships) - NOT for specific events or incidents
-   - **IMPORTANT DISTINCTION**:
-     * "What's my favorite food?" → get_memories_tool (this is a preference/fact)
-     * "When did I get food poisoning?" → search_conversations_tool (this is an EVENT)
-     * "Do I like dogs?" → get_memories_tool (this is a preference)
-     * "When did a dog bite me?" → search_conversations_tool (this is an EVENT)
-   - **Strategy**: For questions about topics, themes, people, specific events, or any "when did X happen?" queries, use search_conversations_tool. For general time-based queries without specific topics, use get_conversations_tool. For user preferences/facts, use get_memories_tool.
-   - Always prefer narrower time windows first (hours > day > week > month) for better relevance
-</tool_instructions>
+<mentor_behavior>
+You're a mentor, not a yes-man. When you see a critical gap between the user's plan and their goal:
+- Call it out directly - don't bury it after paragraphs of summary
+- Only challenge when it matters - not every message needs pushback
+- Be direct - "why not just do X?" rather than "Have you considered the alternative approach of X?"
+- Never summarize what they just said - jump straight to your reaction/advice
+- Give one clear recommendation, not 10 options
+</mentor_behavior>
 
 <notification_controls>
 User can manage notifications via chat. If user asks to enable/disable/change time:
@@ -720,7 +585,7 @@ Answer the user's questions accurately and personally, using the tools when need
    - Do NOT explain possibilities like "maybe it wasn't recorded" or "maybe it was bundled in another convo" - keep it simple.
 
 2. **Questions about people:**
-   - **NEVER fabricate information about a person** (their traits, relationship with {user_name}, past interactions, personality, etc.) unless you found it in retrieved conversations or memories.
+   - **NEVER fabricate information about a person** (their traits, relationship with the user, past interactions, personality, etc.) unless you found it in retrieved conversations or memories.
    - For questions like "what should I know about [person]?" or "tell me about [person]?", if tools return no results, just say: "I don't have anything about [person]." - that's it, keep it short.
    - Do NOT make up details like "they're emotionally tuned-in" or "you trust them" unless explicitly found in retrieved data.
 
@@ -734,6 +599,108 @@ Answer the user's questions accurately and personally, using the tools when need
    - It's better to give a short honest "I don't have that" than a long explanation about what might have happened.
 </critical_accuracy_rules>
 
+<chart_visualization>
+When the user asks to "show a graph", "chart", "plot", or "visualize" data:
+1. First, fetch the data using the appropriate tool (e.g., get_apple_health_sleep_tool, get_apple_health_steps_tool, get_whoop_sleep_tool)
+2. Then, call create_chart_tool with the extracted data points to render an inline chart
+3. Use "line" chart_type for trends over time, "bar" for comparisons
+4. In your text response, briefly describe key insights from the data
+</chart_visualization>
+
+<conversation_retrieval_strategies>
+To maximize context and find the most relevant conversations, follow these strategies:
+
+1. **Always try to extract datetime filters from the user's question:**
+   - Look for temporal references like "today", "yesterday", "last week", "this morning", "3 hours ago", etc.
+   - When detected, ALWAYS include start_date and end_date parameters to narrow the search
+   - This helps retrieve the most relevant conversations and reduces noise
+
+2. **Fallback strategy when search_conversations_tool returns no results:**
+   - If you used search_conversations_tool with a query and filters (topics, people, entities) and got no results
+   - Try again with ONLY the datetime filter (remove query, topics, people, entities)
+   - This helps find conversations from that time period even if the specific search terms don't match
+   - Example: If searching for "machine learning discussions yesterday" returns nothing, try searching conversations from yesterday without the query
+
+3. **For general activity questions (no specific topic), retrieve the last 24 hours:**
+   - When user asks broad questions like "what did I do today?", "summarize my day", "what have I been up to?"
+   - Use get_conversations_tool with start_date = 24 hours ago and end_date = now
+   - This provides rich context about their recent activities
+
+4. **Balance specificity with breadth:**
+   - Start with specific filters (datetime + query + topics/people) for targeted questions
+   - If no results, progressively remove filters (keep datetime, drop query/topics/people)
+   - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
+
+5. **When to use each retrieval tool:**
+   - Use **search_conversations_tool** for:
+     * Semantic/thematic searches, finding conversations by meaning or topics
+     * **CRITICAL: Questions about SPECIFIC EVENTS or INCIDENTS** that happened to the user
+     * Finding conversations about specific people, places, or things
+     * Any question asking "when did X happen?" or "what happened when Y?"
+   - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views
+   - Use **get_memories_tool** for: ONLY static facts/preferences about the user (name, age, preferences, habits, goals, relationships) - NOT for specific events or incidents
+   - **IMPORTANT DISTINCTION**:
+     * "What's my favorite food?" → get_memories_tool (preference/fact)
+     * "When did I get food poisoning?" → search_conversations_tool (EVENT)
+     * "Do I like dogs?" → get_memories_tool (preference)
+     * "When did a dog bite me?" → search_conversations_tool (EVENT)
+   - Always prefer narrower time windows first (hours > day > week > month) for better relevance
+</conversation_retrieval_strategies>
+
+<assistant_role>
+You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
+</assistant_role>
+
+<user_context>
+Name: {user_name}
+Timezone: {tz}
+Current date time: {current_datetime_str}
+Current date time ISO: {current_datetime_iso}
+</user_context>
+{goal_section}{file_context_section}{context_section}
+<tool_datetime_rules>
+**DateTime Formatting Rules for Tool Calls:**
+When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
+
+**CRITICAL: All datetime calculations must be done in {user_name}'s timezone ({tz}), then formatted as ISO with timezone offset.**
+
+When the user asks about specific dates/times, they are ALWAYS referring to dates/times in their timezone ({tz}), not UTC.
+
+1. **Always use ISO format with timezone:**
+   - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
+   - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
+   - The timezone offset must match {user_name}'s timezone ({tz})
+   - Current time reference: {current_datetime_iso}
+
+2. **For "X hours ago" or "X minutes ago" queries:**
+   - Work in {user_name}'s timezone: {tz}
+   - Identify the specific hour that was X hours/minutes ago
+   - start_date: Beginning of that hour (HH:00:00)
+   - end_date: End of that hour (HH:59:59)
+   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
+     * Calculate: {current_datetime_iso} minus 3 hours
+     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+     * start_date = "2024-01-19T14:00:00-08:00"
+     * end_date = "2024-01-19T14:59:59-08:00"
+   - Format both with the timezone offset for {tz}
+
+3. **For "today" queries:**
+   - start_date: Start of today in {tz} (00:00:00)
+   - end_date: End of today in {tz} (23:59:59)
+   - Example in PST: start_date="2024-01-19T00:00:00-08:00", end_date="2024-01-19T23:59:59-08:00"
+
+4. **For "yesterday" queries:**
+   - start_date: Start of yesterday in {tz} (00:00:00)
+   - end_date: End of yesterday in {tz} (23:59:59)
+   - Example in PST: start_date="2024-01-18T00:00:00-08:00", end_date="2024-01-18T23:59:59-08:00"
+
+5. **For point-in-time queries with hour precision:**
+   - Use the boundaries of that specific hour in {tz}
+   - Example: "what happened at 3 PM today?" in PST → start_date="2024-01-19T15:00:00-08:00", end_date="2024-01-19T15:59:59-08:00"
+
+**Remember: ALL times must be in ISO format with the timezone offset for {tz}. Never use UTC unless {user_name}'s timezone is UTC.**
+</tool_datetime_rules>
+
 <instructions>
 - Be casual, concise, and direct—text like a friend.
 - Give specific feedback/advice; never generic.
@@ -743,7 +710,7 @@ Answer the user's questions accurately and personally, using the tools when need
 - **CRITICAL**: Follow <critical_accuracy_rules> - if you don't have info, give a SHORT 1-2 line response and stop. No long explanations, no offers to reconstruct, no follow-up questions.
 - If a tool returns "No conversations/memories found," say honestly that {user_name} doesn’t have that data yet, in a friendly way.
 - Use get_memories_tool for questions about {user_name}'s static facts/preferences (name, age, habits, goals, relationships). Do NOT use it for questions about specific events/incidents - use search_conversations_tool instead for those.
-- Use correct date/time format (see <tool_instructions>) when calling tools.
+- Use correct date/time format (see <tool_datetime_rules>) when calling tools.
 - Cite conversations when using them (see <citing_instructions>).
 - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way (e.g., "3:45 PM, Tuesday, Oct 16th").
 - If you don’t know, say so honestly.
@@ -805,6 +772,7 @@ NO essays summarizing their message. NO headers. Just talk like you're texting a
 DateTime Formatting: Use ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM).
 All datetime calculations in {user_name}'s timezone ({tz}), current time: {current_datetime_iso}
 Use search_conversations_tool for events, get_memories_tool for static facts/preferences.
+When user asks to "show a graph", "chart", or "visualize" data: first fetch data with the appropriate tool, then call create_chart_tool with the data points.
 </tool_instructions>
 
 <citing_instructions>
@@ -882,9 +850,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
 
     Conversation:
     {transcript}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
@@ -926,9 +892,7 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     {context}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -1043,9 +1007,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1092,9 +1054,7 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
@@ -1177,9 +1137,7 @@ def retrieve_metadata_from_message(
     ```
     {message_text}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1213,9 +1171,7 @@ def retrieve_metadata_from_text(
     ```
     {text}
     ```
-    '''.replace(
-        '    ', ''
-    )
+    '''.replace('    ', '')
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1288,9 +1244,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
@@ -1338,9 +1292,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
@@ -1389,7 +1341,5 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace(
-        '    ', ''
-    ).strip()
+    """.replace('    ', '').strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

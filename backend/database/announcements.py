@@ -4,7 +4,7 @@ from typing import List, Optional
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
-from models.announcement import Announcement, AnnouncementType
+from models.announcement import Announcement, AnnouncementType, TriggerType
 
 
 def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
@@ -307,3 +307,160 @@ def _compare_versions(v1: str, v2: str) -> int:
     if build1 > build2:
         return 1
     return 0
+
+
+# ============================================================================
+# Per-user dismissal tracking
+# ============================================================================
+
+
+def get_dismissed_announcement_ids(uid: str) -> set:
+    """Get the set of announcement IDs that a user has dismissed."""
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements")
+    docs = dismissed_ref.stream()
+    return {doc.id for doc in docs}
+
+
+def dismiss_announcement(uid: str, announcement_id: str, cta_clicked: bool = False) -> bool:
+    """
+    Mark an announcement as dismissed for a user.
+    Returns True if successful.
+    """
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
+    dismissed_ref.set(
+        {
+            "dismissed_at": datetime.now(timezone.utc),
+            "cta_clicked": cta_clicked,
+        }
+    )
+    return True
+
+
+def is_announcement_dismissed(uid: str, announcement_id: str) -> bool:
+    """Check if a user has dismissed a specific announcement."""
+    dismissed_ref = db.collection("users").document(uid).collection("dismissed_announcements").document(announcement_id)
+    doc = dismissed_ref.get()
+    return doc.exists
+
+
+# ============================================================================
+# Unified pending announcements query
+# ============================================================================
+
+
+def get_pending_announcements(
+    uid: str,
+    app_version: str,
+    platform: str,
+    trigger: str,
+    firmware_version: Optional[str] = None,
+    device_model: Optional[str] = None,
+) -> List[Announcement]:
+    """
+    Get all announcements that should be shown to a user.
+
+    Filtering logic:
+    1. active == True
+    2. Not in user's dismissed_announcements (if show_once == True)
+    3. Within time window (start_at <= now <= expires_at)
+    4. Matches targeting rules (version range, device, platform)
+    5. Matches trigger type
+    6. Sorted by priority (descending)
+
+    Args:
+        uid: User ID for dismissal tracking
+        app_version: Current app version (e.g., "1.0.522+240")
+        platform: "ios" or "android"
+        trigger: "app_launch", "version_upgrade", or "firmware_upgrade"
+        firmware_version: Current firmware version (optional)
+        device_model: Device model name (optional)
+
+    Returns:
+        List of announcements to show, sorted by priority (highest first)
+    """
+    now = datetime.now(timezone.utc)
+
+    # Map trigger string to enum
+    trigger_map = {
+        "app_launch": TriggerType.IMMEDIATE,
+        "version_upgrade": TriggerType.VERSION_UPGRADE,
+        "firmware_upgrade": TriggerType.FIRMWARE_UPGRADE,
+    }
+    requested_trigger = trigger_map.get(trigger, TriggerType.IMMEDIATE)
+
+    # Get user's dismissed announcements
+    dismissed_ids = get_dismissed_announcement_ids(uid)
+
+    # Query all active announcements
+    announcements_ref = db.collection("announcements")
+    query = announcements_ref.where(filter=FieldFilter("active", "==", True))
+    docs = query.stream()
+
+    pending = []
+
+    for doc in docs:
+        data = doc.to_dict()
+        announcement = Announcement.from_dict(data)
+
+        # Get effective targeting and display configs
+        targeting = announcement.get_effective_targeting()
+        display = announcement.get_effective_display()
+
+        # 1. Check if already dismissed (and show_once is true)
+        if display.show_once and announcement.id in dismissed_ids:
+            continue
+
+        # 2. Check time window
+        effective_start = display.start_at
+        effective_expires = display.expires_at or announcement.expires_at  # Fallback to legacy field
+
+        if effective_start and now < effective_start:
+            continue
+        if effective_expires and now > effective_expires:
+            continue
+
+        # 3. Check trigger type
+        if targeting.trigger != requested_trigger:
+            # Special case: IMMEDIATE trigger announcements should also show on version/firmware upgrades
+            if targeting.trigger != TriggerType.IMMEDIATE:
+                continue
+
+        # 4. Check platform targeting
+        if targeting.platforms and platform not in targeting.platforms:
+            continue
+
+        # 5. Check app version range
+        if targeting.app_version_min:
+            if _compare_versions(app_version, targeting.app_version_min) < 0:
+                continue
+        if targeting.app_version_max:
+            if _compare_versions(app_version, targeting.app_version_max) > 0:
+                continue
+
+        # 6. Check firmware version range (only if firmware_version provided)
+        if targeting.firmware_version_min or targeting.firmware_version_max:
+            if not firmware_version:
+                continue
+            if targeting.firmware_version_min:
+                if _compare_versions(firmware_version, targeting.firmware_version_min) < 0:
+                    continue
+            if targeting.firmware_version_max:
+                if _compare_versions(firmware_version, targeting.firmware_version_max) > 0:
+                    continue
+
+        # 7. Check device model targeting
+        if targeting.device_models:
+            if not device_model or device_model not in targeting.device_models:
+                continue
+
+        # 8. Check test_uids (if set, only those users see the announcement)
+        if targeting.test_uids:
+            if uid not in targeting.test_uids:
+                continue
+
+        pending.append(announcement)
+
+    # Sort by priority (highest first)
+    pending.sort(key=lambda x: x.get_effective_display().priority, reverse=True)
+
+    return pending

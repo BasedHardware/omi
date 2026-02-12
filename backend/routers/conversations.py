@@ -23,6 +23,7 @@ from models.conversation import (
     UpdateActionItemDescriptionRequest,
     DeleteActionItemRequest,
     BulkAssignSegmentsRequest,
+    UpdateSegmentTextRequest,
     SearchRequest,
     TestPromptRequest,
 )
@@ -161,6 +162,20 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
+    return {'status': 'Ok'}
+
+
+@router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
+def patch_conversation_segment_text(
+    conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
+    if result == 'not_found':
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if result == 'locked':
+        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+    if result == 'segment_not_found':
+        raise HTTPException(status_code=404, detail="Segment not found")
     return {'status': 'Ok'}
 
 

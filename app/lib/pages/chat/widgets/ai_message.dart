@@ -25,11 +25,13 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
+import 'chart_message_widget.dart';
 import 'markdown_message_widget.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -55,7 +57,10 @@ String getThinkingDisplayText(String thinkingText) {
 /// Build app icon widget from app_id
 Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
   final appProvider = Provider.of<AppProvider>(context, listen: false);
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId);
+  final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+  // Check both public apps and user's installed chat apps (includes private MCP apps)
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+      messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
     return Opacity(
@@ -464,6 +469,25 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     super.dispose();
   }
 
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
@@ -567,6 +591,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                   },
                 ),
               ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -628,6 +659,25 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   void dispose() {
     _dotsTimer?.cancel();
     super.dispose();
+  }
+
+  Widget _buildChartShimmer() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: const Color(0xFF1A1A20),
+        highlightColor: const Color(0xFF282830),
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A20),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -739,6 +789,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             setMessageNps: widget.setMessageNps,
             currentNps: widget.message.rating,
           ),
+        if (widget.message.chartData != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ChartMessageWidget(chartData: widget.message.chartData!),
+          )
+        else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
+          _buildChartShimmer(),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(

@@ -235,6 +235,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         if (granted) {
           // Update the provider's cached permission status with the granted result
           await provider.updateAppleRemindersPermission(granted: true);
+          // Save connected status to backend so auto-sync works
+          await provider.saveConnectionDetails(app.key, {'connected': true});
           await provider.setSelectedApp(app);
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
@@ -250,6 +252,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
         }
         return;
       }
+      // Permission already granted - ensure backend knows it's connected
+      await provider.saveConnectionDetails(app.key, {'connected': true});
       await provider.setSelectedApp(app);
       return;
     }

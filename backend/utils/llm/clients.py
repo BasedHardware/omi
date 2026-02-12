@@ -6,22 +6,68 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.conversation import Structured
+from utils.llm.usage_tracker import get_usage_callback
 
+# Get the usage tracking callback
+_usage_callback = get_usage_callback()
 
 # Base models for general use
-llm_mini = ChatOpenAI(model='gpt-4.1-mini')
-llm_mini_stream = ChatOpenAI(model='gpt-4.1-mini', streaming=True)
-llm_large = ChatOpenAI(model='o1-preview')
-llm_large_stream = ChatOpenAI(model='o1-preview', streaming=True, temperature=1)
-llm_high = ChatOpenAI(model='o4-mini')
-llm_high_stream = ChatOpenAI(model='o4-mini', streaming=True, temperature=1)
-llm_medium = ChatOpenAI(model='gpt-4.1')
-llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
-llm_medium_experiment = ChatOpenAI(model='gpt-5.1')
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini_stream = ChatOpenAI(
+    model='gpt-4.1-mini',
+    streaming=True,
+    stream_options={"include_usage": True},
+    callbacks=[_usage_callback],
+)
+llm_large = ChatOpenAI(model='o1-preview', callbacks=[_usage_callback])
+llm_large_stream = ChatOpenAI(
+    model='o1-preview',
+    streaming=True,
+    stream_options={"include_usage": True},
+    temperature=1,
+    callbacks=[_usage_callback],
+)
+llm_high = ChatOpenAI(model='o4-mini', callbacks=[_usage_callback])
+llm_high_stream = ChatOpenAI(
+    model='o4-mini',
+    streaming=True,
+    stream_options={"include_usage": True},
+    temperature=1,
+    callbacks=[_usage_callback],
+)
+llm_medium = ChatOpenAI(model='gpt-4.1', callbacks=[_usage_callback])
+llm_medium_stream = ChatOpenAI(
+    model='gpt-4.1',
+    streaming=True,
+    stream_options={"include_usage": True},
+    callbacks=[_usage_callback],
+)
+llm_medium_experiment = ChatOpenAI(
+    model='gpt-5.1',
+    extra_body={"prompt_cache_retention": "24h"},
+    callbacks=[_usage_callback],
+)
 
 # Specialized models for agentic workflows
-llm_agent = ChatOpenAI(model='gpt-5.1')
-llm_agent_stream = ChatOpenAI(model='gpt-5.1', streaming=True)
+# prompt_cache_key ensures consistent routing to the same cache machine
+# for better prompt prefix cache hit rates.
+_agent_cache_kwargs = {
+    "prompt_cache_key": "omi-agent-v1",
+}
+llm_agent = ChatOpenAI(
+    model='gpt-5.1',
+    extra_body={"prompt_cache_retention": "24h"},
+    callbacks=[_usage_callback],
+    model_kwargs=_agent_cache_kwargs,
+)
+llm_agent_stream = ChatOpenAI(
+    model='gpt-5.1',
+    streaming=True,
+    stream_options={"include_usage": True},
+    extra_body={"prompt_cache_retention": "24h"},
+    callbacks=[_usage_callback],
+    model_kwargs=_agent_cache_kwargs,
+)
 llm_persona_mini_stream = ChatOpenAI(
     temperature=0.8,
     model="google/gemini-flash-1.5-8b",
@@ -29,6 +75,8 @@ llm_persona_mini_stream = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
+    stream_options={"include_usage": True},
+    callbacks=[_usage_callback],
 )
 llm_persona_medium_stream = ChatOpenAI(
     temperature=0.8,
@@ -37,6 +85,8 @@ llm_persona_medium_stream = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
+    stream_options={"include_usage": True},
+    callbacks=[_usage_callback],
 )
 
 # Gemini models for large context analysis
@@ -46,6 +96,7 @@ llm_gemini_flash = ChatOpenAI(
     api_key=os.environ.get('OPENROUTER_API_KEY'),
     base_url="https://openrouter.ai/api/v1",
     default_headers={"X-Title": "Omi Wrapped"},
+    callbacks=[_usage_callback],
 )
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")

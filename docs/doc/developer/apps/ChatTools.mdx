@@ -454,9 +454,102 @@ async def get_omi_tools_manifest():
                 "auth_required": True,
                 "status_message": "Adding to playlist..."
             }
-        ]
+        ],
+        "chat_messages": {
+            "enabled": True,
+            "target": "app",
+            "notify": False
+        }
     }
 ```
+
+---
+
+## Sending Chat Messages Proactively
+
+Your app can send messages directly to a user's chat without waiting for them to invoke a tool. This is useful for:
+
+- Sending results from long-running background tasks
+- Proactive notifications based on external events
+- Asynchronous updates from your service
+
+### Enabling Chat Messages
+
+Add the `chat_messages` configuration to your manifest:
+
+```json
+{
+  "tools": [...],
+  "chat_messages": {
+    "enabled": true,
+    "target": "app",
+    "notify": false
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | `false` | Whether your app can send chat messages |
+| `target` | string | `"app"` | Where messages appear: `"app"` (app-specific chat) or `"main"` (main chat) |
+| `notify` | boolean | `false` | Whether to send a push notification with the message |
+
+### Sending Messages via API
+
+Once enabled, use the notification API to send messages:
+
+```bash
+curl -X POST https://api.omi.me/v1/integrations/notification \
+  -H "Authorization: Bearer YOUR_APP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uid": "user_firebase_id",
+    "aid": "your_app_id",
+    "message": "Your task has completed! Here are the results..."
+  }'
+```
+
+### API Request Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `uid` | string | Yes | The user's Firebase UID |
+| `aid` | string | Yes | Your app's ID |
+| `message` | string | Yes | The message content to send |
+
+### Example: Background Task Completion
+
+```python
+import httpx
+
+async def send_task_result(uid: str, result: str):
+    """Send task completion message to user's chat."""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.omi.me/v1/integrations/notification",
+            headers={
+                "Authorization": f"Bearer {APP_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "uid": uid,
+                "aid": APP_ID,
+                "message": result,
+            },
+        )
+        return response.status_code == 200
+```
+
+### Rate Limits
+
+Chat messages are rate-limited to prevent notification fatigue:
+
+- **Maximum**: 10 messages per hour per app per user
+- **Response**: HTTP 429 with `Retry-After` header when exceeded
+
+<Warning>
+Abuse of chat messages (spam, excessive notifications) may result in your app being removed from the store.
+</Warning>
 
 ---
 

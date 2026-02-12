@@ -230,6 +230,23 @@ Future<List<App>> retrievePopularApps() async {
   return SharedPreferencesUtil().appsList;
 }
 
+Future<List<String>> getEnabledAppsServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/enabled',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    return (jsonDecode(response.body) as List).cast<String>();
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
@@ -935,6 +952,58 @@ Future<Map<String, dynamic>?> getUpsertUserPersonaServer() async {
   try {
     if (response == null || response.statusCode != 200) return null;
     log('getUpsertUserPersonaServer: ${response.body}');
+    return jsonDecode(response.body);
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
+  }
+}
+
+/// Add an MCP server as a private app with chat tools.
+/// Returns {app_id, requires_oauth, auth_url?, tools_count?, tool_names?}
+Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {String? description}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/mcp',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({
+      'name': name,
+      'mcp_server_url': serverUrl,
+      if (description != null && description.isNotEmpty) 'description': description,
+    }),
+    method: 'POST',
+  );
+  try {
+    if (response == null) return null;
+    Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    // Return error detail
+    try {
+      var errorData = jsonDecode(response.body);
+      return {'error': errorData['detail'] ?? 'Failed to add MCP server'};
+    } catch (_) {
+      return {'error': 'Failed to add MCP server (${response.statusCode})'};
+    }
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
+  }
+}
+
+/// Re-discover tools from an MCP server.
+Future<Map<String, dynamic>?> refreshMcpTools(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/mcp/refresh',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return null;
+    Logger.debug('refreshMcpTools: ${response.body}');
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());

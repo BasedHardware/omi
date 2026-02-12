@@ -52,6 +52,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
         if (PlatformService.isApple && !_appleRemindersPermissionManuallySet) {
           _appleRemindersPermission = await AppleRemindersService().hasPermission();
+          // Ensure backend has connected status for Apple Reminders if permission is granted
+          if (_appleRemindersPermission && _connectionDetails['apple_reminders']?['connected'] != true) {
+            await saveConnectionDetails('apple_reminders', {'connected': true});
+          }
         }
         _appleRemindersPermissionManuallySet = false;
 

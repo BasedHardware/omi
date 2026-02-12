@@ -181,9 +181,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               ),
               const SizedBox(height: 6),
               SelectableText(
-                isInitializing
-                    ? context.l10n.preparingSystemAudioCapture
-                    : context.l10n.clickTheButtonToCaptureAudio,
+                isInitializing ? context.l10n.preparingSystemAudioCapture : context.l10n.clickTheButtonToCaptureAudio,
                 style: const TextStyle(
                   fontSize: 15,
                   color: ResponsiveHelper.textTertiary,
@@ -293,7 +291,9 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                                       ? '${latestTranscript.substring(0, 60)}...'
                                       : latestTranscript)
                                   : (isPaused ? context.l10n.tapPlayToResume : context.l10n.listeningForAudio))
-                              : (isInitializing ? context.l10n.preparingAudioCapture : context.l10n.clickToBeginRecording),
+                              : (isInitializing
+                                  ? context.l10n.preparingAudioCapture
+                                  : context.l10n.clickToBeginRecording),
                       style: TextStyle(
                         fontSize: 14,
                         color: isRecordingOrPaused ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
@@ -574,7 +574,10 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         final segment = entry.value;
         final isLatest = index == displaySegments.length - 1;
 
-        String speakerName = segment.isUser ? context.l10n.you : context.l10n.speakerWithId(segment.speakerId.toString());
+        String speakerName = segment.isUser
+            ? context.l10n.you
+            : context.l10n
+                .speakerWithId(TranscriptSegment.getDisplaySpeakerId(segment.speakerId, displaySegments).toString());
         if (segment.personId != null && !segment.isUser) {
           final person = people.firstWhereOrNull((p) => p.id == segment.personId);
           if (person != null) {

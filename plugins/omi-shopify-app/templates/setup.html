@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify for Omi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --shopify-green: #96bf48;
+            --shopify-green-hover: #7ba03e;
+            --shopify-dark-green: #5e8e3e;
+            --shopify-black: #0d0d0d;
+            --shopify-dark: #1a1a1a;
+            --shopify-gray: #2a2a2a;
+            --shopify-light-gray: #a3a3a3;
+            --shopify-white: #ffffff;
+            --omi-accent: #6366f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(145deg, var(--shopify-black) 0%, #0f1f0a 50%, var(--shopify-dark) 100%);
+            min-height: 100vh;
+            color: var(--shopify-white);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-top: 20px;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .shopify-logo {
+            width: 56px;
+            height: 56px;
+        }
+
+        .plus-icon {
+            font-size: 28px;
+            color: var(--shopify-light-gray);
+            font-weight: 300;
+        }
+
+        .omi-logo {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--omi-accent) 0%, #8b5cf6 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: -1px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, var(--shopify-white), var(--shopify-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--shopify-light-gray);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--shopify-gray);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .error-banner {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-icon {
+            font-size: 20px;
+        }
+
+        .success-banner {
+            background: linear-gradient(135deg, var(--shopify-green) 0%, var(--shopify-dark-green) 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .success-icon {
+            font-size: 20px;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--shopify-green) 0%, var(--shopify-dark-green) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            overflow: hidden;
+        }
+
+        .profile-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .profile-info p {
+            color: var(--shopify-light-gray);
+            font-size: 14px;
+        }
+
+        .connected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(150, 191, 72, 0.15);
+            color: var(--shopify-green);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .btn-shopify {
+            background: var(--shopify-green);
+            color: var(--shopify-black);
+        }
+
+        .btn-shopify:hover {
+            background: var(--shopify-green-hover);
+            transform: scale(1.02);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--shopify-white);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--shopify-white);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .btn-small {
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--shopify-light-gray);
+            margin-bottom: 16px;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--shopify-light-gray);
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--shopify-dark);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--shopify-white);
+            font-size: 15px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--shopify-green);
+        }
+
+        .input-group input::placeholder {
+            color: var(--shopify-light-gray);
+        }
+
+        .input-suffix {
+            display: flex;
+            align-items: center;
+        }
+
+        .input-suffix input {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .input-suffix span {
+            background: var(--shopify-dark);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-left: none;
+            padding: 14px 12px;
+            border-radius: 0 8px 8px 0;
+            color: var(--shopify-light-gray);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .features-list {
+            list-style: none;
+            margin: 24px 0;
+        }
+
+        .features-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .features-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .feature-text strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .feature-text span {
+            color: var(--shopify-light-gray);
+            font-size: 14px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer p {
+            color: var(--shopify-light-gray);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .footer a {
+            color: var(--shopify-green);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--shopify-dark);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--shopify-green);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--shopify-light-gray);
+            margin-top: 4px;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            h1 {
+                font-size: 26px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <svg class="shopify-logo" viewBox="0 0 109 124" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M95.8707 23.8842C95.7849 23.2688 95.2605 22.9122 94.8223 22.8265C94.3841 22.7407 84.6887 21.4535 84.6887 21.4535C84.6887 21.4535 77.0893 13.9399 76.3021 13.1527C75.5149 12.3655 73.9417 12.6221 73.3263 12.7936C73.2405 12.8794 71.8391 13.2461 69.5215 13.9399C67.2896 7.78574 63.1657 2.19891 55.8093 2.19891C55.5527 2.19891 55.2961 2.19891 55.0395 2.28467C53.1253 0 50.7221 0 49.1489 0C36.3629 0 30.0371 15.8544 28.2085 23.8842C21.5685 25.8841 16.8405 27.2855 16.1533 27.4571C13.1475 28.4015 13.0617 28.4873 12.6093 31.2221C12.3527 33.3681 4.58179 93.2587 4.58179 93.2587L76.7305 109.885L108.617 102.356C108.531 102.27 95.9565 24.4996 95.8707 23.8842ZM65.7455 15.1683C63.8569 15.7837 61.7109 16.4851 59.3935 17.2723C59.3077 12.3655 58.5205 6.17551 55.9809 2.62683C61.0593 3.58547 63.9793 9.33173 65.7455 15.1683ZM53.4683 18.2599C48.3899 19.8331 42.8031 21.4921 37.2163 23.1511C38.8753 17.1011 41.8811 11.0939 46.1763 8.18261C47.7495 6.86685 49.9205 5.46513 52.5573 4.93657C54.9319 8.74253 55.0177 14.7021 53.4683 18.2599ZM49.3209 2.54093C50.6367 2.54093 51.9517 2.88333 53.1253 3.58547C49.4925 5.13647 45.6007 8.82845 43.7121 15.2541C39.3445 16.5699 35.0627 17.8857 30.9529 19.1157C32.8691 12.6221 38.6153 2.54093 49.3209 2.54093Z" fill="#96BF48"/>
+                    <path d="M94.8222 22.8265C94.384 22.7407 84.6886 21.4535 84.6886 21.4535C84.6886 21.4535 77.0892 13.9399 76.302 13.1527C75.9688 12.8103 75.5306 12.6389 75.0924 12.5531L76.7372 109.799L108.623 102.27C108.623 102.27 95.9622 24.4996 95.8764 23.8842C95.7848 23.2688 95.2604 22.9122 94.8222 22.8265Z" fill="#5E8E3E"/>
+                    <path d="M55.8096 42.8116L51.7856 55.7348C51.7856 55.7348 48.1286 53.846 43.7368 54.1168C37.4868 54.4752 37.4868 58.2978 37.4868 59.356C37.9108 64.4344 52.1556 65.5364 52.9286 78.4896C53.53 88.5708 47.5704 95.513 38.73 96.0558C28.3054 96.6712 22.5592 90.6258 22.5592 90.6258L25.308 80.1154C25.308 80.1154 31.14 84.2252 35.7044 83.9544C38.7102 83.7828 39.7546 81.3796 39.6688 79.6626C39.0676 72.9368 27.3386 73.3894 26.6514 61.5746C26.1228 51.6636 32.5448 41.667 47.2272 40.7084C53.044 40.3518 55.8096 42.8116 55.8096 42.8116Z" fill="white"/>
+                </svg>
+                <span class="plus-icon">+</span>
+                <div class="omi-logo">omi</div>
+            </div>
+            <h1>Shopify for Omi</h1>
+            <p class="subtitle">Manage your store with voice commands</p>
+        </div>
+
+        {% if error %}
+        <div class="error-banner">
+            <span class="error-icon">⚠️</span>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        {% if authenticated %}
+        <div class="card">
+            <div class="profile-section">
+                <div class="profile-avatar">
+                    🏪
+                </div>
+                <div class="profile-info">
+                    <h3>{{ shop_info.name if shop_info else 'Your Store' }}</h3>
+                    <p>{{ shop_domain }}</p>
+                    <span class="connected-badge">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Connected
+                    </span>
+                </div>
+            </div>
+
+            {% if shop_info %}
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{ shop_info.currency }}</div>
+                    <div class="stat-label">Currency</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ shop_info.plan_name|title if shop_info.plan_name else 'N/A' }}</div>
+                    <div class="stat-label">Plan</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="action-buttons">
+                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                    Disconnect Store
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">What You Can Say</div>
+            <ul class="features-list">
+                <li>
+                    <span class="feature-icon">📊</span>
+                    <div class="feature-text">
+                        <strong>"Show my analytics for last 7 days"</strong>
+                        <span>Get sales, orders, and revenue data</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">📦</span>
+                    <div class="feature-text">
+                        <strong>"Show my recent orders"</strong>
+                        <span>List orders with status and details</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🔍</span>
+                    <div class="feature-text">
+                        <strong>"Get details for order #1001"</strong>
+                        <span>View complete order information</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🛒</span>
+                    <div class="feature-text">
+                        <strong>"Create an order for john@example.com"</strong>
+                        <span>Create orders with new or existing customers</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">👥</span>
+                    <div class="feature-text">
+                        <strong>"Show my customers" or "Search customer john@..."</strong>
+                        <span>List and search customers</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">➕</span>
+                    <div class="feature-text">
+                        <strong>"Create a customer for jane@example.com"</strong>
+                        <span>Add new customers to your store</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        {% else %}
+
+        <div class="card">
+            <div class="section-title">Connect Your Store</div>
+            <p style="color: var(--shopify-light-gray); margin-bottom: 24px; line-height: 1.6;">
+                Enter your Shopify store domain to connect and start managing your store with voice commands through Omi.
+            </p>
+            
+            <form id="connect-form" onsubmit="return connectStore()">
+                <div class="input-group">
+                    <label for="shop-domain">Store Domain</label>
+                    <div class="input-suffix">
+                        <input type="text" id="shop-domain" placeholder="your-store" required>
+                        <span>.myshopify.com</span>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-shopify">
+                    <svg width="24" height="24" viewBox="0 0 109 124" fill="currentColor">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M95.8707 23.8842C95.7849 23.2688 95.2605 22.9122 94.8223 22.8265C94.3841 22.7407 84.6887 21.4535 84.6887 21.4535C84.6887 21.4535 77.0893 13.9399 76.3021 13.1527C75.5149 12.3655 73.9417 12.6221 73.3263 12.7936C73.2405 12.8794 71.8391 13.2461 69.5215 13.9399C67.2896 7.78574 63.1657 2.19891 55.8093 2.19891C55.5527 2.19891 55.2961 2.19891 55.0395 2.28467C53.1253 0 50.7221 0 49.1489 0C36.3629 0 30.0371 15.8544 28.2085 23.8842C21.5685 25.8841 16.8405 27.2855 16.1533 27.4571C13.1475 28.4015 13.0617 28.4873 12.6093 31.2221C12.3527 33.3681 4.58179 93.2587 4.58179 93.2587L76.7305 109.885L108.617 102.356C108.531 102.27 95.9565 24.4996 95.8707 23.8842Z"/>
+                    </svg>
+                    Connect with Shopify
+                </button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Features</div>
+            <ul class="features-list">
+                <li>
+                    <span class="feature-icon">📊</span>
+                    <div class="feature-text">
+                        <strong>Analytics Dashboard</strong>
+                        <span>Get sales, orders, and revenue insights</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">📦</span>
+                    <div class="feature-text">
+                        <strong>Order Management</strong>
+                        <span>View, search, and create orders with voice</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">👥</span>
+                    <div class="feature-text">
+                        <strong>Customer Management</strong>
+                        <span>Search customers and add new ones instantly</span>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🔐</span>
+                    <div class="feature-text">
+                        <strong>Secure OAuth</strong>
+                        <span>Industry-standard Shopify OAuth 2.0</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>Made for <a href="https://omi.me" target="_blank">Omi</a></p>
+            <p>Your data is secure • <a href="https://www.shopify.com/legal/privacy" target="_blank">Shopify Privacy</a></p>
+        </div>
+    </div>
+
+    <script>
+        function connectStore() {
+            const shopDomain = document.getElementById('shop-domain').value.trim();
+            const uid = new URLSearchParams(window.location.search).get('uid');
+            
+            if (!shopDomain) {
+                alert('Please enter your store domain');
+                return false;
+            }
+            
+            if (!uid) {
+                alert('Missing user ID. Please access this page from the Omi app.');
+                return false;
+            }
+            
+            // Redirect to OAuth flow
+            window.location.href = `/auth/shopify?uid=${uid}&shop=${shopDomain}`;
+            return false;
+        }
+    </script>
+</body>
+</html>
+

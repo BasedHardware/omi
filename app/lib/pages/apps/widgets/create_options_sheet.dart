@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -32,64 +33,72 @@ class CreateOptionsSheet extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 24),
-          InkWell(
-            onTap: () {
-              Navigator.pop(context);
-              MixpanelManager().pageOpened('Submit App');
-              routeToPage(context, const AddAppPage());
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.apps,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Create an App',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Create and share your app',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ],
+          Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              titleAlignment: ListTileTitleAlignment.center,
+              leading: const Icon(Icons.apps, color: Colors.white),
+              title: Text(context.l10n.createAnApp,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle:
+                  Text(context.l10n.createAndShareYourApp, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              onTap: () {
+                Navigator.pop(context);
+                MixpanelManager().pageOpened('Submit App');
+                routeToPage(context, const AddAppPage());
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: const Icon(Icons.person_outline, color: Colors.white),
+              titleAlignment: ListTileTitleAlignment.center,
+              title: Text(context.l10n.createMyClone,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle:
+                  Text(context.l10n.createYourDigitalClone, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              onTap: () {
+                Navigator.pop(context);
+                MixpanelManager().pageOpened('Create Persona');
+                // Set routing in provider and navigate to Persona Profile page
+                Provider.of<PersonaProvider>(context, listen: false).setRouting(PersonaProfileRouting.create_my_clone);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const PersonaProfilePage(),
+                    settings: const RouteSettings(
+                      arguments: 'from_settings',
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: Colors.black,
-                    size: 24,
-                  ),
-                ],
-              ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: const Icon(Icons.cable, color: Colors.white),
+              titleAlignment: ListTileTitleAlignment.center,
+              title: Text(context.l10n.addMcpServer,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle:
+                  Text(context.l10n.connectExternalAiTools, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              onTap: () {
+                Navigator.pop(context);
+                MixpanelManager().pageOpened('Add MCP Server');
+                routeToPage(context, const AddMcpServerPage());
+              },
             ),
           ),
           // const SizedBox(height: 12),

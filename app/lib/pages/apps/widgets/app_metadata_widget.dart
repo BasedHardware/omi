@@ -303,7 +303,8 @@ class AppMetadataWidget extends StatelessWidget {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ?? '${context.l10n.categoryLabel}*',
+                                        (category?.isNotEmpty == true ? category : '${context.l10n.categoryLabel}*') ??
+                                            '${context.l10n.categoryLabel}*',
                                         style: TextStyle(
                                             color: category != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                             fontSize: 16),
@@ -491,7 +492,8 @@ class AppMetadataWidget extends StatelessWidget {
                                   width: 12,
                                 ),
                                 Text(
-                                  (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ?? context.l10n.noneSelected,
+                                  (appPricing?.isNotEmpty == true ? appPricing : context.l10n.noneSelected) ??
+                                      context.l10n.noneSelected,
                                   style: TextStyle(
                                       color: appPricing != null ? Colors.grey.shade100 : Colors.grey.shade400,
                                       fontSize: 16),

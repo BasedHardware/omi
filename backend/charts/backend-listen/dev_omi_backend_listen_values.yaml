@@ -291,10 +291,10 @@ autoscaling:
         value: 4
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
-  # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 60
-  failedResponseCode: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
+  # requestsPerPod: 60
+  # failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []

@@ -2,23 +2,26 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from database.announcements import (
     create_announcement,
     deactivate_announcement,
     delete_announcement,
+    dismiss_announcement,
     get_all_announcements,
     get_announcement_by_id,
     get_app_changelogs,
     get_app_features,
     get_firmware_features,
     get_general_announcements,
+    get_pending_announcements,
     get_recent_changelogs,
     update_announcement,
 )
-from models.announcement import Announcement, AnnouncementType
+from models.announcement import Announcement, AnnouncementType, Display, Targeting, TriggerType
+from utils.other import endpoints as auth_endpoints
 
 router = APIRouter()
 
@@ -96,6 +99,85 @@ async def get_announcements(
 
 
 # ----------------------------
+# Authenticated User Endpoints
+# ----------------------------
+
+
+@router.get("/v1/announcements/pending", response_model=List[Announcement], tags=["announcements"])
+async def get_pending_announcements_endpoint(
+    app_version: str = Query(..., description="Current app version (e.g., '1.0.522+240')"),
+    platform: str = Query(..., description="Platform: 'ios' or 'android'"),
+    trigger: str = Query(..., description="Trigger: 'app_launch', 'version_upgrade', or 'firmware_upgrade'"),
+    firmware_version: Optional[str] = Query(None, description="Current firmware version (optional)"),
+    device_model: Optional[str] = Query(None, description="Device model name (optional)"),
+    uid: str = Depends(auth_endpoints.get_current_user_uid),
+):
+    """
+    Get all pending announcements for a user.
+
+    This is the new unified endpoint that replaces the separate changelogs/features/general endpoints.
+    It supports flexible targeting and per-user dismissal tracking.
+
+    Filtering logic:
+    1. active == True
+    2. Not in user's dismissed_announcements (if show_once == True)
+    3. Within time window (start_at <= now <= expires_at)
+    4. Matches targeting rules (version range, device, platform)
+    5. Matches trigger type
+    6. Sorted by priority (descending)
+
+    Triggers:
+    - app_launch: Check every app launch (for immediate announcements)
+    - version_upgrade: Check only when app version changed
+    - firmware_upgrade: Check only when firmware version changed
+    """
+    if platform not in ["ios", "android"]:
+        raise HTTPException(status_code=400, detail="Platform must be 'ios' or 'android'")
+
+    if trigger not in ["app_launch", "version_upgrade", "firmware_upgrade"]:
+        raise HTTPException(
+            status_code=400, detail="Trigger must be 'app_launch', 'version_upgrade', or 'firmware_upgrade'"
+        )
+
+    announcements = get_pending_announcements(
+        uid=uid,
+        app_version=app_version,
+        platform=platform,
+        trigger=trigger,
+        firmware_version=firmware_version,
+        device_model=device_model,
+    )
+    return announcements
+
+
+class DismissAnnouncementRequest(BaseModel):
+    """Request body for dismissing an announcement."""
+
+    cta_clicked: bool = False
+
+
+@router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
+async def dismiss_announcement_endpoint(
+    announcement_id: str,
+    data: DismissAnnouncementRequest,
+    uid: str = Depends(auth_endpoints.get_current_user_uid),
+):
+    """
+    Mark an announcement as dismissed for the current user.
+
+    This prevents the announcement from being shown again if show_once is True.
+    The cta_clicked field can be used to track whether the user engaged with the call-to-action.
+    """
+    # Verify announcement exists
+    announcement = get_announcement_by_id(announcement_id)
+    if not announcement:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    success = dismiss_announcement(uid, announcement_id, data.cta_clicked)
+    return {"success": success, "message": "Announcement dismissed"}
+
+
+# ----------------------------
 # Admin CRUD Endpoints
 # ----------------------------
 
@@ -113,10 +195,14 @@ class CreateAnnouncementRequest(BaseModel):
     id: str
     type: AnnouncementType
     active: bool = True
+    # Legacy fields (for backward compatibility)
     app_version: Optional[str] = None
     firmware_version: Optional[str] = None
     device_models: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    # New flexible targeting and display options
+    targeting: Optional[Targeting] = None
+    display: Optional[Display] = None
     content: dict
 
 
@@ -124,10 +210,14 @@ class UpdateAnnouncementRequest(BaseModel):
     """Request body for updating an announcement."""
 
     active: Optional[bool] = None
+    # Legacy fields
     app_version: Optional[str] = None
     firmware_version: Optional[str] = None
     device_models: Optional[List[str]] = None
     expires_at: Optional[datetime] = None
+    # New fields
+    targeting: Optional[Targeting] = None
+    display: Optional[Display] = None
     content: Optional[dict] = None
 
 
@@ -200,6 +290,8 @@ async def create_announcement_endpoint(
         firmware_version=data.firmware_version,
         device_models=data.device_models,
         expires_at=data.expires_at,
+        targeting=data.targeting,
+        display=data.display,
         content=data.content,
     )
 
@@ -236,6 +328,10 @@ async def update_announcement_endpoint(
         updates["device_models"] = data.device_models
     if data.expires_at is not None:
         updates["expires_at"] = data.expires_at
+    if data.targeting is not None:
+        updates["targeting"] = data.targeting.to_dict()
+    if data.display is not None:
+        updates["display"] = data.display.to_dict()
     if data.content is not None:
         updates["content"] = data.content
 

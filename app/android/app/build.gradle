@@ -33,7 +33,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 def env = new Properties()
-def envFile = rootProject.file(".env")
+def envFile = rootProject.file("../.env")
 if (envFile.exists()) {
     envFile.withInputStream { stream ->
         env.load(stream)
@@ -97,8 +97,8 @@ android {
         versionName flutterVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
-        buildConfigField("String", "INTERCOM_APP_ID", "\"${System.getenv("intercom.app.id")}\"")
-        buildConfigField("String", "INTERCOM_ANDROID_API_KEY", "\"${System.getenv("intercom.android.api.key")}\"")
+        buildConfigField("String", "INTERCOM_APP_ID", "\"${env.getProperty('INTERCOM_APP_ID', '')}\"")
+        buildConfigField("String", "INTERCOM_ANDROID_API_KEY", "\"${env.getProperty('INTERCOM_ANDROID_API_KEY', '')}\"")
     }
 
     signingConfigs {

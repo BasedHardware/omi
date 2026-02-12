@@ -17,37 +17,30 @@ class AnnouncementDialog extends StatelessWidget {
   });
 
   /// Show the announcement dialog.
-  static Future<void> show(
+  /// Returns true if the CTA button was clicked, false otherwise.
+  static Future<bool> show(
     BuildContext context,
     Announcement announcement, {
     VoidCallback? onDismiss,
     VoidCallback? onCTAPressed,
-  }) {
-    bool dismissed = false;
+  }) async {
+    bool ctaClicked = false;
 
-    void markDismissed() {
-      if (!dismissed) {
-        dismissed = true;
-        onDismiss?.call();
-      }
-    }
-
-    return showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.black87,
       builder: (context) => AnnouncementDialog(
         announcement: announcement,
-        onDismiss: markDismissed,
+        onDismiss: onDismiss,
         onCTAPressed: () {
-          dismissed = true; // Don't call onDismiss if CTA was pressed
+          ctaClicked = true;
           onCTAPressed?.call();
         },
       ),
-    ).then((_) {
-      // Called when dialog closes for any reason (barrier tap, back button, etc.)
-      markDismissed();
-    });
+    );
+
+    return ctaClicked;
   }
 
   @override

@@ -15,6 +15,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_graph.dart';
 import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_management_dialog.dart';
 
@@ -47,10 +48,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   bool _animationsInitialized = false;
 
   FilterOption _currentFilter = FilterOption.all;
+  bool _isGraphMode = false;
 
   bool _isReloading = false;
 
   late FocusNode _focusNode;
+  final GlobalKey<DesktopMemoryGraphWidgetState> _graphKey = GlobalKey();
 
   @override
   void dispose() {
@@ -256,7 +259,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 ),
                                 child: Column(
                                   children: [
-                                    _buildModernHeader(provider),
+                                    if (!_isGraphMode) _buildModernHeader(provider),
                                     Expanded(
                                       child: _animationsInitialized
                                           ? FadeTransition(
@@ -369,6 +372,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           _buildFilterDropdown(provider),
           const SizedBox(width: 12),
           OmiIconButton(
+            icon: FontAwesomeIcons.brain,
+            onPressed: _toggleGraphMode,
+            style: _isGraphMode ? OmiIconButtonStyle.filled : OmiIconButtonStyle.outline,
+          ),
+          const SizedBox(width: 12),
+          OmiIconButton(
             icon: Icons.add,
             onPressed: () => _showMemoryDialog(context, provider),
             style: OmiIconButtonStyle.filled,
@@ -474,6 +483,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   }
 
   Widget _buildMemoriesContent(MemoriesProvider provider) {
+    if (_isGraphMode) {
+      return DesktopMemoryGraphWidget(
+        key: _graphKey,
+        onBack: _toggleGraphMode,
+      );
+    }
+
     if (provider.loading && provider.filteredMemories.isEmpty) {
       return _buildModernLoadingState();
     }
@@ -698,5 +714,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         provider: provider,
       ),
     );
+  }
+
+  void _toggleGraphMode() {
+    setState(() {
+      _isGraphMode = !_isGraphMode;
+    });
   }
 }

@@ -183,6 +183,7 @@ class TranscriptSegment {
   static String segmentsAsString(
     List<TranscriptSegment> segments, {
     bool includeTimestamps = false,
+    String Function(String speakerId)? speakerLabelBuilder,
   }) {
     String transcript = '';
     var userName = SharedPreferencesUtil().givenName;
@@ -200,7 +201,8 @@ class TranscriptSegment {
         if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
           speakerName = peopleMap[segment.personId]!;
         } else {
-          speakerName = 'Speaker ${segment.speakerId}';
+          var displayId = '${getDisplaySpeakerId(segment.speakerId, segments)}';
+          speakerName = speakerLabelBuilder != null ? speakerLabelBuilder(displayId) : 'Speaker $displayId';
         }
         transcript += '$timestampStr $speakerName: $segmentText ';
       }
@@ -218,5 +220,32 @@ class TranscriptSegment {
       }
     }
     return true;
+  }
+
+  /// Gets the display speaker ID (1-indexed) for a segment.
+  /// Normalizes based on the minimum speaker ID in the conversation.
+  ///
+  /// Examples:
+  /// - If conversation has speakers [0, 1, 2] -> displays as [1, 2, 3]
+  /// - If conversation has speakers [1, 2, 3] -> displays as [1, 2, 3]
+  /// - If conversation has speakers [5, 6] -> displays as [1, 2]
+  static int getDisplaySpeakerId(int speakerId, List<TranscriptSegment> segments) {
+    if (segments.isEmpty) return speakerId + 1;
+
+    // Find minimum speaker ID among non-user segments
+    int? minSpeakerId;
+    for (var segment in segments) {
+      if (!segment.isUser) {
+        if (minSpeakerId == null || segment.speakerId < minSpeakerId) {
+          minSpeakerId = segment.speakerId;
+        }
+      }
+    }
+
+    // If no non-user segments found, default to simple +1
+    if (minSpeakerId == null) return speakerId + 1;
+
+    // Normalize: subtract minimum and add 1 to make it 1-indexed
+    return speakerId - minSpeakerId + 1;
   }
 }

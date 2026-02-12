@@ -455,6 +455,80 @@ class _AddAppPageState extends State<AddAppPage> {
                                 ),
                               ],
                             ),
+                          if (provider.isCapabilitySelectedById('external_integration') ||
+                              provider.isCapabilitySelectedById('proactive_notification'))
+                            Column(
+                              children: [
+                                const SizedBox(height: 12),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1F1F25),
+                                    borderRadius: BorderRadius.circular(18.0),
+                                  ),
+                                  padding: const EdgeInsets.all(14.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: Text.rich(
+                                          TextSpan(
+                                            text: 'GitHub Repository URL',
+                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                                            children: const [
+                                              TextSpan(
+                                                text: ' *',
+                                                style: TextStyle(color: Colors.red),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 8.0),
+                                        child: Text(
+                                          'Link to your app\'s source code repository',
+                                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextFormField(
+                                        controller: provider.sourceCodeUrlController,
+                                        decoration: InputDecoration(
+                                          hintText: 'https://github.com/username/repo',
+                                          hintStyle: const TextStyle(color: Colors.grey),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: const BorderSide(color: Colors.grey),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide(color: Colors.grey.shade800),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: const BorderSide(color: Colors.white),
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        ),
+                                        style: const TextStyle(color: Colors.white),
+                                        keyboardType: TextInputType.url,
+                                        validator: (value) {
+                                          if (value == null || value.trim().isEmpty) {
+                                            return 'GitHub repository URL is required';
+                                          }
+                                          if (!Uri.tryParse(value.trim())!.isAbsolute) {
+                                            return 'Please enter a valid URL';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           const SizedBox(
                             height: 22,
                           ),

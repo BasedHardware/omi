@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -19,6 +20,12 @@ class ConnectDevicePage extends StatefulWidget {
 }
 
 class _ConnectDevicePageState extends State<ConnectDevicePage> {
+  @override
+  void initState() {
+    super.initState();
+    MixpanelManager().connectDevicePageOpened();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
