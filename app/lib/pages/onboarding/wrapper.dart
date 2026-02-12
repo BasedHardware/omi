@@ -144,6 +144,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kUserReviewPage:
         newImage = Assets.images.onboardingBg6.path;
         break;
+      case kSpeechProfilePage:
+        newImage = Assets.images.onboardingBg3.path;
+        break;
       default:
         newImage = Assets.images.onboardingBg1.path;
         break;
@@ -188,6 +191,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return Assets.images.onboardingBg3.path;
       case kUserReviewPage:
         return Assets.images.onboardingBg6.path;
+      case kSpeechProfilePage:
+        return Assets.images.onboardingBg3.path;
       default:
         return null;
     }
@@ -301,7 +306,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     _controller!.index == kFoundOmiPage ||
                     _controller!.index == kPermissionsPage ||
                     _controller!.index == kUserReviewPage ||
-                    _controller!.index == kWelcomePage
+                    _controller!.index == kWelcomePage ||
+                    _controller!.index == kSpeechProfilePage
                 ? Stack(
                     children: [
                       // Animated background image (skip for welcome page)
@@ -367,7 +373,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
-                                  if (_controller!.index > kNamePage) {
+                                  if (_controller!.index == kSpeechProfilePage) {
+                                    _speechProfileProvider?.close();
+                                    _controller!.animateTo(kUserReviewPage);
+                                  } else if (_controller!.index > kNamePage) {
                                     _controller!.animateTo(_controller!.index - 1);
                                   }
                                 },
