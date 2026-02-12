@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/utils/conversations/conversation_icon_mapper.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -122,21 +123,25 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
             ),
             child: Row(
               children: [
-                // Emoji icon in rounded square
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22),
+                // Category icon in rounded square
+                Builder(builder: (context) {
+                  final iconStyle = getConversationIconStyle(
+                    widget.conversation.structured.category,
+                    widget.conversation.structured.getEmoji(),
+                    widget.conversation.structured.title,
+                  );
+                  return Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: iconStyle.background,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                ),
+                    child: Center(
+                      child: Icon(iconStyle.icon, size: 22, color: iconStyle.foreground),
+                    ),
+                  );
+                }),
                 const SizedBox(width: 14),
                 // Title and subtitle
                 Expanded(
