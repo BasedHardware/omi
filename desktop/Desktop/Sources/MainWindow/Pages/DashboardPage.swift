@@ -178,9 +178,11 @@ struct DashboardPage: View {
     @Binding var selectedIndex: Int
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Header
+        VStack(spacing: 0) {
+            // Dashboard widgets (scrollable, compact)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    // Header
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Dashboard")
@@ -268,30 +270,22 @@ struct DashboardPage: View {
                     }
                 }
                 .padding(.horizontal, 24)
+                .padding(.bottom, 16)
 
-                // Recent Conversations (full width, at bottom)
-                RecentConversationsWidget(
-                    conversations: Array(appState.conversations.prefix(5)),
-                    folders: appState.folders,
-                    onViewAll: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedIndex = SidebarNavItem.conversations.rawValue
-                        }
-                    },
-                    onMoveToFolder: { id, folderId in
-                        await appState.moveConversationToFolder(id, folderId: folderId)
-                    },
-                    appState: appState
-                )
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                }
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                viewModel.refreshGoals()
+            }
+
+            Divider()
+                .background(OmiColors.backgroundTertiary)
+
+            // Conversations section fills remaining space
+            ConversationsPage(appState: appState)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            viewModel.refreshGoals()
-        }
     }
 
     private var formattedDate: String {
