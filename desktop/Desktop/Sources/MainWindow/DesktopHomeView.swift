@@ -99,6 +99,11 @@ struct DesktopHomeView: View {
                             // Set up and show floating control bar
                             FloatingControlBarManager.shared.setup(appState: appState)
                             FloatingControlBarManager.shared.show()
+
+                            // Set up push-to-talk voice input
+                            if let barState = FloatingControlBarManager.shared.barState {
+                                PushToTalkManager.shared.setup(barState: barState)
+                            }
                         }
                         .task {
                             // Trigger eager data loading when main content appears
