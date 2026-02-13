@@ -27,20 +27,10 @@ class SearchDebouncer: ObservableObject {
 
 struct ConversationsPage: View {
     @ObservedObject var appState: AppState
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
-    @ObservedObject private var recordingTimer = RecordingTimer.shared
-    @ObservedObject private var liveTranscript = LiveTranscriptMonitor.shared
-    @ObservedObject private var liveNotes = LiveNotesMonitor.shared
-    @State private var selectedConversation: ServerConversation? = nil
+    @Binding var selectedConversation: ServerConversation?
 
-    // Transcript visibility state - hidden by default
-    @State private var isTranscriptCollapsed: Bool = true
-
-    // Notes panel visibility
-    @State private var isNotesPanelVisible: Bool = true
-
-    // Notes panel width ratio (persisted)
-    @AppStorage("transcriptNotesPanelRatio") private var notesPanelRatio: Double = 0.65
+    /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
+    var embedded: Bool = false
 
     // Compact view mode - persisted preference
     @AppStorage("conversationsCompactView") private var isCompactView = false
@@ -142,125 +132,25 @@ struct ConversationsPage: View {
     // MARK: - Main View with Recording Header + List
 
     private var mainConversationsView: some View {
-        ZStack(alignment: .top) {
-            VStack(spacing: 0) {
-                // Recording header (always visible)
-                recordingHeader
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-
-                // When transcribing and expanded: full-page transcript
-                // When transcribing and collapsed: show splitter then conversation list
-                // When not transcribing: just conversation list
-                if appState.isTranscribing && !isTranscriptCollapsed {
-                    // Expanded: full-page transcript with back button
-                    fullPageTranscriptView
-                } else {
-                    // Collapsed or not recording: show conversation list
-                    conversationListSection
-                }
-            }
-
-        }
-    }
-
-    // MARK: - Transcript Views
-
-    /// Expanded state: full-page transcript with notes panel
-    private var fullPageTranscriptView: some View {
         VStack(spacing: 0) {
-            // Header with back button and notes toggle
+            // Conversations header
             HStack {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isTranscriptCollapsed = true
-                    }
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .medium))
-                        Text("Back to Conversations")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-                .buttonStyle(.plain)
+                Text("Conversations")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
-                // Notes panel toggle
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isNotesPanelVisible.toggle()
-                    }
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "note.text")
-                            .font(.system(size: 12))
-                        Text("Notes")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundColor(isNotesPanelVisible ? OmiColors.textPrimary : OmiColors.textTertiary)
+                if !appState.isTranscribing {
+                    startRecordingButton
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
 
-            // Split view: transcript (left) + notes (right)
-            GeometryReader { geometry in
-                let totalWidth = geometry.size.width
-                let minPanelWidth: CGFloat = 200
-                let transcriptWidth = isNotesPanelVisible
-                    ? max(minPanelWidth, totalWidth * notesPanelRatio)
-                    : totalWidth
-                let notesWidth = isNotesPanelVisible
-                    ? max(minPanelWidth, totalWidth - transcriptWidth - 1)
-                    : 0
-
-                HStack(spacing: 0) {
-                    // Left panel: Transcript
-                    transcriptContentView
-                        .frame(width: transcriptWidth)
-
-                    if isNotesPanelVisible {
-                        // Draggable divider
-                        TranscriptNotesDivider(
-                            panelRatio: $notesPanelRatio,
-                            totalWidth: totalWidth,
-                            minRatio: minPanelWidth / totalWidth,
-                            maxRatio: 1.0 - (minPanelWidth / totalWidth)
-                        )
-
-                        // Right panel: Notes
-                        LiveNotesView()
-                            .frame(width: notesWidth)
-                    }
-                }
-            }
+            // Conversation list
+            conversationListSection
         }
-    }
-
-    /// Transcript content (empty state or live transcript)
-    private var transcriptContentView: some View {
-        Group {
-            if liveTranscript.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 32))
-                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
-
-                    Text("Listening...")
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                LiveTranscriptView(segments: liveTranscript.segments)
-            }
-        }
-        .background(OmiColors.backgroundPrimary)
     }
 
     // MARK: - Conversation List Section
@@ -359,6 +249,7 @@ struct ConversationsPage: View {
                                 selectedConversationIds.insert(conversationId)
                             }
                         },
+                        embedded: embedded,
                         appState: appState
                     )
 
@@ -411,36 +302,7 @@ struct ConversationsPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ZStack(alignment: .bottom) {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(searchResults) { conversation in
-                                ConversationRowView(
-                                    conversation: conversation,
-                                    onTap: {
-                                        AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
-                                        selectedConversation = conversation
-                                    },
-                                    folders: appState.folders,
-                                    onMoveToFolder: { conversationId, folderId in
-                                        await appState.moveConversationToFolder(conversationId, folderId: folderId)
-                                    },
-                                    isCompactView: isCompactView,
-                                    isMultiSelectMode: isMultiSelectMode,
-                                    isSelected: selectedConversationIds.contains(conversation.id),
-                                    onToggleSelection: {
-                                        if selectedConversationIds.contains(conversation.id) {
-                                            selectedConversationIds.remove(conversation.id)
-                                        } else {
-                                            selectedConversationIds.insert(conversation.id)
-                                        }
-                                    },
-                                    appState: appState
-                                )
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : 16)
-                    }
+                    searchResultsContent
 
                     // Floating merge action bar (also show in search results)
                     if isMultiSelectMode && !selectedConversationIds.isEmpty {
@@ -448,6 +310,46 @@ struct ConversationsPage: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var searchResultsContent: some View {
+        let content = LazyVStack(spacing: 8) {
+            ForEach(searchResults) { conversation in
+                ConversationRowView(
+                    conversation: conversation,
+                    onTap: {
+                        AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
+                        selectedConversation = conversation
+                    },
+                    folders: appState.folders,
+                    onMoveToFolder: { conversationId, folderId in
+                        await appState.moveConversationToFolder(conversationId, folderId: folderId)
+                    },
+                    isCompactView: isCompactView,
+                    isMultiSelectMode: isMultiSelectMode,
+                    isSelected: selectedConversationIds.contains(conversation.id),
+                    onToggleSelection: {
+                        if selectedConversationIds.contains(conversation.id) {
+                            selectedConversationIds.remove(conversation.id)
+                        } else {
+                            selectedConversationIds.insert(conversation.id)
+                        }
+                    },
+                    appState: appState
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, isMultiSelectMode && !selectedConversationIds.isEmpty ? 80 : 16)
+
+        if embedded {
+            content
+        } else {
+            ScrollView {
+                content
             }
         }
     }
@@ -742,197 +644,7 @@ struct ConversationsPage: View {
         isMerging = false
     }
 
-    // MARK: - Recording Header
-
-    private var recordingHeader: some View {
-        HStack(spacing: 16) {
-            if appState.isTranscribing {
-                // Recording indicator
-                recordingIndicator
-
-                Spacer()
-
-                // Duration
-                Text(recordingDurationFormatted)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundColor(OmiColors.textSecondary)
-
-                // Stop recording button
-                stopRecordingButton
-            } else if appState.isSavingConversation {
-                // Saving state with animation
-                savingIndicator
-
-                Spacer()
-            } else {
-                // Not recording - show start button
-                Text("Conversations")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
-
-                Spacer()
-
-                startRecordingButton
-            }
-        }
-    }
-
-    // MARK: - Recording Indicator
-
-    @State private var isPulsing = false
-
-    private var recordingIndicator: some View {
-        HStack(spacing: 12) {
-            // Pulsing dot
-            ZStack {
-                Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.3))
-                    .frame(width: 20, height: 20)
-                    .scaleEffect(isPulsing ? 1.6 : 1.0)
-                    .opacity(isPulsing ? 0.0 : 0.6)
-
-                Circle()
-                    .fill(OmiColors.purplePrimary)
-                    .frame(width: 10, height: 10)
-            }
-            .animation(
-                .easeInOut(duration: 1.0)
-                .repeatForever(autoreverses: true),
-                value: isPulsing
-            )
-            .onAppear { isPulsing = true }
-
-            // Show inline transcript when collapsed, "Listening" when expanded or no text
-            if isTranscriptCollapsed, let latestText = latestTranscriptText {
-                // Inline transcript preview - clickable to expand
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isTranscriptCollapsed = false
-                    }
-                }) {
-                    HStack(spacing: 6) {
-                        Text(latestText)
-                            .font(.system(size: 14))
-                            .foregroundColor(OmiColors.textSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                            .frame(maxWidth: 280, alignment: .leading)
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(OmiColors.backgroundTertiary.opacity(0.5))
-                    )
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-            } else {
-                Text("Listening")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(OmiColors.textPrimary)
-            }
-
-            // Audio level waveforms (restored original animation)
-            HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(OmiColors.textTertiary)
-                    AudioLevelWaveformView(
-                        level: audioLevels.microphoneLevel,
-                        barCount: 8,
-                        isActive: appState.isTranscribing
-                    )
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "speaker.wave.2.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(OmiColors.textTertiary)
-                    AudioLevelWaveformView(
-                        level: audioLevels.systemLevel,
-                        barCount: 8,
-                        isActive: appState.isTranscribing
-                    )
-                }
-            }
-        }
-    }
-
-    /// Get the latest transcript text for inline display
-    private var latestTranscriptText: String? {
-        guard !liveTranscript.isEmpty else { return nil }
-        // Get the last segment's text
-        return liveTranscript.latestText
-    }
-
-    // MARK: - Saving Indicator
-
-    @State private var isSavingPulsing = false
-
-    private var savingIndicator: some View {
-        HStack(spacing: 12) {
-            // Pulsing save icon
-            ZStack {
-                Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.3))
-                    .frame(width: 24, height: 24)
-                    .scaleEffect(isSavingPulsing ? 1.5 : 1.0)
-                    .opacity(isSavingPulsing ? 0.0 : 0.6)
-
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(OmiColors.purplePrimary)
-                    .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
-            }
-            .animation(
-                .easeInOut(duration: 0.8)
-                .repeatForever(autoreverses: true),
-                value: isSavingPulsing
-            )
-            .onAppear { isSavingPulsing = true }
-            .onDisappear { isSavingPulsing = false }
-
-            Text("Saving conversation...")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(OmiColors.textPrimary)
-
-            ProgressView()
-                .scaleEffect(0.7)
-        }
-    }
-
     // MARK: - Buttons
-
-    private var stopRecordingButton: some View {
-        Button(action: {
-            appState.stopTranscription()
-        }) {
-            HStack(spacing: 6) {
-                Image(systemName: "stop.circle.fill")
-                    .font(.system(size: 12))
-                Text("Stop Recording")
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .foregroundColor(.black)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                Capsule()
-                    .fill(Color.white)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
 
     private var startRecordingButton: some View {
         Button(action: {
@@ -959,12 +671,6 @@ struct ConversationsPage: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Helpers
-
-    /// Recording duration formatted - separate from conversation duration
-    private var recordingDurationFormatted: String {
-        recordingTimer.formattedDuration
-    }
 }
 
 // MARK: - Transcript Notes Divider
@@ -1005,7 +711,7 @@ private struct TranscriptNotesDivider: View {
 }
 
 #Preview {
-    ConversationsPage(appState: AppState())
+    ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
         .frame(width: 600, height: 800)
         .background(OmiColors.backgroundSecondary)
 }
