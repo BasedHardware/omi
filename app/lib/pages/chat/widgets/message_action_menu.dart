@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'markdown_message_widget.dart';
@@ -60,7 +61,7 @@ class MessageActionMenu extends StatelessWidget {
             ),
             _buildActionButton(
               title: context.l10n.share,
-              icon: Icons.share,
+              icon: FontAwesomeIcons.share,
               onTap: onShare,
             ),
             if (onThumbsDown != null) ...[
