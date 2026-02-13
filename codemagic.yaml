@@ -73,19 +73,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up App .env
         script: |
@@ -268,19 +259,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up local.properties
         script: |
@@ -413,19 +395,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up App .env
         script: |
@@ -597,19 +570,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up local.properties
         script: |
@@ -741,19 +705,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up App .env
         script: |
@@ -891,19 +846,10 @@ workflows:
             --ios-target="Runner" \
             --yes
 
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.nooto-app-with-wearable.ios12.development \
-            --android-package-name=com.nooto-app-with-wearable.ios12.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="nooto-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Dev Firebase config — stub only (no nooto-dev service account key yet)
+          # To enable full dev config: add FIREBASE_SERVICE_ACCOUNT_DEV_KEY and uncomment below
+          cp lib/firebase_options_prod.dart lib/firebase_options_dev.dart
+          sed -i '' 's/firebase_options_prod/firebase_options_dev/g' lib/firebase_options_dev.dart
 
       - name: Set up local.properties
         script: |
