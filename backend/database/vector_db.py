@@ -4,12 +4,16 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import List
 
-from pinecone import Pinecone
-
 from models.conversation import Conversation
 from utils.llm.clients import embeddings
 
-if os.getenv('PINECONE_API_KEY') is not None:
+if os.getenv('QDRANT_HOST'):
+    from database.qdrant_adapter import QdrantIndex
+
+    index = QdrantIndex(host=os.getenv('QDRANT_HOST'), port=int(os.getenv('QDRANT_PORT', '6333')))
+elif os.getenv('PINECONE_API_KEY') is not None:
+    from pinecone import Pinecone
+
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
     index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
 else:
@@ -29,11 +33,15 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
 
 
 def upsert_vector(uid: str, conversation: Conversation, vector: List[float]):
+    if index is None:
+        return
     res = index.upsert(vectors=[_get_data(uid, conversation.id, vector)], namespace="ns1")
     print('upsert_vector', res)
 
 
 def upsert_vector2(uid: str, conversation: Conversation, vector: List[float], metadata: dict):
+    if index is None:
+        return
     data = _get_data(uid, conversation.id, vector)
     data['metadata'].update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
@@ -41,18 +49,24 @@ def upsert_vector2(uid: str, conversation: Conversation, vector: List[float], me
 
 
 def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
+    if index is None:
+        return
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
     return index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
 
 
 def upsert_vectors(uid: str, vectors: List[List[float]], conversations: List[Conversation]):
+    if index is None:
+        return
     data = [_get_data(uid, conversation.id, vector) for conversation, vector in zip(conversations, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     print('upsert_vectors', res)
 
 
 def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
+    if index is None:
+        return []
     filter_data = {'uid': uid}
     if starts_at is not None:
         filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
@@ -72,6 +86,8 @@ def query_vectors_by_metadata(
     dates: List[str],
     limit: int = 5,
 ):
+    if index is None:
+        return []
     filter_data = {
         '$and': [
             {'uid': {'$eq': uid}},
@@ -137,6 +153,8 @@ def delete_vector(uid: str, conversation_id: str):
 
     Note: Vectors are stored with ID format '{uid}-{conversation_id}'
     """
+    if index is None:
+        return
     vector_id = f'{uid}-{conversation_id}'
     result = index.delete(ids=[vector_id], namespace="ns1")
     print('delete_vector', vector_id, result)
