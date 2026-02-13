@@ -13,13 +13,19 @@
 		<string>applinks:h.omi.me</string>
 		<string>applinks:try.omi.me</string>
 	</array>
-	<key>com.apple.developer.networking.HotspotConfiguration</key>
-	<true/>
-	<key>com.apple.developer.networking.wifi-info</key>
-	<true/>
 	<key>com.apple.developer.healthkit</key>
 	<true/>
 	<key>com.apple.developer.healthkit.access</key>
 	<array/>
+	<key>com.apple.developer.networking.HotspotConfiguration</key>
+	<true/>
+	<key>com.apple.developer.networking.wifi-info</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.friend-app-with-wearable.ios12</string>
+		<string>group.friend-app-with-wearable.ios12</string>
+		<string>group.omi.shared.data</string>
+	</array>
 </dict>
 </plist>

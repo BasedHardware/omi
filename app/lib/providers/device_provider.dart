@@ -19,6 +19,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/widget_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -174,6 +175,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (shouldNotify) {
           _lastNotifiedBatteryLevel = value;
           _lastBatteryNotifyTime = DateTime.now();
+          WidgetService.instance.updateBatteryWidget(batteryLevel: value, isConnected: true);
           notifyListeners();
         }
       },
@@ -343,6 +345,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setisDeviceStorageSupport();
     setIsConnected(false);
     updateConnectingStatus(false);
+    WidgetService.instance.updateBatteryWidget(batteryLevel: -1, isConnected: false);
 
     captureProvider?.updateRecordingDevice(null);
 
@@ -406,6 +409,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Then set up listener for battery changes
     await initiateBleBatteryListener();
+    WidgetService.instance.updateBatteryWidget(batteryLevel: batteryLevel, isConnected: true);
     if (batteryLevel != -1 && batteryLevel < 20) {
       _hasLowBatteryAlerted = false;
     }
