@@ -246,7 +246,7 @@ struct DesktopHomeView: View {
                     case 6:
                         AdvicePage()
                     case 7:
-                        RewindPage()
+                        RewindPage(appState: appState)
                     case 8:
                         AppsPage(appProvider: viewModelContainer.appProvider)
                     case 9:
