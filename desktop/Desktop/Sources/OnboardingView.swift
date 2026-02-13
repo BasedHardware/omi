@@ -449,16 +449,23 @@ struct OnboardingView: View {
 
             ScrollView {
                 VStack(spacing: 10) {
-                    permissionRow(
-                        number: 1,
-                        icon: "record.circle",
-                        name: "Screen Recording",
-                        isGranted: appState.hasScreenRecordingPermission,
-                        action: {
-                            AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
-                            appState.triggerScreenRecordingPermission()
-                        }
-                    )
+                    VStack(spacing: 4) {
+                        permissionRow(
+                            number: 1,
+                            icon: "record.circle",
+                            name: "Screen Recording",
+                            isGranted: appState.hasScreenRecordingPermission,
+                            action: {
+                                AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
+                                appState.triggerScreenRecordingPermission()
+                            }
+                        )
+                        Text("Your screen data is stored locally on your device and never uploaded to the cloud.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 4)
+                    }
                     permissionRow(
                         number: 2,
                         icon: "mic",
