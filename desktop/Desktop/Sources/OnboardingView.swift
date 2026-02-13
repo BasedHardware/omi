@@ -460,11 +460,16 @@ struct OnboardingView: View {
                                 appState.triggerScreenRecordingPermission()
                             }
                         )
-                        Text("Your screen data is stored locally on your device and never uploaded to the cloud.")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 4)
+                        VStack(spacing: 2) {
+                            Text("Used for Rewind — your personal screen history.")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                            Text("All data stays on your device. Nothing is uploaded to the cloud.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 4)
                     }
                     permissionRow(
                         number: 2,
