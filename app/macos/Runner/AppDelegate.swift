@@ -69,6 +69,16 @@ class AppDelegate: FlutterAppDelegate {
 
         super.applicationDidFinishLaunching(aNotification)
 
+        // Initialize method channels now that Flutter engine is ready
+        if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
+           let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
+            updateChannel = FlutterMethodChannel(
+                name: "com.omi/updates",
+                binaryMessenger: flutterViewController.engine.binaryMessenger
+            )
+            NSLog("DEBUG: Initialized updates method channel")
+        }
+
         // Delay to check if app was launched hidden (e.g., as a login item)
         DispatchQueue.main.async {
             if !NSApp.isHidden {
@@ -113,21 +123,7 @@ class AppDelegate: FlutterAppDelegate {
     // MARK: - Check for Updates
     
     @IBAction func checkForUpdates(_ sender: Any) {
-        setupUpdateChannel()
         updateChannel?.invokeMethod("checkForUpdates", arguments: nil)
         NSLog("DEBUG: Triggered check for updates via menu")
-    }
-    
-    private func setupUpdateChannel() {
-        guard updateChannel == nil else { return }
-        
-        if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
-           let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
-            updateChannel = FlutterMethodChannel(
-                name: "com.omi/updates",
-                binaryMessenger: flutterViewController.engine.binaryMessenger
-            )
-            NSLog("DEBUG: Created updates method channel")
-        }
     }
 }
