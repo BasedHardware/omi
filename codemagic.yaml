@@ -59,6 +59,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -72,6 +73,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
@@ -251,6 +253,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -264,6 +267,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
@@ -393,6 +397,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -406,6 +411,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
@@ -574,6 +580,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -587,6 +594,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
@@ -715,6 +723,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -728,6 +737,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
@@ -862,6 +872,7 @@ workflows:
           dart pub global activate flutterfire_cli
 
           echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_prod.dart \
@@ -875,6 +886,7 @@ workflows:
             --yes
 
           echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/firebase_dev_key.json"
           flutterfire config \
             --platforms="android,ios" \
             --out=lib/firebase_options_dev.dart \
