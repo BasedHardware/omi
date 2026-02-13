@@ -587,17 +587,29 @@ class AppState: ObservableObject {
         // If TCC is granted AND broken flag is set, leave it set until reset/restart
     }
 
-    /// Check automation permission by attempting to use Apple Events
+    /// Check automation permission without triggering a prompt
+    /// Uses AEDeterminePermissionToAutomateTarget to query TCC status for System Events
     func checkAutomationPermission() {
         Task.detached {
-            let script = NSAppleScript(source: """
-                tell application "System Events"
-                    return name of first process whose frontmost is true
-                end tell
-            """)
-            var error: NSDictionary?
-            let result = script?.executeAndReturnError(&error)
-            let hasPermission = result != nil && error == nil
+            var addressDesc = AEAddressDesc()
+            let bundleID = "com.apple.systemevents" as CFString
+            let utf8 = CFStringGetCStringPtr(bundleID, CFStringBuiltInEncodings.UTF8.rawValue)
+            AECreateDesc(
+                keyAddressAttr,
+                utf8!,
+                strlen(utf8!),
+                &addressDesc
+            )
+            let status = AEDeterminePermissionToAutomateTarget(
+                &addressDesc,
+                typeWildCard,
+                typeWildCard,
+                false // askUserIfNeeded = false → never shows dialog
+            )
+            AEDisposeDesc(&addressDesc)
+
+            // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, procNotFound (-600) = not asked yet
+            let hasPermission = status == noErr
 
             await MainActor.run {
                 self.hasAutomationPermission = hasPermission
