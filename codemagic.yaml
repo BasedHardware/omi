@@ -10,17 +10,13 @@ workflows:
     integrations:
       app_store_connect: nooto
     environment:
-      ios_signing:
-        provisioning_profiles:
-          - nooto
-        certificates:
-          - nooto
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: $NOOTO_APP_ID
+        BUNDLE_ID: "com.togodynamics.nooto"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -42,6 +38,17 @@ workflows:
           - 'app/**'
     working_directory: app
     scripts:
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+
       - name: Installing Opus
         script: |
           brew install opus
@@ -340,17 +347,13 @@ workflows:
     integrations:
       app_store_connect: nooto
     environment:
-      ios_signing:
-        provisioning_profiles:
-          - nooto
-        certificates:
-          - nooto
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: $NOOTO_APP_ID
+        BUNDLE_ID: "com.togodynamics.nooto"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -369,6 +372,17 @@ workflows:
           include: true
     working_directory: app
     scripts:
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+
       - name: Installing Opus
         script: |
           brew install opus
@@ -650,17 +664,13 @@ workflows:
     integrations:
       app_store_connect: nooto
     environment:
-      ios_signing:
-        provisioning_profiles:
-          - nooto
-        certificates:
-          - nooto
       groups:
         - app_env
         - firebase
         - shorebird
       vars:
         APP_ID: $NOOTO_APP_ID
+        BUNDLE_ID: "com.togodynamics.nooto"
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -679,6 +689,17 @@ workflows:
           include: true
     working_directory: app
     scripts:
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+
       - name: Installing Shorebird
         script: |
           curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
