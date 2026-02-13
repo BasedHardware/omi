@@ -146,10 +146,8 @@ struct ConversationsPage: View {
             VStack(spacing: 0) {
                 // Recording header (always visible)
                 recordingHeader
-                    .padding(16)
-
-                Divider()
-                    .background(OmiColors.backgroundTertiary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
 
                 // When transcribing and expanded: full-page transcript
                 // When transcribing and collapsed: show splitter then conversation list
