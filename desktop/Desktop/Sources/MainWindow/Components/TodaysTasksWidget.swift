@@ -50,15 +50,20 @@ struct TasksWidget: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
             } else {
+                let maxVisible = 3
+                let todayVisible = min(combinedTodayTasks.count, maxVisible)
+                let remaining = maxVisible - todayVisible
+                let noDueDateVisible = min(recentTasks.count, remaining)
+
                 ScrollView {
                     VStack(spacing: 16) {
                         // Today section (includes overdue tasks, like Flutter)
-                        if !combinedTodayTasks.isEmpty {
+                        if todayVisible > 0 {
                             TaskSectionView(
                                 title: "Today",
                                 titleColor: OmiColors.textSecondary,
                                 icon: "calendar",
-                                tasks: Array(combinedTodayTasks.prefix(3)),
+                                tasks: Array(combinedTodayTasks.prefix(todayVisible)),
                                 totalCount: combinedTodayTasks.count,
                                 showDueDate: true,
                                 onToggle: onToggleCompletion
@@ -66,12 +71,12 @@ struct TasksWidget: View {
                         }
 
                         // Recent tasks without due date
-                        if !recentTasks.isEmpty {
+                        if noDueDateVisible > 0 {
                             TaskSectionView(
                                 title: "No Due Date",
                                 titleColor: OmiColors.textSecondary,
                                 icon: "tray",
-                                tasks: Array(recentTasks.prefix(3)),
+                                tasks: Array(recentTasks.prefix(noDueDateVisible)),
                                 totalCount: recentTasks.count,
                                 showDueDate: false,
                                 onToggle: onToggleCompletion
