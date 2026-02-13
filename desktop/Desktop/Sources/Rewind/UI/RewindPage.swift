@@ -4,7 +4,12 @@ import AppKit
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
 struct RewindPage: View {
+    var appState: AppState? = nil
+
     @StateObject private var viewModel = RewindViewModel()
+    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
+    @ObservedObject private var recordingTimer = RecordingTimer.shared
+    @ObservedObject private var liveTranscript = LiveTranscriptMonitor.shared
 
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
@@ -19,6 +24,10 @@ struct RewindPage: View {
     @State private var isMonitoring = false
     @State private var isTogglingMonitoring = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
+
+    // Recording animation state
+    @State private var isRecordingPulsing = false
+    @State private var isSavingPulsing = false
 
     enum SearchViewMode {
         case results  // Full-screen search results
@@ -42,6 +51,11 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
+                    // Recording bar (when recording or saving)
+                    if let appState = appState, (appState.isTranscribing || appState.isSavingConversation) {
+                        rewindRecordingBar(appState: appState)
+                    }
+
                     // Recovery banner (if database was recovered from corruption)
                     if viewModel.showRecoveryBanner {
                         recoveryBanner
@@ -983,6 +997,130 @@ struct RewindPage: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    // MARK: - Recording Bar
+
+    private func rewindRecordingBar(appState: AppState) -> some View {
+        HStack(spacing: 16) {
+            if appState.isTranscribing {
+                // Pulsing dot
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.3))
+                        .frame(width: 20, height: 20)
+                        .scaleEffect(isRecordingPulsing ? 1.6 : 1.0)
+                        .opacity(isRecordingPulsing ? 0.0 : 0.6)
+
+                    Circle()
+                        .fill(OmiColors.purplePrimary)
+                        .frame(width: 10, height: 10)
+                }
+                .animation(
+                    .easeInOut(duration: 1.0)
+                        .repeatForever(autoreverses: true),
+                    value: isRecordingPulsing
+                )
+                .onAppear { isRecordingPulsing = true }
+
+                // Latest transcript text
+                if let latestText = liveTranscript.latestText, !liveTranscript.isEmpty {
+                    Text(latestText)
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .frame(maxWidth: 280, alignment: .leading)
+                } else {
+                    Text("Listening")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(OmiColors.textPrimary)
+                }
+
+                // Audio level waveforms
+                HStack(spacing: 16) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.textTertiary)
+                        AudioLevelWaveformView(
+                            level: audioLevels.microphoneLevel,
+                            barCount: 8,
+                            isActive: true
+                        )
+                    }
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.textTertiary)
+                        AudioLevelWaveformView(
+                            level: audioLevels.systemLevel,
+                            barCount: 8,
+                            isActive: true
+                        )
+                    }
+                }
+
+                Spacer()
+
+                // Duration
+                Text(recordingTimer.formattedDuration)
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundColor(OmiColors.textSecondary)
+
+                // Stop button
+                Button(action: {
+                    appState.stopTranscription()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 12))
+                        Text("Stop Recording")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.white))
+                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            } else if appState.isSavingConversation {
+                // Saving indicator
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.3))
+                        .frame(width: 24, height: 24)
+                        .scaleEffect(isSavingPulsing ? 1.5 : 1.0)
+                        .opacity(isSavingPulsing ? 0.0 : 0.6)
+
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(OmiColors.purplePrimary)
+                        .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
+                }
+                .animation(
+                    .easeInOut(duration: 0.8)
+                        .repeatForever(autoreverses: true),
+                    value: isSavingPulsing
+                )
+                .onAppear { isSavingPulsing = true }
+                .onDisappear { isSavingPulsing = false }
+
+                Text("Saving conversation...")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(OmiColors.textPrimary)
+
+                ProgressView()
+                    .scaleEffect(0.7)
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(OmiColors.backgroundTertiary.opacity(0.8))
     }
 }
 

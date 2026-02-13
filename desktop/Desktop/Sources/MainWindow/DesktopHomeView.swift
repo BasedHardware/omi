@@ -7,8 +7,7 @@ struct DesktopHomeView: View {
     @State private var selectedIndex: Int = {
         if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
         let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
-        if tier == 0 || tier >= 5 { return SidebarNavItem.dashboard.rawValue }
-        return SidebarNavItem.conversations.rawValue
+        return SidebarNavItem.dashboard.rawValue
     }()
     @State private var isSidebarCollapsed: Bool = false
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
@@ -171,14 +170,13 @@ struct DesktopHomeView: View {
         let nonMainPages: Set<Int> = [SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue, SidebarNavItem.device.rawValue, SidebarNavItem.help.rawValue]
         guard !nonMainPages.contains(selectedIndex) else { return }
 
-        var visibleRawValues: Set<Int> = [SidebarNavItem.conversations.rawValue, SidebarNavItem.rewind.rawValue]
+        var visibleRawValues: Set<Int> = [SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue]
         if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
         if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
         if currentTierLevel >= 4 { visibleRawValues.insert(SidebarNavItem.chat.rawValue) }
-        if currentTierLevel >= 5 { visibleRawValues.insert(SidebarNavItem.dashboard.rawValue) }
 
         if !visibleRawValues.contains(selectedIndex) {
-            selectedIndex = SidebarNavItem.conversations.rawValue
+            selectedIndex = SidebarNavItem.dashboard.rawValue
         }
     }
 
@@ -235,7 +233,8 @@ struct DesktopHomeView: View {
                     case 0:
                         DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
                     case 1:
-                        ConversationsPage(appState: appState)
+                        // Conversations moved into Dashboard — redirect
+                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
                     case 2:
                         ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
                     case 3:
@@ -247,7 +246,7 @@ struct DesktopHomeView: View {
                     case 6:
                         AdvicePage()
                     case 7:
-                        RewindPage()
+                        RewindPage(appState: appState)
                     case 8:
                         AppsPage(appProvider: viewModelContainer.appProvider)
                     case 9:

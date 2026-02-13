@@ -16,6 +16,9 @@ struct ConversationListView: View {
     var selectedIds: Set<String> = []
     var onToggleSelection: ((String) -> Void)? = nil
 
+    /// When true, renders without its own ScrollView (for embedding in an outer ScrollView)
+    var embedded: Bool = false
+
     var appState: AppState
 
     /// Group conversations by date
@@ -145,37 +148,47 @@ struct ConversationListView: View {
         .padding(32)
     }
 
-    private var conversationList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(groupedConversations, id: \.0) { group, convos in
-                    // Date header
-                    Text(group)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.top, group == groupedConversations.first?.0 ? 0 : 16)
-                        .padding(.bottom, 8)
+    private var conversationListContent: some View {
+        LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(groupedConversations, id: \.0) { group, convos in
+                // Date header
+                Text(group)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(OmiColors.textTertiary)
+                    .padding(.top, group == groupedConversations.first?.0 ? 0 : 16)
+                    .padding(.bottom, 8)
 
-                    // Conversations in this group
-                    ForEach(convos) { conversation in
-                        ConversationRowView(
-                            conversation: conversation,
-                            onTap: { onSelect(conversation) },
-                            folders: folders,
-                            onMoveToFolder: onMoveToFolder,
-                            isCompactView: isCompactView,
-                            isMultiSelectMode: isMultiSelectMode,
-                            isSelected: selectedIds.contains(conversation.id),
-                            onToggleSelection: { onToggleSelection?(conversation.id) },
-                            appState: appState
-                        )
-                    }
+                // Conversations in this group
+                ForEach(convos) { conversation in
+                    ConversationRowView(
+                        conversation: conversation,
+                        onTap: { onSelect(conversation) },
+                        folders: folders,
+                        onMoveToFolder: onMoveToFolder,
+                        isCompactView: isCompactView,
+                        isMultiSelectMode: isMultiSelectMode,
+                        isSelected: selectedIds.contains(conversation.id),
+                        onToggleSelection: { onToggleSelection?(conversation.id) },
+                        appState: appState
+                    )
                 }
             }
-            .padding(16)
         }
-        .refreshable {
-            onRefresh()
+        .padding(16)
+    }
+
+    private var conversationList: some View {
+        Group {
+            if embedded {
+                conversationListContent
+            } else {
+                ScrollView {
+                    conversationListContent
+                }
+                .refreshable {
+                    onRefresh()
+                }
+            }
         }
     }
 }
