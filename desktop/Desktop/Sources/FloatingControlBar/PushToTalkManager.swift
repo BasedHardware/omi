@@ -37,6 +37,7 @@ class PushToTalkManager: ObservableObject {
   private var transcriptionService: TranscriptionService?
   private var audioCaptureService: AudioCaptureService?
   private var transcriptSegments: [String] = []
+  private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
   private var hasMicPermission: Bool = false
 
@@ -102,20 +103,18 @@ class PushToTalkManager: ObservableObject {
     let pttActive: Bool
     switch settings.pttKey {
     case .option:
-        // Ignore if other modifiers are held (Cmd, Ctrl, Shift)
-        let otherModifiers: NSEvent.ModifierFlags = [.command, .control, .shift]
-        guard event.modifierFlags.intersection(otherModifiers) == [] else { return }
-        pttActive = event.modifierFlags.contains(.option)
+      // Ignore if other modifiers are held (Cmd, Ctrl, Shift)
+      let otherModifiers: NSEvent.ModifierFlags = [.command, .control, .shift]
+      guard event.modifierFlags.intersection(otherModifiers) == [] else { return }
+      pttActive = event.modifierFlags.contains(.option)
     case .rightCommand:
-        // Right Cmd: keyCode 54. flagsChanged fires for both left/right Cmd.
-        // Only trigger on right Cmd (keyCode 54), not left (55).
-        guard event.keyCode == 54 || event.keyCode == 55 else { return }
-        pttActive = event.modifierFlags.contains(.command) && event.keyCode == 54
+      // Right Cmd: keyCode 54. flagsChanged fires for both left/right Cmd.
+      // Only trigger on right Cmd (keyCode 54), not left (55).
+      guard event.keyCode == 54 || event.keyCode == 55 else { return }
+      pttActive = event.modifierFlags.contains(.command) && event.keyCode == 54
     case .fn:
-        pttActive = event.modifierFlags.contains(.function)
+      pttActive = event.modifierFlags.contains(.function)
     }
-
-    log("PushToTalkManager: flagsChanged pttActive=\(pttActive) state=\(state) keyCode=\(event.keyCode)")
 
     if pttActive {
       handleOptionDown()
@@ -187,13 +186,22 @@ class PushToTalkManager: ObservableObject {
   private func startListening() {
     state = .listening
     transcriptSegments = []
+    lastInterimText = ""
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
 
     updateBarState()
-    captureScreenshot()
-    startAudioTranscription()
 
+    // Capture screenshot in background — do NOT block the main thread
+    Task.detached { [weak self] in
+      let url = ScreenCaptureManager.captureScreen()
+      await MainActor.run {
+        self?.capturedScreenshotURL = url
+        log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
+      }
+    }
+
+    startAudioTranscription()
     log("PushToTalkManager: started listening (hold mode)")
   }
 
@@ -206,7 +214,15 @@ class PushToTalkManager: ObservableObject {
     // Otherwise start fresh.
     if transcriptionService == nil {
       transcriptSegments = []
-      captureScreenshot()
+      lastInterimText = ""
+
+      Task.detached { [weak self] in
+        let url = ScreenCaptureManager.captureScreen()
+        await MainActor.run {
+          self?.capturedScreenshotURL = url
+        }
+      }
+
       startAudioTranscription()
     }
 
@@ -221,6 +237,7 @@ class PushToTalkManager: ObservableObject {
     state = .idle
     capturedScreenshotURL = nil
     transcriptSegments = []
+    lastInterimText = ""
     updateBarState()
   }
 
@@ -245,13 +262,18 @@ class PushToTalkManager: ObservableObject {
   private func sendTranscript() {
     stopAudioTranscription()
 
-    let query = transcriptSegments.joined(separator: " ").trimmingCharacters(
+    // Use final segments if available, fall back to last interim text
+    var query = transcriptSegments.joined(separator: " ").trimmingCharacters(
       in: .whitespacesAndNewlines)
+    if query.isEmpty {
+      query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     let screenshot = capturedScreenshotURL
 
     // Reset state
     state = .idle
     transcriptSegments = []
+    lastInterimText = ""
     capturedScreenshotURL = nil
     updateBarState()
 
@@ -260,7 +282,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    log("PushToTalkManager: sending query (\(query.count) chars)")
+    log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
     FloatingControlBarManager.shared.openAIInputWithQuery(query, screenshot: screenshot)
   }
 
@@ -272,7 +294,6 @@ class PushToTalkManager: ObservableObject {
 
     guard hasMicPermission else {
       log("PushToTalkManager: no microphone permission, requesting")
-      // Request permission instead of silently stopping
       Task {
         let granted = await AudioCaptureService.requestPermission()
         self.hasMicPermission = granted
@@ -286,9 +307,11 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
+    // Start mic capture immediately (before DeepGram connects) so audio is ready
+    startMicCapture()
+
     do {
       let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-      // Dedicated TranscriptionService for PTT — mono mic only, separate from main recording
       let service = try TranscriptionService(language: language, channels: 1)
       transcriptionService = service
 
@@ -306,8 +329,7 @@ class PushToTalkManager: ObservableObject {
         },
         onConnected: { [weak self] in
           Task { @MainActor in
-            log("PushToTalkManager: DeepGram connected, starting mic capture")
-            self?.startMicCapture()
+            log("PushToTalkManager: DeepGram connected")
           }
         }
       )
@@ -318,7 +340,6 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startMicCapture() {
-    // Reuse existing AudioCaptureService if available (avoids re-triggering permissions)
     if audioCaptureService == nil {
       audioCaptureService = AudioCaptureService()
     }
@@ -340,7 +361,6 @@ class PushToTalkManager: ObservableObject {
 
   private func stopAudioTranscription() {
     audioCaptureService?.stopCapture()
-    // Keep audioCaptureService alive — reuse across PTT sessions
     transcriptionService?.stop()
     transcriptionService = nil
   }
@@ -350,6 +370,10 @@ class PushToTalkManager: ObservableObject {
 
     if segment.speechFinal || segment.isFinal {
       transcriptSegments.append(segment.text)
+      lastInterimText = ""
+    } else {
+      // Track latest interim text as fallback
+      lastInterimText = segment.text
     }
 
     // Update live transcript in the bar
@@ -357,21 +381,10 @@ class PushToTalkManager: ObservableObject {
     if segment.speechFinal || segment.isFinal {
       liveText = transcriptSegments.joined(separator: " ")
     } else {
-      // Show committed segments + current interim
       let committed = transcriptSegments.joined(separator: " ")
       liveText = committed.isEmpty ? segment.text : committed + " " + segment.text
     }
     barState?.voiceTranscript = liveText
-  }
-
-  // MARK: - Screenshot
-
-  private func captureScreenshot() {
-    // Hide bar, capture, restore — reuse ScreenCaptureManager
-    capturedScreenshotURL = ScreenCaptureManager.captureScreen()
-    log(
-      "PushToTalkManager: screenshot captured: \(capturedScreenshotURL?.lastPathComponent ?? "nil")"
-    )
   }
 
   // MARK: - Bar State Sync
