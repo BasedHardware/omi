@@ -8162,4 +8162,43 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => 'Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.';
+
+  @override
+  String get downloadingFromDevice => 'Downloading from device';
+
+  @override
+  String get reconnectingToInternet => 'Reconnecting to internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Uploading $current of $total';
+  }
+
+  @override
+  String get processedStatus => 'Processed';
+
+  @override
+  String get corruptedStatus => 'Corrupted';
+
+  @override
+  String nPending(int count) {
+    return '$count pending';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processed';
+  }
+
+  @override
+  String get synced => 'Synced';
+
+  @override
+  String get noPendingRecordings => 'No pending recordings';
+
+  @override
+  String get noProcessedRecordings => 'No processed recordings yet';
+
+  @override
+  String get pending => 'Pending';
 }
