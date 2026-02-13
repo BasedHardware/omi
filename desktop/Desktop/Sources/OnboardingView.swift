@@ -8,20 +8,10 @@ struct OnboardingView: View {
     @AppStorage("onboardingStep") private var currentStep = 0
     @Environment(\.dismiss) private var dismiss
 
-    // Track which permissions user has attempted to grant (to start polling)
-    // Persisted so polling resumes after app restart
-    @AppStorage("hasTriggeredNotification") private var hasTriggeredNotification = false
-    @AppStorage("hasTriggeredAutomation") private var hasTriggeredAutomation = false
-    @AppStorage("hasTriggeredScreenRecording") private var hasTriggeredScreenRecording = false
-    @AppStorage("hasTriggeredMicrophone") private var hasTriggeredMicrophone = false
-    @AppStorage("hasTriggeredSystemAudio") private var hasTriggeredSystemAudio = false
-    @AppStorage("hasTriggeredAccessibility") private var hasTriggeredAccessibility = false
-    @AppStorage("hasTriggeredBluetooth") private var hasTriggeredBluetooth = false
-
-    // Timer to periodically check permission status (only for triggered permissions)
+    // Timer to periodically check permission status when on permissions step
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
-    let steps = ["Video", "Name", "Language", "Notifications", "Automation", "Screen Recording", "Microphone", "System Audio", "Accessibility", "Bluetooth", "Done"]
+    let steps = ["Video", "Name", "Language", "Permissions", "Done"]
 
     // State for name input
     @State private var nameInput: String = ""
@@ -31,6 +21,9 @@ struct OnboardingView: View {
     // State for language selection
     @State private var selectedLanguage: String = "en"
     @State private var autoDetectEnabled: Bool = false
+
+    // Track whether we've initialized bluetooth on the permissions step
+    @State private var hasInitializedBluetoothForPermissions = false
 
     var body: some View {
         ZStack {
@@ -64,92 +57,64 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onReceive(permissionCheckTimer) { _ in
-            // Only poll for permissions that user has triggered
-            if hasTriggeredNotification {
+            // Poll all permissions when on the permissions step
+            if currentStep == 3 {
                 appState.checkNotificationPermission()
-            }
-            if hasTriggeredAutomation {
-                appState.checkAutomationPermission()
-            }
-            if hasTriggeredScreenRecording {
                 appState.checkScreenRecordingPermission()
-            }
-            if hasTriggeredMicrophone {
                 appState.checkMicrophonePermission()
-            }
-            if hasTriggeredSystemAudio {
+                appState.checkAccessibilityPermission()
+                appState.checkAutomationPermission()
+                appState.checkBluetoothPermission()
                 appState.checkSystemAudioPermission()
             }
-            if hasTriggeredAccessibility {
-                appState.checkAccessibilityPermission()
-            }
-            if hasTriggeredBluetooth {
-                appState.checkBluetoothPermission()
-            }
         }
-        // Bring app to front when the CURRENT step's permission is granted
-        // Only bring to front if we're on the step that requires this permission
+        // Bring app to front when any permission is granted while on the permissions step
         .onChange(of: appState.hasNotificationPermission) { _, granted in
             if granted && currentStep == 3 {
-                log("Notification permission granted (current step), bringing to front")
+                log("Notification permission granted on permissions step, bringing to front")
                 bringToFront()
-            } else if granted {
-                log("Notification permission granted (not current step \(currentStep), skipping bringToFront)")
-            }
-        }
-        .onChange(of: appState.hasAutomationPermission) { _, granted in
-            if granted && currentStep == 4 {
-                log("Automation permission granted (current step), bringing to front")
-                bringToFront()
-            } else if granted {
-                log("Automation permission granted (not current step \(currentStep), skipping bringToFront)")
             }
         }
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
-            if granted && currentStep == 5 {
-                log("Screen recording permission granted (current step), bringing to front")
+            if granted && currentStep == 3 {
+                log("Screen recording permission granted on permissions step, bringing to front")
                 bringToFront()
-            } else if granted {
-                log("Screen recording permission granted (not current step \(currentStep), skipping bringToFront)")
+                // Silently trigger system audio permission (piggybacks on screen recording)
+                if appState.isSystemAudioSupported && !appState.hasSystemAudioPermission {
+                    appState.triggerSystemAudioPermission()
+                }
             }
         }
         .onChange(of: appState.hasMicrophonePermission) { _, granted in
-            if granted && currentStep == 6 {
-                log("Microphone permission granted (current step), bringing to front")
+            if granted && currentStep == 3 {
+                log("Microphone permission granted on permissions step, bringing to front")
                 bringToFront()
-            } else if granted {
-                log("Microphone permission granted (not current step \(currentStep), skipping bringToFront)")
-            }
-        }
-        .onChange(of: appState.hasSystemAudioPermission) { _, granted in
-            if granted && currentStep == 7 {
-                log("System audio permission granted (current step), bringing to front")
-                bringToFront()
-            } else if granted {
-                log("System audio permission granted (not current step \(currentStep), skipping bringToFront)")
             }
         }
         .onChange(of: appState.hasAccessibilityPermission) { _, granted in
-            if granted && currentStep == 8 {
-                log("Accessibility permission granted (current step), bringing to front")
+            if granted && currentStep == 3 {
+                log("Accessibility permission granted on permissions step, bringing to front")
                 bringToFront()
-            } else if granted {
-                log("Accessibility permission granted (not current step \(currentStep), skipping bringToFront)")
+            }
+        }
+        .onChange(of: appState.hasAutomationPermission) { _, granted in
+            if granted && currentStep == 3 {
+                log("Automation permission granted on permissions step, bringing to front")
+                bringToFront()
             }
         }
         .onChange(of: appState.hasBluetoothPermission) { _, granted in
-            if granted && currentStep == 9 {
-                log("Bluetooth permission granted (current step), bringing to front")
+            if granted && currentStep == 3 {
+                log("Bluetooth permission granted on permissions step, bringing to front")
                 bringToFront()
-            } else if granted {
-                log("Bluetooth permission granted (not current step \(currentStep), skipping bringToFront)")
             }
         }
         .onChange(of: currentStep) { _, newStep in
-            // Initialize Bluetooth when reaching step 9 so the state is shown correctly
-            if newStep == 9 {
-                log("Reached Bluetooth step, initializing Bluetooth manager")
+            // Initialize Bluetooth when reaching permissions step
+            if newStep == 3 && !hasInitializedBluetoothForPermissions {
+                log("Reached Permissions step, initializing Bluetooth manager")
                 appState.initializeBluetoothIfNeeded()
+                hasInitializedBluetoothForPermissions = true
             }
         }
     }
@@ -190,24 +155,29 @@ struct OnboardingView: View {
         case 0: return true // Video step - always valid
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
-        case 3: return appState.hasNotificationPermission
-        case 4: return appState.hasAutomationPermission
-        case 5: return appState.hasScreenRecordingPermission
-        case 6: return appState.hasMicrophonePermission
-        case 7: return !appState.isSystemAudioSupported || appState.hasSystemAudioPermission // Skip if not supported
-        case 8: return appState.hasAccessibilityPermission
-        case 9: return appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied
+        case 3: return true // Permissions step - always allow continuing (Skip exists)
+        case 4: return true // Done step
         default: return true
         }
+    }
+
+    private var allPermissionsGranted: Bool {
+        appState.hasScreenRecordingPermission
+            && appState.hasMicrophonePermission
+            && appState.hasNotificationPermission
+            && appState.hasAccessibilityPermission
+            && appState.hasAutomationPermission
+            && (appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied)
     }
 
     private var onboardingContent: some View {
         Group {
             if currentStep == 0 {
-                // Full-window video with overlaid controls
+                // Full-window video with overlaid controls, capped at native resolution
                 ZStack {
                     OnboardingVideoView()
-                        .ignoresSafeArea()
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .frame(maxWidth: 960)
 
                     // Overlay progress indicators and button
                     VStack {
@@ -240,12 +210,32 @@ struct OnboardingView: View {
                     Spacer()
 
                     VStack(spacing: 24) {
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
+                        // Progress indicators + Skip button row
+                        ZStack {
+                            HStack(spacing: 12) {
+                                ForEach(0..<steps.count, id: \.self) { index in
+                                    progressIndicator(for: index)
+                                }
+                            }
+
+                            // Skip button in top-right corner (only on Permissions step)
+                            if currentStep == 3 {
+                                HStack {
+                                    Spacer()
+                                    Button(action: {
+                                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Permissions")
+                                        currentStep = 4
+                                    }) {
+                                        Text("Skip")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                         .padding(.top, 20)
+                        .padding(.horizontal, 20)
 
                         Spacer()
                             .frame(height: 20)
@@ -257,8 +247,8 @@ struct OnboardingView: View {
 
                         buttonSection
                     }
-                    .frame(width: (currentStep == 3 && !appState.hasNotificationPermission) || (currentStep == 5 && !appState.hasScreenRecordingPermission) ? 500 : 420)
-                    .frame(height: (currentStep == 3 && !appState.hasNotificationPermission) || (currentStep == 5 && !appState.hasScreenRecordingPermission) ? 520 : 420)
+                    .frame(width: currentStep == 3 ? 480 : 420)
+                    .frame(height: currentStep == 3 ? 520 : 420)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(OmiColors.backgroundSecondary)
@@ -302,14 +292,8 @@ struct OnboardingView: View {
         case 0: return true // Video - always "granted"
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
-        case 3: return appState.hasNotificationPermission
-        case 4: return appState.hasAutomationPermission
-        case 5: return appState.hasScreenRecordingPermission
-        case 6: return appState.hasMicrophonePermission
-        case 7: return !appState.isSystemAudioSupported || appState.hasSystemAudioPermission // System Audio
-        case 8: return appState.hasAccessibilityPermission // Accessibility
-        case 9: return appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied // Bluetooth (allow skip if unsupported/denied)
-        case 10: return true // Done - always "granted"
+        case 3: return allPermissionsGranted // Permissions step
+        case 4: return true // Done - always "granted"
         default: return false
         }
     }
@@ -324,27 +308,8 @@ struct OnboardingView: View {
         case 2:
             languageStepView
         case 3:
-            notificationStepView
+            permissionsStepView
         case 4:
-            stepView(
-                icon: appState.hasAutomationPermission ? "checkmark.circle.fill" : "gearshape.2",
-                iconColor: appState.hasAutomationPermission ? .white : OmiColors.purplePrimary,
-                title: "Automation",
-                description: appState.hasAutomationPermission
-                    ? "Automation permission granted! Omi can now detect which app you're using."
-                    : "Omi needs Automation permission to detect which app you're using.\n\nClick below to grant permission, then return to this window."
-            )
-        case 5:
-            screenRecordingStepView
-        case 6:
-            microphoneStepView
-        case 7:
-            systemAudioStepView
-        case 8:
-            accessibilityStepView
-        case 9:
-            bluetoothStepView
-        case 10:
             VStack(spacing: 16) {
                 Image(systemName: "checkmark.circle")
                     .font(.system(size: 48))
@@ -468,23 +433,141 @@ struct OnboardingView: View {
         }
     }
 
-    private func stepView(icon: String, iconColor: Color = OmiColors.purplePrimary, title: String, description: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundColor(iconColor)
+    // MARK: - Consolidated Permissions Step View
 
-            Text(title)
+    private var permissionsStepView: some View {
+        VStack(spacing: 16) {
+            Text("Permissions")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text(description)
+            Text("Omi needs a few permissions to work properly.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+
+            ScrollView {
+                VStack(spacing: 10) {
+                    permissionRow(
+                        number: 1,
+                        icon: "record.circle",
+                        name: "Screen Recording",
+                        isGranted: appState.hasScreenRecordingPermission,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
+                            appState.triggerScreenRecordingPermission()
+                        }
+                    )
+                    permissionRow(
+                        number: 2,
+                        icon: "mic",
+                        name: "Microphone",
+                        isGranted: appState.hasMicrophonePermission,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "microphone")
+                            appState.requestMicrophonePermission()
+                        }
+                    )
+                    permissionRow(
+                        number: 3,
+                        icon: "bell",
+                        name: "Notifications",
+                        isGranted: appState.hasNotificationPermission,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "notifications")
+                            appState.requestNotificationPermission()
+                        }
+                    )
+                    permissionRow(
+                        number: 4,
+                        icon: "hand.raised",
+                        name: "Accessibility",
+                        isGranted: appState.hasAccessibilityPermission,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "accessibility")
+                            appState.triggerAccessibilityPermission()
+                        }
+                    )
+                    permissionRow(
+                        number: 5,
+                        icon: "gearshape.2",
+                        name: "Automation",
+                        isGranted: appState.hasAutomationPermission,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "automation")
+                            appState.triggerAutomationPermission()
+                        }
+                    )
+                    permissionRow(
+                        number: 6,
+                        icon: "antenna.radiowaves.left.and.right",
+                        name: "Bluetooth",
+                        isGranted: appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "bluetooth")
+                            appState.initializeBluetoothIfNeeded()
+                            appState.triggerBluetoothPermission()
+                        }
+                    )
+                }
+                .padding(.horizontal, 24)
+            }
+            .frame(maxHeight: 260)
         }
+    }
+
+    @ViewBuilder
+    private func permissionRow(number: Int, icon: String, name: String, isGranted: Bool, action: @escaping () -> Void) -> some View {
+        HStack(spacing: 12) {
+            Text("\(number).")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(width: 20, alignment: .trailing)
+
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(isGranted ? .green : OmiColors.purplePrimary)
+                .frame(width: 20)
+
+            Text(name)
+                .font(.system(size: 14, weight: .medium))
+
+            Spacer()
+
+            if isGranted {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.green)
+            } else {
+                Button(action: action) {
+                    Text("Grant Access")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(OmiColors.purplePrimary)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isGranted ? Color.green.opacity(0.08) : OmiColors.backgroundPrimary.opacity(0.5))
+        )
+    }
+
+    private var isBluetoothPermissionDenied: Bool {
+        appState.isBluetoothPermissionDenied()
+    }
+
+    private var isBluetoothUnsupported: Bool {
+        appState.isBluetoothUnsupported()
     }
 
     @ViewBuilder
@@ -516,637 +599,13 @@ struct OnboardingView: View {
 
     private var mainButtonTitle: String {
         switch currentStep {
-        case 0:
-            return "Continue"
-        case 1:
-            return "Continue"  // Name step
-        case 2:
-            return "Continue"  // Language step
-        case 3:
-            return appState.hasNotificationPermission ? "Continue" : "Enable Notifications"
-        case 4:
-            return appState.hasAutomationPermission ? "Continue" : "Grant Automation Access"
-        case 5:
-            return appState.hasScreenRecordingPermission ? "Continue" : "Grant Screen Recording"
-        case 6:
-            return appState.hasMicrophonePermission ? "Continue" : "Enable Microphone"
-        case 7:
-            return systemAudioButtonTitle
-        case 8:
-            return appState.hasAccessibilityPermission ? "Continue" : "Grant Accessibility"
-        case 9:
-            if appState.hasBluetoothPermission {
-                return "Continue"
-            } else if isBluetoothUnsupported || isBluetoothPermissionDenied {
-                return "Skip"
-            } else {
-                return "Grant Bluetooth Access"
-            }
-        case 10:
-            return "Start Using Omi"
-        default:
-            return "Continue"
+        case 0: return "Continue"
+        case 1: return "Continue"
+        case 2: return "Continue"
+        case 3: return "Continue"
+        case 4: return "Start Using Omi"
+        default: return "Continue"
         }
-    }
-
-    private var systemAudioButtonTitle: String {
-        if !appState.isSystemAudioSupported {
-            return "Continue"  // Not supported on this macOS version
-        }
-        return appState.hasSystemAudioPermission ? "Continue" : "Enable System Audio"
-    }
-
-    // MARK: - Microphone Step View
-
-    @State private var micResetInProgress = false
-    @State private var micResetButtonText = "Reset & Restart"
-
-    private var isMicrophonePermissionDenied: Bool {
-        appState.isMicrophonePermissionDenied()
-    }
-
-    private var microphoneStepView: some View {
-        VStack(spacing: 16) {
-            if appState.hasMicrophonePermission {
-                // Granted state
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("Microphone")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Microphone access granted! Omi can now transcribe your conversations.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-            } else if isMicrophonePermissionDenied {
-                // Denied state - show reset options
-                // Note: Grant Access button is NOT shown here because macOS won't show the permission
-                // dialog again after the user denied it. They must reset the permission first.
-                Image(systemName: "mic.slash.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.red)
-
-                Text("Microphone Permission Denied")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Permission was previously denied. Reset it to try again:")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                VStack(spacing: 8) {
-                    // Option 1: Quick Reset
-                    Button(action: micTryDirectReset) {
-                        HStack(spacing: 8) {
-                            if micResetInProgress {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 14))
-                            }
-                            Text(micResetButtonText)
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .frame(width: 260)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(micResetInProgress)
-
-                    // Option 2: Terminal
-                    Button(action: micTryTerminalReset) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "terminal")
-                                .font(.system(size: 14))
-                            Text("Reset via Terminal")
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .frame(width: 260)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-
-                    // Option 3: Manual
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Option 3: Manual")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-
-                        // Step 1
-                        HStack(alignment: .top, spacing: 6) {
-                            Text("1.")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Open System Settings")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-                                Button(action: micOpenSystemSettings) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "gear")
-                                            .font(.system(size: 12))
-                                        Text("Open Settings")
-                                            .font(.system(size: 12, weight: .medium))
-                                    }
-                                    .foregroundColor(.primary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-
-                        // Step 2
-                        HStack(alignment: .top, spacing: 6) {
-                            Text("2.")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.secondary)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Find \"Omi\" and toggle it ON")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
-
-                                // Screenshot
-                                if let image = NSImage(contentsOfFile: Bundle.resourceBundle.path(forResource: "microphone-settings", ofType: "png") ?? "") {
-                                    Image(nsImage: image)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(maxWidth: 220)
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                                        )
-                                }
-                            }
-                        }
-                    }
-                    .frame(width: 260, alignment: .leading)
-                }
-
-            } else {
-                // Not determined state - normal flow
-                Image(systemName: "mic")
-                    .font(.system(size: 48))
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("Microphone")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Omi needs microphone access to transcribe your conversations and provide context-aware assistance.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-        }
-    }
-
-    private func micTryDirectReset() {
-        micResetInProgress = true
-        micResetButtonText = "Resetting & Restarting..."
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            // Reset and restart the app - macOS requires restart to show permission dialog again
-            let success = appState.resetMicrophonePermissionDirect(shouldRestart: true)
-
-            if !success {
-                DispatchQueue.main.async {
-                    micResetButtonText = "Failed - Try Terminal"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        micResetInProgress = false
-                        micResetButtonText = "Reset & Restart"
-                    }
-                }
-            }
-            // If success, app will restart automatically
-        }
-    }
-
-    private func micTryTerminalReset() {
-        // Reset via terminal and restart - macOS requires restart to show permission dialog again
-        appState.resetMicrophonePermissionViaTerminal(shouldRestart: true)
-    }
-
-    private func micOpenSystemSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
-            NSWorkspace.shared.open(url)
-        }
-        // User will manually grant permission in System Settings
-        // No automatic restart needed - they can grant it directly there
-    }
-
-    // MARK: - Notification Step with Tutorial GIF
-
-    private var notificationStepView: some View {
-        VStack(spacing: 12) {
-            if appState.hasNotificationPermission {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("Notifications")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Notifications are enabled! You'll receive focus alerts from Omi.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else {
-                Text("Notifications")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Omi sends you gentle notifications when it detects you're getting distracted from your work.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                // Animated GIF tutorial
-                AnimatedGIFView(gifName: "enable_notifications")
-                    .frame(maxWidth: 440, maxHeight: 350)
-                    .cornerRadius(8)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-            }
-        }
-    }
-
-    // MARK: - Screen Recording Step with Tutorial GIF
-
-    private var screenRecordingStepView: some View {
-        VStack(spacing: 12) {
-            if appState.hasScreenRecordingPermission {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("Screen Recording")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Screen Recording permission granted! Omi can now analyze your focus.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else {
-                Text("Screen Recording")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Follow these steps to grant permission:")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-
-                // Animated GIF tutorial
-                AnimatedGIFView(gifName: "permissions")
-                    .frame(maxWidth: 440, maxHeight: 350)
-                    .cornerRadius(8)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-            }
-        }
-    }
-
-    // MARK: - System Audio Step View
-
-    private var systemAudioStepView: some View {
-        VStack(spacing: 16) {
-            if !appState.isSystemAudioSupported {
-                // macOS version doesn't support system audio capture
-                Image(systemName: "speaker.slash")
-                    .font(.system(size: 48))
-                    .foregroundColor(.secondary)
-
-                Text("System Audio")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("System audio capture requires macOS 14.4 or later.\n\nYou can still use Omi with microphone-only transcription.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else if appState.hasSystemAudioPermission {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("System Audio")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("System audio capture is ready! Omi can now capture audio from your meetings and media.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            } else {
-                Image(systemName: "speaker.wave.2")
-                    .font(.system(size: 48))
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("System Audio")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Omi can capture system audio to transcribe meetings, videos, and other media playing on your Mac.\n\nThis uses the same Screen Recording permission you already granted.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    // MARK: - Accessibility Step View
-
-    @State private var accessibilityResetInProgress = false
-    @State private var accessibilityResetButtonText = "Reset & Restart"
-
-    private var isAccessibilityPermissionDenied: Bool {
-        appState.isAccessibilityPermissionDenied()
-    }
-
-    private var accessibilityStepView: some View {
-        VStack(spacing: 16) {
-            if appState.hasAccessibilityPermission {
-                // Granted state
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("Accessibility")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Accessibility permission granted! Omi can now provide click-through sidebar functionality.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-            } else if isAccessibilityPermissionDenied {
-                // Denied state - show reset options
-                Image(systemName: "hand.raised.slash.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.red)
-
-                Text("Accessibility Permission Denied")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Permission was previously denied. Reset it to try again:")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                VStack(spacing: 8) {
-                    // Option 1: Quick Reset
-                    Button(action: accessibilityTryDirectReset) {
-                        HStack(spacing: 8) {
-                            if accessibilityResetInProgress {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 14))
-                            }
-                            Text(accessibilityResetButtonText)
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .frame(width: 260)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(accessibilityResetInProgress)
-
-                    // Option 2: Manual
-                    Button(action: accessibilityOpenSystemSettings) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "gear")
-                                .font(.system(size: 14))
-                            Text("Open System Settings")
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .frame(width: 260)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-            } else {
-                // Not determined state - normal flow
-                Image(systemName: "hand.raised")
-                    .font(.system(size: 48))
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("Accessibility")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Omi needs Accessibility permission to provide seamless click-through behavior on the sidebar.\n\nThis allows you to interact with the sidebar without needing to click twice when switching apps.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func accessibilityTryDirectReset() {
-        accessibilityResetInProgress = true
-        accessibilityResetButtonText = "Resetting & Restarting..."
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let success = appState.resetAccessibilityPermissionDirect(shouldRestart: true)
-
-            if !success {
-                DispatchQueue.main.async {
-                    accessibilityResetButtonText = "Failed - Try Settings"
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        accessibilityResetInProgress = false
-                        accessibilityResetButtonText = "Reset & Restart"
-                    }
-                }
-            }
-            // If success, app will restart automatically
-        }
-    }
-
-    private func accessibilityOpenSystemSettings() {
-        appState.openAccessibilityPreferences()
-    }
-
-    // MARK: - Bluetooth Step View
-
-    private var isBluetoothPermissionDenied: Bool {
-        appState.isBluetoothPermissionDenied()
-    }
-
-    private var isBluetoothUnsupported: Bool {
-        appState.isBluetoothUnsupported()
-    }
-
-    private var bluetoothStepView: some View {
-        VStack(spacing: 16) {
-            if appState.hasBluetoothPermission {
-                // Granted state
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.white)
-
-                Text("Bluetooth")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Bluetooth access granted! Omi can now connect to your wearable device.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-            } else if isBluetoothPermissionDenied {
-                // Denied state - show manual settings option
-                Image(systemName: "antenna.radiowaves.left.and.right.slash")
-                    .font(.system(size: 48))
-                    .foregroundColor(.red)
-
-                Text("Bluetooth Permission Denied")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Permission was previously denied. Please enable Bluetooth access in System Settings:")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                Button(action: bluetoothOpenSystemSettings) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "gear")
-                            .font(.system(size: 14))
-                        Text("Open System Settings")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .frame(width: 260)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-
-            } else if isBluetoothUnsupported {
-                // Unsupported state - allow skip with explanation
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 48))
-                    .foregroundColor(.orange)
-
-                Text("Bluetooth Unavailable")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Bluetooth appears unavailable on this Mac. This can happen on newer macOS versions. You can skip this step and Omi will work without wearable device support.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text("You can try enabling Bluetooth in System Settings if you have an Omi wearable.")
-                    .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.8))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-
-                Button(action: bluetoothOpenSystemSettings) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "gear")
-                            .font(.system(size: 14))
-                        Text("Open System Settings")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .frame(width: 260)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-
-            } else {
-                // Not determined state - normal flow
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 48))
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("Bluetooth")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Omi needs Bluetooth access to connect to your Omi wearable device for audio capture and transcription.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func bluetoothOpenSystemSettings() {
-        appState.openBluetoothPreferences()
     }
 
     private func handleMainAction() {
@@ -1184,108 +643,35 @@ struct OnboardingView: View {
             AnalyticsManager.shared.languageChanged(language: selectedLanguage)
             currentStep += 1
         case 3:
-            if appState.hasNotificationPermission {
-                // Permission already granted - advance
-                AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Notifications")
-                AnalyticsManager.shared.permissionGranted(permission: "notifications")
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "notifications")
-                hasTriggeredNotification = true
-                appState.requestNotificationPermission()
-            }
-        case 4:
-            if appState.hasAutomationPermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Automation")
-                AnalyticsManager.shared.permissionGranted(permission: "automation")
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "automation")
-                hasTriggeredAutomation = true
-                appState.triggerAutomationPermission()
-            }
-        case 5:
+            // Permissions step - advance to Done
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Permissions")
+            // Log granted permissions
             if appState.hasScreenRecordingPermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Screen Recording")
                 AnalyticsManager.shared.permissionGranted(permission: "screen_recording")
-                // Trigger proactive monitoring to surface any additional ScreenCaptureKit permission dialogs
-                // (e.g., "allow app to bypass standard screen recording" on macOS Sequoia)
-                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
-                hasTriggeredScreenRecording = true
-                appState.triggerScreenRecordingPermission()
             }
-        case 6:
             if appState.hasMicrophonePermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "Microphone")
                 AnalyticsManager.shared.permissionGranted(permission: "microphone")
-                currentStep += 1
-            } else {
-                // Request permission - UI will update based on denied/not determined state
-                AnalyticsManager.shared.permissionRequested(permission: "microphone")
-                hasTriggeredMicrophone = true
-                appState.requestMicrophonePermission()
             }
-        case 7:
-            // System Audio step
-            if !appState.isSystemAudioSupported {
-                // Not supported on this macOS version - just continue
-                AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "System Audio")
-                currentStep += 1
-            } else if appState.hasSystemAudioPermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "System Audio")
-                AnalyticsManager.shared.permissionGranted(permission: "system_audio")
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "system_audio")
-                hasTriggeredSystemAudio = true
-                appState.triggerSystemAudioPermission()
+            if appState.hasNotificationPermission {
+                AnalyticsManager.shared.permissionGranted(permission: "notifications")
             }
-        case 8:
-            // Accessibility step
             if appState.hasAccessibilityPermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
                 AnalyticsManager.shared.permissionGranted(permission: "accessibility")
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "accessibility")
-                hasTriggeredAccessibility = true
-                appState.triggerAccessibilityPermission()
             }
-        case 9:
-            // Bluetooth step
-            // Initialize Bluetooth if not already done
-            appState.initializeBluetoothIfNeeded()
-
+            if appState.hasAutomationPermission {
+                AnalyticsManager.shared.permissionGranted(permission: "automation")
+            }
             if appState.hasBluetoothPermission {
-                AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Bluetooth")
-                AnalyticsManager.shared.permissionGranted(permission: "bluetooth", extraProperties: [
-                    "bluetooth_state": BluetoothManager.shared.bluetoothStateDescription,
-                    "bluetooth_state_raw": BluetoothManager.shared.bluetoothState.rawValue
-                ])
-                currentStep += 1
-            } else if isBluetoothUnsupported || isBluetoothPermissionDenied {
-                // Allow skipping when Bluetooth is unsupported or denied
-                AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Bluetooth")
-                AnalyticsManager.shared.permissionSkipped(permission: "bluetooth", extraProperties: [
-                    "bluetooth_state": BluetoothManager.shared.bluetoothStateDescription,
-                    "bluetooth_state_raw": BluetoothManager.shared.bluetoothState.rawValue,
-                    "reason": isBluetoothUnsupported ? "unsupported" : "denied"
-                ])
-                currentStep += 1
-            } else {
-                AnalyticsManager.shared.permissionRequested(permission: "bluetooth", extraProperties: [
-                    "bluetooth_state": BluetoothManager.shared.bluetoothStateDescription,
-                    "bluetooth_state_raw": BluetoothManager.shared.bluetoothState.rawValue
-                ])
-                hasTriggeredBluetooth = true
-                appState.triggerBluetoothPermission()
+                AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
             }
-        case 10:
-            log("OnboardingView: Step 10 - Completing onboarding")
-            AnalyticsManager.shared.onboardingStepCompleted(step: 10, stepName: "Done")
+            // Trigger proactive monitoring if screen recording is granted
+            if appState.hasScreenRecordingPermission {
+                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+            }
+            currentStep += 1
+        case 4:
+            log("OnboardingView: Step 4 - Completing onboarding")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Done")
             AnalyticsManager.shared.onboardingCompleted()
             appState.hasCompletedOnboarding = true
             // Enable launch at login by default for new users
@@ -1371,4 +757,3 @@ struct AnimatedGIFView: NSViewRepresentable {
         nsView.animates = true
     }
 }
-
