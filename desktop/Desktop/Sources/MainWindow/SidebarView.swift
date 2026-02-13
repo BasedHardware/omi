@@ -67,7 +67,7 @@ enum SidebarNavItem: Int, CaseIterable {
 
     /// Items shown in the main navigation (top section)
     static var mainItems: [SidebarNavItem] {
-        [.dashboard, .conversations, .chat, .memories, .tasks, .rewind, .apps]
+        [.dashboard, .chat, .memories, .tasks, .rewind, .apps]
     }
 }
 
@@ -389,7 +389,7 @@ struct SidebarView: View {
             if let currentItem = SidebarNavItem(rawValue: selectedIndex),
                newTier != 0 && newTier < currentItem.requiredTier,
                selectedIndex != SidebarNavItem.settings.rawValue && selectedIndex != SidebarNavItem.permissions.rawValue && selectedIndex != SidebarNavItem.device.rawValue && selectedIndex != SidebarNavItem.help.rawValue {
-                selectedIndex = SidebarNavItem.conversations.rawValue
+                selectedIndex = SidebarNavItem.dashboard.rawValue
             }
             // If sidebar is currently visible (not in settings), play animation immediately
             if selectedIndex != SidebarNavItem.settings.rawValue {
