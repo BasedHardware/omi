@@ -2770,20 +2770,33 @@ impl FirestoreService {
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        // Query action_items where completed=false
-        // We filter source and deleted in Rust since Firestore can't reliably filter
-        // on fields that may not exist on all documents
+        // Composite filter: source="screenshot" AND completed=false at Firestore level
+        // so we don't miss items when users have thousands of action_items
         let query = json!({
             "structuredQuery": {
                 "from": [{"collectionId": ACTION_ITEMS_SUBCOLLECTION}],
                 "where": {
-                    "fieldFilter": {
-                        "field": {"fieldPath": "completed"},
-                        "op": "EQUAL",
-                        "value": {"booleanValue": false}
+                    "compositeFilter": {
+                        "op": "AND",
+                        "filters": [
+                            {
+                                "fieldFilter": {
+                                    "field": {"fieldPath": "completed"},
+                                    "op": "EQUAL",
+                                    "value": {"booleanValue": false}
+                                }
+                            },
+                            {
+                                "fieldFilter": {
+                                    "field": {"fieldPath": "source"},
+                                    "op": "EQUAL",
+                                    "value": {"stringValue": "screenshot"}
+                                }
+                            }
+                        ]
                     }
                 },
-                "limit": 500
+                "limit": 100
             }
         });
 
@@ -2817,8 +2830,9 @@ impl FirestoreService {
         Ok(count)
     }
 
-    /// Get active AI action items (source contains "screenshot", not completed, not deleted).
+    /// Get active AI action items (source = "screenshot", not completed, not deleted).
     /// Returns the actual items for dedup comparison during promotion.
+    /// Uses a composite filter to query source="screenshot" AND completed=false at the Firestore level.
     pub async fn get_active_ai_action_items(
         &self,
         uid: &str,
@@ -2829,13 +2843,27 @@ impl FirestoreService {
             "structuredQuery": {
                 "from": [{"collectionId": ACTION_ITEMS_SUBCOLLECTION}],
                 "where": {
-                    "fieldFilter": {
-                        "field": {"fieldPath": "completed"},
-                        "op": "EQUAL",
-                        "value": {"booleanValue": false}
+                    "compositeFilter": {
+                        "op": "AND",
+                        "filters": [
+                            {
+                                "fieldFilter": {
+                                    "field": {"fieldPath": "completed"},
+                                    "op": "EQUAL",
+                                    "value": {"booleanValue": false}
+                                }
+                            },
+                            {
+                                "fieldFilter": {
+                                    "field": {"fieldPath": "source"},
+                                    "op": "EQUAL",
+                                    "value": {"stringValue": "screenshot"}
+                                }
+                            }
+                        ]
                     }
                 },
-                "limit": 500
+                "limit": 100
             }
         });
 

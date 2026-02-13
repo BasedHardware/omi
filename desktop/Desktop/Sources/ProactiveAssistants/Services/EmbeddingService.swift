@@ -107,7 +107,7 @@ actor EmbeddingService {
 
     // MARK: - In-Memory Index
 
-    /// Load all embeddings from SQLite into memory
+    /// Load all embeddings from SQLite into memory (action_items + staged_tasks)
     func loadIndex() async {
         do {
             let rows = try await ActionItemStorage.shared.getAllEmbeddings()
@@ -117,8 +117,18 @@ actor EmbeddingService {
                     index[id] = floats
                 }
             }
+            let actionCount = index.count
+
+            // Also load staged task embeddings
+            let stagedRows = try await StagedTaskStorage.shared.getAllEmbeddings()
+            for (id, data) in stagedRows {
+                if let floats = dataToFloats(data) {
+                    index[id] = floats
+                }
+            }
+
             isIndexLoaded = true
-            log("EmbeddingService: Loaded \(index.count) embeddings into memory")
+            log("EmbeddingService: Loaded \(index.count) embeddings into memory (\(actionCount) action_items, \(index.count - actionCount) staged_tasks)")
         } catch {
             logError("EmbeddingService: Failed to load index", error: error)
         }
@@ -159,12 +169,13 @@ actor EmbeddingService {
 
     // MARK: - Backfill
 
-    /// Batch-embed all tasks missing embeddings
+    /// Batch-embed all tasks missing embeddings (action_items + staged_tasks)
     func backfillIfNeeded() async {
         let batchSize = 100
         var totalProcessed = 0
 
         do {
+            // Backfill action_items
             while true {
                 let items = try await ActionItemStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
                 if items.isEmpty { break }
@@ -180,9 +191,30 @@ actor EmbeddingService {
                 }
 
                 totalProcessed += items.count
-                log("EmbeddingService: Backfill progress: \(totalProcessed) items")
+                log("EmbeddingService: Backfill progress: \(totalProcessed) action_items")
 
                 // Small delay to avoid rate limiting
+                try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            }
+
+            // Backfill staged_tasks
+            while true {
+                let items = try await StagedTaskStorage.shared.getItemsMissingEmbeddings(limit: batchSize)
+                if items.isEmpty { break }
+
+                let texts = items.map { $0.description }
+                let embeddings = try await embedBatch(texts: texts)
+
+                for (i, embedding) in embeddings.enumerated() where i < items.count {
+                    let item = items[i]
+                    let data = floatsToData(embedding)
+                    try await StagedTaskStorage.shared.updateEmbedding(id: item.id, embedding: data)
+                    addToIndex(id: item.id, embedding: embedding)
+                }
+
+                totalProcessed += items.count
+                log("EmbeddingService: Backfill progress: \(totalProcessed) total (incl. staged)")
+
                 try await Task.sleep(nanoseconds: 200_000_000) // 200ms
             }
 

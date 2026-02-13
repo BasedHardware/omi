@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.7.1",
+      "date": "2026-02-13",
+      "changes": [
+        "Staged tasks now included in semantic search results",
+        "Faster task promotion: promoted tasks appear instantly without reloading",
+        "Fixed duplicate staged tasks being created during migration",
+        "Fixed migration flag race condition causing repeated runs"
+      ]
+    },
+    {
       "version": "0.7.0",
       "date": "2026-02-12",
       "changes": [
