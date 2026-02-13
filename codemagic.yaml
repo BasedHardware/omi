@@ -17,6 +17,7 @@ workflows:
       vars:
         APP_ID: $NOOTO_APP_ID
         BUNDLE_ID: "com.togodynamics.nooto"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -196,6 +197,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.togodynamics.nooto"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -358,6 +360,7 @@ workflows:
       vars:
         APP_ID: $NOOTO_APP_ID
         BUNDLE_ID: "com.togodynamics.nooto"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -526,6 +529,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.togodynamics.nooto"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -679,6 +683,7 @@ workflows:
       vars:
         APP_ID: $NOOTO_APP_ID
         BUNDLE_ID: "com.togodynamics.nooto"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
@@ -813,6 +818,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.togodynamics.nooto"
+        CM_CLONE_DEPTH: 1
       flutter: 3.35.3
       xcode: 16.4
       cocoapods: 1.16.2
