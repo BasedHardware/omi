@@ -52,10 +52,17 @@ struct DesktopHomeView: View {
                     }
             } else if !appState.hasCompletedOnboarding {
                 // State 2: Signed in but onboarding not complete
-                OnboardingView(appState: appState, onComplete: nil)
-                    .onAppear {
-                        log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
+                if shouldSkipOnboarding() {
+                    Color.clear.onAppear {
+                        log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
+                        appState.hasCompletedOnboarding = true
                     }
+                } else {
+                    OnboardingView(appState: appState, onComplete: nil)
+                        .onAppear {
+                            log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
+                        }
+                }
             } else {
                 // State 3: Signed in and onboarded - show main content
                 ZStack {
@@ -88,6 +95,10 @@ struct DesktopHomeView: View {
                             } else {
                                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
                             }
+
+                            // Set up and show floating control bar
+                            FloatingControlBarManager.shared.setup(appState: appState)
+                            FloatingControlBarManager.shared.show()
                         }
                         .task {
                             // Trigger eager data loading when main content appears
