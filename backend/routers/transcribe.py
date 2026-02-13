@@ -317,7 +317,7 @@ async def _stream_handler(
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
 
-                if transcription_seconds > 0 or words_to_record > 0:
+                if words_to_record > 0:
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
@@ -2033,7 +2033,7 @@ async def _stream_handler(
         if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
-            if transcription_seconds > 0 or words_to_record > 0:
+            if words_to_record > 0:
                 record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
         websocket_active = False
 
