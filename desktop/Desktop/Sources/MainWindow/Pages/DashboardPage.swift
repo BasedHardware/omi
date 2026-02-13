@@ -278,9 +278,6 @@ struct DashboardPage: View {
                 viewModel.refreshGoals()
             }
 
-            Divider()
-                .background(OmiColors.backgroundTertiary)
-
             // Conversations section fills remaining space
             ConversationsPage(appState: appState)
         }
