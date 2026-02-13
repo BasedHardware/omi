@@ -176,113 +176,121 @@ struct DashboardPage: View {
     @ObservedObject var viewModel: DashboardViewModel
     @ObservedObject var appState: AppState
     @Binding var selectedIndex: Int
+    @State private var selectedConversation: ServerConversation? = nil
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Dashboard widgets (scrollable, compact)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Dashboard")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            Text(formattedDate)
-                                .font(.system(size: 14))
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
-
-                        Spacer()
-
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        }
-
-                        Button(action: {
-                            Task {
-                                await viewModel.loadDashboardData()
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 14))
-                                .foregroundColor(OmiColors.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 24)
-
-                // 4 Widgets in 2x2 grid
-                Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                    // Top row: Score + Focus
-                    GridRow {
-                        ScoreWidget(scoreResponse: viewModel.scoreResponse)
-                            .frame(minWidth: 0, maxWidth: .infinity)
-
-                        FocusSummaryWidget(
-                            todayStats: FocusStorage.shared.todayStats,
-                            totalStats: FocusStorage.shared.allTimeStats
-                        )
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                    }
-
-                    // Bottom row: Tasks + Goals
-                    GridRow {
-                        TasksWidget(
-                            overdueTasks: viewModel.overdueTasks,
-                            todaysTasks: viewModel.todaysTasks,
-                            recentTasks: viewModel.recentTasks,
-                            onToggleCompletion: { task in
-                                Task {
-                                    await viewModel.toggleTaskCompletion(task)
-                                }
-                            }
-                        )
-                        .frame(minWidth: 0, maxWidth: .infinity)
-
-                        GoalsWidget(
-                            goals: viewModel.goals,
-                            onCreateGoal: { title, current, target in
-                                Task {
-                                    await viewModel.createGoal(
-                                        title: title,
-                                        goalType: .numeric,
-                                        targetValue: target,
-                                        unit: nil
-                                    )
-                                }
-                            },
-                            onUpdateProgress: { goal, value in
-                                Task {
-                                    await viewModel.updateGoalProgress(goal, currentValue: value)
-                                }
-                            },
-                            onDeleteGoal: { goal in
-                                Task {
-                                    await viewModel.deleteGoal(goal)
-                                }
-                            }
-                        )
-                        .frame(minWidth: 0, maxWidth: .infinity)
+        Group {
+            if selectedConversation != nil {
+                // Full-page conversation detail (hides dashboard)
+                ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+            } else {
+                // Dashboard + conversations in one scrollable page
+                ScrollView {
+                    VStack(spacing: 0) {
+                        dashboardWidgets
+                        ConversationsPage(appState: appState, selectedConversation: $selectedConversation, embedded: true)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
-
-                }
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                viewModel.refreshGoals()
-            }
-
-            // Conversations section fills remaining space
-            ConversationsPage(appState: appState)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            viewModel.refreshGoals()
+        }
+    }
+
+    private var dashboardWidgets: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dashboard")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text(formattedDate)
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                Spacer()
+
+                if viewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+
+                Button(action: {
+                    Task {
+                        await viewModel.loadDashboardData()
+                    }
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // 4 Widgets in 2x2 grid
+            Grid(horizontalSpacing: 16, verticalSpacing: 16) {
+                // Top row: Score + Focus
+                GridRow {
+                    ScoreWidget(scoreResponse: viewModel.scoreResponse)
+                        .frame(minWidth: 0, maxWidth: .infinity)
+
+                    FocusSummaryWidget(
+                        todayStats: FocusStorage.shared.todayStats,
+                        totalStats: FocusStorage.shared.allTimeStats
+                    )
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                }
+
+                // Bottom row: Tasks + Goals
+                GridRow {
+                    TasksWidget(
+                        overdueTasks: viewModel.overdueTasks,
+                        todaysTasks: viewModel.todaysTasks,
+                        recentTasks: viewModel.recentTasks,
+                        onToggleCompletion: { task in
+                            Task {
+                                await viewModel.toggleTaskCompletion(task)
+                            }
+                        }
+                    )
+                    .frame(minWidth: 0, maxWidth: .infinity)
+
+                    GoalsWidget(
+                        goals: viewModel.goals,
+                        onCreateGoal: { title, current, target in
+                            Task {
+                                await viewModel.createGoal(
+                                    title: title,
+                                    goalType: .numeric,
+                                    targetValue: target,
+                                    unit: nil
+                                )
+                            }
+                        },
+                        onUpdateProgress: { goal, value in
+                            Task {
+                                await viewModel.updateGoalProgress(goal, currentValue: value)
+                            }
+                        },
+                        onDeleteGoal: { goal in
+                            Task {
+                                await viewModel.deleteGoal(goal)
+                            }
+                        }
+                    )
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 8)
     }
 
     private var formattedDate: String {
