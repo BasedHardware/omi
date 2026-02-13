@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Observable object holding the state for the floating control bar.
 @MainActor
-class FloatingControlBarState: ObservableObject {
+class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
     @Published var isInitialising: Bool = false
@@ -18,4 +18,9 @@ class FloatingControlBarState: ObservableObject {
     @Published var displayedQuery: String = ""
     @Published var inputViewHeight: CGFloat = 120
     @Published var screenshotURL: URL? = nil
+
+    // Push-to-talk state
+    @Published var isVoiceListening: Bool = false
+    @Published var isVoiceLocked: Bool = false
+    @Published var voiceTranscript: String = ""
 }

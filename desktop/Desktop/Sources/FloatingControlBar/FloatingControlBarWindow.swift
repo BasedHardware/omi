@@ -6,9 +6,10 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 430, height: 60)
-    private static let minBarSize = NSSize(width: 430, height: 60)
+    private static let defaultSize = NSSize(width: 200, height: 60)
+    private static let minBarSize = NSSize(width: 200, height: 60)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
+    private static let expandedWidth: CGFloat = 430
 
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
@@ -263,13 +264,22 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
-        let size = NSSize(width: 430, height: height)
+        // Use narrow width for collapsed bar, expanded for AI panels
+        let width = height <= 60 ? FloatingControlBarWindow.defaultSize.width : FloatingControlBarWindow.expandedWidth
+        let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
         }
         if let workItem = resizeWorkItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
         }
+    }
+
+    /// Resize window for PTT state (expanded when listening, narrow when idle)
+    func resizeForPTTState(expanded: Bool) {
+        let width = expanded ? FloatingControlBarWindow.expandedWidth : FloatingControlBarWindow.defaultSize.width
+        let size = NSSize(width: width, height: 60)
+        resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -442,7 +452,53 @@ class FloatingControlBarManager {
             show()
         }
         window.showAIConversation()
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    /// Open AI input with a pre-filled query and auto-send (used by PTT).
+    func openAIInputWithQuery(_ query: String, screenshot: URL?) {
+        guard let window = window else { return }
+
+        // Close any existing conversation and create fresh ChatProvider
+        window.closeAIConversation()
+        let provider = ChatProvider()
+        self.chatProvider = provider
+
+        // Re-wire the onSendQuery to use the new provider
+        window.onSendQuery = { [weak self, weak window] message, screenshotURL in
+            guard let self = self, let window = window else { return }
+            Task { @MainActor in
+                await self.sendAIQuery(message, screenshotURL: screenshotURL, barWindow: window, provider: provider)
+            }
+        }
+
+        if !window.isVisible {
+            show()
+        }
+
+        // Set up state for immediate response view
+        window.state.showingAIConversation = true
+        window.state.showingAIResponse = false
+        window.state.isAILoading = true
+        window.state.aiInputText = query
+        window.state.aiResponseText = ""
+        window.resizeToResponseHeightPublic(animated: true)
+        window.orderFrontRegardless()
+
+        // Auto-send the query
+        Task { @MainActor in
+            await sendAIQuery(query, screenshotURL: screenshot, barWindow: window, provider: provider)
+        }
+    }
+
+    /// Access the bar state for PTT updates.
+    var barState: FloatingControlBarState? {
+        return window?.state
+    }
+
+    /// Resize the floating bar for PTT state changes.
+    func resizeForPTT(expanded: Bool) {
+        window?.resizeForPTTState(expanded: expanded)
     }
 
     // MARK: - AI Query

@@ -42,18 +42,12 @@ struct FloatingControlBarView: View {
         HStack(spacing: 12) {
             Spacer()
 
-            recordingStatusView
-
-            Spacer().frame(width: 4)
-
-            commandButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
-                onAskAI()
-            }
-
-            Spacer().frame(width: 4)
-
-            commandButton(title: "Show/Hide", keys: ["\u{2318}", "\\"]) {
-                onHide()
+            if state.isVoiceListening {
+                voiceListeningView
+            } else {
+                commandButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
+                    onAskAI()
+                }
             }
 
             Spacer()
@@ -62,6 +56,43 @@ struct FloatingControlBarView: View {
         .padding(.vertical, 8)
         .frame(height: 60)
         .background(DraggableAreaView(targetWindow: window))
+    }
+
+    private var voiceListeningView: some View {
+        HStack(spacing: 8) {
+            // Pulsing mic icon
+            Circle()
+                .fill(Color.red)
+                .frame(width: 10, height: 10)
+                .scaleEffect(state.isVoiceListening ? 1.2 : 1.0)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: state.isVoiceListening)
+
+            Image(systemName: "mic.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+
+            if state.isVoiceLocked {
+                Text("LOCKED")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.2))
+                    .cornerRadius(4)
+            }
+
+            if !state.voiceTranscript.isEmpty {
+                Text(state.voiceTranscript)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } else {
+                Text(state.isVoiceLocked ? "Tap \u{2325} to send" : "Release \u{2325} to send")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+        }
     }
 
     private var aiInputView: some View {
@@ -87,7 +118,7 @@ struct FloatingControlBarView: View {
             onCancel: onCloseAI,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-                let totalHeight = 60 + height + 24 + (state.screenshotURL != nil ? 60 : 0)
+                let totalHeight = 60 + height + 24
                 state.inputViewHeight = totalHeight
             },
             onCaptureScreenshot: onCaptureScreenshot
@@ -120,40 +151,6 @@ struct FloatingControlBarView: View {
             ))
     }
 
-    private var recordingStatusView: some View {
-        HStack(spacing: 8) {
-            Button(action: onPlayPause) {
-                if state.isInitialising {
-                    FloatingLoadingSpinner()
-                        .frame(width: 24, height: 24)
-                        .frame(width: 28, height: 28)
-                        .background(Color.white)
-                        .clipShape(Circle())
-                } else {
-                    Image(systemName: state.isRecording ? "pause.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
-                        .frame(width: 28, height: 28)
-                        .background(Color.white)
-                        .clipShape(Circle())
-                        .scaleEffect(state.isRecording ? 1.0 : 0.9)
-                        .animation(
-                            .spring(response: 0.3, dampingFraction: 0.6), value: state.isRecording
-                        )
-                }
-            }
-            .buttonStyle(.plain)
-
-            if state.isRecording {
-                Text(formattedDuration)
-                    .font(.system(size: 14).monospacedDigit())
-                    .foregroundColor(.white)
-                    .transition(.scale(scale: 0.8).combined(with: .opacity))
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: state.duration)
-            }
-        }
-    }
-
     private func commandButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
@@ -173,7 +170,4 @@ struct FloatingControlBarView: View {
         .buttonStyle(.plain)
     }
 
-    private var formattedDuration: String {
-        String(format: "%02d:%02d", state.duration / 60, state.duration % 60)
-    }
 }
