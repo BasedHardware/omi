@@ -9958,5 +9958,52 @@
   "pairingDescNeoOne": "Press and hold the power button until the LED blinks. The device will be discoverable.",
   "@pairingDescNeoOne": {
     "description": "Pairing description for Neo One device"
+  },
+  "downloadingFromDevice": "Downloading from device",
+  "reconnectingToInternet": "Reconnecting to internet...",
+  "uploadingToCloud": "Uploading {current} of {total}",
+  "@uploadingToCloud": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "processedStatus": "Processed",
+  "corruptedStatus": "Corrupted",
+  "nPending": "{count} pending",
+  "@nPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nProcessed": "{count} processed",
+  "@nProcessed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "synced": "Synced",
+  "@synced": {
+    "description": "Label for synced/processed recordings tab"
+  },
+  "noPendingRecordings": "No pending recordings",
+  "@noPendingRecordings": {
+    "description": "Empty state when no pending recordings"
+  },
+  "noProcessedRecordings": "No processed recordings yet",
+  "@noProcessedRecordings": {
+    "description": "Empty state when no processed recordings"
+  },
+  "pending": "Pending",
+  "@pending": {
+    "description": "Pending tab label for sync page"
   }
 }
