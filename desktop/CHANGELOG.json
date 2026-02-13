@@ -1,0 +1,552 @@
+{
+  "releases": [
+    {
+      "version": "0.6.6",
+      "date": "2026-02-12",
+      "changes": [
+        "Updated app icon",
+        "Tasks date view now auto-selects 'Last 7 Days' for a cleaner default",
+        "Get Omi widget now shows regardless of device pairing status",
+        "Updated onboarding completion screen layout",
+        "Fixed app restart interrupting in-progress updates",
+        "Fixed old tasks appearing in date-filtered views"
+      ]
+    },
+    {
+      "version": "0.6.5",
+      "date": "2026-02-12",
+      "changes": [
+        "Folder tabs: browse and manage conversation folders inline",
+        "Folder creation and editing with descriptions",
+        "Fixed Node.js path resolution for AI chat agent",
+        "Cleaned up compiler warnings"
+      ]
+    },
+    {
+      "version": "0.6.4",
+      "date": "2026-02-12",
+      "changes": [
+        "Goal tracking: persistent local goal storage with cloud sync",
+        "Stale goals are now auto-completed",
+        "Advice system migrated to memory API for better recommendations",
+        "Fixed app icon not displaying correctly in builds",
+        "Added agent-bridge to release builds"
+      ]
+    },
+    {
+      "version": "0.6.3",
+      "date": "2026-02-12",
+      "changes": [
+        "Smarter chat: your goals, AI profile, and memories now included in context",
+        "Better task extraction: ignores messaging sidebars and list views",
+        "Task suggestions now based on your completed task patterns",
+        "Fixed task allowlist not loading on fresh login"
+      ]
+    },
+    {
+      "version": "0.6.2",
+      "date": "2026-02-12",
+      "changes": [
+        "Switched AI chat to Claude for smarter, more reliable responses",
+        "Per-user data isolation: your data stays separate across accounts",
+        "Tool call visualization: see what the AI is doing in real time",
+        "New app icon",
+        "Simplified onboarding with streamlined name input step",
+        "Fixed race conditions in database initialization and user switching",
+        "Analytics tracking for chat queries and tool usage"
+      ]
+    },
+    {
+      "version": "0.6.1",
+      "date": "2026-02-11",
+      "changes": [
+        "AI onboarding chat: conversational setup that learns your name, job, and goals",
+        "Agent service with Anthropic-powered multi-turn tool execution",
+        "Screenshot search via chat: ask the AI to find past screenshots",
+        "Suggested replies in onboarding for faster setup",
+        "Multi-turn tool execution for smarter chat responses",
+        "Chat messages now sorted chronologically",
+        "Stronger agent prompts for reliable onboarding field saving",
+        "Search failures are now non-fatal to prevent chat disruptions"
+      ]
+    },
+    {
+      "version": "0.6.0",
+      "date": "2026-02-11",
+      "changes": [
+        "Task sharing: copy a link to share your tasks with others",
+        "Task detail view with rich metadata display",
+        "Per-assistant notification controls for Focus, Task, and Advice",
+        "Update available widget in sidebar with one-click install",
+        "Advanced settings subsections with sidebar navigation",
+        "Smarter task extraction: ignores past deadlines and due dates",
+        "Optimized focus session storage to reduce unnecessary UI re-renders",
+        "Screenshot semantic search with Gemini embeddings (full backfill migration)",
+        "Fixed CPU spike caused by macOS writing tools on 15.1+",
+        "Fixed actor isolation and memory sync issues",
+        "Fixed auth validation edge case during backfill"
+      ]
+    },
+    {
+      "version": "0.5.2",
+      "date": "2026-02-10",
+      "changes": [
+        "Battery optimization: OCR pauses automatically when on battery to save power",
+        "Task agents now work with all task categories, not just allowlisted ones",
+        "Sentry webhook integration for real-time bug and feedback tracking",
+        "Improved OCR deduplication with perceptual hashing (dHash) for better accuracy",
+        "Inline task editing with debounced auto-save",
+        "Date range filter for tasks sorted by due date",
+        "Upgraded embeddings to 3072 dimensions with task-type-aware search",
+        "Task relevance scores sync bidirectionally with backend",
+        "Smarter task extraction that ignores outgoing messages in chat apps",
+        "Hidden mouse cursor during window capture for cleaner screenshots"
+      ]
+    },
+    {
+      "version": "0.5.1",
+      "date": "2026-02-10",
+      "changes": [
+        "OCR text embeddings for semantic Rewind search",
+        "Agent session persistence: task agents resume across app restarts",
+        "Smooth conversation deletion animations",
+        "Improved task relevance scoring and allowlist management",
+        "Local cache updates for conversations, memories, and tasks prevent stale UI",
+        "Fixed resource bundle paths for notification sounds and images"
+      ]
+    },
+    {
+      "version": "0.5.0",
+      "date": "2026-02-10",
+      "changes": [
+        "Task prioritization: AI ranks tasks by relevance to your profile and goals",
+        "Context-aware task extraction: detects app and window switches for smarter triggers",
+        "AI User Profile: auto-generated profile powers personalized task scoring",
+        "Window title tracking across memories, focus sessions, and tasks",
+        "Settings sync: assistant settings now sync bidirectionally with the backend",
+        "Browser keyword filtering for task extraction in browser windows",
+        "New app icon and updated Omi branding",
+        "Improved notification sounds for focus sessions",
+        "Dashboard widgets now fill available space properly",
+        "Task extraction uses tool-calling loop with search for better accuracy",
+        "Faster startup by skipping database integrity check after clean shutdown",
+        "Fixed duplicate OCR insert errors"
+      ]
+    },
+    {
+      "version": "0.4.1",
+      "date": "2026-02-08",
+      "changes": [
+        "Auto-updater now starts checking for updates immediately at launch",
+        "Appcast filtered to serve only the latest live release",
+        "Analytics tracking for update check results",
+        "Fixed audio reconfiguration crash with retry logic and backoff",
+        "Added Objective-C exception catching to prevent audio capture crashes"
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-02-07",
+      "changes": [
+        "AI-powered goal generation: goals are automatically suggested based on your conversation history",
+        "Goal completion tracking with celebration animations when you hit your targets",
+        "Goal history page showing completed and removed goals",
+        "Goals now include descriptions and linked tasks for better context",
+        "Task tags: tasks support multiple tags instead of a single category",
+        "App exclusion settings for Memory, Focus, Advice, and Task assistants",
+        "Background sync for tasks and memories with local-first offline support",
+        "Pagination and 'Load more' for tasks, memories, and search results",
+        "Task agent now shows editing status and file counts",
+        "Tags displayed on memory cards and detail sheets",
+        "Dashboard updated to 2x2 grid layout with full-width conversations",
+        "Screen capture auto-recovery with background polling",
+        "Upgraded to Gemini 3 for smarter goal generation",
+        "Retry logic with backoff for Gemini API reliability",
+        "Fixed crashes from UTF-8 boundary panics in backend",
+        "Fixed auth race condition causing login issues",
+        "Fixed UI flash during tier migration"
+      ]
+    },
+    {
+      "version": "0.3.7",
+      "date": "2026-02-06",
+      "changes": [
+        "App renamed to Omi Beta with new icon for clearer identity",
+        "Help page with direct Crisp chat support from the founder",
+        "Loading screen during authentication for smoother sign-in",
+        "Tier gating for premium features in sidebar navigation",
+        "OCR optimizations with frame throttling, deduplication, and fast mode setting",
+        "Dashboard improvements: recent conversations widget and focus session stats",
+        "Advanced memory and task filtering by category, source, and priority",
+        "Inline memory editing with delete and public toggle",
+        "Reduced task polling frequency and paused updates when inactive",
+        "Fixed dev bundle ID to prevent permission conflicts between production and development builds"
+      ]
+    },
+    {
+      "version": "0.3.6",
+      "date": "2026-02-06",
+      "changes": [
+        "App renamed to Omi Beta with new icon for clearer identity",
+        "Help page with direct Crisp chat support from the founder",
+        "Loading screen during authentication for smoother sign-in",
+        "Tier gating for premium features in sidebar navigation",
+        "OCR optimizations with frame throttling, deduplication, and fast mode setting",
+        "Dashboard improvements: recent conversations widget and focus session stats",
+        "Advanced memory and task filtering by category, source, and priority",
+        "Inline memory editing with delete and public toggle",
+        "Reduced task polling frequency and paused updates when inactive",
+        "Fixed dev bundle ID to prevent permission conflicts between production and development builds"
+      ]
+    },
+    {
+      "version": "0.3.5",
+      "date": "2026-02-06",
+      "changes": [
+        "App renamed to Omi Beta with new icon for clearer identity",
+        "Help page with direct Crisp chat support from the founder",
+        "Loading screen during authentication for smoother sign-in",
+        "Tier gating for premium features in sidebar navigation",
+        "OCR optimizations with frame throttling, deduplication, and fast mode setting",
+        "Dashboard improvements: recent conversations widget and focus session stats",
+        "Advanced memory and task filtering by category, source, and priority",
+        "Inline memory editing with delete and public toggle",
+        "Reduced task polling frequency and paused updates when inactive",
+        "Fixed dev bundle ID to prevent permission conflicts between production and development builds"
+      ]
+    },
+    {
+      "version": "0.3.4",
+      "date": "2026-02-05",
+      "changes": [
+        "Local-first sync: tasks, memories, and conversations now work offline",
+        "Task AI agent with automatic category classification",
+        "AI-powered task deduplication removes duplicates automatically",
+        "Goal progress history tracking with interactive drag-to-update",
+        "Optimized screen capture pipeline for lower CPU usage on macOS 14+",
+        "SQLite-based search for faster memory and task filtering",
+        "Apps page redesign with category filtering and pagination",
+        "Auto-refresh for tasks, memories, and timeline views",
+        "Bulk memory management actions",
+        "Task priority and category support",
+        "Launch at login enabled by default for new users",
+        "Fixed database corruption issues with WAL file cleanup",
+        "Corrupted video chunk detection and automatic recovery"
+      ]
+    },
+    {
+      "version": "0.3.3",
+      "date": "2026-02-05",
+      "changes": [
+        "Fixed menu bar icon not appearing on macOS Sequoia",
+        "Enhanced menu bar diagnostics logging"
+      ]
+    },
+    {
+      "version": "0.3.2",
+      "date": "2026-02-05",
+      "changes": [
+        "New menu bar icons for a cleaner look",
+        "Export logs from Settings for easier troubleshooting"
+      ]
+    },
+    {
+      "version": "0.3.1",
+      "date": "2026-02-04",
+      "changes": [
+        "Fixed notifications not appearing when app is in foreground"
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-02-04",
+      "changes": [
+        "Live Notes: real-time AI-generated notes during recordings",
+        "Memory Graph: interactive 3D visualization of your memories",
+        "Launch at Login: automatically start OMI when you log in",
+        "Goals AI: personalized goal suggestions and progress tracking",
+        "Audio level indicator in sidebar shows recording status",
+        "Resizable notes panel in transcript view",
+        "Improved Rewind-only mode with streamlined menu bar",
+        "Enhanced database recovery with automatic rebuild from video chunks",
+        "Upgraded to Gemini 3 Pro Preview for better AI responses"
+      ]
+    },
+    {
+      "version": "0.2.6",
+      "date": "2026-02-04",
+      "changes": [
+        "New settings sidebar for easier navigation",
+        "Database corruption detection and automatic recovery",
+        "Reduced video file size with optimized compression",
+        "Disabled auto-detect transcription language by default for reliability",
+        "Improved Rewind date filtering consistency"
+      ]
+    },
+    {
+      "version": "0.2.4",
+      "date": "2026-02-04",
+      "changes": [
+        "Improved analytics for permission and Bluetooth state tracking",
+        "Code cleanup and stability improvements"
+      ]
+    },
+    {
+      "version": "0.2.3",
+      "date": "2026-02-03",
+      "changes": [
+        "Transcription crash recovery: sessions saved locally and uploaded after restart",
+        "Multi-chat support with default chat mode",
+        "Rewind-only mode with simplified menu bar UI",
+        "Task drag-and-drop reordering and indent/outdent buttons",
+        "Apps grouped by capability and sorted by popularity",
+        "Timeline navigation with scroll wheel support",
+        "Fixed OCR context bounds and image display issues"
+      ]
+    },
+    {
+      "version": "0.2.2",
+      "date": "2026-02-03",
+      "changes": [
+        "Device settings now accessible from Settings page",
+        "Improved Bluetooth permission flow for device pairing"
+      ]
+    },
+    {
+      "version": "0.2.1",
+      "date": "2026-02-03",
+      "changes": [
+        "Universal binary support for Intel and Apple Silicon Macs",
+        "Improved screen capture quality with higher JPEG compression",
+        "Added Device connect widget to sidebar",
+        "Better memory management with LRU thumbnail and icon caches",
+        "Increased video chunk resolution to 3000px"
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-02-03",
+      "changes": [
+        "New Dashboard with daily score, goals, tasks widgets, and streak tracking",
+        "AI Persona management for personalized interactions",
+        "OMI device connectivity with Bluetooth support",
+        "Support for multiple devices: Bee, Fieldy, Friend Pendant, Limitless, Plaud, Frame",
+        "Live transcript overlay and audio level monitoring",
+        "Focus session sound notifications and summaries",
+        "Rewind day summary generation",
+        "Improved conversations with expandable transcripts and undo delete",
+        "Enhanced memories page with editing and category filtering",
+        "Apps management with enable/disable and chat functionality",
+        "Redis caching for improved backend performance"
+      ]
+    },
+    {
+      "version": "0.1.9",
+      "date": "2026-02-02",
+      "changes": [
+        "Lowered macOS requirement from 15.0 to 14.0 (Sonoma)"
+      ]
+    },
+    {
+      "version": "0.1.8",
+      "date": "2026-02-02",
+      "changes": [
+        "Unified search field into persistent top bar",
+        "Added backward compatibility for Flutter chat sessions"
+      ]
+    },
+    {
+      "version": "0.1.7",
+      "date": "2026-02-02",
+      "changes": [
+        "Fixed window screenshot to maintain aspect ratio",
+        "Added no-results state to search UI",
+        "Fixed bundled ffmpeg path for SPM builds",
+        "Enhanced reset onboarding with thorough cleanup"
+      ]
+    },
+    {
+      "version": "0.1.6",
+      "date": "2026-02-02",
+      "changes": [
+        "Added bundled ffmpeg binary for users without Homebrew",
+        "Simplified search UI to default to results view",
+        "Added Reset Now action button to screen capture notifications",
+        "Added Launch Services registration to fix permission confusion"
+      ]
+    },
+    {
+      "version": "0.1.5",
+      "date": "2026-02-01",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.1.4",
+      "date": "2026-02-01",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.1.3",
+      "date": "2026-02-01",
+      "changes": [
+        "Redesigned search results with mode picker and Google-style list view",
+        "Changed Rewind hotkey to Cmd+Option+R",
+        "Compact RewindPage controls and improved frame display sizing",
+        "Rewrote InteractiveTimelineBar with NSView for proper scroll handling",
+        "Fixed sidebar layout to expand to full height"
+      ]
+    },
+    {
+      "version": "0.1.2",
+      "date": "2026-02-01",
+      "changes": [
+        "Updated Rewind timeline player view",
+        "Improved Rewind indexer performance",
+        "Updated settings and sidebar UI",
+        "Enhanced memories and conversations pages"
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "date": "2026-02-01",
+      "changes": [
+        "Updated chat interface",
+        "Improved proactive assistants",
+        "Enhanced settings page",
+        "Focus assistant improvements"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-02-01",
+      "changes": [
+        "Major UI overhaul with new OmiColors theme",
+        "Added chat sessions with full CRUD operations",
+        "Integrated chat sessions UI in ChatPage",
+        "Updated Tasks and Focus pages UI",
+        "Enhanced Rewind database and view model"
+      ]
+    },
+    {
+      "version": "0.0.14",
+      "date": "2026-01-31",
+      "changes": [
+        "Added transcription toggle to Settings page",
+        "Respect transcription and screen analysis settings on app launch",
+        "Fixed PostHog person profile linking",
+        "Updated OnboardingView colors to use OmiColors"
+      ]
+    },
+    {
+      "version": "0.0.13",
+      "date": "2026-01-31",
+      "changes": [
+        "Added custom Bundle extension for resource bundle access",
+        "Updated all views to use custom resource bundle accessor"
+      ]
+    },
+    {
+      "version": "0.0.12",
+      "date": "2026-01-31",
+      "changes": [
+        "Added /download endpoint to redirect to latest DMG",
+        "Added JSON schema enforcement to Gemini LLM calls",
+        "Fixed empty userId by extracting from JWT token"
+      ]
+    },
+    {
+      "version": "0.0.11",
+      "date": "2026-01-30",
+      "changes": [
+        "Added automated installation testing to release pipeline",
+        "Fixed missing notarization stapling ticket in DMG"
+      ]
+    },
+    {
+      "version": "0.0.10",
+      "date": "2026-01-30",
+      "changes": [
+        "Added ResourceMonitor for memory and CPU tracking",
+        "Track rewind screenshot viewed and timeline navigation",
+        "Track chat cleared analytics event",
+        "Improved FocusAssistant task cleanup"
+      ]
+    },
+    {
+      "version": "0.0.9",
+      "date": "2026-01-30",
+      "changes": [
+        "Removed email routes and Firestore functions from Rust backend"
+      ]
+    },
+    {
+      "version": "0.0.8",
+      "date": "2026-01-30",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.0.7",
+      "date": "2026-01-30",
+      "changes": [
+        "Added first launch tracking with system diagnostics",
+        "Fixed Firestore auth to use service account credentials",
+        "Added Sparkle delegate for update analytics tracking"
+      ]
+    },
+    {
+      "version": "0.0.6",
+      "date": "2026-01-30",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.0.5",
+      "date": "2026-01-30",
+      "changes": [
+        "Set Sparkle update check interval to 1 hour",
+        "Track advice, task, and memory extraction analytics",
+        "Track focus alert and rewind search analytics",
+        "Track app enabled/disabled analytics events",
+        "Show version number in window title"
+      ]
+    },
+    {
+      "version": "0.0.4",
+      "date": "2026-01-30",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.0.3",
+      "date": "2026-01-30",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.0.2",
+      "date": "2026-01-30",
+      "changes": [
+        "Bug fixes and stability improvements"
+      ]
+    },
+    {
+      "version": "0.0.1",
+      "date": "2026-01-30",
+      "changes": [
+        "Initial release",
+        "Updated DMG background image",
+        "Added Frameworks rpath for Sparkle runtime loading",
+        "Unified AnalyticsManager across all views"
+      ]
+    }
+  ]
+}

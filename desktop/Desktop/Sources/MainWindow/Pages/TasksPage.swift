@@ -1,0 +1,3422 @@
+import SwiftUI
+import Combine
+
+// MARK: - Task Category (by due date)
+
+enum TaskCategory: String, CaseIterable {
+    case today = "Today"
+    case tomorrow = "Tomorrow"
+    case later = "Later"
+    case noDeadline = "No Deadline"
+
+    var icon: String {
+        switch self {
+        case .today: return "sun.max.fill"
+        case .tomorrow: return "sunrise.fill"
+        case .later: return "calendar"
+        case .noDeadline: return "tray.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .today: return OmiColors.textPrimary
+        case .tomorrow: return OmiColors.textSecondary
+        case .later: return OmiColors.textSecondary
+        case .noDeadline: return OmiColors.textTertiary
+        }
+    }
+}
+
+// MARK: - Task Filter Tag
+
+enum TaskFilterGroup: String, CaseIterable {
+    case status = "Status"
+    case date = "Date Range"
+    case category = "Category"
+    case source = "Source"
+    case priority = "Priority"
+    case origin = "Origin"
+}
+
+enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
+    // Status
+    case todo
+    case done
+    case removedByAI
+    case removedByMe
+
+    // Category (matches TaskClassification)
+    case personal
+    case work
+    case feature
+    case bug
+    case code
+    case research
+    case communication
+    case finance
+    case health
+    case other
+
+    // Source
+    case sourceScreen
+    case sourceOmi
+    case sourceDesktop
+    case sourceManual
+    case sourceOmiAnalytics
+
+    // Priority
+    case priorityHigh
+    case priorityMedium
+    case priorityLow
+
+    // Date Range
+    case last7Days
+
+    // Origin (source classification)
+    case originDirectRequest
+    case originSelfGenerated
+    case originCalendarDriven
+    case originReactive
+    case originExternalSystem
+    case originOther
+
+    var id: String { rawValue }
+
+    var group: TaskFilterGroup {
+        switch self {
+        case .todo, .done, .removedByAI, .removedByMe: return .status
+        case .last7Days: return .date
+        case .personal, .work, .feature, .bug, .code, .research, .communication, .finance, .health, .other: return .category
+        case .sourceScreen, .sourceOmi, .sourceDesktop, .sourceManual, .sourceOmiAnalytics: return .source
+        case .priorityHigh, .priorityMedium, .priorityLow: return .priority
+        case .originDirectRequest, .originSelfGenerated, .originCalendarDriven, .originReactive, .originExternalSystem, .originOther: return .origin
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .todo: return "To Do"
+        case .done: return "Done"
+        case .removedByAI: return "Removed by AI"
+        case .removedByMe: return "Removed by me"
+        case .last7Days: return "Last 7 days"
+        case .personal: return "Personal"
+        case .work: return "Work"
+        case .feature: return "Feature"
+        case .bug: return "Bug"
+        case .code: return "Code"
+        case .research: return "Research"
+        case .communication: return "Communication"
+        case .finance: return "Finance"
+        case .health: return "Health"
+        case .other: return "Other"
+        case .sourceScreen: return "Screen"
+        case .sourceOmi: return "OMI"
+        case .sourceDesktop: return "Desktop"
+        case .sourceManual: return "Manual"
+        case .sourceOmiAnalytics: return "OMI Analytics"
+        case .priorityHigh: return "High"
+        case .priorityMedium: return "Medium"
+        case .priorityLow: return "Low"
+        case .originDirectRequest: return "Direct Request"
+        case .originSelfGenerated: return "Self-Generated"
+        case .originCalendarDriven: return "Calendar-Driven"
+        case .originReactive: return "Reactive"
+        case .originExternalSystem: return "External System"
+        case .originOther: return "Other Origin"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .todo: return "circle"
+        case .done: return "checkmark.circle.fill"
+        case .removedByAI: return "trash.slash"
+        case .removedByMe: return "trash"
+        case .last7Days: return "clock.arrow.circlepath"
+        case .personal: return "person.fill"
+        case .work: return "briefcase.fill"
+        case .feature: return "sparkles"
+        case .bug: return "ladybug.fill"
+        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .research: return "magnifyingglass"
+        case .communication: return "message.fill"
+        case .finance: return "dollarsign.circle.fill"
+        case .health: return "heart.fill"
+        case .other: return "folder.fill"
+        case .sourceScreen: return "camera.fill"
+        case .sourceOmi: return "waveform"
+        case .sourceDesktop: return "desktopcomputer"
+        case .sourceManual: return "square.and.pencil"
+        case .sourceOmiAnalytics: return "chart.bar.fill"
+        case .priorityHigh: return "flag.fill"
+        case .priorityMedium: return "flag"
+        case .priorityLow: return "flag"
+        case .originDirectRequest: return "bubble.left.fill"
+        case .originSelfGenerated: return "lightbulb.fill"
+        case .originCalendarDriven: return "calendar"
+        case .originReactive: return "exclamationmark.triangle.fill"
+        case .originExternalSystem: return "server.rack"
+        case .originOther: return "questionmark.circle"
+        }
+    }
+
+    /// Check if a task matches this filter tag
+    func matches(_ task: TaskActionItem) -> Bool {
+        switch self {
+        case .todo: return !task.completed
+        case .done: return task.completed
+        case .removedByAI: return task.deleted == true && task.deletedBy != "user"
+        case .removedByMe: return task.deleted == true && task.deletedBy == "user"
+        case .last7Days:
+            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+            if let dueAt = task.dueAt {
+                return dueAt >= sevenDaysAgo
+            } else {
+                return task.createdAt >= sevenDaysAgo
+            }
+        case .personal: return task.tags.contains("personal")
+        case .work: return task.tags.contains("work")
+        case .feature: return task.tags.contains("feature")
+        case .bug: return task.tags.contains("bug")
+        case .code: return task.tags.contains("code")
+        case .research: return task.tags.contains("research")
+        case .communication: return task.tags.contains("communication")
+        case .finance: return task.tags.contains("finance")
+        case .health: return task.tags.contains("health")
+        case .other: return task.tags.contains("other")
+        case .sourceScreen: return task.source == "screenshot"
+        case .sourceOmi: return task.source == "transcription:omi"
+        case .sourceDesktop: return task.source == "transcription:desktop"
+        case .sourceManual: return task.source == "manual"
+        case .sourceOmiAnalytics: return task.source == "omi-analytics"
+        case .priorityHigh: return task.priority == "high"
+        case .priorityMedium: return task.priority == "medium"
+        case .priorityLow: return task.priority == "low"
+        case .originDirectRequest: return task.sourceClassification?.category == .direct_request
+        case .originSelfGenerated: return task.sourceClassification?.category == .self_generated
+        case .originCalendarDriven: return task.sourceClassification?.category == .calendar_driven
+        case .originReactive: return task.sourceClassification?.category == .reactive
+        case .originExternalSystem: return task.sourceClassification?.category == .external_system
+        case .originOther: return task.sourceClassification?.category == .other
+        }
+    }
+
+    /// Pre-computed context for efficient batch filtering (avoids per-task Calendar calls)
+    struct FilterContext {
+        let sevenDaysAgo: Date
+
+        init() {
+            self.sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+        }
+    }
+
+    /// Efficient match using pre-computed context — use this in batch filter loops
+    func matches(_ task: TaskActionItem, context: FilterContext) -> Bool {
+        switch self {
+        case .last7Days:
+            if let dueAt = task.dueAt {
+                return dueAt >= context.sevenDaysAgo
+            } else {
+                return task.createdAt >= context.sevenDaysAgo
+            }
+        default:
+            return matches(task)
+        }
+    }
+
+    /// Tags grouped by their filter group
+    static func tags(for group: TaskFilterGroup) -> [TaskFilterTag] {
+        allCases.filter { $0.group == group }
+    }
+
+    /// Get the raw source value this tag matches
+    var sourceValue: String? {
+        switch self {
+        case .sourceScreen: return "screenshot"
+        case .sourceOmi: return "transcription:omi"
+        case .sourceDesktop: return "transcription:desktop"
+        case .sourceManual: return "manual"
+        case .sourceOmiAnalytics: return "omi-analytics"
+        default: return nil
+        }
+    }
+
+    /// Get the raw category value this tag matches
+    var categoryValue: String? {
+        switch self {
+        case .personal: return "personal"
+        case .work: return "work"
+        case .feature: return "feature"
+        case .bug: return "bug"
+        case .code: return "code"
+        case .research: return "research"
+        case .communication: return "communication"
+        case .finance: return "finance"
+        case .health: return "health"
+        case .other: return "other"
+        default: return nil
+        }
+    }
+
+    /// Get the raw origin category value this tag matches
+    var originCategoryValue: String? {
+        switch self {
+        case .originDirectRequest: return "direct_request"
+        case .originSelfGenerated: return "self_generated"
+        case .originCalendarDriven: return "calendar_driven"
+        case .originReactive: return "reactive"
+        case .originExternalSystem: return "external_system"
+        case .originOther: return "other"
+        default: return nil
+        }
+    }
+
+    /// All known source values
+    static var knownSources: Set<String> {
+        Set(allCases.compactMap { $0.sourceValue })
+    }
+
+    /// All known category values
+    static var knownCategories: Set<String> {
+        Set(allCases.compactMap { $0.categoryValue })
+    }
+}
+
+// MARK: - Dynamic Filter Tag (for unknown sources/categories)
+
+/// Represents a filter tag that was discovered dynamically from task data
+struct DynamicFilterTag: Identifiable, Hashable {
+    let id: String
+    let group: TaskFilterGroup
+    let rawValue: String  // The actual value in the task (e.g., "email:inbound")
+    let displayName: String
+    let icon: String
+
+    /// Create a dynamic tag for an unknown source
+    static func source(_ value: String) -> DynamicFilterTag {
+        DynamicFilterTag(
+            id: "source:\(value)",
+            group: .source,
+            rawValue: value,
+            displayName: formatDisplayName(value),
+            icon: "arrow.right.circle"  // Generic source icon
+        )
+    }
+
+    /// Create a dynamic tag for an unknown category
+    static func category(_ value: String) -> DynamicFilterTag {
+        DynamicFilterTag(
+            id: "category:\(value)",
+            group: .category,
+            rawValue: value,
+            displayName: formatDisplayName(value),
+            icon: "tag"  // Generic category icon
+        )
+    }
+
+    /// Check if a task matches this dynamic tag
+    func matches(_ task: TaskActionItem) -> Bool {
+        switch group {
+        case .source:
+            return task.source == rawValue
+        case .category:
+            return task.tags.contains(rawValue)
+        default:
+            return false
+        }
+    }
+
+    /// Format a raw value into a display name
+    /// e.g., "omi-analytics" -> "Omi Analytics", "email:inbound" -> "Email Inbound"
+    private static func formatDisplayName(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: ":", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
+            .joined(separator: " ")
+    }
+}
+
+// MARK: - Unified Filter Tag (wraps both predefined and dynamic)
+
+enum UnifiedFilterTag: Identifiable, Hashable {
+    case predefined(TaskFilterTag)
+    case dynamic(DynamicFilterTag)
+
+    var id: String {
+        switch self {
+        case .predefined(let tag): return "predefined:\(tag.rawValue)"
+        case .dynamic(let tag): return tag.id
+        }
+    }
+
+    var group: TaskFilterGroup {
+        switch self {
+        case .predefined(let tag): return tag.group
+        case .dynamic(let tag): return tag.group
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .predefined(let tag): return tag.displayName
+        case .dynamic(let tag): return tag.displayName
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .predefined(let tag): return tag.icon
+        case .dynamic(let tag): return tag.icon
+        }
+    }
+
+    func matches(_ task: TaskActionItem) -> Bool {
+        switch self {
+        case .predefined(let tag): return tag.matches(task)
+        case .dynamic(let tag): return tag.matches(task)
+        }
+    }
+
+    /// Get the raw source value if this is a source filter
+    var sourceValue: String? {
+        switch self {
+        case .predefined(let tag): return tag.sourceValue
+        case .dynamic(let tag): return tag.group == .source ? tag.rawValue : nil
+        }
+    }
+
+    /// Get the raw category value if this is a category filter
+    var categoryValue: String? {
+        switch self {
+        case .predefined(let tag): return tag.categoryValue
+        case .dynamic(let tag): return tag.group == .category ? tag.rawValue : nil
+        }
+    }
+
+    /// Get the raw origin category value if this is an origin filter
+    var originCategoryValue: String? {
+        switch self {
+        case .predefined(let tag): return tag.originCategoryValue
+        case .dynamic(_): return nil
+        }
+    }
+}
+
+// MARK: - Tasks View Model (uses shared TasksStore)
+
+@MainActor
+class TasksViewModel: ObservableObject {
+    // Use shared TasksStore as single source of truth
+    private let store = TasksStore.shared
+
+    // Search state - searches SQLite directly
+    @Published var searchText = "" {
+        didSet {
+            if oldValue != searchText {
+                displayLimit = 100
+                Task { await performSearch() }
+            }
+        }
+    }
+    @Published private(set) var isSearching = false
+    @Published private(set) var searchResults: [TaskActionItem] = []
+
+    // UI-specific state
+    @Published var showCompleted = false {
+        didSet {
+            if oldValue != showCompleted {
+                // Load appropriate tasks from server when switching tabs
+                Task {
+                    if showCompleted {
+                        await store.loadCompletedTasks()
+                    } else {
+                        await store.loadIncompleteTasks()
+                    }
+                }
+            }
+            recomputeDisplayCaches()
+        }
+    }
+    // Filter tags (Memories-style dropdown)
+    @Published var selectedTags: Set<TaskFilterTag> = [.todo, .last7Days] {
+        didSet {
+            // Reset display limit when filters change
+            displayLimit = 100
+
+            // Map status tags to showCompleted for server-side loading
+            let hasStatusFilter = selectedTags.contains(where: { $0.group == .status })
+            if hasStatusFilter {
+                let wantsDone = selectedTags.contains(.done)
+                let wantsTodo = selectedTags.contains(.todo)
+                let wantsDeleted = selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
+                if wantsDeleted {
+                    // Load deleted tasks from server
+                    Task { await store.loadDeletedTasks() }
+                }
+                if wantsDone && !wantsTodo && !wantsDeleted && !showCompleted {
+                    showCompleted = true
+                } else if wantsTodo && !wantsDone && !wantsDeleted && showCompleted {
+                    showCompleted = false
+                } else if wantsDone && wantsTodo {
+                    // Both selected - load both
+                    if !showCompleted {
+                        Task { await store.loadCompletedTasks() }
+                    }
+                }
+            }
+            // When non-status/non-date filters are applied, query SQLite directly
+            // Date filters (like last7Days) are applied in-memory, not via SQLite
+            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+            if hasNonStatusFilters {
+                Task { await loadFilteredTasksFromDatabase() }
+            } else {
+                filteredFromDatabase = []
+                recomputeDisplayCaches()
+            }
+        }
+    }
+
+    /// Tasks loaded from SQLite with filters applied
+    @Published private(set) var filteredFromDatabase: [TaskActionItem] = []
+    @Published private(set) var isLoadingFiltered = false
+
+    /// Cached tag counts - recomputed when tasks change
+    @Published private(set) var tagCounts: [TaskFilterTag: Int] = [:]
+
+    /// Dynamically discovered tags (sources/categories not in predefined list)
+    @Published private(set) var dynamicTags: [DynamicFilterTag] = []
+
+    /// Counts for dynamic tags
+    @Published private(set) var dynamicTagCounts: [String: Int] = [:]
+
+    /// Selected dynamic tags
+    @Published var selectedDynamicTags: Set<DynamicFilterTag> = [] {
+        didSet {
+            displayLimit = 100
+            if !selectedDynamicTags.isEmpty {
+                Task { await loadFilteredTasksFromDatabase() }
+            } else if selectedTags.isEmpty || !selectedTags.contains(where: { $0.group != .status }) {
+                filteredFromDatabase = []
+                recomputeDisplayCaches()
+            }
+        }
+    }
+
+    /// Count tasks for a specific tag
+    func tagCount(_ tag: TaskFilterTag) -> Int {
+        tagCounts[tag] ?? 0
+    }
+
+    /// Count tasks for a dynamic tag
+    func dynamicTagCount(_ tag: DynamicFilterTag) -> Int {
+        dynamicTagCounts[tag.id] ?? 0
+    }
+
+    /// Get all available tags for a group (predefined + dynamic)
+    func availableTags(for group: TaskFilterGroup) -> [UnifiedFilterTag] {
+        var tags: [UnifiedFilterTag] = []
+
+        // Add predefined tags
+        for tag in TaskFilterTag.tags(for: group) {
+            tags.append(.predefined(tag))
+        }
+
+        // Add dynamic tags for this group
+        for tag in dynamicTags where tag.group == group {
+            tags.append(.dynamic(tag))
+        }
+
+        return tags
+    }
+
+    /// Check if any filters are active (predefined or dynamic)
+    var hasActiveFilters: Bool {
+        !selectedTags.isEmpty || !selectedDynamicTags.isEmpty
+    }
+
+    /// Clear all filters
+    func clearAllFilters() {
+        selectedTags.removeAll()
+        selectedDynamicTags.removeAll()
+    }
+
+    // Create/Edit task state
+    @Published var showingCreateTask = false
+    // Multi-select state
+    @Published var isMultiSelectMode = false
+    @Published var selectedTaskIds: Set<String> = []
+
+    // MARK: - Drag-and-Drop Reordering (like Flutter)
+    /// Custom order of task IDs per category (persisted to UserDefaults)
+    @Published var categoryOrder: [TaskCategory: [String]] = [:] {
+        didSet { saveCategoryOrder() }
+    }
+
+    // MARK: - Task Indentation (like Flutter)
+    /// Indent levels for tasks (0-3), persisted to UserDefaults
+    @Published var indentLevels: [String: Int] = [:] {
+        didSet { saveIndentLevels() }
+    }
+
+    private var cancellables = Set<AnyCancellable>()
+
+    /// Version counter to coalesce rapid recomputation requests
+    private var recomputeVersion: Int = 0
+
+    /// Throttle flag for loadMoreIfNeeded to prevent task storms during fast scroll
+    private var isLoadingMoreGuard = false
+
+    // MARK: - Cached Properties (avoid recomputation on every render)
+
+    @Published private(set) var displayTasks: [TaskActionItem] = []
+    @Published private(set) var categorizedTasks: [TaskCategory: [TaskActionItem]] = [:]
+    @Published private(set) var todoCount: Int = 0
+    @Published private(set) var doneCount: Int = 0
+
+    /// Whether there are more filtered/search results beyond the display limit
+    @Published private(set) var hasMoreFilteredResults = false
+
+    /// Full filtered results before display cap (kept for pagination)
+    private var allFilteredDisplayTasks: [TaskActionItem] = []
+
+    /// Current display limit for filtered/search results
+    private var displayLimit = 100
+
+    // Delegate to store
+    var isLoading: Bool { store.isLoading }
+    var isLoadingMore: Bool { store.isLoadingMore }
+    var hasMoreTasks: Bool {
+        showCompleted ? store.hasMoreCompletedTasks : store.hasMoreIncompleteTasks
+    }
+    var error: String? { store.error }
+    var tasks: [TaskActionItem] { store.tasks }
+
+    init() {
+        // Load saved order and indent levels
+        loadCategoryOrder()
+        loadIndentLevels()
+
+        // Forward store changes to trigger view updates and recompute caches
+        // Debounced so surgical single-item updates don't cause a redundant full recompute
+        store.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recomputeAllCaches()
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Persistence (UserDefaults)
+
+    private static let categoryOrderKey = "TasksCategoryOrder"
+    private static let indentLevelsKey = "TasksIndentLevels"
+
+    private func loadCategoryOrder() {
+        guard let data = UserDefaults.standard.dictionary(forKey: Self.categoryOrderKey) as? [String: [String]] else {
+            return
+        }
+        var order: [TaskCategory: [String]] = [:]
+        for (key, ids) in data {
+            if let category = TaskCategory(rawValue: key) {
+                order[category] = ids
+            }
+        }
+        categoryOrder = order
+    }
+
+    private func saveCategoryOrder() {
+        var data: [String: [String]] = [:]
+        for (category, ids) in categoryOrder {
+            data[category.rawValue] = ids
+        }
+        UserDefaults.standard.set(data, forKey: Self.categoryOrderKey)
+    }
+
+    private func loadIndentLevels() {
+        guard let data = UserDefaults.standard.dictionary(forKey: Self.indentLevelsKey) as? [String: Int] else {
+            return
+        }
+        indentLevels = data
+    }
+
+    private func saveIndentLevels() {
+        UserDefaults.standard.set(indentLevels, forKey: Self.indentLevelsKey)
+    }
+
+    // MARK: - Drag-and-Drop Methods
+
+    /// Get ordered tasks for a category, respecting custom order
+    func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
+        guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
+            return []
+        }
+
+        guard let order = categoryOrder[category], !order.isEmpty else {
+            return tasks // No custom order, return as-is
+        }
+
+        // Sort tasks by custom order, new items go at the end
+        var orderedTasks: [TaskActionItem] = []
+        var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+
+        // Add tasks in custom order
+        for id in order {
+            if let task = taskMap[id] {
+                orderedTasks.append(task)
+                taskMap.removeValue(forKey: id)
+            }
+        }
+
+        // Add remaining tasks (new ones not in custom order)
+        orderedTasks.append(contentsOf: taskMap.values)
+
+        return orderedTasks
+    }
+
+    /// Move a task within a category
+    func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
+        var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
+
+        // Remove task from current position
+        order.removeAll { $0 == task.id }
+
+        // Insert at new position
+        let safeIndex = min(targetIndex, order.count)
+        order.insert(task.id, at: safeIndex)
+
+        categoryOrder[category] = order
+    }
+
+    /// Move a task to first position in category
+    func moveTaskToFirst(_ task: TaskActionItem, inCategory category: TaskCategory) {
+        moveTask(task, toIndex: 0, inCategory: category)
+    }
+
+    // MARK: - Indent Methods
+
+    func getIndentLevel(for taskId: String) -> Int {
+        return indentLevels[taskId] ?? 0
+    }
+
+    func incrementIndent(for taskId: String) {
+        let current = indentLevels[taskId] ?? 0
+        if current < 3 {
+            indentLevels[taskId] = current + 1
+        }
+    }
+
+    func decrementIndent(for taskId: String) {
+        let current = indentLevels[taskId] ?? 0
+        if current > 0 {
+            indentLevels[taskId] = current - 1
+        }
+    }
+
+    // MARK: - Cache Recomputation
+
+    /// Get the source tasks based on current view (completed vs incomplete)
+    private func getSourceTasks() -> [TaskActionItem] {
+        let statusTags = selectedTags.filter { $0.group == .status }
+
+        // If only deleted filters are selected, show only deleted tasks
+        let wantsDeletedOnly = (statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe)) && !statusTags.contains(.todo) && !statusTags.contains(.done)
+        if wantsDeletedOnly {
+            return store.deletedTasks
+        }
+
+        // Build combined list from selected status filters
+        var result: [TaskActionItem] = []
+        if statusTags.isEmpty || statusTags.contains(.todo) || statusTags.contains(.done) {
+            if statusTags.isEmpty || (statusTags.contains(.todo) && statusTags.contains(.done)) {
+                result = store.incompleteTasks + store.completedTasks
+            } else if statusTags.contains(.done) {
+                result = store.completedTasks
+            } else {
+                result = store.incompleteTasks
+            }
+        }
+
+        // If any deleted filter is also selected alongside other status tags, include deleted
+        if statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe) {
+            result += store.deletedTasks
+        }
+
+        return result
+    }
+
+    /// Apply selected filter tags to tasks (non-status tags)
+    private func applyTagFilters(_ tasks: [TaskActionItem], context: TaskFilterTag.FilterContext) -> [TaskActionItem] {
+        let nonStatusTags = selectedTags.filter { $0.group != .status }
+        guard !nonStatusTags.isEmpty else { return tasks }
+
+        // Group tags by their filter group, then AND between groups, OR within a group
+        let tagsByGroup = Dictionary(grouping: nonStatusTags) { $0.group }
+
+        return tasks.filter { task in
+            tagsByGroup.allSatisfy { (_, groupTags) in
+                groupTags.contains { $0.matches(task, context: context) }
+            }
+        }
+    }
+
+    /// Recompute all caches when tasks change
+    private func recomputeAllCaches() {
+        recomputeVersion += 1
+        let version = recomputeVersion
+
+        // Snapshot inputs for background computation
+        let allTasks = store.incompleteTasks + store.completedTasks
+        let knownSources = TaskFilterTag.knownSources
+        let knownCategories = TaskFilterTag.knownCategories
+
+        // Discover dynamic tags on a background thread (iterates all tasks)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var newDynamicTags: [DynamicFilterTag] = []
+            var newDynamicCounts: [String: Int] = [:]
+
+            var allSources: [String: Int] = [:]
+            var allCategories: [String: Int] = [:]
+
+            for task in allTasks {
+                if let source = task.source, !source.isEmpty {
+                    allSources[source, default: 0] += 1
+                }
+                for tag in task.tags {
+                    allCategories[tag, default: 0] += 1
+                }
+            }
+
+            for (source, count) in allSources {
+                if !knownSources.contains(source) {
+                    let tag = DynamicFilterTag.source(source)
+                    newDynamicTags.append(tag)
+                    newDynamicCounts[tag.id] = count
+                }
+            }
+
+            for (category, count) in allCategories {
+                if !knownCategories.contains(category) {
+                    let tag = DynamicFilterTag.category(category)
+                    newDynamicTags.append(tag)
+                    newDynamicCounts[tag.id] = count
+                }
+            }
+
+            newDynamicTags.sort { (newDynamicCounts[$0.id] ?? 0) > (newDynamicCounts[$1.id] ?? 0) }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.recomputeVersion == version else { return }
+                self.dynamicTags = newDynamicTags
+                self.dynamicTagCounts = newDynamicCounts
+            }
+        }
+
+        // Recompute display caches (reads @Published state, must stay on main but is now cheaper with cached dates)
+        recomputeDisplayCaches()
+
+        // Load true counts from SQLite asynchronously
+        Task {
+            await loadTagCountsFromDatabase()
+        }
+    }
+
+    /// Discover unknown sources/categories from task data and create dynamic tags
+    private func discoverDynamicTags() {
+        let allTasks = store.incompleteTasks + store.completedTasks
+        var newDynamicTags: [DynamicFilterTag] = []
+        var newDynamicCounts: [String: Int] = [:]
+
+        // Collect all unique sources and categories
+        var allSources: [String: Int] = [:]
+        var allCategories: [String: Int] = [:]
+
+        for task in allTasks {
+            if let source = task.source, !source.isEmpty {
+                allSources[source, default: 0] += 1
+            }
+            for tag in task.tags {
+                allCategories[tag, default: 0] += 1
+            }
+        }
+
+        // Find sources not in predefined list
+        let knownSources = TaskFilterTag.knownSources
+        for (source, count) in allSources {
+            if !knownSources.contains(source) {
+                let tag = DynamicFilterTag.source(source)
+                newDynamicTags.append(tag)
+                newDynamicCounts[tag.id] = count
+            }
+        }
+
+        // Find categories not in predefined list
+        let knownCategories = TaskFilterTag.knownCategories
+        for (category, count) in allCategories {
+            if !knownCategories.contains(category) {
+                let tag = DynamicFilterTag.category(category)
+                newDynamicTags.append(tag)
+                newDynamicCounts[tag.id] = count
+            }
+        }
+
+        // Sort by count descending
+        newDynamicTags.sort { (dynamicTagCounts[$0.id] ?? 0) > (dynamicTagCounts[$1.id] ?? 0) }
+
+        dynamicTags = newDynamicTags
+        dynamicTagCounts = newDynamicCounts
+    }
+
+    /// Load filtered tasks from SQLite when non-status filters are applied
+    private func loadFilteredTasksFromDatabase() async {
+        let nonStatusTags = selectedTags.filter { $0.group != .status && $0.group != .date }
+        let hasDynamicFilters = !selectedDynamicTags.isEmpty
+
+        guard !nonStatusTags.isEmpty || hasDynamicFilters else {
+            filteredFromDatabase = []
+            recomputeDisplayCaches()
+            return
+        }
+
+        isLoadingFiltered = true
+
+        // Extract filter values from predefined tags
+        let tagsByGroup = Dictionary(grouping: nonStatusTags) { $0.group }
+
+        // Get categories from predefined tags
+        var categories: [String] = tagsByGroup[.category]?.compactMap { tag -> String? in
+            switch tag {
+            case .personal: return "personal"
+            case .work: return "work"
+            case .feature: return "feature"
+            case .bug: return "bug"
+            case .code: return "code"
+            case .research: return "research"
+            case .communication: return "communication"
+            case .finance: return "finance"
+            case .health: return "health"
+            case .other: return "other"
+            default: return nil
+            }
+        } ?? []
+
+        // Add categories from dynamic tags
+        for tag in selectedDynamicTags where tag.group == .category {
+            categories.append(tag.rawValue)
+        }
+
+        // Get sources from predefined tags
+        var sources: [String] = tagsByGroup[.source]?.compactMap { tag -> String? in
+            switch tag {
+            case .sourceScreen: return "screenshot"
+            case .sourceOmi: return "transcription:omi"
+            case .sourceDesktop: return "transcription:desktop"
+            case .sourceManual: return "manual"
+            case .sourceOmiAnalytics: return "omi-analytics"
+            default: return nil
+            }
+        } ?? []
+
+        // Add sources from dynamic tags
+        for tag in selectedDynamicTags where tag.group == .source {
+            sources.append(tag.rawValue)
+        }
+
+        // Get priorities
+        let priorities: [String]? = tagsByGroup[.priority]?.compactMap { tag -> String? in
+            switch tag {
+            case .priorityHigh: return "high"
+            case .priorityMedium: return "medium"
+            case .priorityLow: return "low"
+            default: return nil
+            }
+        }
+
+        // Get origin categories
+        let originCategories: [String]? = tagsByGroup[.origin]?.compactMap { $0.originCategoryValue }
+
+        // Determine completed states from status filters
+        let statusTags = selectedTags.filter { $0.group == .status }
+        let completedStates: [Bool]?
+        if statusTags.isEmpty {
+            completedStates = nil  // Show all
+        } else {
+            var states: [Bool] = []
+            if statusTags.contains(.todo) { states.append(false) }
+            if statusTags.contains(.done) { states.append(true) }
+            completedStates = states.isEmpty ? nil : states
+        }
+
+        let includeDeleted = statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe)
+
+        do {
+            let results = try await ActionItemStorage.shared.getFilteredActionItems(
+                limit: 10000,
+                completedStates: completedStates,
+                includeDeleted: includeDeleted,
+                categories: categories.isEmpty ? nil : categories,
+                sources: sources.isEmpty ? nil : sources,
+                priorities: priorities,
+                originCategories: originCategories
+            )
+            filteredFromDatabase = results
+            log("TasksViewModel: Loaded \(results.count) filtered tasks from SQLite")
+        } catch {
+            logError("TasksViewModel: Failed to load filtered tasks", error: error)
+            filteredFromDatabase = []
+        }
+
+        isLoadingFiltered = false
+        recomputeDisplayCaches()
+    }
+
+    /// Load tag counts from SQLite database (shows true totals, not just loaded items)
+    private func loadTagCountsFromDatabase() async {
+        do {
+            let filterCounts = try await ActionItemStorage.shared.getFilterCounts()
+
+            // Update counts on main actor
+            todoCount = filterCounts.todo
+            doneCount = filterCounts.done
+
+            var counts: [TaskFilterTag: Int] = [:]
+
+            // Status counts
+            counts[.todo] = filterCounts.todo
+            counts[.done] = filterCounts.done
+            counts[.removedByAI] = filterCounts.deletedByAI
+            counts[.removedByMe] = filterCounts.deletedByUser
+
+            // Category counts
+            counts[.personal] = filterCounts.categories["personal"] ?? 0
+            counts[.work] = filterCounts.categories["work"] ?? 0
+            counts[.feature] = filterCounts.categories["feature"] ?? 0
+            counts[.bug] = filterCounts.categories["bug"] ?? 0
+            counts[.code] = filterCounts.categories["code"] ?? 0
+            counts[.research] = filterCounts.categories["research"] ?? 0
+            counts[.communication] = filterCounts.categories["communication"] ?? 0
+            counts[.finance] = filterCounts.categories["finance"] ?? 0
+            counts[.health] = filterCounts.categories["health"] ?? 0
+            counts[.other] = filterCounts.categories["other"] ?? 0
+
+            // Date range counts (computed in-memory)
+            let allTasks = store.incompleteTasks + store.completedTasks
+            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+            counts[.last7Days] = allTasks.filter { task in
+                if let dueAt = task.dueAt {
+                    return dueAt >= sevenDaysAgo
+                } else {
+                    return task.createdAt >= sevenDaysAgo
+                }
+            }.count
+
+            // Source counts
+            counts[.sourceScreen] = filterCounts.sources["screenshot"] ?? 0
+            counts[.sourceOmi] = filterCounts.sources["transcription:omi"] ?? 0
+            counts[.sourceDesktop] = filterCounts.sources["transcription:desktop"] ?? 0
+            counts[.sourceManual] = filterCounts.sources["manual"] ?? 0
+            counts[.sourceOmiAnalytics] = filterCounts.sources["omi-analytics"] ?? 0
+
+            // Priority counts
+            counts[.priorityHigh] = filterCounts.priorities["high"] ?? 0
+            counts[.priorityMedium] = filterCounts.priorities["medium"] ?? 0
+            counts[.priorityLow] = filterCounts.priorities["low"] ?? 0
+
+            // Origin counts
+            counts[.originDirectRequest] = filterCounts.origins["direct_request"] ?? 0
+            counts[.originSelfGenerated] = filterCounts.origins["self_generated"] ?? 0
+            counts[.originCalendarDriven] = filterCounts.origins["calendar_driven"] ?? 0
+            counts[.originReactive] = filterCounts.origins["reactive"] ?? 0
+            counts[.originExternalSystem] = filterCounts.origins["external_system"] ?? 0
+            counts[.originOther] = filterCounts.origins["other"] ?? 0
+
+            tagCounts = counts
+
+            // Discover and count dynamic tags from SQLite data
+            var newDynamicTags: [DynamicFilterTag] = []
+            var newDynamicCounts: [String: Int] = [:]
+
+            // Find unknown sources
+            let knownSources = TaskFilterTag.knownSources
+            for (source, count) in filterCounts.sources {
+                if !knownSources.contains(source) && count > 0 {
+                    let tag = DynamicFilterTag.source(source)
+                    newDynamicTags.append(tag)
+                    newDynamicCounts[tag.id] = count
+                }
+            }
+
+            // Find unknown categories
+            let knownCategories = TaskFilterTag.knownCategories
+            for (category, count) in filterCounts.categories {
+                if !knownCategories.contains(category) && count > 0 {
+                    let tag = DynamicFilterTag.category(category)
+                    newDynamicTags.append(tag)
+                    newDynamicCounts[tag.id] = count
+                }
+            }
+
+            // Sort by count descending
+            newDynamicTags.sort { (newDynamicCounts[$0.id] ?? 0) > (newDynamicCounts[$1.id] ?? 0) }
+
+            dynamicTags = newDynamicTags
+            dynamicTagCounts = newDynamicCounts
+
+        } catch {
+            logError("TasksViewModel: Failed to load tag counts from database", error: error)
+            // Fall back to in-memory counts
+            let allTasks = store.incompleteTasks + store.completedTasks
+            todoCount = store.incompleteTasks.count
+            doneCount = store.completedTasks.count
+
+            var counts: [TaskFilterTag: Int] = [:]
+            for tag in TaskFilterTag.allCases {
+                if tag == .removedByAI || tag == .removedByMe {
+                    counts[tag] = store.deletedTasks.filter { tag.matches($0) }.count
+                } else {
+                    counts[tag] = allTasks.filter { tag.matches($0) }.count
+                }
+            }
+            tagCounts = counts
+
+            // Also discover dynamic tags from in-memory tasks
+            discoverDynamicTags()
+        }
+    }
+
+    /// Perform search against SQLite database
+    private func performSearch() async {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if query.isEmpty {
+            searchResults = []
+            recomputeDisplayCaches()
+            return
+        }
+
+        isSearching = true
+
+        do {
+            // Search across all tasks in SQLite
+            let results = try await ActionItemStorage.shared.searchLocalActionItems(
+                query: query,
+                limit: 10000,
+                completed: nil,  // Search all
+                includeDeleted: selectedTags.contains(.removedByAI) || selectedTags.contains(.removedByMe)
+            )
+            searchResults = results
+            log("TasksViewModel: Search found \(results.count) tasks for '\(query)'")
+        } catch {
+            logError("TasksViewModel: Search failed", error: error)
+            searchResults = []
+        }
+
+        isSearching = false
+        recomputeDisplayCaches()
+    }
+
+    /// Whether we're currently in a filtered/search mode
+    var isInFilteredMode: Bool {
+        !searchText.isEmpty || hasActiveFilters
+    }
+
+    /// Recompute display-related caches when filters or sort change
+    private func recomputeDisplayCaches() {
+        // Determine the source of tasks based on current state
+        let sourceTasks: [TaskActionItem]
+
+        if !searchText.isEmpty {
+            // Searching: use search results from SQLite
+            sourceTasks = searchResults
+        } else if !filteredFromDatabase.isEmpty {
+            // Non-status filters applied: use SQLite filtered results
+            sourceTasks = filteredFromDatabase
+        } else {
+            // No filters or only status filters: use in-memory store arrays
+            sourceTasks = getSourceTasks()
+        }
+
+        // Apply status filters to SQLite results (if needed)
+        // Note: Non-status filters are already applied by SQLite query
+        // Date filters (like last7Days) are applied in-memory, not via SQLite
+        let hasSQLiteFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+        let hasDateFilters = selectedTags.contains(where: { $0.group == .date })
+        let filterContext = TaskFilterTag.FilterContext()
+        var filteredTasks: [TaskActionItem]
+        if !searchText.isEmpty {
+            filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
+        } else if hasSQLiteFilters {
+            // SQLite already filtered by category/source/priority
+            // But we may still need to apply status + date filters
+            let statusFiltered = applyStatusFilters(sourceTasks)
+            filteredTasks = hasDateFilters ? applyDateFilters(statusFiltered, context: filterContext) : statusFiltered
+        } else {
+            filteredTasks = applyTagFilters(sourceTasks, context: filterContext)
+        }
+
+        // Sort
+        let sorted = sortTasks(filteredTasks)
+
+        // Apply display cap for filtered/search mode
+        if isInFilteredMode {
+            allFilteredDisplayTasks = sorted
+            let capped = Array(sorted.prefix(displayLimit))
+            displayTasks = capped
+            hasMoreFilteredResults = sorted.count > displayLimit
+        } else {
+            allFilteredDisplayTasks = []
+            hasMoreFilteredResults = false
+            displayTasks = sorted
+        }
+
+        // Deduplicate and compute categorizedTasks for category view
+        displayTasks = deduplicateById(displayTasks)
+        var result: [TaskCategory: [TaskActionItem]] = [:]
+        for category in TaskCategory.allCases {
+            result[category] = []
+        }
+        // Pre-compute date boundaries once for all tasks
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        for task in displayTasks {
+            let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
+            result[category, default: []].append(task)
+        }
+        categorizedTasks = result
+
+        // Debug logging
+        log("TasksViewModel: Categorized \(displayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)")
+    }
+
+    /// Load more filtered/search results (pagination within already-queried results)
+    func loadMoreFiltered() {
+        displayLimit += 100
+        let capped = Array(allFilteredDisplayTasks.prefix(displayLimit))
+        displayTasks = deduplicateById(capped)
+        hasMoreFilteredResults = allFilteredDisplayTasks.count > displayLimit
+
+        // Recompute categorized tasks
+        var result: [TaskCategory: [TaskActionItem]] = [:]
+        for category in TaskCategory.allCases {
+            result[category] = []
+        }
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        for task in displayTasks {
+            let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
+            result[category, default: []].append(task)
+        }
+        categorizedTasks = result
+    }
+
+    /// Remove duplicate tasks by ID, keeping the first occurrence
+    private func deduplicateById(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        var seen = Set<String>()
+        return tasks.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Apply only status filters (todo/done/deleted)
+    private func applyStatusFilters(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        let statusTags = selectedTags.filter { $0.group == .status }
+        guard !statusTags.isEmpty else { return tasks }
+
+        return tasks.filter { task in
+            if statusTags.contains(.removedByAI) && task.deleted == true && task.deletedBy != "user" { return true }
+            if statusTags.contains(.removedByMe) && task.deleted == true && task.deletedBy == "user" { return true }
+            if statusTags.contains(.done) && task.completed { return true }
+            if statusTags.contains(.todo) && !task.completed && task.deleted != true { return true }
+            return false
+        }
+    }
+
+    /// Apply only date filters (e.g., last7Days) — used when SQLite handled other filters
+    private func applyDateFilters(_ tasks: [TaskActionItem], context: TaskFilterTag.FilterContext) -> [TaskActionItem] {
+        let dateTags = selectedTags.filter { $0.group == .date }
+        guard !dateTags.isEmpty else { return tasks }
+        return tasks.filter { task in
+            dateTags.contains { $0.matches(task, context: context) }
+        }
+    }
+
+    /// Apply only non-status tag filters (for search results which already include all statuses)
+    private func applyNonStatusTagFilters(_ tasks: [TaskActionItem], context: TaskFilterTag.FilterContext) -> [TaskActionItem] {
+        let nonStatusTags = selectedTags.filter { $0.group != .status }
+        guard !nonStatusTags.isEmpty else { return tasks }
+
+        let tagsByGroup = Dictionary(grouping: nonStatusTags) { $0.group }
+
+        return tasks.filter { task in
+            for (_, groupTags) in tagsByGroup {
+                let matchesGroup = groupTags.contains { $0.matches(task, context: context) }
+                if !matchesGroup { return false }
+            }
+            return true
+        }
+    }
+
+    // MARK: - Category Helpers
+
+    private func categoryFor(task: TaskActionItem, startOfTomorrow: Date, startOfDayAfterTomorrow: Date) -> TaskCategory {
+        guard let dueAt = task.dueAt else {
+            return .noDeadline
+        }
+
+        // Overdue and today's tasks go into "Today" category (like Flutter)
+        if dueAt < startOfTomorrow {
+            return .today
+        } else if dueAt < startOfDayAfterTomorrow {
+            return .tomorrow
+        } else {
+            return .later
+        }
+    }
+
+    private func sortTasks(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        tasks.sorted { a, b in
+            // Tasks with due dates first, then by due date ascending
+            // Tie-breaker: created_at descending (newest first) - matches backend
+            switch (a.dueAt, b.dueAt) {
+            case (nil, nil):
+                return a.createdAt > b.createdAt
+            case (nil, _):
+                return false
+            case (_, nil):
+                return true
+            case (let aDate?, let bDate?):
+                if aDate == bDate {
+                    return a.createdAt > b.createdAt
+                }
+                return aDate < bDate
+            }
+        }
+    }
+
+    // MARK: - Actions (delegate to shared store)
+
+    func loadTasks() async {
+        await store.loadTasks()
+    }
+
+    func loadMoreIfNeeded(currentTask: TaskActionItem) async {
+        guard !isLoadingMoreGuard else { return }
+
+        if isInFilteredMode {
+            // In filtered mode, check if we need to show more from already-queried results
+            let hasMore = hasMoreFilteredResults
+            guard hasMore else { return }
+
+            let thresholdIndex = displayTasks.index(displayTasks.endIndex, offsetBy: -10, limitedBy: displayTasks.startIndex) ?? displayTasks.startIndex
+            guard let taskIndex = displayTasks.firstIndex(where: { $0.id == currentTask.id }),
+                  taskIndex >= thresholdIndex else {
+                return
+            }
+            isLoadingMoreGuard = true
+            loadMoreFiltered()
+            isLoadingMoreGuard = false
+        } else {
+            isLoadingMoreGuard = true
+            await store.loadMoreIfNeeded(currentTask: currentTask)
+            isLoadingMoreGuard = false
+        }
+    }
+
+    func toggleTask(_ task: TaskActionItem) async {
+        log("TasksViewModel: toggleTask called for id=\(task.id)")
+        removeFromDisplay(task.id)
+        await store.toggleTask(task)
+    }
+
+    func deleteTask(_ task: TaskActionItem) async {
+        removeFromDisplay(task.id)
+        await store.deleteTask(task)
+    }
+
+    // MARK: - Surgical Display Updates
+
+    /// Remove a single task from displayTasks without full recompute
+    private func removeFromDisplay(_ taskId: String) {
+        displayTasks.removeAll { $0.id == taskId }
+        for category in TaskCategory.allCases {
+            categorizedTasks[category]?.removeAll { $0.id == taskId }
+        }
+        objectWillChange.send()
+    }
+
+    /// Update a single task in displayTasks without full recompute
+    private func updateInDisplay(_ updated: TaskActionItem) {
+        if let index = displayTasks.firstIndex(where: { $0.id == updated.id }) {
+            displayTasks[index] = updated
+        }
+        for category in TaskCategory.allCases {
+            if let index = categorizedTasks[category]?.firstIndex(where: { $0.id == updated.id }) {
+                categorizedTasks[category]?[index] = updated
+            }
+        }
+        objectWillChange.send()
+    }
+
+    // MARK: - Multi-Select
+
+    func toggleMultiSelectMode() {
+        isMultiSelectMode.toggle()
+        if !isMultiSelectMode {
+            selectedTaskIds.removeAll()
+        }
+    }
+
+    func toggleTaskSelection(_ task: TaskActionItem) {
+        if selectedTaskIds.contains(task.id) {
+            selectedTaskIds.remove(task.id)
+        } else {
+            selectedTaskIds.insert(task.id)
+        }
+    }
+
+    func selectAll() {
+        selectedTaskIds = Set(displayTasks.map { $0.id })
+    }
+
+    func deselectAll() {
+        selectedTaskIds.removeAll()
+    }
+
+    func deleteSelectedTasks() async {
+        let idsToDelete = Array(selectedTaskIds)
+        await store.deleteMultipleTasks(ids: idsToDelete)
+        selectedTaskIds.removeAll()
+        isMultiSelectMode = false
+    }
+
+    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async {
+        await store.createTask(description: description, dueAt: dueAt, priority: priority, tags: tags)
+        showingCreateTask = false
+    }
+
+    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
+        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority)
+        // Read the updated task back from the store for surgical update
+        if let updated = store.tasks.first(where: { $0.id == task.id }) {
+            updateInDisplay(updated)
+        }
+    }
+}
+
+// MARK: - Tasks Page
+
+struct TasksPage: View {
+    @ObservedObject var viewModel: TasksViewModel
+    @ObservedObject private var store = TasksStore.shared
+    var chatProvider: ChatProvider?
+
+    // Chat panel state
+    @StateObject private var chatCoordinator: TaskChatCoordinator
+    @State private var showChatPanel = false
+    @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
+
+    // Filter popover state
+    @State private var showFilterPopover = false
+    @State private var pendingSelectedTags: Set<TaskFilterTag> = [.todo, .last7Days]
+    @State private var pendingSelectedDynamicTags: Set<DynamicFilterTag> = []
+    @State private var filterSearchText = ""
+
+    /// Width added to the window for the chat panel
+    private static let chatExpandWidth: CGFloat = 400
+
+    init(viewModel: TasksViewModel, chatProvider: ChatProvider? = nil) {
+        self.viewModel = viewModel
+        self.chatProvider = chatProvider
+        let provider = chatProvider ?? ChatProvider()
+        _chatCoordinator = StateObject(wrappedValue: TaskChatCoordinator(chatProvider: provider))
+    }
+
+    var body: some View {
+        let isChatVisible = showChatPanel && chatCoordinator.activeTaskId != nil && chatProvider != nil
+
+        HStack(spacing: 0) {
+            // Left panel: Tasks content (always full width)
+            tasksContent
+                .frame(maxWidth: .infinity)
+
+            if isChatVisible {
+                // Divider line
+                Rectangle()
+                    .fill(OmiColors.border)
+                    .frame(width: 1)
+
+                // Right panel: Task chat (fixed width, in expanded window space)
+                TaskChatPanel(
+                    chatProvider: chatProvider!,
+                    coordinator: chatCoordinator,
+                    task: activeTask,
+                    onClose: {
+                        closeChatPanel()
+                    }
+                )
+                .frame(width: chatPanelWidth)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.clear)
+        .dismissableSheet(isPresented: $viewModel.showingCreateTask) {
+            TaskCreateSheet(
+                viewModel: viewModel,
+                onDismiss: { viewModel.showingCreateTask = false }
+            )
+        }
+        .onAppear {
+            // If tasks are already loaded, notify sidebar to clear loading indicator
+            if !viewModel.isLoading {
+                NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+            }
+            // Ensure prioritization service is running (no-op if already started)
+            Task { await TaskPrioritizationService.shared.start() }
+        }
+        .onChange(of: showChatPanel) { _, isShowing in
+            // Expand/shrink the window when chat panel opens/closes
+            adjustWindowWidth(expand: isShowing)
+        }
+        .onDisappear {
+            // Shrink window back if chat was open when navigating away from Tasks tab
+            if showChatPanel {
+                adjustWindowWidth(expand: false)
+            }
+        }
+    }
+
+    /// The currently active task for the chat panel
+    private var activeTask: TaskActionItem? {
+        guard let taskId = chatCoordinator.activeTaskId else { return nil }
+        return store.incompleteTasks.first(where: { $0.id == taskId })
+            ?? store.completedTasks.first(where: { $0.id == taskId })
+    }
+
+    /// Open chat for a task
+    private func openChatForTask(_ task: TaskActionItem) {
+        Task {
+            await chatCoordinator.openChat(for: task)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showChatPanel = true
+            }
+        }
+    }
+
+    /// Close the chat panel and shrink window
+    private func closeChatPanel() {
+        Task { await chatCoordinator.closeChat() }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showChatPanel = false
+        }
+    }
+
+    /// Expand or shrink the main window to accommodate the chat panel
+    private func adjustWindowWidth(expand: Bool) {
+        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+
+        let expandAmount = chatPanelWidth + 1 // +1 for divider
+        var frame = window.frame
+
+        if expand {
+            // Expand to the right
+            frame.size.width += expandAmount
+            // Clamp to screen bounds
+            if let screen = window.screen {
+                let maxRight = screen.visibleFrame.maxX
+                if frame.maxX > maxRight {
+                    // Shift left if we'd go off-screen
+                    frame.origin.x = maxRight - frame.size.width
+                }
+            }
+        } else {
+            // Shrink from the right
+            frame.size.width = max(900, frame.size.width - expandAmount)
+        }
+
+        window.setFrame(frame, display: true, animate: true)
+    }
+
+    // MARK: - Tasks Content
+
+    private var tasksContent: some View {
+        VStack(spacing: 0) {
+            // Header with filter toggle and sort
+            headerView
+
+            // Content
+            if viewModel.isLoading && viewModel.tasks.isEmpty {
+                loadingView
+            } else if let error = viewModel.error, viewModel.tasks.isEmpty {
+                errorView(error)
+            } else if viewModel.displayTasks.isEmpty {
+                emptyView
+            } else {
+                tasksListView
+            }
+        }
+    }
+
+    // MARK: - Header View
+
+    private var headerView: some View {
+        HStack(spacing: 10) {
+            // Search field
+            HStack(spacing: 8) {
+                if viewModel.isSearching || viewModel.isLoadingFiltered {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                TextField("Search tasks...", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                if !viewModel.searchText.isEmpty {
+                    Button {
+                        viewModel.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundSecondary)
+            .cornerRadius(8)
+
+            if !viewModel.isMultiSelectMode {
+                filterDropdownButton
+            } else {
+                multiSelectControls
+            }
+
+            if viewModel.isMultiSelectMode {
+                if !viewModel.selectedTaskIds.isEmpty {
+                    deleteSelectedButton
+                }
+                cancelMultiSelectButton
+            } else {
+                addTaskButton
+                taskSettingsButton
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+    }
+
+    // MARK: - Filter Dropdown
+
+    private var filterLabel: String {
+        let totalCount = viewModel.selectedTags.count + viewModel.selectedDynamicTags.count
+        if totalCount == 0 {
+            return "All"
+        } else if viewModel.selectedTags == [.todo, .last7Days] && viewModel.selectedDynamicTags.isEmpty {
+            return "To Do"
+        } else if totalCount == 1 {
+            if let tag = viewModel.selectedTags.first {
+                return tag.displayName
+            } else if let dynamicTag = viewModel.selectedDynamicTags.first {
+                return dynamicTag.displayName
+            }
+            return "1 selected"
+        } else {
+            return "\(totalCount) selected"
+        }
+    }
+
+    /// Filtered predefined tags based on search text, grouped by filter group
+    private func filteredTags(for group: TaskFilterGroup) -> [TaskFilterTag] {
+        let tags = TaskFilterTag.tags(for: group)
+        if filterSearchText.isEmpty {
+            return tags.sorted { viewModel.tagCount($0) > viewModel.tagCount($1) }
+        }
+        return tags
+            .filter { $0.displayName.localizedCaseInsensitiveContains(filterSearchText) }
+            .sorted { viewModel.tagCount($0) > viewModel.tagCount($1) }
+    }
+
+    /// Filtered dynamic tags based on search text, grouped by filter group
+    private func filteredDynamicTags(for group: TaskFilterGroup) -> [DynamicFilterTag] {
+        let tags = viewModel.dynamicTags.filter { $0.group == group }
+        if filterSearchText.isEmpty {
+            return tags.sorted { viewModel.dynamicTagCount($0) > viewModel.dynamicTagCount($1) }
+        }
+        return tags
+            .filter { $0.displayName.localizedCaseInsensitiveContains(filterSearchText) }
+            .sorted { viewModel.dynamicTagCount($0) > viewModel.dynamicTagCount($1) }
+    }
+
+    private var filterDropdownButton: some View {
+        Button {
+            pendingSelectedTags = viewModel.selectedTags
+            pendingSelectedDynamicTags = viewModel.selectedDynamicTags
+            filterSearchText = ""
+            showFilterPopover = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 12))
+                Text(filterLabel)
+                    .font(.system(size: 13, weight: viewModel.hasActiveFilters ? .medium : .regular))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10))
+            }
+            .foregroundColor(viewModel.hasActiveFilters ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundSecondary)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(viewModel.hasActiveFilters ? OmiColors.border : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showFilterPopover, arrowEdge: .bottom) {
+            filterPopover
+        }
+    }
+
+    private var filterPopover: some View {
+        VStack(spacing: 0) {
+            // Search field
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(OmiColors.textTertiary)
+                    .font(.system(size: 12))
+
+                TextField("Search filters...", text: $filterSearchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundColor(OmiColors.textPrimary)
+
+                if !filterSearchText.isEmpty {
+                    Button {
+                        filterSearchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(OmiColors.textTertiary)
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundTertiary)
+            .cornerRadius(6)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            // Tag list grouped by filter group
+            ScrollView {
+                VStack(spacing: 2) {
+                    // "All" option
+                    Button {
+                        pendingSelectedTags.removeAll()
+                        pendingSelectedDynamicTags.removeAll()
+                    } label: {
+                        HStack {
+                            Image(systemName: "tray.full")
+                                .font(.system(size: 12))
+                                .frame(width: 20)
+                            Text("All")
+                                .font(.system(size: 13))
+                            Spacer()
+                            Text("\(viewModel.todoCount + viewModel.doneCount)")
+                                .font(.system(size: 11))
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(OmiColors.backgroundTertiary)
+                                .cornerRadius(4)
+                            if pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .foregroundColor(OmiColors.textPrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(pendingSelectedTags.isEmpty && pendingSelectedDynamicTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                        .cornerRadius(6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // Groups
+                    ForEach(TaskFilterGroup.allCases, id: \.self) { group in
+                        let tags = filteredTags(for: group)
+                        let dynTags = filteredDynamicTags(for: group)
+                        if !tags.isEmpty || !dynTags.isEmpty {
+                            Divider()
+                                .padding(.vertical, 4)
+
+                            // Group header
+                            Text(group.rawValue)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(OmiColors.textTertiary)
+                                .textCase(.uppercase)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            // Predefined tags in group
+                            ForEach(tags) { tag in
+                                let isSelected = pendingSelectedTags.contains(tag)
+                                let count = viewModel.tagCount(tag)
+
+                                Button {
+                                    if isSelected {
+                                        pendingSelectedTags.remove(tag)
+                                    } else {
+                                        pendingSelectedTags.insert(tag)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: tag.icon)
+                                            .font(.system(size: 12))
+                                            .frame(width: 20)
+                                        Text(tag.displayName)
+                                            .font(.system(size: 13))
+                                        Spacer()
+                                        Text("\(count)")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(OmiColors.textTertiary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(OmiColors.backgroundTertiary)
+                                            .cornerRadius(4)
+                                        if isSelected {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                                    .cornerRadius(6)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            // Dynamic tags for this group (discovered from task data)
+                            ForEach(filteredDynamicTags(for: group)) { tag in
+                                let isSelected = pendingSelectedDynamicTags.contains(tag)
+                                let count = viewModel.dynamicTagCount(tag)
+
+                                Button {
+                                    if isSelected {
+                                        pendingSelectedDynamicTags.remove(tag)
+                                    } else {
+                                        pendingSelectedDynamicTags.insert(tag)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: tag.icon)
+                                            .font(.system(size: 12))
+                                            .frame(width: 20)
+                                        Text(tag.displayName)
+                                            .font(.system(size: 13))
+                                        Spacer()
+                                        Text("\(count)")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(OmiColors.textTertiary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(OmiColors.backgroundTertiary)
+                                            .cornerRadius(4)
+                                        if isSelected {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+                                    .cornerRadius(6)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .frame(maxHeight: 350)
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            // Action buttons
+            HStack(spacing: 8) {
+                Button {
+                    pendingSelectedTags.removeAll()
+                    pendingSelectedDynamicTags.removeAll()
+                } label: {
+                    Text("Clear")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(OmiColors.textSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(OmiColors.backgroundTertiary)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    viewModel.selectedTags = pendingSelectedTags
+                    viewModel.selectedDynamicTags = pendingSelectedDynamicTags
+                    showFilterPopover = false
+                } label: {
+                    Text("Apply")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.black)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.white)
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(12)
+        }
+        .frame(width: 280)
+    }
+
+    private var multiSelectControls: some View {
+        HStack(spacing: 12) {
+            Button {
+                if viewModel.selectedTaskIds.count == viewModel.displayTasks.count {
+                    viewModel.deselectAll()
+                } else {
+                    viewModel.selectAll()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: viewModel.selectedTaskIds.count == viewModel.displayTasks.count ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 14))
+                    Text(viewModel.selectedTaskIds.count == viewModel.displayTasks.count ? "Deselect All" : "Select All")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .foregroundColor(OmiColors.textSecondary)
+            }
+            .buttonStyle(.plain)
+
+            Text("\(viewModel.selectedTaskIds.count) selected")
+                .font(.system(size: 13))
+                .foregroundColor(OmiColors.textTertiary)
+        }
+    }
+
+    private var deleteSelectedButton: some View {
+        Button {
+            Task {
+                await viewModel.deleteSelectedTasks()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12))
+                Text("Delete \(viewModel.selectedTaskIds.count)")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.red)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cancelMultiSelectButton: some View {
+        Button {
+            viewModel.toggleMultiSelectMode()
+        } label: {
+            Text("Cancel")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(OmiColors.backgroundSecondary)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var addTaskButton: some View {
+        Button {
+            viewModel.showingCreateTask = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Add Task")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundColor(.black)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(OmiColors.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+
+    private var taskSettingsButton: some View {
+        Button {
+            NotificationCenter.default.post(
+                name: .navigateToTaskSettings,
+                object: nil
+            )
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 12))
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(OmiColors.backgroundSecondary)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Task Settings")
+    }
+
+    private var chatToggleButton: some View {
+        Button {
+            if showChatPanel {
+                closeChatPanel()
+            } else if let firstTask = viewModel.displayTasks.first {
+                openChatForTask(firstTask)
+            }
+        } label: {
+            Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                .font(.system(size: 12))
+                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
+                )
+        }
+        .buttonStyle(.plain)
+        .help(showChatPanel ? "Close chat panel" : "Open task chat")
+    }
+
+    // MARK: - Loading View
+
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+                .tint(OmiColors.textSecondary)
+
+            Text("Loading tasks...")
+                .font(.system(size: 14))
+                .foregroundColor(OmiColors.textTertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Error View
+
+    private func errorView(_ error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 48))
+                .foregroundColor(OmiColors.textTertiary)
+
+            Text("Failed to load tasks")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(OmiColors.textPrimary)
+
+            Text(error)
+                .font(.system(size: 14))
+                .foregroundColor(OmiColors.textTertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+            Button("Try Again") {
+                Task {
+                    await viewModel.loadTasks()
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(OmiColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Empty View
+
+    private var emptyView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: viewModel.hasActiveFilters ? "line.3.horizontal.decrease" : "tray.fill")
+                .font(.system(size: 48))
+                .foregroundColor(OmiColors.textTertiary)
+
+            Text(viewModel.hasActiveFilters ? "No Matching Tasks" : "All Caught Up!")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(OmiColors.textPrimary)
+
+            Text(viewModel.hasActiveFilters ? "Try adjusting your filters" : "You have no tasks yet")
+                .font(.system(size: 14))
+                .foregroundColor(OmiColors.textTertiary)
+                .multilineTextAlignment(.center)
+
+            if viewModel.hasActiveFilters {
+                Button("Clear Filters") {
+                    withAnimation {
+                        viewModel.clearAllFilters()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(OmiColors.textSecondary)
+                .padding(.top, 8)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Tasks List View
+
+    private var tasksListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline)
+                let onlyDone = viewModel.selectedTags.contains(.done) && !viewModel.selectedTags.contains(.todo)
+                let onlyDeleted = (viewModel.selectedTags.contains(.removedByAI) || viewModel.selectedTags.contains(.removedByMe)) && !viewModel.selectedTags.contains(.todo) && !viewModel.selectedTags.contains(.done)
+                if !onlyDone && !onlyDeleted && !viewModel.isMultiSelectMode {
+                    ForEach(TaskCategory.allCases, id: \.self) { category in
+                        let orderedTasks = viewModel.getOrderedTasks(for: category)
+                        if !orderedTasks.isEmpty {
+                            TaskCategorySection(
+                                category: category,
+                                orderedTasks: orderedTasks,
+                                isMultiSelectMode: viewModel.isMultiSelectMode,
+                                indentLevelFor: { viewModel.getIndentLevel(for: $0) },
+                                isSelectedFor: { viewModel.selectedTaskIds.contains($0) },
+                                onToggle: { await viewModel.toggleTask($0) },
+                                onDelete: { await viewModel.deleteTask($0) },
+                                onToggleSelection: { viewModel.toggleTaskSelection($0) },
+                                onUpdateDetails: { task, desc, date, priority in
+                                    await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                                },
+                                onIncrementIndent: { viewModel.incrementIndent(for: $0) },
+                                onDecrementIndent: { viewModel.decrementIndent(for: $0) },
+                                onMoveTask: { task, index, cat in viewModel.moveTask(task, toIndex: index, inCategory: cat) },
+                                onOpenChat: chatProvider != nil ? { task in openChatForTask(task) } : nil
+                            )
+                        }
+                    }
+                } else {
+                    // Flat list for other sort options, completed view, or multi-select mode
+                    ForEach(viewModel.displayTasks) { task in
+                        TaskRow(
+                            task: task,
+                            indentLevel: viewModel.getIndentLevel(for: task.id),
+                            isMultiSelectMode: viewModel.isMultiSelectMode,
+                            isSelected: viewModel.selectedTaskIds.contains(task.id),
+                            onToggle: { await viewModel.toggleTask($0) },
+                            onDelete: { await viewModel.deleteTask($0) },
+                            onToggleSelection: { viewModel.toggleTaskSelection($0) },
+                            onUpdateDetails: { task, desc, date, priority in
+                                await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                            },
+                            onIncrementIndent: { viewModel.incrementIndent(for: $0) },
+                            onDecrementIndent: { viewModel.decrementIndent(for: $0) },
+                            onOpenChat: chatProvider != nil ? { task in openChatForTask(task) } : nil
+                        )
+                            .onAppear {
+                                Task {
+                                    await viewModel.loadMoreIfNeeded(currentTask: task)
+                                }
+                            }
+                    }
+                }
+
+                // Loading more indicator
+                if viewModel.isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                }
+
+                // "Load more" button
+                if !viewModel.displayTasks.isEmpty && !viewModel.isLoadingMore {
+                    if viewModel.isInFilteredMode && viewModel.hasMoreFilteredResults {
+                        Button {
+                            viewModel.loadMoreFiltered()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.circle")
+                                Text("Load more tasks")
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(OmiColors.backgroundTertiary)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    } else if !viewModel.isInFilteredMode && viewModel.hasMoreTasks {
+                        Button {
+                            Task { await viewModel.loadMoreIfNeeded(currentTask: viewModel.displayTasks.last!) }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.down.circle")
+                                Text("Load more tasks")
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(OmiColors.backgroundTertiary)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .refreshable {
+            await viewModel.loadTasks()
+        }
+    }
+}
+
+// MARK: - Task Category Section
+
+struct TaskCategorySection: View {
+    let category: TaskCategory
+    let orderedTasks: [TaskActionItem]
+    var isMultiSelectMode: Bool = false
+
+    // Callbacks for row data and actions (passed through to TaskRow)
+    var indentLevelFor: ((String) -> Int)?
+    var isSelectedFor: ((String) -> Bool)?
+    var onToggle: ((TaskActionItem) async -> Void)?
+    var onDelete: ((TaskActionItem) async -> Void)?
+    var onToggleSelection: ((TaskActionItem) -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onIncrementIndent: ((String) -> Void)?
+    var onDecrementIndent: ((String) -> Void)?
+    var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
+    var onOpenChat: ((TaskActionItem) -> Void)?
+
+    private var visibleTasks: [TaskActionItem] {
+        orderedTasks
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Category header
+            HStack(spacing: 8) {
+                Image(systemName: category.icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(category.color)
+
+                Text(category.rawValue)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Text("\(orderedTasks.count)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(OmiColors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(OmiColors.textTertiary.opacity(0.1))
+                    )
+
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+
+            // Tasks in category with drag-and-drop reordering
+            if !isMultiSelectMode {
+                VStack(spacing: 8) {
+                    ForEach(visibleTasks) { task in
+                        TaskRow(
+                            task: task,
+                            category: category,
+                            indentLevel: indentLevelFor?(task.id) ?? 0,
+                            isMultiSelectMode: isMultiSelectMode,
+                            isSelected: isSelectedFor?(task.id) ?? false,
+                            onToggle: onToggle,
+                            onDelete: onDelete,
+                            onToggleSelection: onToggleSelection,
+                            onUpdateDetails: onUpdateDetails,
+                            onIncrementIndent: onIncrementIndent,
+                            onDecrementIndent: onDecrementIndent,
+                            onOpenChat: onOpenChat
+                        )
+                            .draggable(task.id) {
+                                // Drag preview
+                                TaskDragPreview(task: task)
+                            }
+                            .dropDestination(for: String.self) { droppedIds, _ in
+                                guard let droppedId = droppedIds.first,
+                                      orderedTasks.contains(where: { $0.id == droppedId }),
+                                      let targetIndex = orderedTasks.firstIndex(where: { $0.id == task.id }) else {
+                                    return false
+                                }
+                                // Move the task
+                                if let droppedTask = orderedTasks.first(where: { $0.id == droppedId }) {
+                                    onMoveTask?(droppedTask, targetIndex, category)
+                                }
+                                return true
+                            }
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)),
+                                removal: .opacity.combined(with: .move(edge: .trailing))
+                            ))
+                    }
+
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Task Drag Preview
+
+struct TaskDragPreview: View {
+    let task: TaskActionItem
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "circle")
+                .font(.system(size: 16))
+                .foregroundColor(OmiColors.textTertiary)
+
+            Text(task.description)
+                .font(.system(size: 13))
+                .foregroundColor(OmiColors.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.backgroundSecondary)
+                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        )
+        .frame(maxWidth: 300)
+    }
+}
+
+// MARK: - Task Row
+
+struct TaskRow: View {
+    let task: TaskActionItem
+    var category: TaskCategory? = nil  // Optional for flat list views
+
+    // Data from ViewModel (passed as values, not via @ObservedObject)
+    var indentLevel: Int = 0
+    var isMultiSelectMode: Bool = false
+    var isSelected: Bool = false
+
+    // Action closures
+    var onToggle: ((TaskActionItem) async -> Void)?
+    var onDelete: ((TaskActionItem) async -> Void)?
+    var onToggleSelection: ((TaskActionItem) -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onIncrementIndent: ((String) -> Void)?
+    var onDecrementIndent: ((String) -> Void)?
+    var onOpenChat: ((TaskActionItem) -> Void)?
+
+    @State private var isHovering = false
+    @State private var showDeleteConfirmation = false
+    @State private var isCompletingAnimation = false
+    @State private var checkmarkScale: CGFloat = 1.0
+    @State private var rowOpacity: Double = 1.0
+    @State private var rowOffset: CGFloat = 0
+    @State private var showAgentDetail = false
+    @State private var showTaskDetail = false
+    @State private var isCopyingLink = false
+
+    // Inline editing state
+    @State private var editText = ""
+    @FocusState private var isTextFieldFocused: Bool
+    @State private var debounceTask: Task<Void, Never>?
+
+    // Inline due date popover
+    @State private var showDatePicker = false
+    @State private var editDueDate: Date = Date()
+
+    // Inline priority popover
+    @State private var showPriorityPicker = false
+
+    // Swipe gesture state
+    @State private var swipeOffset: CGFloat = 0
+    @State private var isDragging = false
+
+    /// Threshold for triggering delete (30% of row width, like Flutter)
+    private let deleteThreshold: CGFloat = 100
+    /// Threshold for triggering indent change (25% of row width)
+    private let indentThreshold: CGFloat = 80
+
+    /// Check if task was created less than 1 minute ago (newly added)
+    private var isNewlyCreated: Bool {
+        Date().timeIntervalSince(task.createdAt) < 60
+    }
+
+    /// Indent amount in points (28pt per level, like Flutter)
+    private var indentPadding: CGFloat {
+        CGFloat(indentLevel) * 28
+    }
+
+    var body: some View {
+        swipeableContent
+            .confirmationDialog(
+                "Delete Task",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await onDelete?(task)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to delete this task? This action cannot be undone.")
+            }
+            .sheet(isPresented: $showAgentDetail) {
+                TaskAgentDetailView(
+                    task: task,
+                    onDismiss: { showAgentDetail = false }
+                )
+            }
+            .sheet(isPresented: $showTaskDetail) {
+                TaskDetailView(
+                    task: task,
+                    onDismiss: { showTaskDetail = false }
+                )
+            }
+    }
+
+    // MARK: - Swipeable Content
+
+    private var swipeableContent: some View {
+        ZStack(alignment: .trailing) {
+            // Background revealed when swiping left
+            if swipeOffset < 0 {
+                if indentLevel > 0 {
+                    // Indented task: swipe left to outdent
+                    outdentBackground
+                } else {
+                    // Not indented: swipe left to delete
+                    deleteBackground
+                }
+            }
+
+            // Indent background (revealed when swiping right)
+            if swipeOffset > 0 && indentLevel < 3 {
+                indentBackground
+            }
+
+            // Main task row content
+            taskRowContent
+                .offset(x: swipeOffset)
+                .gesture(
+                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                        .onChanged { value in
+                            guard !isMultiSelectMode, !isDeletedTask else { return }
+                            isDragging = true
+
+                            // Apply resistance at the edges
+                            let translation = value.translation.width
+                            if translation < 0 {
+                                // Swiping left (delete or outdent)
+                                swipeOffset = translation * 0.8
+                            } else if translation > 0 && indentLevel < 3 {
+                                // Swiping right (indent) - only if can indent more
+                                swipeOffset = translation * 0.6
+                            }
+                        }
+                        .onEnded { value in
+                            isDragging = false
+                            handleSwipeEnd(velocity: value.velocity.width)
+                        }
+                )
+        }
+        .clipped()
+    }
+
+    // MARK: - Swipe Backgrounds
+
+    private var deleteBackground: some View {
+        HStack {
+            Spacer()
+            HStack(spacing: 8) {
+                Image(systemName: "trash.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                if swipeOffset < -deleteThreshold {
+                    Text("Release to delete")
+                        .font(.system(size: 13, weight: .medium))
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.red)
+        .cornerRadius(8)
+    }
+
+    private var indentBackground: some View {
+        HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.right.to.line")
+                    .font(.system(size: 16, weight: .semibold))
+                if swipeOffset > indentThreshold {
+                    Text("Release to indent")
+                        .font(.system(size: 13, weight: .medium))
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OmiColors.textSecondary)
+        .cornerRadius(8)
+    }
+
+    /// Outdent background (revealed when swiping left on indented tasks)
+    private var outdentBackground: some View {
+        HStack {
+            Spacer()
+            HStack(spacing: 8) {
+                if swipeOffset < -indentThreshold {
+                    Text("Release to outdent")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                Image(systemName: "arrow.left.to.line")
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.orange)
+        .cornerRadius(8)
+    }
+
+    // MARK: - Swipe Handling
+
+    private func handleSwipeEnd(velocity: CGFloat) {
+        let swipedLeftPastThreshold = swipeOffset < -deleteThreshold || velocity < -500
+        let swipedRightPastThreshold = swipeOffset > indentThreshold || velocity > 500
+
+        if swipedLeftPastThreshold {
+            if indentLevel > 0 {
+                // Outdent (decrease indent) and snap back
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    swipeOffset = 0
+                }
+                onDecrementIndent?(task.id)
+            } else {
+                // Delete - animate off screen
+                withAnimation(.easeOut(duration: 0.2)) {
+                    swipeOffset = -400
+                    rowOpacity = 0
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    Task {
+                        await onDelete?(task)
+                    }
+                }
+            }
+        } else if swipedRightPastThreshold && indentLevel < 3 {
+            // Indent (increase indent) and snap back
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                swipeOffset = 0
+            }
+            onIncrementIndent?(task.id)
+        } else {
+            // Snap back to original position
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                swipeOffset = 0
+            }
+        }
+    }
+
+    /// Whether this task is soft-deleted
+    private var isDeletedTask: Bool {
+        task.deleted == true
+    }
+
+    private var taskRowContent: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // Indent visual (vertical line for indented tasks)
+            if indentLevel > 0 {
+                HStack(spacing: 0) {
+                    ForEach(0..<indentLevel, id: \.self) { level in
+                        Rectangle()
+                            .fill(OmiColors.textQuaternary.opacity(0.5))
+                            .frame(width: 2)
+                            .padding(.leading, level == 0 ? 8 : 26)
+                    }
+                }
+                .frame(width: indentPadding)
+            }
+
+            if isDeletedTask {
+                // Deleted tasks: show trash icon instead of checkbox
+                Image(systemName: "trash.slash")
+                    .font(.system(size: 14))
+                    .foregroundColor(OmiColors.textTertiary)
+                    .frame(width: 24, height: 24)
+            } else if isMultiSelectMode {
+                // Multi-select checkbox
+                Button {
+                    onToggleSelection?(task)
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5)
+                            .frame(width: 20, height: 20)
+
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.textPrimary)
+                                .frame(width: 20, height: 20)
+
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                // Completion checkbox with animation
+                Button {
+                    log("Task: Checkbox clicked for task: \(task.id)")
+                    handleToggle()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .stroke(isCompletingAnimation || task.completed ? OmiColors.textPrimary : OmiColors.textTertiary, lineWidth: 1.5)
+                            .frame(width: 20, height: 20)
+
+                        if isCompletingAnimation || task.completed {
+                            Circle()
+                                .fill(OmiColors.textPrimary)
+                                .frame(width: 20, height: 20)
+                                .scaleEffect(checkmarkScale)
+
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.black)
+                                .scaleEffect(checkmarkScale)
+                        }
+                    }
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Task content
+            if isDeletedTask {
+                // Deleted task: strikethrough description + reason
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.description)
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textTertiary)
+                        .strikethrough(true, color: OmiColors.textTertiary)
+
+                    if let reason = task.deletedReason {
+                        Text(reason)
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.textQuaternary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                // Always-editable task content
+                FlowLayout(spacing: 6) {
+                    // Always-rendered TextField (notes-like editing)
+                    TextField("Task description", text: $editText, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14))
+                        .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                        .strikethrough(task.completed, color: OmiColors.textTertiary)
+                        .lineLimit(1...4)
+                        .focused($isTextFieldFocused)
+                        .disabled(isMultiSelectMode)
+                        .onSubmit {
+                            debounceTask?.cancel()
+                            commitEdit()
+                        }
+                        .onChange(of: isTextFieldFocused) { _, focused in
+                            if !focused {
+                                debounceTask?.cancel()
+                                commitEdit()
+                            }
+                        }
+                        .onChange(of: editText) { _, _ in
+                            // Debounced auto-save: save after 1s of no typing
+                            debounceTask?.cancel()
+                            debounceTask = Task {
+                                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                                guard !Task.isCancelled else { return }
+                                commitEdit()
+                            }
+                        }
+                        .onAppear {
+                            editText = task.description
+                        }
+                        .onChange(of: task.description) { _, newValue in
+                            if !isTextFieldFocused {
+                                editText = newValue
+                            }
+                        }
+
+                    // New badge
+                    if isNewlyCreated {
+                        NewBadge()
+                    }
+
+
+
+                    // Tag badges (show up to 3)
+                    ForEach(task.tags.prefix(3), id: \.self) { tag in
+                        TaskClassificationBadge(category: tag)
+                    }
+
+                    // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
+                    if TaskAgentSettings.shared.isEnabled {
+                        AgentStatusIndicator(task: task, showAgentDetail: $showAgentDetail, onLaunchWithChat: onOpenChat)
+                    }
+
+                    // Chat button (shown on hover when onOpenChat is available)
+                    if isHovering && onOpenChat != nil && !task.completed {
+                        Button {
+                            onOpenChat?(task)
+                        } label: {
+                            Image(systemName: "bubble.left")
+                                .font(.system(size: 10))
+                                .foregroundColor(OmiColors.textTertiary)
+                                .frame(width: 20, height: 20)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Chat about this task")
+                    }
+
+                    // Task detail button for tasks with rich metadata
+                    if task.hasDetailMetadata {
+                        TaskDetailButton(showDetail: $showTaskDetail)
+                    }
+
+                    // Due date badge - clickable
+                    if let dueAt = task.dueAt {
+                        DueDateBadgeInteractive(
+                            dueAt: dueAt,
+                            isCompleted: task.completed,
+                            showDatePicker: $showDatePicker,
+                            editDueDate: $editDueDate
+                        )
+                    } else if isHovering && !task.completed {
+                        // Show "add date" button on hover
+                        Button {
+                            editDueDate = Date()
+                            showDatePicker = true
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 8))
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 9))
+                            }
+                            .foregroundColor(OmiColors.textTertiary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(OmiColors.backgroundTertiary))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Source badge (read-only)
+                    if let source = task.source {
+                        SourceBadgeCompact(source: source, sourceLabel: task.sourceAppLabel, sourceIcon: task.sourceIcon, windowTitle: task.windowTitle)
+                    }
+
+                    // Priority badge - clickable
+                    PriorityBadgeInteractive(
+                        priority: task.priority,
+                        isCompleted: task.completed,
+                        isHovering: isHovering,
+                        showPriorityPicker: $showPriorityPicker,
+                        onPriorityChange: { newPriority in
+                            Task {
+                                await onUpdateDetails?(task, nil, nil, newPriority)
+                            }
+                        }
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .popover(isPresented: $showDatePicker) {
+                    dueDatePopover
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            // Hover actions: indent controls and delete (not for deleted tasks)
+            if isHovering && !isMultiSelectMode && !isDeletedTask {
+                HStack(spacing: 4) {
+                    // Outdent button (decrease indent)
+                    if indentLevel > 0 {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                onDecrementIndent?(task.id)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.left.to.line")
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textTertiary)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Decrease indent")
+                    }
+
+                    // Indent button (increase indent)
+                    if indentLevel < 3 {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                onIncrementIndent?(task.id)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.right.to.line")
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textTertiary)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Increase indent")
+                    }
+
+                    // Share link button
+                    Button {
+                        Task { await copyShareLink() }
+                    } label: {
+                        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+                            .font(.system(size: 14))
+                            .foregroundColor(OmiColors.textTertiary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isCopyingLink)
+                    .help("Copy share link")
+
+                    // Delete button
+                    Button {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14))
+                            .foregroundColor(OmiColors.textTertiary)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(.leading, indentPadding > 0 ? 0 : 12)
+        .padding(.trailing, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundPrimary))
+        )
+        .opacity(rowOpacity)
+        .offset(x: rowOffset)
+        .onAppear {
+            rowOpacity = 1.0
+            rowOffset = 0
+            isCompletingAnimation = false
+            checkmarkScale = 1.0
+        }
+        .onChange(of: task.completed) { _, _ in
+            rowOpacity = 1.0
+            rowOffset = 0
+            isCompletingAnimation = false
+            checkmarkScale = 1.0
+        }
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+
+    // MARK: - Inline Editing
+
+    private func commitEdit() {
+        let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty, trimmed != task.description else {
+            // Reset to original if empty or unchanged
+            editText = task.description
+            return
+        }
+
+        Task {
+            await onUpdateDetails?(task, trimmed, nil, nil)
+        }
+    }
+
+    // MARK: - Share Link
+
+    private func copyShareLink() async {
+        guard !isCopyingLink else { return }
+        isCopyingLink = true
+        defer { isCopyingLink = false }
+
+        do {
+            let response = try await APIClient.shared.shareTasks(taskIds: [task.id])
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(response.url, forType: .string)
+            log("Copied task share link to clipboard: \(response.url)")
+        } catch {
+            log("Failed to get task share link: \(error)")
+        }
+    }
+
+    // MARK: - Due Date Popover
+
+    private var dueDatePopover: some View {
+        VStack(spacing: 12) {
+            DatePicker(
+                "Due Date",
+                selection: $editDueDate,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+
+            HStack(spacing: 8) {
+                Button("Cancel") {
+                    showDatePicker = false
+                }
+                .buttonStyle(.bordered)
+
+                Button("Save") {
+                    showDatePicker = false
+                    Task {
+                        await onUpdateDetails?(task, nil, editDueDate, nil)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(OmiColors.textPrimary)
+            }
+        }
+        .padding(16)
+        .frame(width: 300)
+    }
+
+    private func handleToggle() {
+        log("Task: handleToggle called, completed=\(task.completed)")
+
+        if task.completed {
+            log("Task: Already completed, toggling back")
+            Task {
+                await onToggle?(task)
+            }
+            return
+        }
+
+        log("Task: Starting completion animation")
+        isCompletingAnimation = true
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+            checkmarkScale = 1.2
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                self.checkmarkScale = 1.0
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.rowOpacity = 0.0
+                self.rowOffset = 50
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            log("Task: Animation complete, calling toggleTask")
+            Task {
+                await self.onToggle?(self.task)
+            }
+        }
+    }
+}
+
+// FlowLayout is defined in AppsPage.swift
+
+// MARK: - Interactive Badges
+
+struct DueDateBadgeInteractive: View {
+    let dueAt: Date
+    let isCompleted: Bool
+    @Binding var showDatePicker: Bool
+    @Binding var editDueDate: Date
+
+    @State private var isHovering = false
+
+    private var displayText: String {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = calendar.startOfDay(for: now)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfToday)!
+
+        if isCompleted {
+            return dueAt.formatted(date: .abbreviated, time: .omitted)
+        }
+
+        if dueAt < startOfToday {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .short
+            return formatter.localizedString(for: dueAt, relativeTo: now)
+        } else if dueAt < startOfTomorrow {
+            return "Today"
+        } else if dueAt < startOfDayAfterTomorrow {
+            return "Tomorrow"
+        } else if dueAt < endOfWeek {
+            return calendar.weekdaySymbols[calendar.component(.weekday, from: dueAt) - 1]
+        } else {
+            return dueAt.formatted(date: .abbreviated, time: .omitted)
+        }
+    }
+
+    var body: some View {
+        Button {
+            editDueDate = dueAt
+            showDatePicker = true
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 9))
+                Text(displayText)
+                    .font(.system(size: 11, weight: .medium))
+                if isHovering {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 8))
+                }
+            }
+            .foregroundColor(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
+struct PriorityBadgeInteractive: View {
+    let priority: String?
+    let isCompleted: Bool
+    let isHovering: Bool  // Row hover state
+    @Binding var showPriorityPicker: Bool
+    let onPriorityChange: (String) -> Void
+
+    @State private var badgeHovering = false
+
+    private var badgeColor: Color {
+        switch priority {
+        case "high": return OmiColors.textPrimary
+        case "medium": return OmiColors.textSecondary
+        case "low": return OmiColors.textTertiary
+        default: return OmiColors.textTertiary
+        }
+    }
+
+    private var label: String {
+        priority?.capitalized ?? "Priority"
+    }
+
+    var body: some View {
+        // Show if task has a priority, or show "add priority" on hover
+        if priority != nil || (isHovering && !isCompleted) {
+            Button {
+                showPriorityPicker = true
+            } label: {
+                HStack(spacing: 3) {
+                    if priority != nil {
+                        Image(systemName: priority == "high" ? "flag.fill" : "flag")
+                            .font(.system(size: 8))
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.system(size: 8))
+                    }
+                    Text(label)
+                        .font(.system(size: 10, weight: .medium))
+                    if badgeHovering && priority != nil {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 7))
+                    }
+                }
+                .foregroundColor(badgeHovering ? badgeColor : (priority != nil ? OmiColors.textSecondary : OmiColors.textTertiary))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                badgeHovering = hovering
+            }
+            .popover(isPresented: $showPriorityPicker) {
+                VStack(spacing: 4) {
+                    ForEach(["high", "medium", "low"], id: \.self) { value in
+                        let color: Color = value == "high" ? OmiColors.textPrimary : value == "medium" ? OmiColors.textSecondary : OmiColors.textTertiary
+                        let isSelected = priority == value
+
+                        Button {
+                            showPriorityPicker = false
+                            onPriorityChange(value)
+                        } label: {
+                            HStack {
+                                Image(systemName: value == "high" ? "flag.fill" : "flag")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(color)
+                                    .frame(width: 20)
+                                Text(value.capitalized)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(OmiColors.textPrimary)
+                                Spacer()
+                                if isSelected {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(color)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(isSelected ? color.opacity(0.1) : Color.clear)
+                            .cornerRadius(6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
+                .frame(width: 180)
+            }
+        }
+    }
+}
+
+struct SourceBadgeCompact: View {
+    let source: String
+    let sourceLabel: String
+    let sourceIcon: String
+    var windowTitle: String? = nil
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: sourceIcon)
+                .font(.system(size: 8))
+            Text(sourceLabel)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundColor(OmiColors.textSecondary)
+        .help(windowTitle ?? sourceLabel)
+    }
+}
+
+
+// MARK: - New Badge
+
+struct NewBadge: View {
+    var body: some View {
+        Text("New")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(OmiColors.purplePrimary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(OmiColors.purplePrimary.opacity(0.15))
+            .cornerRadius(4)
+    }
+}
+
+// MARK: - Task Create Sheet
+
+struct TaskCreateSheet: View {
+    @ObservedObject var viewModel: TasksViewModel
+    var onDismiss: (() -> Void)? = nil
+
+    @State private var description: String = ""
+    @State private var hasDueDate: Bool = false
+    @State private var dueDate: Date = Date()
+    @State private var priority: String? = nil
+    @State private var selectedTags: Set<String> = []
+    @State private var isSaving = false
+
+    @Environment(\.dismiss) private var environmentDismiss
+
+    private func dismissSheet() {
+        if let onDismiss = onDismiss {
+            onDismiss()
+        } else {
+            environmentDismiss()
+        }
+    }
+
+    private var canSave: Bool {
+        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("New Task")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(OmiColors.textPrimary)
+                Spacer()
+                DismissButton(action: dismissSheet)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+
+            Divider()
+                .background(OmiColors.border)
+
+            // Content
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Description field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+
+                        TextField("What needs to be done?", text: $description, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14))
+                            .lineLimit(3...6)
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(OmiColors.backgroundSecondary)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(OmiColors.border, lineWidth: 1)
+                            )
+                    }
+
+                    // Due date
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Due Date")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(OmiColors.textSecondary)
+                            Spacer()
+                            Toggle("", isOn: $hasDueDate)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .controlSize(.small)
+                        }
+                        if hasDueDate {
+                            DatePicker("", selection: $dueDate, displayedComponents: [.date, .hourAndMinute])
+                                .datePickerStyle(.graphical)
+                                .labelsHidden()
+                                .padding(12)
+                                .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundSecondary))
+                        }
+                    }
+
+                    // Priority
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Priority")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+                        HStack(spacing: 8) {
+                            createPriorityButton(label: "None", value: nil)
+                            createPriorityButton(label: "Low", value: "low", color: OmiColors.textTertiary)
+                            createPriorityButton(label: "Medium", value: "medium", color: OmiColors.textSecondary)
+                            createPriorityButton(label: "High", value: "high", color: OmiColors.textPrimary)
+                        }
+                    }
+
+                    // Tags
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Tags")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(OmiColors.textSecondary)
+
+                        // Flow layout of toggleable tag pills
+                        let allTags = TaskClassification.allCases
+                        LazyVGrid(columns: [
+                            GridItem(.adaptive(minimum: 90), spacing: 6)
+                        ], spacing: 6) {
+                            ForEach(allTags, id: \.rawValue) { classification in
+                                let isSelected = selectedTags.contains(classification.rawValue)
+                                let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+                                Button {
+                                    if isSelected {
+                                        selectedTags.remove(classification.rawValue)
+                                    } else {
+                                        selectedTags.insert(classification.rawValue)
+                                    }
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: classification.icon)
+                                            .font(.system(size: 9))
+                                        Text(classification.label)
+                                            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                                    }
+                                    .foregroundColor(isSelected ? .white : tagColor)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? tagColor : tagColor.opacity(0.1))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(isSelected ? Color.clear : tagColor.opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider()
+                .background(OmiColors.border)
+
+            // Footer
+            HStack(spacing: 12) {
+                Button("Cancel") { dismissSheet() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
+                Button {
+                    Task { await createTask() }
+                } label: {
+                    if isSaving {
+                        ProgressView().controlSize(.small).frame(width: 60)
+                    } else {
+                        Text("Create").frame(width: 60)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(OmiColors.textPrimary)
+                .controlSize(.large)
+                .disabled(!canSave || isSaving)
+            }
+            .padding(20)
+        }
+        .frame(width: 420, height: 500)
+        .background(OmiColors.backgroundPrimary)
+    }
+
+    private func createPriorityButton(label: String, value: String?, color: Color = OmiColors.textSecondary) -> some View {
+        let isSelected = priority == value
+        return Button {
+            priority = value
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .foregroundColor(isSelected ? OmiColors.backgroundPrimary : color)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isSelected ? (value != nil ? color : OmiColors.textSecondary) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isSelected ? Color.clear : OmiColors.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func createTask() async {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        isSaving = true
+        let tags = selectedTags.isEmpty ? nil : Array(selectedTags)
+        await viewModel.createTask(description: trimmed, dueAt: hasDueDate ? dueDate : nil, priority: priority, tags: tags)
+        isSaving = false
+        dismissSheet()
+    }
+}
+
+

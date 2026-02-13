@@ -1,0 +1,82 @@
+# Build artifacts
+.build/
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.d
+*.o
+*.swiftdeps
+
+# Environment (both contain secrets)
+.env
+.env.app
+
+# Credentials
+**/google-credentials.json
+.claude/settings.json
+.claude/skills/firebase/SKILL.md
+.claude/skills/local-backend-test/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# Agent bridge build artifacts
+agent-bridge/node_modules/
+agent-bridge/dist/
+
+# Xcode
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local scripts and data (untracked)
+local/
+scripts/
+
+# Swift compiler diagnostics cache
+*.dia
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# Python reference code (for Rust porting)
+**/python_reference/
+Desktop/Sources/Resources/ffmpeg
+Desktop/Sources/Resources/node
+
+# Generated browser snapshots (contain PII)
+*-snapshot.md
+reddit-*.md
+linkedin-*.md
+
+# Stray screenshots and documents in repo root
+/*.jpeg
+/*.png
+/*.docx
+/*.doc
+/*.pdf
+
+# IDE directories
+.cursor/
+.windsurf/
+
+# Session logs / transcripts
+/*.txt
+
+# Skills (user-local)
+skills/
