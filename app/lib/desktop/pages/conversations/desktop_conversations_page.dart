@@ -21,6 +21,7 @@ import 'widgets/desktop_conversation_card.dart';
 import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
 import 'widgets/desktop_goals_widget.dart';
+import 'widgets/desktop_processing_conversation_widget.dart';
 import 'widgets/desktop_recording_widget.dart';
 import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_search_widget.dart';
@@ -311,9 +312,13 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                       opacity: _fadeAnimation,
                                       child: Container(
                                         padding: const EdgeInsets.fromLTRB(32, 24, 32, 24),
-                                        child: DesktopRecordingWidget(
-                                          hasConversations: true,
-                                          onStartRecording: _showExpandedRecordingView,
+                                        child: Column(
+                                          children: [
+                                            DesktopRecordingWidget(
+                                              hasConversations: true,
+                                              onStartRecording: _showExpandedRecordingView,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -348,6 +353,17 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                             ),
                                           ],
                                         ),
+                                      ),
+                                    ),
+                                  ),
+                                if (convoProvider.processingConversations.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                        child: getDesktopProcessingConversationsWidget(
+                                            convoProvider.processingConversations),
                                       ),
                                     ),
                                   ),
