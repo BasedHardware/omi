@@ -336,21 +336,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return event
         }
 
-        // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
-        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            _ = hotkeyHandler(event)
-        }
-
-        // Local monitor - for when THIS app is focused
-        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Check for Cmd+Enter -> open floating bar AI input
+        // Shared handler for Cmd+Enter (Ask AI) — works globally without activating main window
+        let cmdEnterHandler: (NSEvent) -> Bool = { event in
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if mods.contains(.command) && event.keyCode == 36 { // 36 = Return
                 Task { @MainActor in
                     FloatingControlBarManager.shared.openAIInput()
                 }
-                return nil // consume the event
+                return true
             }
+            return false
+        }
+
+        // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
+        globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+            if cmdEnterHandler(event) { return }
+            _ = hotkeyHandler(event)
+        }
+
+        // Local monitor - for when THIS app is focused
+        localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if cmdEnterHandler(event) { return nil }
             return hotkeyHandler(event)
         }
 
@@ -613,6 +619,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             toggleBarObserver = nil
         }
         GlobalShortcutManager.shared.unregisterShortcuts()
+
+        // Stop push-to-talk
+        PushToTalkManager.shared.cleanup()
 
         // Stop heartbeat timer
         sentryHeartbeatTimer?.invalidate()
