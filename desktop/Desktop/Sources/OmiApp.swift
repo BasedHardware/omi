@@ -23,6 +23,12 @@ enum LaunchMode: String {
     }
 }
 
+// MARK: - Dev Flags
+/// Check for --skip-onboarding flag to bypass onboarding during development
+func shouldSkipOnboarding() -> Bool {
+    return CommandLine.arguments.contains("--skip-onboarding")
+}
+
 // Simple observable state without Firebase types
 @MainActor
 class AuthState: ObservableObject {
@@ -107,6 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var localHotkeyMonitor: Any?
     private var windowObservers: [NSObjectProtocol] = []
     private var statusBarItem: NSStatusItem?
+    private var toggleBarObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
@@ -230,6 +237,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Register global hotkey for Rewind (Cmd+Shift+Space)
         setupGlobalHotkeys()
 
+        // Register Carbon-based global shortcuts for floating control bar (Cmd+\)
+        GlobalShortcutManager.shared.registerShortcuts()
+        toggleBarObserver = NotificationCenter.default.addObserver(
+            forName: GlobalShortcutManager.toggleFloatingBarNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                FloatingControlBarManager.shared.toggle()
+            }
+        }
+
         // Set up dock icon visibility based on window state
         setupDockIconObservers()
 
@@ -324,11 +343,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Local monitor - for when THIS app is focused
         localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Check for Cmd+Enter -> open floating bar AI input
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if mods.contains(.command) && event.keyCode == 36 { // 36 = Return
+                Task { @MainActor in
+                    FloatingControlBarManager.shared.openAIInput()
+                }
+                return nil // consume the event
+            }
             return hotkeyHandler(event)
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R)")
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Cmd+Enter (Ask AI), Cmd+\\ (Toggle bar)")
     }
 
     /// Set up observers to show/hide dock icon when main window appears/disappears
@@ -580,6 +607,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSEvent.removeMonitor(monitor)
             localHotkeyMonitor = nil
         }
+        // Remove floating bar observers and shortcuts
+        if let observer = toggleBarObserver {
+            NotificationCenter.default.removeObserver(observer)
+            toggleBarObserver = nil
+        }
+        GlobalShortcutManager.shared.unregisterShortcuts()
 
         // Stop heartbeat timer
         sentryHeartbeatTimer?.invalidate()
