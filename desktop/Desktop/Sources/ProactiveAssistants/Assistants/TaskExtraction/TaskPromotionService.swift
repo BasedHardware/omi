@@ -44,15 +44,17 @@ actor TaskPromotionService {
     /// Event-driven: called after task complete/delete, and on app startup.
     /// Loops calling the backend promote endpoint until it returns promoted=false
     /// (either cap reached or no staged tasks available).
-    func promoteIfNeeded() async {
+    /// Returns the list of promoted tasks so callers can insert them directly.
+    @discardableResult
+    func promoteIfNeeded() async -> [TaskActionItem] {
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
-            return
+            return []
         }
         isPromoting = true
         defer { isPromoting = false }
 
-        var totalPromoted = 0
+        var promotedTasks: [TaskActionItem] = []
         let maxIterations = targetCount  // Safety cap
 
         for _ in 0..<maxIterations {
@@ -60,7 +62,7 @@ actor TaskPromotionService {
                 let response = try await APIClient.shared.promoteTopStagedTask()
 
                 if response.promoted, let promotedTask = response.promotedTask {
-                    totalPromoted += 1
+                    promotedTasks.append(promotedTask)
                     log("TaskPromotion: Promoted task \(promotedTask.id) — \"\(promotedTask.description.prefix(60))\"")
 
                     // Sync promoted task to local ActionItemStorage
@@ -70,13 +72,6 @@ actor TaskPromotionService {
                         log("TaskPromotion: Synced promoted task to local ActionItemStorage")
                     } catch {
                         log("TaskPromotion: Failed to sync promoted task locally: \(error)")
-                    }
-
-                    // Delete from local StagedTaskStorage (if it was there)
-                    if response.promotedTask?.id != nil {
-                        // The staged task had a different backend ID before promotion,
-                        // but we can try to match by description since the backend already
-                        // deleted the staged task from Firestore
                     }
                 } else {
                     let reason = response.reason ?? "cap reached or no staged tasks"
@@ -89,14 +84,17 @@ actor TaskPromotionService {
             }
         }
 
-        if totalPromoted > 0 {
-            log("TaskPromotion: Promoted \(totalPromoted) tasks total")
+        if !promotedTasks.isEmpty {
+            log("TaskPromotion: Promoted \(promotedTasks.count) tasks total")
         }
+        return promotedTasks
     }
 
-    /// App startup: ensure minimum tasks are present
-    func ensureMinimumOnStartup() async {
+    /// App startup: ensure minimum tasks are present.
+    /// Returns promoted tasks so caller can insert them directly.
+    @discardableResult
+    func ensureMinimumOnStartup() async -> [TaskActionItem] {
         log("TaskPromotion: Checking minimum on startup")
-        await promoteIfNeeded()
+        return await promoteIfNeeded()
     }
 }

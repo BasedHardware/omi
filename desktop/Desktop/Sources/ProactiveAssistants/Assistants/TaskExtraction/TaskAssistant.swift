@@ -1096,6 +1096,21 @@ actor TaskAssistant: ProactiveAssistant {
                         matchType: "vector",
                         relevanceScore: record.relevanceScore
                     ))
+                } else if let staged = try await StagedTaskStorage.shared.getStagedTask(id: result.id) {
+                    // Fallback: ID belongs to a staged task (shared embedding index)
+                    let status: String
+                    if staged.deleted { status = "deleted" }
+                    else if staged.completed { status = "completed" }
+                    else { status = "active" }
+
+                    results.append(TaskSearchResult(
+                        id: result.id,
+                        description: staged.description,
+                        status: status,
+                        similarity: Double(result.similarity),
+                        matchType: "vector",
+                        relevanceScore: staged.relevanceScore
+                    ))
                 }
             }
         } catch {

@@ -527,7 +527,11 @@ class AuthService {
         NSLog("OMI AUTH: Updated name locally - given: %@, family: %@", newGivenName, newFamilyName)
 
         // Try to update Firebase profile (best effort)
-        if let user = Auth.auth().currentUser {
+        // Skip during impersonation to avoid overwriting the target user's display name
+        let isImpersonating = UserDefaults.standard.bool(forKey: "auth_isImpersonating")
+        if isImpersonating {
+            NSLog("OMI AUTH: Skipping Firebase displayName update (impersonation mode)")
+        } else if let user = Auth.auth().currentUser {
             do {
                 let changeRequest = user.createProfileChangeRequest()
                 changeRequest.displayName = fullName.trimmingCharacters(in: .whitespaces)

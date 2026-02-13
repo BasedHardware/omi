@@ -185,6 +185,11 @@ async fn promote_staged_task(
     };
 
     let active_count = active_ai_items.len();
+    tracing::info!(
+        "User {} has {} active AI tasks in action_items",
+        user.uid,
+        active_count
+    );
     if active_count >= 5 {
         return Ok(Json(PromoteResponse {
             promoted: false,
@@ -222,7 +227,11 @@ async fn promote_staged_task(
     }
 
     // Step 3: Find first non-duplicate task, deleting duplicates along the way
+    // Also track descriptions we've seen within this batch to deduplicate staged_tasks internally
     let mut selected_task = None;
+    let mut seen_descriptions: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut duplicate_ids: Vec<String> = Vec::new();
+
     for task in staged_tasks {
         let normalized = task
             .description
@@ -230,22 +239,39 @@ async fn promote_staged_task(
             .trim_end_matches(" [screen]")
             .to_lowercase();
 
-        if existing_descriptions.contains(&normalized) {
-            // Duplicate — hard-delete from staged_tasks silently
+        if existing_descriptions.contains(&normalized) || seen_descriptions.contains(&normalized) {
+            // Duplicate of action_items OR duplicate within staged_tasks — mark for deletion
             tracing::info!(
                 "Skipping duplicate staged task {} (\"{}\")",
                 task.id,
                 task.description
             );
-            let _ = state
-                .firestore
-                .delete_staged_task(&user.uid, &task.id)
-                .await;
+            duplicate_ids.push(task.id.clone());
             continue;
         }
 
-        selected_task = Some(task);
-        break;
+        seen_descriptions.insert(normalized);
+
+        if selected_task.is_none() {
+            selected_task = Some(task);
+        } else {
+            // Already found our candidate — keep scanning for duplicates to clean up
+        }
+    }
+
+    // Clean up all duplicates in the background
+    for dup_id in &duplicate_ids {
+        let _ = state
+            .firestore
+            .delete_staged_task(&user.uid, dup_id)
+            .await;
+    }
+    if !duplicate_ids.is_empty() {
+        tracing::info!(
+            "Cleaned up {} duplicate staged tasks for user {}",
+            duplicate_ids.len(),
+            user.uid
+        );
     }
 
     let top_task = match selected_task {

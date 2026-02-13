@@ -284,6 +284,40 @@ actor StagedTaskStorage {
         }
     }
 
+    // MARK: - Single Record Lookup
+
+    /// Get a single staged task by local ID (for vector search fallback)
+    func getStagedTask(id: Int64) async throws -> (id: Int64, description: String, relevanceScore: Int?, completed: Bool, deleted: Bool)? {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            guard let record = try StagedTaskRecord.fetchOne(database, key: id) else {
+                return nil
+            }
+            return (id: record.id ?? id, description: record.description, relevanceScore: record.relevanceScore, completed: record.completed, deleted: record.deleted)
+        }
+    }
+
+    // MARK: - Missing Embeddings
+
+    /// Get staged tasks missing embeddings (for backfill)
+    func getItemsMissingEmbeddings(limit: Int = 100) async throws -> [(id: Int64, description: String)] {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            try Row.fetchAll(database, sql: """
+                SELECT id, description FROM staged_tasks
+                WHERE embedding IS NULL AND deleted = 0
+                ORDER BY createdAt DESC LIMIT ?
+            """, arguments: [limit]).map { row in
+                (
+                    id: row["id"] as Int64,
+                    description: row["description"] as String
+                )
+            }
+        }
+    }
+
     // MARK: - Count
 
     func countActiveStagedTasks() async throws -> Int {
