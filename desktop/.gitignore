@@ -80,3 +80,9 @@ linkedin-*.md
 
 # Skills (user-local)
 skills/
+
+# Agent configs (user-local)
+.agents/
+
+# Claude project instructions (user-local, contains absolute paths)
+CLAUDE.md

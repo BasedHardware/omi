@@ -1,6 +1,20 @@
 {
   "releases": [
     {
+      "version": "0.7.0",
+      "date": "2026-02-12",
+      "changes": [
+        "Task chat: open a split-view chat panel alongside any task to work on it with AI",
+        "Staged tasks: AI discovers, scores, and promotes tasks in the background",
+        "AI agent upgraded to Claude Opus 4.6 with auto-recovery on crash",
+        "Chat context now uses your timezone for conversation dates",
+        "Default task filters set to Todo and Last 7 Days for a cleaner view",
+        "Fixed AI responses not persisting when switching chat sessions",
+        "Fixed sort switching spinner not clearing",
+        "Fixed task loading storms from rapid scrolling"
+      ]
+    },
+    {
       "version": "0.6.6",
       "date": "2026-02-12",
       "changes": [
