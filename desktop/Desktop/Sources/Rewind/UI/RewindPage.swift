@@ -261,7 +261,7 @@ struct RewindPage: View {
                 toggleMonitoring(enabled: !isMonitoring)
             }
         }
-        .help(isMonitoring ? "Rewind is capturing - click to stop" : "Rewind is off - click to start capturing")
+        .help(isMonitoring ? "Rewind is capturing your screen locally for your personal memory — click to stop" : "Rewind is off — click to start local screen capture for your memory")
     }
 
     private func toggleMonitoring(enabled: Bool) {
@@ -847,10 +847,23 @@ struct RewindPage: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(.white)
 
-            Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
+            Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen locally to build your personal memory.")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
+
+            // Privacy clarification
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield.fill")
+                    .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
+                Text("All screen captures are stored locally on your Mac — nothing leaves your device unless you choose to sync.")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(OmiColors.purplePrimary.opacity(0.08))
+            .cornerRadius(8)
 
             HStack(spacing: 8) {
                 Image(systemName: "lightbulb.fill")
@@ -863,7 +876,7 @@ struct RewindPage: View {
             .padding(.vertical, 10)
             .background(Color.white.opacity(0.1))
             .cornerRadius(8)
-            .padding(.top, 8)
+            .padding(.top, 4)
         }
     }
 
