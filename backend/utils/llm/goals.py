@@ -238,63 +238,80 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
     """
     Extract goal progress from text and update if found.
-    Checks all active goals. Returns dict with update info if successful, None otherwise.
+    Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
     """
     try:
         goals = goals_db.get_user_goals(uid)
         if not goals or not text or len(text) < 5:
             return None
 
-        updates = []
+        # Build a single prompt that evaluates all goals at once
+        goals_list = []
+        goals_by_id = {}
         for goal in goals:
+            goal_id = goal.get('id', '')
             goal_title = goal.get('title', '')
             current_value = goal.get('current_value', 0)
             target_value = goal.get('target_value', 10)
             goal_type = goal.get('goal_type', 'numeric')
+            goals_list.append(
+                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
+            )
+            goals_by_id[goal_id] = goal
 
-            prompt = f"""Analyze this message to see if it mentions progress toward this goal:
+        goals_text = '\n'.join(goals_list)
 
-Goal: "{goal_title}"
-Goal Type: {goal_type}
-Current Progress: {current_value} / {target_value}
+        prompt = f"""Analyze this message to see if it mentions progress toward ANY of these goals:
+
+Goals:
+{goals_text}
 
 User Message: "{text[:500]}"
 
-If the message mentions a NEW progress value for this goal, extract it.
-Handle formats like:
-- "1k users" → 1000
-- "500k" → 500000
-- "1.5 million" → 1500000
-- "1000" → 1000
-- Percentages relative to goal
+For each goal where the message mentions a NEW progress value, extract it.
+Handle formats like: "1k users" → 1000, "500k" → 500000, "1.5 million" → 1500000, percentages relative to goal.
 
-Return JSON only: {{"found": true/false, "value": number_or_null, "reasoning": "brief explanation"}}
-Only return found=true if you're confident this is about the SPECIFIC goal mentioned above."""
+Return a JSON array of results. Include ONLY goals where you found progress (found=true). If no goals match, return an empty array [].
+Format: [{{"goal_id": "...", "found": true, "value": <number>, "reasoning": "brief explanation"}}]
+Only include a goal if you're confident the message is about that SPECIFIC goal."""
 
-            with track_usage(uid, Features.GOALS):
-                response = llm_mini.invoke(prompt).content
+        with track_usage(uid, Features.GOALS):
+            response = llm_mini.invoke(prompt).content
 
-            # Extract JSON from response
-            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
-            if match:
-                result = json.loads(match.group())
-                if result.get('found') and result.get('value') is not None:
-                    new_value = float(result['value'])
-                    old_value = current_value
-                    if new_value != old_value:
-                        goals_db.update_goal_progress(uid, goal['id'], new_value)
-                        print(
-                            f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
-                        )
-                        updates.append(
-                            {
-                                "goal_id": goal['id'],
-                                "goal_title": goal_title,
-                                "old_value": old_value,
-                                "new_value": new_value,
-                                "reasoning": result.get('reasoning'),
-                            }
-                        )
+        # Extract JSON array from response
+        match = re.search(r'\[.*\]', response, re.DOTALL)
+        if not match:
+            return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
+
+        results = json.loads(match.group())
+        if not isinstance(results, list):
+            results = [results]
+
+        updates = []
+        for result in results:
+            if not result.get('found') or result.get('value') is None:
+                continue
+            goal_id = result.get('goal_id', '')
+            goal = goals_by_id.get(goal_id)
+            if not goal:
+                continue
+            new_value = float(result['value'])
+            old_value = goal.get('current_value', 0)
+            if new_value != old_value:
+                goals_db.update_goal_progress(uid, goal_id, new_value)
+                goal_title = goal.get('title', '')
+                print(
+                    f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                )
+                updates.append(
+                    {
+                        "goal_id": goal_id,
+                        "goal_title": goal_title,
+                        "old_value": old_value,
+                        "new_value": new_value,
+                        "reasoning": result.get('reasoning'),
+                    }
+                )
 
         if updates:
             return {"status": "updated", "updates": updates}
