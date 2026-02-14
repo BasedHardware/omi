@@ -126,16 +126,11 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            automaticallyImplyLeading: true,
             title: Text(
               context.l10n.dataPrivacy,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             centerTitle: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new),
-              onPressed: () => Navigator.pop(context),
-            ),
             elevation: 0,
           ),
           body: Stack(
