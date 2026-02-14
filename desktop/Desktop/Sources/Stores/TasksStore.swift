@@ -724,7 +724,7 @@ class TasksStore: ObservableObject {
     /// These were created by the old save_action_items path that bypassed the staging pipeline.
     private func migrateConversationItemsToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "conversationItemsMigrationCompleted_v1_\(userId)"
+        let migrationKey = "conversationItemsMigrationCompleted_v2_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
 

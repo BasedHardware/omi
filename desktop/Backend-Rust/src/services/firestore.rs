@@ -2556,20 +2556,20 @@ impl FirestoreService {
         &self,
         uid: &str,
     ) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
-        // Fetch all incomplete, non-deleted action items
+        // Fetch all incomplete, non-deleted action items.
+        // NOTE: get_action_items runs enrich_action_items_with_source which populates
+        // the source field from the conversation. So we can't check source.is_none()
+        // after that. Instead, we filter by conversation_id.is_some() — all items with
+        // a conversation_id were created by the old save_action_items path (confirmed
+        // 0 false positives: no items have both conversation_id AND a real source in Firestore).
         let all_items = self
             .get_action_items(uid, 10000, 0, Some(false), None, None, None, None, None, None, None)
             .await?;
 
-        // Filter: has conversation_id but no source → created by old save_action_items path
+        // Filter: has conversation_id → created by old save_action_items path
         let bad_items: Vec<&ActionItemDB> = all_items
             .iter()
-            .filter(|item| {
-                item.conversation_id.is_some()
-                    && (item.source.is_none()
-                        || item.source.as_deref() == Some("")
-                        || item.source.as_deref() == Some("unknown"))
-            })
+            .filter(|item| item.conversation_id.is_some())
             .collect();
 
         if bad_items.is_empty() {
