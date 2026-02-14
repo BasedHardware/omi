@@ -419,6 +419,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func captureFrame() async {
         guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
+        // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
+        // This avoids burning through consecutive failures and generating unnecessary error events
+        if isInSpecialSystemMode() {
+            return
+        }
+
         // Get current window info (use real app name, not cached)
         let (realAppName, windowTitle, windowID) = WindowMonitor.getActiveWindowInfoStatic()
 
@@ -635,6 +641,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             Task { @MainActor in
                 self?.wasMonitoringBeforeSleep = self?.isMonitoring ?? false
                 log("ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
+
+                // Pause the capture timer while sleeping (same as screen lock)
+                self?.captureTimer?.invalidate()
+                self?.captureTimer = nil
             }
         }
         systemEventObservers.append(sleepObserver)
@@ -684,7 +694,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         consecutiveFailures = 0
         lastCaptureSucceeded = true
 
-        // If we were monitoring before sleep, reinitialize capture service
+        // If we were monitoring before sleep, reinitialize capture service and restart timer
         if wasMonitoringBeforeSleep && isMonitoring {
             log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
 
@@ -693,6 +703,19 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             // Refresh permission state
             refreshScreenRecordingPermission()
+
+            // Restart capture timer after a brief delay to let the system settle
+            captureTimer?.invalidate()
+            captureTimer = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self = self, self.isMonitoring else { return }
+                self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
+                    Task { @MainActor in
+                        await self?.captureFrame()
+                    }
+                }
+                log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
+            }
         }
 
         wasMonitoringBeforeSleep = false
