@@ -215,6 +215,9 @@ struct SettingsContentView: View {
         case taskAssistant = "Task Assistant"
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
+        case analysisThrottle = "Analysis Throttle"
+        case preferences = "Preferences"
+        case troubleshooting = "Troubleshooting"
 
         var icon: String {
             switch self {
@@ -225,6 +228,9 @@ struct SettingsContentView: View {
             case .taskAssistant: return "checklist"
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
+            case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .preferences: return "slider.horizontal.3"
+            case .troubleshooting: return "wrench.and.screwdriver"
             }
         }
     }
