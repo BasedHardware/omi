@@ -1,6 +1,7 @@
 import Foundation
 import WatchConnectivity
 import AVFoundation
+import WidgetKit
 
 @MainActor
 class WatchAudioRecorderViewModel: NSObject, ObservableObject {
@@ -46,6 +47,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             if success {
                 self.setupAudioStreaming()
                 self.isRecording = true
+                SharedState.isWatchRecording = true
                 self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
             } else {
                 self.session.sendMessage(["method": "recordingError", "error": "Microphone permission denied"], replyHandler: nil)
@@ -59,6 +61,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         }
 
         isRecording = false
+        SharedState.isWatchRecording = false
         isStreaming = false
 
         // Stop audio streaming
@@ -362,12 +365,24 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
                 BatteryManager.shared.sendBatteryLevel()
             case "requestWatchInfo":
                 BatteryManager.shared.sendWatchInfo()
+            case "deviceRecordingStarted":
+                SharedState.isDeviceRecording = true
+            case "deviceRecordingStopped":
+                SharedState.isDeviceRecording = false
+            case "deviceConnected":
+                SharedState.isDeviceConnected = true
+            case "deviceDisconnected":
+                SharedState.isDeviceConnected = false
+            case "deviceBatteryUpdate":
+                if let level = message["batteryLevel"] as? Float {
+                    SharedState.deviceBatteryLevel = level
+                }
             default:
                 print("Unknown method: \(method)")
             }
         }
     }
-    
+
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
         Task {
             guard let method = userInfo["method"] as? String else { return }
@@ -376,6 +391,18 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
                 BatteryManager.shared.sendBatteryLevel()
             case "requestWatchInfo":
                 BatteryManager.shared.sendWatchInfo()
+            case "deviceRecordingStarted":
+                SharedState.isDeviceRecording = true
+            case "deviceRecordingStopped":
+                SharedState.isDeviceRecording = false
+            case "deviceConnected":
+                SharedState.isDeviceConnected = true
+            case "deviceDisconnected":
+                SharedState.isDeviceConnected = false
+            case "deviceBatteryUpdate":
+                if let level = userInfo["batteryLevel"] as? Float {
+                    SharedState.deviceBatteryLevel = level
+                }
             default:
                 print("Unknown background method: \(method)")
             }
