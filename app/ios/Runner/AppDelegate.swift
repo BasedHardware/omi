@@ -230,6 +230,22 @@ extension FlutterError: Error {}
     }
     }
 
+    private func handleAskQuestion(audioData: Data, sampleRate: Double) {
+        // Save audio to temp file and notify Flutter via method channel
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("ask_question_\(UUID().uuidString).pcm")
+        do {
+            try audioData.write(to: tempURL)
+            DispatchQueue.main.async {
+                self.methodChannel?.invokeMethod("onAskQuestion", arguments: [
+                    "filePath": tempURL.path,
+                    "sampleRate": sampleRate
+                ])
+            }
+        } catch {
+            print("Failed to save ask question audio: \(error)")
+        }
+    }
+
     private func handleAudioChunk(_ message: [String: Any]) {
         guard isRecordingActive else {
             print("Ignoring audio chunk - recording not active") // probably started recording with main omi app closed
@@ -383,13 +399,18 @@ extension AppDelegate: WCSessionDelegate {
                         }
                     }
                 }
+            case "askQuestion":
+                if let audioData = message["audioData"] as? Data,
+                   let sampleRate = message["sampleRate"] as? Double {
+                    self.handleAskQuestion(audioData: audioData, sampleRate: sampleRate)
+                }
             case "batteryUpdate":
                 if let batteryLevel = message["batteryLevel"] as? Double,
                    let batteryState = message["batteryState"] as? Int {
                     UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
                     UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
                     UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
-                    
+
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
                             switch result {
@@ -452,13 +473,18 @@ extension AppDelegate: WCSessionDelegate {
                         }
                     }
                 }
+            case "askQuestion":
+                if let audioData = userInfo["audioData"] as? Data,
+                   let sampleRate = userInfo["sampleRate"] as? Double {
+                    self.handleAskQuestion(audioData: audioData, sampleRate: sampleRate)
+                }
             case "batteryUpdate":
                 if let batteryLevel = userInfo["batteryLevel"] as? Double,
                    let batteryState = userInfo["batteryState"] as? Int {
                     UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
                     UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
                     UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
-                    
+
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
                             switch result {
