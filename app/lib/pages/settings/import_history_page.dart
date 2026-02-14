@@ -784,13 +784,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
+        elevation: 0,
+        centerTitle: true,
         title: Text(
           context.l10n.importData,
           style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           Container(
