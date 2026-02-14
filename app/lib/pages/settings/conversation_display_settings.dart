@@ -238,17 +238,13 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        leading: IconButton(
-          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         title: Text(
           context.l10n.conversationDisplay,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
       ),
