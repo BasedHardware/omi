@@ -219,6 +219,23 @@ class MixpanelManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
+  // Phone Calls (VoIP)
+  void phoneCallPageOpened() => track('Phone Call Page Opened');
+
+  void phoneCallVerificationStarted() => track('Phone Call Verification Started');
+
+  void phoneCallVerificationCompleted() => track('Phone Call Verification Completed');
+
+  void phoneCallStarted({String? contactName}) =>
+      track('Phone Call Started', properties: {'has_contact_name': contactName != null});
+
+  void phoneCallConnected() => track('Phone Call Connected');
+
+  void phoneCallEnded({required int durationSeconds}) =>
+      track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
+
+  void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
+
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
