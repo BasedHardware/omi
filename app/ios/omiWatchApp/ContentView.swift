@@ -6,7 +6,9 @@ struct WatchRecorderView: View {
     @State private var pulseScale: CGFloat = 1.0
     @State private var rippleScale: CGFloat = 1.0
     @State private var rippleOpacity: Double = 0.0
-    
+    var autoStartRecording: Bool = false
+    var autoStartDeviceRecording: Bool = false
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -85,6 +87,12 @@ struct WatchRecorderView: View {
         .onAppear {
             if viewModel.isRecording {
                 startRippleAnimation()
+            }
+            if autoStartRecording && !viewModel.isRecording {
+                viewModel.startRecording()
+            }
+            if autoStartDeviceRecording {
+                viewModel.session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: nil)
             }
         }
         .onChange(of: viewModel.isRecording) { isRecording in
