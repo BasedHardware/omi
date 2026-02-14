@@ -226,7 +226,7 @@ async fn create_conversation_from_segments(
         created_at: request.started_at,
         started_at: request.started_at,
         finished_at: request.finished_at,
-        source: ConversationSource::Desktop,
+        source: request.source.clone(),
         language: request.language.clone(),
         status: ConversationStatus::Completed,
         discarded: false,
@@ -248,15 +248,32 @@ async fn create_conversation_from_segments(
         return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
     }
 
-    // Save action items
+    // Save action items as staged tasks (go through ranking/promotion pipeline)
     if !processed.action_items.is_empty() {
-        if let Err(e) = state
-            .firestore
-            .save_action_items(&user.uid, &conversation_id, &processed.action_items)
-            .await
-        {
-            tracing::error!("Failed to save action items: {}", e);
+        let source_str = format!("transcription:{:?}", request.source).to_lowercase();
+        for item in &processed.action_items {
+            if let Err(e) = state
+                .firestore
+                .create_staged_task(
+                    &user.uid,
+                    &item.description,
+                    item.due_at,
+                    Some(&source_str),
+                    None, // priority - LLM doesn't extract this
+                    None, // metadata
+                    None, // category
+                    None, // relevance_score - will be ranked by prioritization service
+                )
+                .await
+            {
+                tracing::error!("Failed to save staged task: {}", e);
+            }
         }
+        tracing::info!(
+            "Saved {} action items as staged tasks for conversation {}",
+            processed.action_items.len(),
+            conversation_id
+        );
     }
 
     // Save memories
@@ -805,12 +822,24 @@ async fn merge_conversations(
                     merged_conversation.structured.title = format!("{} (merged)", merged_conversation.structured.title);
                     merged_conversation.status = ConversationStatus::Completed;
 
-                    // Save action items if any
+                    // Save action items as staged tasks
                     if !processed.action_items.is_empty() {
-                        let _ = state
-                            .firestore
-                            .save_action_items(&user.uid, &new_conversation_id, &processed.action_items)
-                            .await;
+                        let source_str = format!("transcription:{:?}", merged_conversation.source).to_lowercase();
+                        for item in &processed.action_items {
+                            let _ = state
+                                .firestore
+                                .create_staged_task(
+                                    &user.uid,
+                                    &item.description,
+                                    item.due_at,
+                                    Some(&source_str),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                )
+                                .await;
+                        }
                     }
 
                     // Save memories if any
