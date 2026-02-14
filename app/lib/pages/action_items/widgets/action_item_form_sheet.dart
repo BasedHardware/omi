@@ -210,7 +210,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to create share link'), backgroundColor: Colors.red));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToCreateShareLink), backgroundColor: Colors.red));
     }
   }
 
