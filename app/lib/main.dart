@@ -57,6 +57,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/watch_ask_question_service.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
@@ -205,6 +206,12 @@ Future _init() async {
   }
 
   await ServiceManager.instance().start();
+
+  // Initialize watch ask question handler (iOS only)
+  if (PlatformService.isIOS) {
+    WatchAskQuestionService().initialize();
+  }
+
   return;
 }
 
