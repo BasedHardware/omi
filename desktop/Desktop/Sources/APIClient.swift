@@ -1950,7 +1950,9 @@ extension APIClient {
             unit: unit
         )
 
-        return try await post("v1/goals", body: request)
+        let goal: Goal = try await post("v1/goals", body: request)
+        goalsCache = nil
+        return goal
     }
 
     /// Updates a goal's progress
@@ -2001,12 +2003,15 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        return try decoder.decode(Goal.self, from: data)
+        let goal = try decoder.decode(Goal.self, from: data)
+        goalsCache = nil
+        return goal
     }
 
     /// Deletes a goal
     func deleteGoal(id: String) async throws {
         try await delete("v1/goals/\(id)")
+        goalsCache = nil
     }
 
     /// Gets progress history for a goal
