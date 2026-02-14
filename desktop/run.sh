@@ -257,6 +257,15 @@ fi
 step "Removing quarantine attributes..."
 xattr -cr "$APP_BUNDLE"
 
+step "Clearing stale LaunchServices registration..."
+# Unregister first to clear any launch-disabled flag from stale entries,
+# then let `open` re-register the app fresh. Without this, notifications
+# fail with "Notifications are not allowed for this application" because
+# the launch-disabled flag prevents notification center registration.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$APP_BUNDLE" 2>/dev/null || true
+$LSREGISTER -f "$APP_BUNDLE" 2>/dev/null || true
+
 step "Starting app..."
 
 # Print summary

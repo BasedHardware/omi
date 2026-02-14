@@ -145,7 +145,15 @@ public class ProactiveAssistantsPlugin: NSObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    log("Notification permission request error: \(error.localizedDescription)")
+                    let nsError = error as NSError
+                    log("Notification permission request error: \(error.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))")
+
+                    // UNErrorDomain code 1 = notificationsNotAllowed
+                    // This happens when LaunchServices has the app marked as launch-disabled,
+                    // preventing notification center registration. Repair and retry once.
+                    if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                        Self.repairNotificationRegistration()
+                    }
                 }
 
                 if !granted {
@@ -154,6 +162,49 @@ public class ProactiveAssistantsPlugin: NSObject {
 
                 // Continue with monitoring regardless of notification permission
                 self?.continueStartMonitoring(completion: completion)
+            }
+        }
+    }
+
+    /// Repair LaunchServices registration when notification authorization fails with "not allowed".
+    /// The launch-disabled flag in LaunchServices prevents notification center registration.
+    /// Unregistering and re-registering clears the flag, then retries authorization.
+    static func repairNotificationRegistration() {
+        let appPath = Bundle.main.bundlePath
+        log("Repairing LaunchServices registration for notifications: \(appPath)")
+
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+        // Unregister to clear stale/launch-disabled entries
+        let unregister = Process()
+        unregister.executableURL = URL(fileURLWithPath: lsregister)
+        unregister.arguments = ["-u", appPath]
+        try? unregister.run()
+        unregister.waitUntilExit()
+
+        // Force re-register
+        let register = Process()
+        register.executableURL = URL(fileURLWithPath: lsregister)
+        register.arguments = ["-f", appPath]
+        try? register.run()
+        register.waitUntilExit()
+
+        // Also re-register via LSRegisterURL
+        if let cfURL = Bundle.main.bundleURL as CFURL? {
+            LSRegisterURL(cfURL, true)
+        }
+
+        log("LaunchServices re-registration complete, retrying notification authorization...")
+
+        // Retry authorization after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NSApp.activate(ignoringOtherApps: true)
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                if let error = error {
+                    log("Notification retry after repair failed: \(error.localizedDescription)")
+                } else if granted {
+                    log("Notification permission granted after LaunchServices repair")
+                }
             }
         }
     }
