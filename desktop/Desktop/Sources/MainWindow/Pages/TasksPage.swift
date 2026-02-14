@@ -3529,6 +3529,12 @@ struct TaskRow: View {
                         .lineLimit(1...4)
                         .focused($isTextFieldFocused)
                         .disabled(isMultiSelectMode)
+                        .onKeyPress(.escape) {
+                            debounceTask?.cancel()
+                            editText = task.description
+                            isTextFieldFocused = false
+                            return .handled
+                        }
                         .onSubmit {
                             debounceTask?.cancel()
                             commitEdit()
