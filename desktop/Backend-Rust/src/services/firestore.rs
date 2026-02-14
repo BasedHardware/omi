@@ -2485,6 +2485,29 @@ impl FirestoreService {
         category: Option<&str>,
         relevance_score: Option<i32>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
+        // Reject empty descriptions
+        let description = description.trim();
+        if description.is_empty() {
+            return Err("Cannot create staged task with empty description".into());
+        }
+
+        // Check for exact-match duplicate (case-insensitive)
+        let existing = self.get_staged_tasks(uid, 200, 0).await.unwrap_or_default();
+        let desc_lower = description.to_lowercase();
+        if existing.iter().any(|t| t.description.trim().to_lowercase() == desc_lower) {
+            tracing::info!(
+                "Skipping duplicate staged task for user {}: {}",
+                uid,
+                &description[..description.len().min(80)]
+            );
+            // Return the existing item instead of creating a duplicate
+            let existing_item = existing
+                .into_iter()
+                .find(|t| t.description.trim().to_lowercase() == desc_lower)
+                .unwrap();
+            return Ok(existing_item);
+        }
+
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
