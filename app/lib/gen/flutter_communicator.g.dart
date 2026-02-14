@@ -488,6 +488,8 @@ abstract class WatchRecorderFlutterAPI {
 
   void onWatchBatteryUpdate(double batteryLevel, int batteryState);
 
+  void onDeviceRecordingRequested();
+
   static void setUp(WatchRecorderFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -681,6 +683,25 @@ abstract class WatchRecorderFlutterAPI {
               'Argument for dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null, expected non-null int.');
           try {
             api.onWatchBatteryUpdate(arg_batteryLevel!, arg_batteryState!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.watch.WatchRecorderFlutterAPI.onDeviceRecordingRequested$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          try {
+            api.onDeviceRecordingRequested();
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
