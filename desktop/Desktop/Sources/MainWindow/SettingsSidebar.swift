@@ -38,6 +38,9 @@ struct SettingsSidebar: View {
                             onTap: {
                                 withAnimation(.easeInOut(duration: 0.15)) {
                                     selectedSection = section
+                                    if section == .advanced && selectedAdvancedSubsection == nil {
+                                        selectedAdvancedSubsection = .aiUserProfile
+                                    }
                                 }
                             }
                         )
