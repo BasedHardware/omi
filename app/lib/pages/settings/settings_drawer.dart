@@ -30,18 +30,12 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 
-enum SettingsMode {
-  no_device,
-  omi,
-}
+enum SettingsMode { no_device, omi }
 
 class SettingsDrawer extends StatefulWidget {
   final SettingsMode mode;
 
-  const SettingsDrawer({
-    super.key,
-    this.mode = SettingsMode.omi,
-  });
+  const SettingsDrawer({super.key, this.mode = SettingsMode.omi});
 
   @override
   State<SettingsDrawer> createState() => _SettingsDrawerState();
@@ -118,30 +112,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 1),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: Row(
             children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: icon,
-              ),
+              SizedBox(width: 24, height: 24, child: icon),
               const SizedBox(width: 16),
               Expanded(
                 child: Row(
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                     if (showBetaTag) ...[
                       const SizedBox(width: 8),
@@ -181,18 +164,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         ),
                       ),
                     ],
-                    if (trailingChip != null) ...[
-                      const SizedBox(width: 8),
-                      trailingChip,
-                    ],
+                    if (trailingChip != null) ...[const SizedBox(width: 8), trailingChip],
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF3C3C43),
-                size: 20,
-              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
             ],
           ),
         ),
@@ -202,13 +178,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: children,
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+      child: Column(children: children),
     );
   }
 
@@ -224,22 +195,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       children: [
         Text(
           displayText,
-          style: const TextStyle(
-            color: Color(0xFF8E8E93),
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-          ),
+          style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w400),
         ),
         const SizedBox(width: 2),
         GestureDetector(
           onTap: _copyVersionInfo,
           child: Container(
             padding: const EdgeInsets.all(2),
-            child: const Icon(
-              Icons.copy,
-              size: 12,
-              color: Color(0xFF8E8E93),
-            ),
+            child: const Icon(Icons.copy, size: 12, color: Color(0xFF8E8E93)),
           ),
         ),
       ],
@@ -276,13 +239,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
               ),
               child: Text(
                 context.l10n.appAndDeviceCopied,
@@ -303,266 +260,241 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   Widget _buildOmiModeContent(BuildContext context) {
-    return Consumer<UsageProvider>(builder: (context, usageProvider, child) {
-      return Column(
-        children: [
-          // Profile & Notifications Section
-          _buildSectionContainer(
-            children: [
-              // Wrapped 2025 - temporarily disabled
-              // _buildSettingsItem(
-              //   title: context.l10n.wrapped2025,
-              //   icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-              //   showNewTag: true,
-              //   onTap: () {
-              //     Navigator.of(context).push(
-              //       MaterialPageRoute(
-              //         builder: (context) => const Wrapped2025Page(),
-              //       ),
-              //     );
-              //   },
-              // ),
-              // const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.profile,
-                icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  routeToPage(context, const ProfilePage());
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.notifications,
-                icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  routeToPage(context, const NotificationsSettingsPage());
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              Consumer<UsageProvider>(
-                builder: (context, usageProvider, child) {
-                  final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
-                  return _buildSettingsItem(
-                    title: context.l10n.planAndUsage,
-                    icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
-                    trailingChip: isUnlimited
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const FaIcon(
-                                  FontAwesomeIcons.crown,
-                                  color: Colors.amber,
-                                  size: 10,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  context.l10n.pro.toUpperCase(),
-                                  style: const TextStyle(
-                                    color: Colors.amber,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
+    return Consumer<UsageProvider>(
+      builder: (context, usageProvider, child) {
+        return Column(
+          children: [
+            // Profile & Notifications Section
+            _buildSectionContainer(
+              children: [
+                // Wrapped 2025 - temporarily disabled
+                // _buildSettingsItem(
+                //   title: context.l10n.wrapped2025,
+                //   icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                //   showNewTag: true,
+                //   onTap: () {
+                //     Navigator.of(context).push(
+                //       MaterialPageRoute(
+                //         builder: (context) => const Wrapped2025Page(),
+                //       ),
+                //     );
+                //   },
+                // ),
+                // const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.profile,
+                  icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const ProfilePage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.notifications,
+                  icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const NotificationsSettingsPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                Consumer<UsageProvider>(
+                  builder: (context, usageProvider, child) {
+                    final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                    return _buildSettingsItem(
+                      title: context.l10n.planAndUsage,
+                      icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
+                      trailingChip: isUnlimited
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const FaIcon(FontAwesomeIcons.crown, color: Colors.amber, size: 10),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    context.l10n.pro.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const UsagePage(),
+                                ],
+                              ),
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage()));
+                      },
+                    );
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.offlineSync,
+                  icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const SyncPage()));
+                  },
+                ),
+                Consumer<DeviceProvider>(
+                  builder: (context, deviceProvider, child) {
+                    if (!deviceProvider.isConnected) {
+                      return const SizedBox.shrink();
+                    }
+                    return Column(
+                      children: [
+                        const Divider(height: 1, color: Color(0xFF3C3C43)),
+                        _buildSettingsItem(
+                          title: context.l10n.deviceSettings,
+                          icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
+                          onTap: () {
+                            Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
+                          },
                         ),
-                      );
-                    },
-                  );
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.offlineSync,
-                icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const SyncPage(),
-                    ),
-                  );
-                },
-              ),
-              Consumer<DeviceProvider>(
-                builder: (context, deviceProvider, child) {
-                  if (!deviceProvider.isConnected) {
-                    return const SizedBox.shrink();
-                  }
-                  return Column(
-                    children: [
-                      const Divider(height: 1, color: Color(0xFF3C3C43)),
-                      _buildSettingsItem(
-                        title: context.l10n.deviceSettings,
-                        icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const DeviceSettings(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.integrations,
-                icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
-                showBetaTag: true,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const IntegrationsPage(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          // Support & Settings Section
-          _buildSectionContainer(
-            children: [
-              if (PlatformService.isIntercomSupported) ...[
-                _buildSettingsItem(
-                  title: context.l10n.feedbackBug,
-                  icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    final Uri url = Uri.parse('https://feedback.omi.me/');
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                    }
+                      ],
+                    );
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
-                  title: context.l10n.helpCenter,
-                  icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    final Uri url = Uri.parse('https://help.omi.me/en/');
-                    if (await canLaunchUrl(url)) {
-                      try {
-                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                      } catch (e) {
-                        await launchUrl(url, mode: LaunchMode.externalApplication);
-                      }
-                    }
+                  title: context.l10n.integrations,
+                  icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
                   },
                 ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
               ],
-              _buildSettingsItem(
-                title: context.l10n.developerSettings,
-                icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
-                  await routeToPage(context, const DeveloperSettingsPage());
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.whatsNew,
-                icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  MixpanelManager().whatsNewOpened();
-                  ChangelogSheet.showWithLoading(
-                    context,
-                    () => getAppChangelogs(limit: 5),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
+            ),
+            const SizedBox(height: 32),
 
-          // Share & Get Section
-          _buildSectionContainer(
-            children: [
-              _buildSettingsItem(
-                title: context.l10n.getOmiForMac,
-                icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
-                  final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: context.l10n.referralProgram,
-                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-                showNewTag: true,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const ReferralPage(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-
-          // Sign Out Section
-          _buildSectionContainer(
-            children: [
-              _buildSettingsItem(
-                title: context.l10n.signOut,
-                icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
-                onTap: () async {
-                  // Capture the provider reference before any navigation
-                  final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
-                  final navigator = Navigator.of(context);
-
-                  navigator.pop(); // Close the settings drawer
-
-                  await showDialog(
-                    context: context,
-                    builder: (ctx) {
-                      return getDialog(
-                        ctx,
-                        () => Navigator.of(ctx).pop(),
-                        () async {
-                          Navigator.of(ctx).pop();
-                          await SharedPreferencesUtil().clear();
-                          await AuthService.instance.signOut();
-                          personaProvider.setRouting(PersonaProfileRouting.no_device);
-                          if (context.mounted) {
-                            routeToPage(context, const AppShell(), replace: true);
-                          }
-                        },
-                        context.l10n.signOutQuestion,
-                        context.l10n.signOutConfirmation,
-                      );
+            // Support & Settings Section
+            _buildSectionContainer(
+              children: [
+                if (PlatformService.isIntercomSupported) ...[
+                  _buildSettingsItem(
+                    title: context.l10n.feedbackBug,
+                    icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
+                    onTap: () async {
+                      final Uri url = Uri.parse('https://feedback.omi.me/');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      }
                     },
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF3C3C43)),
+                  _buildSettingsItem(
+                    title: context.l10n.helpCenter,
+                    icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
+                    onTap: () async {
+                      final Uri url = Uri.parse('https://help.omi.me/en/');
+                      if (await canLaunchUrl(url)) {
+                        try {
+                          await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                        } catch (e) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
+                      }
+                    },
+                  ),
+                  const Divider(height: 1, color: Color(0xFF3C3C43)),
+                ],
+                _buildSettingsItem(
+                  title: context.l10n.developerSettings,
+                  icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    await routeToPage(context, const DeveloperSettingsPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.whatsNew,
+                  icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    MixpanelManager().whatsNewOpened();
+                    ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
 
-          // Version Info
-          _buildVersionInfoSection(),
-          const SizedBox(height: 24),
-        ],
-      );
-    });
+            // Share & Get Section
+            _buildSectionContainer(
+              children: [
+                _buildSettingsItem(
+                  title: context.l10n.getOmiForMac,
+                  icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.referralProgram,
+                  icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                  showNewTag: true,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ReferralPage()));
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Sign Out Section
+            _buildSectionContainer(
+              children: [
+                _buildSettingsItem(
+                  title: context.l10n.signOut,
+                  icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () async {
+                    // Capture the provider reference before any navigation
+                    final personaProvider = Provider.of<PersonaProvider>(context, listen: false);
+                    final navigator = Navigator.of(context);
+
+                    navigator.pop(); // Close the settings drawer
+
+                    await showDialog(
+                      context: context,
+                      builder: (ctx) {
+                        return getDialog(
+                          ctx,
+                          () => Navigator.of(ctx).pop(),
+                          () async {
+                            Navigator.of(ctx).pop();
+                            await SharedPreferencesUtil().clear();
+                            await AuthService.instance.signOut();
+                            personaProvider.setRouting(PersonaProfileRouting.no_device);
+                            if (context.mounted) {
+                              routeToPage(context, const AppShell(), replace: true);
+                            }
+                          },
+                          context.l10n.signOutQuestion,
+                          context.l10n.signOutConfirmation,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Version Info
+            _buildVersionInfoSection(),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildNoDeviceModeContent(BuildContext context) {
@@ -635,10 +567,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       height: MediaQuery.of(context).size.height * 0.9,
       decoration: const BoxDecoration(
         color: Color(0xFF000000),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
       ),
       child: Column(
         children: [
@@ -647,10 +576,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             margin: const EdgeInsets.only(top: 8),
             height: 4,
             width: 36,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3C3C43),
-              borderRadius: BorderRadius.circular(2),
-            ),
+            decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
           ),
           // Header
           Container(
@@ -661,11 +587,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 Center(
                   child: Text(
                     context.l10n.settings,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
                 // Done button positioned to the right
@@ -675,11 +597,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     onTap: () => Navigator.pop(context),
                     child: Text(
                       context.l10n.done,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
                     ),
                   ),
                 ),
@@ -691,8 +609,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child:
-                  widget.mode == SettingsMode.omi ? _buildOmiModeContent(context) : _buildNoDeviceModeContent(context),
+              child: widget.mode == SettingsMode.omi
+                  ? _buildOmiModeContent(context)
+                  : _buildNoDeviceModeContent(context),
             ),
           ),
         ],
