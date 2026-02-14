@@ -10,12 +10,10 @@ class PrivacyInfoPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: Text(context.l10n.privacyInformation),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        title: Text(context.l10n.privacyInformation, style: const TextStyle(fontWeight: FontWeight.w600)),
+        centerTitle: true,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
