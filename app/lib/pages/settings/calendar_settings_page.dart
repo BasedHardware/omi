@@ -56,17 +56,13 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       appBar: AppBar(
         backgroundColor: ResponsiveHelper.backgroundPrimary,
         elevation: 0,
+        centerTitle: true,
         title: Text(
           context.l10n.calendarSettings,
           style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
-            fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
-          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Consumer<CalendarProvider>(
