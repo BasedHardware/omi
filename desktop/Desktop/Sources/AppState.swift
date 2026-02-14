@@ -432,49 +432,19 @@ class AppState: ObservableObject {
     /// The "launch-disabled" flag in LaunchServices prevents the notification center
     /// from registering the app. This unregisters and re-registers to clear the flag.
     private func repairNotificationRegistrationAndRetry() {
-        guard let appURL = Bundle.main.bundleURL as CFURL? else {
-            log("Cannot repair notification registration: no bundle URL")
-            return
-        }
+        // Use the shared repair utility (also used by ProactiveAssistantsPlugin)
+        ProactiveAssistantsPlugin.repairNotificationRegistration()
 
-        let appPath = Bundle.main.bundlePath
-        log("Repairing LaunchServices registration for notifications: \(appPath)")
-
-        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-        // Step 1: Unregister to clear stale/launch-disabled entries
-        let unregister = Process()
-        unregister.executableURL = URL(fileURLWithPath: lsregister)
-        unregister.arguments = ["-u", appPath]
-        try? unregister.run()
-        unregister.waitUntilExit()
-
-        // Step 2: Force re-register
-        let register = Process()
-        register.executableURL = URL(fileURLWithPath: lsregister)
-        register.arguments = ["-f", appPath]
-        try? register.run()
-        register.waitUntilExit()
-
-        // Step 3: Also re-register via LSRegisterURL for good measure
-        LSRegisterURL(appURL, true)
-
-        log("LaunchServices re-registration complete, retrying notification authorization...")
-
-        // Step 4: Retry authorization after a short delay to let LaunchServices update
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            NSApp.activate(ignoringOtherApps: true)
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
-                if let error = error {
-                    log("Notification retry failed: \(error.localizedDescription). Opening System Settings as fallback.")
-                    DispatchQueue.main.async {
+        // After the repair + retry, update our permission state and open System Settings as fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                DispatchQueue.main.async {
+                    let isNowGranted = settings.authorizationStatus == .authorized
+                    self?.hasNotificationPermission = isNowGranted
+                    if !isNowGranted {
+                        log("Notification permission still not granted after repair. Opening System Settings.")
                         self?.openNotificationPreferences()
                     }
-                } else if granted {
-                    log("Notification permission granted after LaunchServices repair")
-                }
-                DispatchQueue.main.async {
-                    self?.checkNotificationPermission()
                 }
             }
         }
