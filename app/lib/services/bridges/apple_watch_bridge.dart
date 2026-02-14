@@ -11,6 +11,7 @@ class AppleWatchFlutterBridge implements WatchRecorderFlutterAPI {
   final void Function(bool granted)? onMicPermissionCb;
   final void Function(bool granted)? onMainAppMicPermissionCb;
   final void Function(double batteryLevel, int batteryState)? onBatteryUpdateCb;
+  final void Function()? onDeviceRecordingRequestedCb;
 
   AppleWatchFlutterBridge({
     this.onChunk,
@@ -20,6 +21,7 @@ class AppleWatchFlutterBridge implements WatchRecorderFlutterAPI {
     this.onMicPermissionCb,
     this.onMainAppMicPermissionCb,
     this.onBatteryUpdateCb,
+    this.onDeviceRecordingRequestedCb,
   });
 
   @override
@@ -58,5 +60,10 @@ class AppleWatchFlutterBridge implements WatchRecorderFlutterAPI {
   @override
   void onWatchBatteryUpdate(double batteryLevel, int batteryState) {
     onBatteryUpdateCb?.call(batteryLevel, batteryState);
+  }
+
+  @override
+  void onDeviceRecordingRequested() {
+    onDeviceRecordingRequestedCb?.call();
   }
 }

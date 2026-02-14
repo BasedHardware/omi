@@ -19,6 +19,8 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -174,6 +176,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         if (shouldNotify) {
           _lastNotifiedBatteryLevel = value;
           _lastBatteryNotifyTime = DateTime.now();
+          _sendDeviceStateToWatch();
           notifyListeners();
         }
       },
@@ -323,7 +326,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isConnected) {
       _reconnectionTimer?.cancel();
     }
+    _sendDeviceStateToWatch();
     notifyListeners();
+  }
+
+  void _sendDeviceStateToWatch() {
+    if (!PlatformService.isIOS) return;
+    try {
+      final api = WatchRecorderHostAPI();
+      final isRecording = captureProvider?.isRecording ?? false;
+      api.sendDeviceState(isRecording, isConnected, batteryLevel);
+    } catch (e) {
+      Logger.debug('Failed to send device state to watch: $e');
+    }
   }
 
   @override

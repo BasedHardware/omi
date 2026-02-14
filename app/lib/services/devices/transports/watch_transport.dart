@@ -82,6 +82,9 @@ class WatchTransport extends DeviceTransport {
             }
           }
         },
+        onDeviceRecordingRequestedCb: () {
+          Logger.debug('Watch Transport: Device recording requested from watch complication');
+        },
       );
       WatchRecorderFlutterAPI.setUp(_bridge!);
     }
