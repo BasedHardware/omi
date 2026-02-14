@@ -403,6 +403,17 @@ extension AppDelegate: WCSessionDelegate {
                         }
                     }
                 }
+            case "startDeviceRecording":
+                DispatchQueue.main.async {
+                    self.flutterWatchAPI?.onDeviceRecordingRequested() { result in
+                        switch result {
+                        case .success:
+                            break
+                        case .failure(let error):
+                            print("iOS: Device recording request sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
             case "askQuestion":
                 if let audioData = message["audioData"] as? Data,
                    let sampleRate = message["sampleRate"] as? Double {
