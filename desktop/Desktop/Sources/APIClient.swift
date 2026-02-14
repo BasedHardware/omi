@@ -1861,6 +1861,12 @@ extension APIClient {
         struct StatusResponse: Decodable { let status: String }
         let _: StatusResponse = try await post("v1/staged-tasks/migrate")
     }
+
+    /// Migrate conversation-extracted action items (no source field) to staged_tasks
+    func migrateConversationItemsToStaged() async throws {
+        struct MigrateResponse: Decodable { let status: String; let migrated: Int; let deleted: Int }
+        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
+    }
 }
 
 /// Response for staged task promotion

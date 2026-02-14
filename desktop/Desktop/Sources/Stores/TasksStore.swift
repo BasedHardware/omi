@@ -364,6 +364,7 @@ class TasksStore: ObservableObject {
         Task {
             await performFullSyncIfNeeded()
             await migrateAITasksToStagedIfNeeded()
+            await migrateConversationItemsToStagedIfNeeded()
             await retryUnsyncedItems()
         }
         // Backfill relevance scores for unscored tasks (independent of full sync)
@@ -717,6 +718,25 @@ class TasksStore: ObservableObject {
             log("TasksStore: Staged tasks backend migration fired (may complete in background): \(error.localizedDescription)")
         }
         Self.isMigrating = false
+    }
+
+    /// One-time migration of conversation-extracted action items (no source field) to staged_tasks.
+    /// These were created by the old save_action_items path that bypassed the staging pipeline.
+    private func migrateConversationItemsToStagedIfNeeded() async {
+        let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+        let migrationKey = "conversationItemsMigrationCompleted_v1_\(userId)"
+
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        log("TasksStore: Starting conversation items migration for user \(userId)")
+
+        do {
+            try await APIClient.shared.migrateConversationItemsToStaged()
+            log("TasksStore: Conversation items migration completed")
+        } catch {
+            log("TasksStore: Conversation items migration fired (may complete in background): \(error.localizedDescription)")
+        }
     }
 
     /// Retry syncing locally-created tasks that failed to push to the backend.
