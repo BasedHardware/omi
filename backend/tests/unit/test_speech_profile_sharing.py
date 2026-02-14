@@ -3,6 +3,7 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
+from database import users as users_db
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -31,8 +32,6 @@ sys.modules.setdefault("google.cloud.firestore_v1", _google_firestore_v1_module)
 setattr(_google_module, "cloud", _google_cloud_module)
 setattr(_google_cloud_module, "exceptions", _google_exceptions_module)
 setattr(_google_cloud_module, "firestore", _google_firestore_module)
-
-from database import users as users_db
 
 
 class _FakeSnapshot:
@@ -215,4 +214,4 @@ def test_share_profile_idempotent():
 
         assert result1 is True
         assert result2 is True
-        assert shared_ref.set.call_count == 2  
+        assert shared_ref.set.call_count == 2
