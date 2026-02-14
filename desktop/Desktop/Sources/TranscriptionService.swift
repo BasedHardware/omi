@@ -137,6 +137,28 @@ class TranscriptionService {
         disconnect()
     }
 
+    /// Signal Deepgram that no more audio will be sent, but keep connection open
+    /// to receive final transcription results. Call stop() later to fully disconnect.
+    func finishStream() {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
+
+        flushAudioBuffer()
+
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+
+        let closeMsg = "{\"type\": \"CloseStream\"}"
+        webSocketTask.send(.string(closeMsg)) { error in
+            if let error = error {
+                logError("TranscriptionService: CloseStream send error", error: error)
+            }
+        }
+        log("TranscriptionService: CloseStream sent, waiting for final results")
+    }
+
     /// Send audio data to DeepGram (buffered for efficiency)
     func sendAudio(_ data: Data) {
         guard isConnected else { return }

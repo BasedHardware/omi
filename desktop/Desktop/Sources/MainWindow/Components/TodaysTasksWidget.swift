@@ -25,14 +25,14 @@ struct TasksWidget: View {
             // Header
             HStack {
                 Text("Tasks")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 if totalTaskCount > 0 {
                     Text("\(totalTaskCount) incomplete")
-                        .font(.system(size: 12).monospacedDigit())
+                        .scaledMonospacedDigitFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -41,10 +41,10 @@ struct TasksWidget: View {
                 // Empty state
                 VStack(spacing: 8) {
                     Image(systemName: "checkmark.circle")
-                        .font(.system(size: 28))
+                        .scaledFont(size: 28)
                         .foregroundColor(OmiColors.textQuaternary)
                     Text("No incomplete tasks")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -97,10 +97,10 @@ struct TasksWidget: View {
                     HStack {
                         Spacer()
                         Text("View all tasks")
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.textSecondary)
                         Spacer()
                     }
@@ -138,14 +138,14 @@ struct TaskSectionView: View {
             // Section header
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(titleColor)
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(titleColor)
                 if totalCount > tasks.count {
                     Text("(\(totalCount))")
-                        .font(.system(size: 11).monospacedDigit())
+                        .scaledMonospacedDigitFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -200,7 +200,7 @@ struct TaskRowView: View {
                 }
             }) {
                 Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundColor(task.completed ? OmiColors.textPrimary : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -210,7 +210,7 @@ struct TaskRowView: View {
             // Task description
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.description)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
                     .strikethrough(task.completed)
                     .lineLimit(2)
@@ -218,7 +218,7 @@ struct TaskRowView: View {
                 // Due date chip
                 if showDueDate, let dueAt = task.dueAt {
                     Text(formatDueDate(dueAt))
-                        .font(.system(size: 10, weight: .medium))
+                        .scaledFont(size: 10, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -234,7 +234,7 @@ struct TaskRowView: View {
             // Priority indicator
             if let priority = task.priority, priority != "low" {
                 Text(priority.capitalized)
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)

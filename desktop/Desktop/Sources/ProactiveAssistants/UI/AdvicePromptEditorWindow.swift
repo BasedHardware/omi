@@ -19,11 +19,11 @@ struct AdvicePromptEditorView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Advice Prompt")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.primary)
 
                     Text("Customize the AI instructions for proactive advice")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
 
@@ -33,9 +33,9 @@ struct AdvicePromptEditorView: View {
                 Button(action: resetToDefault) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                         Text("Reset to Default")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                 }
                 .buttonStyle(.bordered)
@@ -44,7 +44,7 @@ struct AdvicePromptEditorView: View {
 
             // Text editor
             TextEditor(text: $prompt)
-                .font(.system(size: 13, design: .monospaced))
+                .scaledFont(size: 13, design: .monospaced)
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
@@ -61,7 +61,7 @@ struct AdvicePromptEditorView: View {
             // Footer with character count
             HStack {
                 Text("\(prompt.count) characters")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.secondary)
 
                 Spacer()
@@ -132,7 +132,7 @@ class AdvicePromptEditorWindow: NSWindow {
             self?.close()
         })
 
-        let hostingView = NSHostingView(rootView: editorView)
+        let hostingView = NSHostingView(rootView: editorView.withFontScaling())
         self.contentView = hostingView
     }
 }

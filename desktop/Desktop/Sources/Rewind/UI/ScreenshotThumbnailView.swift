@@ -39,7 +39,7 @@ struct ScreenshotThumbnailView: View {
                             .frame(height: 120)
                             .overlay {
                                 Image(systemName: "photo")
-                                    .font(.system(size: 24))
+                                    .scaledFont(size: 24)
                                     .foregroundColor(OmiColors.textQuaternary)
                             }
                     }
@@ -62,7 +62,7 @@ struct ScreenshotThumbnailView: View {
                                     onDelete()
                                 } label: {
                                     Image(systemName: "trash")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundColor(.white)
                                         .padding(6)
                                         .background(Color.red.opacity(0.8))
@@ -76,7 +76,7 @@ struct ScreenshotThumbnailView: View {
                             HStack {
                                 Spacer()
                                 Text(screenshot.formattedTime)
-                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .scaledFont(size: 11, weight: .medium, design: .monospaced)
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
@@ -93,7 +93,7 @@ struct ScreenshotThumbnailView: View {
                             HStack {
                                 Spacer()
                                 Image(systemName: "text.magnifyingglass")
-                                    .font(.system(size: 10))
+                                    .scaledFont(size: 10)
                                     .foregroundColor(.white)
                                     .padding(4)
                                     .background(OmiColors.purplePrimary)
@@ -119,13 +119,13 @@ struct ScreenshotThumbnailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         // App name
                         Text(screenshot.appName)
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .lineLimit(1)
 
                         // Time
                         Text(screenshot.formattedTime)
-                            .font(.system(size: 10, design: .monospaced))
+                            .scaledFont(size: 10, design: .monospaced)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -134,7 +134,7 @@ struct ScreenshotThumbnailView: View {
                     // OCR indicator
                     if screenshot.isIndexed && screenshot.ocrText != nil && !screenshot.ocrText!.isEmpty {
                         Image(systemName: "doc.text.fill")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
                             .help("Text extracted")
                     }
@@ -149,7 +149,7 @@ struct ScreenshotThumbnailView: View {
                 // Window title (if available and no search context)
                 else if let title = screenshot.windowTitle, !title.isEmpty {
                     Text(title)
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(OmiColors.textQuaternary)
                         .lineLimit(1)
                 }
@@ -210,7 +210,7 @@ struct SearchContextSnippet: View {
 
     var body: some View {
         Text(attributedSnippet)
-            .font(.system(size: 10))
+            .scaledFont(size: 10)
             .lineLimit(2)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
@@ -258,12 +258,12 @@ struct ScreenshotGridView: View {
             // View controls
             HStack {
                 Text("\(screenshots.count) screenshots")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
 
                 if let query = searchQuery {
                     Text("matching \"\(query)\"")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
 
@@ -275,7 +275,7 @@ struct ScreenshotGridView: View {
                         Image(systemName: groupByApp ? "square.grid.3x3.fill" : "square.grid.3x3")
                         Text("Group by app")
                     }
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
                 }
                 .toggleStyle(.button)
@@ -323,11 +323,11 @@ struct ScreenshotGridView: View {
                         AppIconView(appName: appName, size: 20)
 
                         Text(appName)
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("(\(grouped[appName]?.count ?? 0))")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
 
                         Spacer()

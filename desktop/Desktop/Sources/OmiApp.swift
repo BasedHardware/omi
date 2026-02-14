@@ -95,6 +95,7 @@ struct OMIApp: App {
         // Main desktop window - same view for both modes, sidebar hidden in rewind mode
         Window(windowTitle, id: "main") {
             DesktopHomeView()
+                .withFontScaling()
                 .onAppear {
                     log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
                 }

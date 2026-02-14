@@ -154,7 +154,7 @@ actor GoalsAIService {
         )
 
         // Sync to local storage
-        try? await GoalStorage.shared.syncServerGoal(goal)
+        _ = try? await GoalStorage.shared.syncServerGoal(goal)
 
         log("GoalsAI: Auto-created goal '\(goal.title)' (id: \(goal.id))")
 

@@ -34,25 +34,25 @@ struct AudioSourceSelector: View {
         }) {
             HStack(spacing: 8) {
                 Image(systemName: source.iconName)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(source.displayName)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
 
                     if source == .bleDevice {
                         if deviceProvider.isConnected, let device = deviceProvider.connectedDevice {
                             Text(device.displayName)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         } else {
                             Text("Not connected")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     } else {
                         Text(AudioCaptureService.getCurrentMicrophoneName() ?? "Default")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
                     }
@@ -91,11 +91,11 @@ struct AudioSourceIndicator: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: appState.audioSource.iconName)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(indicatorColor)
 
             Text(sourceName)
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             if appState.audioSource == .bleDevice && deviceProvider.isConnected {
@@ -103,9 +103,9 @@ struct AudioSourceIndicator: View {
                 if deviceProvider.batteryLevel >= 0 {
                     HStack(spacing: 2) {
                         Image(systemName: batteryIcon)
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("\(deviceProvider.batteryLevel)%")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                     }
                     .foregroundColor(batteryColor)
                 }

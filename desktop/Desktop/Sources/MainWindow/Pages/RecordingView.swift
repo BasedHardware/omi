@@ -27,16 +27,16 @@ struct RecordingView: View {
     private var emptyTranscriptView: some View {
         VStack(spacing: 16) {
             Image(systemName: "waveform")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
                 .opacity(0.5)
 
             Text("Listening...")
-                .font(.system(size: 16, weight: .medium))
+                .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text("Start speaking and your transcript will appear here")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
         }

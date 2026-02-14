@@ -79,8 +79,18 @@ class TasksStore: ObservableObject {
         }
     }
 
-    /// Standard sort: due date ascending, then manual > AI-generated, then newest first
+    /// Standard sort: sortOrder first (if set), then due date ascending, then manual > AI-generated, then newest first
     private static func sortByDueDateThenSource(_ a: TaskActionItem, _ b: TaskActionItem) -> Bool {
+        // If both have sortOrder, use it
+        let aSort = a.sortOrder ?? 0
+        let bSort = b.sortOrder ?? 0
+        if aSort > 0 && bSort > 0 {
+            return aSort < bSort
+        }
+        // Tasks with sortOrder precede unsorted tasks
+        if aSort > 0 && bSort == 0 { return true }
+        if aSort == 0 && bSort > 0 { return false }
+
         let aDue = a.dueAt ?? .distantFuture
         let bDue = b.dueAt ?? .distantFuture
         if aDue != bDue {
@@ -156,6 +166,7 @@ class TasksStore: ObservableObject {
 
     /// Refresh tasks if already loaded (for auto-refresh)
     /// Uses local-first pattern: sync API to cache, then reload from cache
+    /// Merges changes in-place to avoid wholesale array replacement (which kills SwiftUI gestures)
     private func refreshTasksIfNeeded() async {
         // Skip if page is not visible
         guard isActive else { return }
@@ -166,10 +177,11 @@ class TasksStore: ObservableObject {
         // Only refresh if we've already loaded tasks
         guard hasLoadedIncomplete else { return }
 
-        // Silently sync and reload incomplete tasks
+        // Silently sync and reload incomplete tasks (local-first, like Memories)
         do {
+            let reloadLimit = max(pageSize, incompleteTasks.count)
             let response = try await APIClient.shared.getActionItems(
-                limit: pageSize,
+                limit: reloadLimit,
                 offset: 0,
                 completed: false
             )
@@ -177,14 +189,22 @@ class TasksStore: ObservableObject {
             // Sync API results to local cache
             try await ActionItemStorage.shared.syncTaskActionItems(response.items)
 
-            // Use API response directly to match iOS/Flutter behavior
-            let updated = response.items
-            if updated != incompleteTasks {
-                incompleteTasks = updated
-                hasMoreIncompleteTasks = updated.count >= pageSize
-                incompleteOffset = updated.count
-                log("TasksStore: Auto-refresh updated \(updated.count) incomplete tasks (API had \(response.items.count))")
+            // Reload from local cache (respects local changes like completions/deletions)
+            let mergedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: reloadLimit,
+                offset: 0,
+                completed: false
+            )
+
+            // Merge without triggering @Published unless something actually changed
+            let merged = mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
+            if merged != incompleteTasks {
+                incompleteTasks = merged
+                incompleteOffset = merged.count
+                log("TasksStore: Auto-refresh updated incomplete tasks (\(merged.count) items)")
             }
+            let newHasMore = mergedTasks.count >= reloadLimit
+            if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
         } catch {
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
@@ -208,11 +228,13 @@ class TasksStore: ObservableObject {
                     offset: 0,
                     completed: true
                 )
-                if mergedTasks != completedTasks {
-                    completedTasks = mergedTasks
-                    hasMoreCompletedTasks = mergedTasks.count >= pageSize
-                    completedOffset = mergedTasks.count
+                let merged = mergeWithoutAdding(source: mergedTasks, current: completedTasks)
+                if merged != completedTasks {
+                    completedTasks = merged
+                    completedOffset = merged.count
                 }
+                let newHasMore = mergedTasks.count >= pageSize
+                if hasMoreCompletedTasks != newHasMore { hasMoreCompletedTasks = newHasMore }
             } catch {
                 logError("TasksStore: Auto-refresh completed tasks failed", error: error)
             }
@@ -238,15 +260,39 @@ class TasksStore: ObservableObject {
                 )
                 // Filter to only deleted
                 let newDeleted = mergedTasks.filter { $0.deleted == true }
-                if newDeleted != deletedTasks {
-                    deletedTasks = newDeleted
-                    hasMoreDeletedTasks = response.hasMore
-                    deletedOffset = newDeleted.count
+                let merged = mergeWithoutAdding(source: newDeleted, current: deletedTasks)
+                if merged != deletedTasks {
+                    deletedTasks = merged
+                    deletedOffset = merged.count
                 }
+                if hasMoreDeletedTasks != response.hasMore { hasMoreDeletedTasks = response.hasMore }
             } catch {
                 logError("TasksStore: Auto-refresh deleted tasks failed", error: error)
             }
         }
+    }
+
+    /// Build a merged result from source and current: update changed items, remove gone ones.
+    /// Does NOT add new items — new tasks only appear on explicit load (initial load, tab switch).
+    /// Returns a new array only if different from current (caller compares with == before assigning
+    /// to @Published property, preventing unnecessary objectWillChange notifications).
+    private func mergeWithoutAdding(source: [TaskActionItem], current: [TaskActionItem]) -> [TaskActionItem] {
+        let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+        let sourceIds = Set(source.map { $0.id })
+
+        var result = current
+
+        // Update existing items
+        for i in result.indices {
+            if let updated = sourceById[result[i].id], updated != result[i] {
+                result[i] = updated
+            }
+        }
+
+        // Remove items no longer in source (e.g. completed/deleted by another device)
+        result.removeAll { !sourceIds.contains($0.id) }
+
+        return result
     }
 
     // MARK: - Load Tasks
@@ -290,8 +336,8 @@ class TasksStore: ObservableObject {
         }
     }
 
-    /// Load incomplete tasks (To Do) using local-first pattern
-    /// Load incomplete tasks (To Do) from API
+    /// Load incomplete tasks (To Do) using local-first pattern (like Memories)
+    /// Step 1: Show cached data instantly. Step 2: Sync API to cache, reload from cache.
     func loadIncompleteTasks() async {
         guard !isLoadingIncomplete else { return }
 
@@ -299,7 +345,25 @@ class TasksStore: ObservableObject {
         error = nil
         incompleteOffset = 0
 
-        // Fetch from API and sync to local cache
+        // Step 1: Load from local cache first for instant display
+        do {
+            let cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: pageSize,
+                offset: 0,
+                completed: false
+            )
+            if !cachedTasks.isEmpty {
+                incompleteTasks = cachedTasks
+                incompleteOffset = cachedTasks.count
+                hasMoreIncompleteTasks = cachedTasks.count >= pageSize
+                isLoadingIncomplete = false  // Show cached data immediately
+                log("TasksStore: Loaded \(cachedTasks.count) incomplete tasks from local cache")
+            }
+        } catch {
+            log("TasksStore: Local cache unavailable for incomplete tasks, falling back to API")
+        }
+
+        // Step 2: Fetch from API, sync to cache, reload from cache
         do {
             let response = try await APIClient.shared.getActionItems(
                 limit: pageSize,
@@ -309,17 +373,23 @@ class TasksStore: ObservableObject {
             hasLoadedIncomplete = true
             log("TasksStore: Fetched \(response.items.count) incomplete tasks from API")
 
-            // Sync API data to cache, use API response as source of truth
+            // Sync API data to local cache
             do {
                 try await ActionItemStorage.shared.syncTaskActionItems(response.items)
             } catch {
                 logError("TasksStore: Failed to sync incomplete tasks to local cache", error: error)
             }
 
-            incompleteTasks = response.items
-            incompleteOffset = response.items.count
-            hasMoreIncompleteTasks = response.hasMore
-            log("TasksStore: Showing \(response.items.count) incomplete tasks")
+            // Reload from cache to get merged data (local changes + API data)
+            let mergedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: pageSize,
+                offset: 0,
+                completed: false
+            )
+            incompleteTasks = mergedTasks
+            incompleteOffset = mergedTasks.count
+            hasMoreIncompleteTasks = mergedTasks.count >= pageSize
+            log("TasksStore: Showing \(mergedTasks.count) incomplete tasks from merged local cache")
         } catch {
             if incompleteTasks.isEmpty {
                 self.error = error.localizedDescription
@@ -473,7 +543,7 @@ class TasksStore: ObservableObject {
     /// Ensures filter/search queries have the full dataset. Keyed per user so it runs once per account.
     private func performFullSyncIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let syncKey = "tasksFullSyncCompleted_v3_\(userId)"
+        let syncKey = "tasksFullSyncCompleted_v4_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: syncKey) else {
             log("TasksStore: Full sync already completed for user \(userId)")
@@ -487,6 +557,7 @@ class TasksStore: ObservableObject {
 
         do {
             // Sync all incomplete tasks (start at 0 — initial load uses a date filter so it's a different dataset)
+            var allIncompleteApiIds = Set<String>()
             var offset = 0
             while true {
                 let response = try await APIClient.shared.getActionItems(
@@ -495,11 +566,18 @@ class TasksStore: ObservableObject {
                     completed: false
                 )
                 if response.items.isEmpty { break }
-                try await ActionItemStorage.shared.syncTaskActionItems(response.items)
+                try await ActionItemStorage.shared.syncTaskActionItems(response.items, overrideStagedDeletions: true)
+                allIncompleteApiIds.formUnion(response.items.map { $0.id })
                 totalSynced += response.items.count
                 offset += response.items.count
                 log("TasksStore: Full sync progress - \(totalSynced) tasks synced (incomplete)")
                 if response.items.count < batchSize { break }
+            }
+
+            // Now that we have ALL incomplete API IDs, mark any local tasks
+            // not in this set as staged. This is safe because we have the full dataset.
+            if !allIncompleteApiIds.isEmpty {
+                try await ActionItemStorage.shared.markAbsentTasksAsStaged(apiIds: allIncompleteApiIds)
             }
 
             // Sync all completed tasks
@@ -536,6 +614,21 @@ class TasksStore: ObservableObject {
 
             UserDefaults.standard.set(true, forKey: syncKey)
             log("TasksStore: Full sync completed - \(totalSynced) tasks synced total")
+
+            // Reload incomplete tasks from cache so UI reflects the full dataset
+            do {
+                let refreshed = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: pageSize,
+                    offset: 0,
+                    completed: false
+                )
+                incompleteTasks = refreshed
+                incompleteOffset = refreshed.count
+                hasMoreIncompleteTasks = refreshed.count >= pageSize
+                log("TasksStore: Refreshed UI after full sync - \(refreshed.count) incomplete tasks")
+            } catch {
+                logError("TasksStore: Failed to refresh UI after full sync", error: error)
+            }
 
             // Backfill due dates on backend for tasks that have none
             await backfillDueDatesOnBackendIfNeeded(userId: userId)
@@ -795,49 +888,79 @@ class TasksStore: ObservableObject {
     // MARK: - Task Actions
 
     func toggleTask(_ task: TaskActionItem) async {
+        let newCompleted = !task.completed
+
+        // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
         do {
-            let updated = try await APIClient.shared.updateActionItem(
-                id: task.id,
-                completed: !task.completed
+            try await ActionItemStorage.shared.updateCompletionStatus(
+                backendId: task.id, completed: newCompleted
             )
+        } catch {
+            logError("TasksStore: Failed to update task locally", error: error)
+            self.error = error.localizedDescription
+            return
+        }
 
-            // Sync to local SQLite cache so auto-refresh doesn't revert the change
-            try await ActionItemStorage.shared.syncTaskActionItems([updated])
+        // 2. Read back from SQLite to get a TaskActionItem with the new completed value
+        guard let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) else {
+            logError("TasksStore: Failed to read back toggled task", error: nil)
+            return
+        }
 
-            // Move task between lists based on new completion status
-            if updated.completed {
-                // Was incomplete, now completed - move to completed list
-                incompleteTasks.removeAll { $0.id == task.id }
-                completedTasks.insert(updated, at: 0)
+        // 3. Update in-memory arrays immediately (optimistic UI)
+        if newCompleted {
+            incompleteTasks.removeAll { $0.id == task.id }
+            completedTasks.insert(updatedTask, at: 0)
 
-                // Compact relevance scores to fill the gap
-                if let score = task.relevanceScore {
-                    try await ActionItemStorage.shared.compactScoresAfterRemoval(removedScore: score)
-                    Task { await self.syncScoresToBackend() }
-                }
+            // Compact relevance scores to fill the gap
+            if let score = task.relevanceScore {
+                try? await ActionItemStorage.shared.compactScoresAfterRemoval(removedScore: score)
+                Task { await self.syncScoresToBackend() }
+            }
 
-                // Promote a staged task to fill the vacated slot
-                if task.source?.contains("screenshot") == true {
-                    Task {
-                        let promoted = await TaskPromotionService.shared.promoteIfNeeded()
-                        if !promoted.isEmpty {
-                            self.incompleteTasks.append(contentsOf: promoted)
-                            log("TasksStore: Inserted \(promoted.count) promoted tasks after completion")
-                        }
+            // Promote a staged task to fill the vacated slot
+            if task.source?.contains("screenshot") == true {
+                Task {
+                    let promoted = await TaskPromotionService.shared.promoteIfNeeded()
+                    if !promoted.isEmpty {
+                        self.incompleteTasks.append(contentsOf: promoted)
+                        log("TasksStore: Inserted \(promoted.count) promoted tasks after completion")
                     }
                 }
-            } else {
-                // Was completed, now incomplete - move to incomplete list
-                completedTasks.removeAll { $0.id == task.id }
-                incompleteTasks.insert(updated, at: 0)
             }
+        } else {
+            completedTasks.removeAll { $0.id == task.id }
+            incompleteTasks.insert(updatedTask, at: 0)
+        }
+
+        // 4. Call API in background, revert on failure
+        do {
+            let apiResult = try await APIClient.shared.updateActionItem(
+                id: task.id,
+                completed: newCompleted
+            )
+            // Sync API result to store server-side timestamps
+            try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
         } catch {
+            logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
+            // Revert SQLite
+            try? await ActionItemStorage.shared.updateCompletionStatus(
+                backendId: task.id, completed: task.completed
+            )
+            // Revert in-memory arrays
+            if newCompleted {
+                completedTasks.removeAll { $0.id == task.id }
+                incompleteTasks.insert(task, at: 0)
+            } else {
+                incompleteTasks.removeAll { $0.id == task.id }
+                completedTasks.insert(task, at: 0)
+            }
             self.error = error.localizedDescription
-            logError("TasksStore: Failed to toggle task", error: error)
         }
     }
 
-    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async {
+    @discardableResult
+    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async -> TaskActionItem? {
         do {
             var metadata: [String: Any]? = nil
             if let tags = tags, !tags.isEmpty {
@@ -858,9 +981,11 @@ class TasksStore: ObservableObject {
 
             // New tasks are incomplete, add to incomplete list
             incompleteTasks.insert(created, at: 0)
+            return created
         } catch {
             self.error = error.localizedDescription
             logError("TasksStore: Failed to create task", error: error)
+            return nil
         }
     }
 
@@ -904,42 +1029,88 @@ class TasksStore: ObservableObject {
         }
     }
 
-    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
+    /// Restore a previously soft-deleted task (for undo)
+    /// Uses local-first: un-soft-deletes in SQLite (with fresh updatedAt to prevent
+    /// auto-refresh from reverting) and re-inserts into in-memory arrays.
+    func restoreTask(_ task: TaskActionItem) async {
+        // 1. Un-soft-delete in SQLite
         do {
-            // Track manual edits: if description is changed, mark as manually edited
-            var metadata: [String: Any]? = nil
-            if description != nil {
-                metadata = ["manually_edited": true]
-                // Preserve existing tags in metadata
-                if !task.tags.isEmpty {
-                    metadata?["tags"] = task.tags
+            try await ActionItemStorage.shared.undeleteActionItemByBackendId(task.id)
+        } catch {
+            logError("TasksStore: Failed to undelete task locally", error: error)
+            return
+        }
+
+        // 2. Read back from SQLite to get fresh state
+        guard let restoredTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) else {
+            logError("TasksStore: Failed to read back restored task", error: nil)
+            return
+        }
+
+        // 3. Re-insert into the appropriate in-memory array
+        if restoredTask.completed {
+            completedTasks.insert(restoredTask, at: 0)
+        } else {
+            incompleteTasks.insert(restoredTask, at: 0)
+        }
+
+        log("TasksStore: Restored task \(task.id) via undo")
+    }
+
+    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
+        // Track manual edits: if description is changed, mark as manually edited
+        var metadata: [String: Any]? = nil
+        if description != nil {
+            metadata = ["manually_edited": true]
+            // Preserve existing tags in metadata
+            if !task.tags.isEmpty {
+                metadata?["tags"] = task.tags
+            }
+        }
+
+        // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
+        do {
+            try await ActionItemStorage.shared.updateActionItemFields(
+                backendId: task.id,
+                description: description,
+                dueAt: dueAt,
+                priority: priority,
+                metadata: metadata
+            )
+        } catch {
+            logError("TasksStore: Failed to update task locally", error: error)
+            self.error = error.localizedDescription
+            return
+        }
+
+        // 2. Read back from SQLite and update in-memory arrays immediately
+        if let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
+            if task.completed {
+                if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
+                    completedTasks[index] = updatedTask
+                }
+            } else {
+                if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
+                    incompleteTasks[index] = updatedTask
                 }
             }
+        }
 
-            let updated = try await APIClient.shared.updateActionItem(
+        // 3. Call API in background
+        do {
+            let apiResult = try await APIClient.shared.updateActionItem(
                 id: task.id,
                 description: description,
                 dueAt: dueAt,
                 priority: priority,
                 metadata: metadata
             )
-
-            // Sync to local SQLite cache so auto-refresh doesn't revert the change
-            try await ActionItemStorage.shared.syncTaskActionItems([updated])
-
-            // Update in appropriate list
-            if task.completed {
-                if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
-                    completedTasks[index] = updated
-                }
-            } else {
-                if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
-                    incompleteTasks[index] = updated
-                }
-            }
+            // Sync API result to store server-side timestamps
+            try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
         } catch {
+            // Local change persists; next successful sync will reconcile
             self.error = error.localizedDescription
-            logError("TasksStore: Failed to update task", error: error)
+            logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
         }
     }
 

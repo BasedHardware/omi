@@ -22,13 +22,13 @@ struct AskAIInputView: View {
                 Spacer()
                 HStack(spacing: 4) {
                     Text("esc")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                         .frame(width: 30, height: 16)
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(4)
                     Text("to close")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
                 .padding(.top, 8)
@@ -48,7 +48,7 @@ struct AskAIInputView: View {
 
                         Button(action: { screenshotURL = nil }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(.white)
                                 .shadow(radius: 2)
                         }
@@ -56,13 +56,13 @@ struct AskAIInputView: View {
                         .offset(x: 4, y: -4)
                     }
                     Text("Screenshot attached")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                     Spacer()
 
                     Button(action: { onCaptureScreenshot?() }) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -76,7 +76,7 @@ struct AskAIInputView: View {
                 ZStack(alignment: .topLeading) {
                     if localInput.isEmpty {
                         Text("Ask a question...")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 8)
@@ -114,7 +114,7 @@ struct AskAIInputView: View {
                     onSend?(trimmed)
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 24))
+                        .scaledFont(size: 24)
                         .foregroundColor(
                             localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 ? .secondary : .white

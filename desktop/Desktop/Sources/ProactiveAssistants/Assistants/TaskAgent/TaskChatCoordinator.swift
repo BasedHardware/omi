@@ -33,7 +33,8 @@ class TaskChatCoordinator: ObservableObject {
     /// Creates a new Firestore ChatSession if the task doesn't have one yet.
     func openChat(for task: TaskActionItem) async {
         // If already viewing this task's chat, just ensure panel is open
-        if activeTaskId == task.id && isPanelOpen {
+        if activeTaskId == task.id {
+            isPanelOpen = true
             return
         }
 
@@ -53,9 +54,12 @@ class TaskChatCoordinator: ObservableObject {
 
         activeTaskId = task.id
 
-        // Set workspace path for file-system tools
-        workspacePath = TaskAgentSettings.shared.workingDirectory
-        chatProvider.workingDirectory = workspacePath
+        // Set workspace path for file-system tools (only if explicitly configured)
+        let configuredPath = TaskAgentSettings.shared.workingDirectory
+        if !configuredPath.isEmpty {
+            workspacePath = configuredPath
+            chatProvider.workingDirectory = workspacePath
+        }
         // Isolate task messages from the default chat
         chatProvider.overrideAppId = Self.taskChatAppId
 
@@ -75,9 +79,10 @@ class TaskChatCoordinator: ObservableObject {
                 // Also update the in-memory task in the store
                 TasksStore.shared.updateChatSessionId(taskId: task.id, sessionId: session.id)
 
-                // Send initial context message about the task
+                // Send initial context message about the task (fire-and-forget so panel opens immediately)
                 let contextMessage = buildInitialPrompt(for: task)
-                await chatProvider.sendMessage(contextMessage)
+                let provider = chatProvider
+                Task { await provider.sendMessage(contextMessage) }
             }
         }
 
@@ -112,30 +117,18 @@ class TaskChatCoordinator: ObservableObject {
     }
 
     /// Build the initial context prompt for a task chat session.
+    /// Uses task.chatContext which lives on the model itself — add new fields there.
     private func buildInitialPrompt(for task: TaskActionItem) -> String {
-        var parts: [String] = []
-        parts.append("I'd like help with this task: \(task.description)")
+        var prompt = "I'd like help with this task.\n\n\(task.chatContext)"
 
-        if !task.tags.isEmpty {
-            parts.append("Tags: \(task.tags.joined(separator: ", "))")
-        }
-        if let priority = task.priority {
-            parts.append("Priority: \(priority)")
-        }
-        if let dueAt = task.dueAt {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            parts.append("Due: \(formatter.string(from: dueAt))")
-        }
-
-        // Include agent output if available
+        // Live agent output (from running/completed session, not persisted on the model)
         if let session = TaskAgentManager.shared.getSession(for: task.id),
            let output = session.output, !output.isEmpty {
-            let truncated = output.prefix(2000)
-            parts.append("\nAgent output so far:\n\(truncated)")
+            let truncated = String(output.prefix(2000))
+            prompt += "\n\nAgent output so far:\n\(truncated)"
         }
 
-        return parts.joined(separator: "\n")
+        return prompt
     }
 
     private func taskChatTitle(for task: TaskActionItem) -> String {

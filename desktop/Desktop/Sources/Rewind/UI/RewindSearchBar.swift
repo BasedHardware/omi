@@ -44,7 +44,7 @@ struct RewindSearchBar: View {
                 // Keyboard shortcut hint
                 if searchQuery.isEmpty && !isSearchFocused {
                     Text("⌘F")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .scaledFont(size: 10, weight: .medium, design: .monospaced)
                         .foregroundColor(OmiColors.textQuaternary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -104,15 +104,15 @@ struct RewindSearchBar: View {
                             AppIconView(appName: app, size: 14)
                         } else {
                             Image(systemName: "square.grid.2x2")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                         }
 
                         Text(selectedApp ?? "All Apps")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .lineLimit(1)
 
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                     }
                     .foregroundColor(selectedApp != nil ? OmiColors.textPrimary : OmiColors.textSecondary)
                     .padding(.horizontal, 12)
@@ -159,7 +159,7 @@ struct RewindSearchBar: View {
                             Image(systemName: "xmark")
                             Text("Clear")
                         }
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -180,7 +180,7 @@ struct RewindSearchBar: View {
             onDateChanged(date)
         } label: {
             Text(title)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)

@@ -36,13 +36,14 @@ struct SpeakerBubbleView: View {
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 // Speaker label
                 Text(speakerLabel)
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
 
                 // Message bubble
                 Text(segment.text)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textPrimary)
+                    .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
@@ -52,7 +53,7 @@ struct SpeakerBubbleView: View {
 
                 // Timestamp
                 Text(formatTime(segment.start))
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -70,7 +71,7 @@ struct SpeakerBubbleView: View {
             .frame(width: 32, height: 32)
             .overlay(
                 Text(isUser ? "Y" : String(segment.speakerId))
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
             )
     }

@@ -30,11 +30,11 @@ struct AIResponseView: View {
                     .scaleEffect(0.6)
                     .frame(width: 16, height: 16)
                 Text("thinking")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(.secondary)
             } else {
                 Text("omi says")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(.secondary)
             }
 
@@ -44,7 +44,7 @@ struct AIResponseView: View {
                 Button("Ask follow up") {
                     onAskFollowUp?()
                 }
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color.white.opacity(0.1))
@@ -54,7 +54,7 @@ struct AIResponseView: View {
 
             Button(action: { onClose?() }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 8))
+                    .scaledFont(size: 8)
                     .foregroundColor(.secondary)
                     .frame(width: 16, height: 16)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
@@ -70,7 +70,7 @@ struct AIResponseView: View {
                     if isQuestionExpanded {
                         ScrollView {
                             Text(userInput)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(.white)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,7 +78,7 @@ struct AIResponseView: View {
                         .frame(maxHeight: 120)
                     } else {
                         Text(userInput)
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(.white)
                             .lineLimit(1)
                             .textSelection(.enabled)
@@ -89,7 +89,7 @@ struct AIResponseView: View {
                 if needsExpansion {
                     Button(action: { isQuestionExpanded.toggle() }) {
                         Image(systemName: isQuestionExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(.secondary)
                             .frame(width: 20, height: 20)
                     }

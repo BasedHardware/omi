@@ -28,6 +28,11 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
     <key>NSScreenCaptureUsageDescription</key>
     <string>Omi needs screen recording permission to monitor your focus and detect distractions.</string>
     <key>NSAppleEventsUsageDescription</key>

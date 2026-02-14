@@ -34,6 +34,10 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var metadataJson: String?           // Additional extraction metadata
     var embedding: Data?                // 3072 Float32s for vector search (Gemini embedding-001)
 
+    // Ordering (synced to backend)
+    var sortOrder: Int?                  // Sort position within category
+    var indentLevel: Int?                // 0-3 indent depth
+
     // Prioritization
     var relevanceScore: Int?             // 0-100 score from TaskPrioritizationService
     var scoredAt: Date?                  // When the score was last computed
@@ -80,6 +84,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         currentActivity: String? = nil,
         metadataJson: String? = nil,
         embedding: Data? = nil,
+        sortOrder: Int? = nil,
+        indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
         scoredAt: Date? = nil,
         agentStatus: String? = nil,
@@ -114,6 +120,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.currentActivity = currentActivity
         self.metadataJson = metadataJson
         self.embedding = embedding
+        self.sortOrder = sortOrder
+        self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
         self.scoredAt = scoredAt
         self.agentStatus = agentStatus
@@ -284,6 +292,8 @@ extension ActionItemRecord {
             contextSummary: nil,
             currentActivity: nil,
             metadataJson: item.metadata,
+            sortOrder: item.sortOrder,
+            indentLevel: item.indentLevel,
             relevanceScore: item.relevanceScore,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt ?? item.createdAt
@@ -335,6 +345,14 @@ extension ActionItemRecord {
         // Adopt API score when local record has none (avoids overwriting recent Gemini re-ranking)
         if self.relevanceScore == nil, let apiScore = item.relevanceScore {
             self.relevanceScore = apiScore
+        }
+
+        // Sync sort order and indent level from backend
+        if let apiSortOrder = item.sortOrder {
+            self.sortOrder = apiSortOrder
+        }
+        if let apiIndentLevel = item.indentLevel {
+            self.indentLevel = apiIndentLevel
         }
     }
 
@@ -391,7 +409,12 @@ extension ActionItemRecord {
             deletedAt: nil,  // Not stored locally
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
+            sortOrder: sortOrder,
+            indentLevel: indentLevel,
             relevanceScore: relevanceScore,
+            contextSummary: contextSummary,
+            currentActivity: currentActivity,
+            agentEditedFiles: agentEditedFiles.isEmpty ? nil : agentEditedFiles,
             agentStatus: agentStatus,
             agentPrompt: agentPrompt,
             agentPlan: agentPlan,
@@ -580,7 +603,12 @@ struct StagedTaskRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
             deletedAt: nil,
             deletedReason: nil,
             keptTaskId: nil,
+            sortOrder: nil,
+            indentLevel: nil,
             relevanceScore: relevanceScore,
+            contextSummary: contextSummary,
+            currentActivity: currentActivity,
+            agentEditedFiles: nil,
             agentStatus: nil,
             agentPrompt: nil,
             agentPlan: nil,

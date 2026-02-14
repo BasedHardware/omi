@@ -64,9 +64,9 @@ struct MemoryGraphPage: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                     Text("Back")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                 }
                 .foregroundColor(.white.opacity(0.8))
             }
@@ -75,7 +75,7 @@ struct MemoryGraphPage: View {
             Spacer()
 
             Text("Memory Graph")
-                .font(.system(size: 16, weight: .semibold))
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(.white)
 
             Spacer()
@@ -88,7 +88,7 @@ struct MemoryGraphPage: View {
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(.white.opacity(0.8))
                 }
                 .buttonStyle(.plain)
@@ -100,7 +100,7 @@ struct MemoryGraphPage: View {
                     viewModel.shareGraph()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(.white.opacity(0.8))
                 }
                 .buttonStyle(.plain)
@@ -126,7 +126,7 @@ struct MemoryGraphPage: View {
                         .fill(type.color)
                         .frame(width: 10, height: 10)
                     Text(type.displayName)
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
@@ -148,7 +148,7 @@ struct MemoryGraphPage: View {
                 .tint(.white)
 
             Text("Loading graph...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.7))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -164,11 +164,11 @@ struct MemoryGraphPage: View {
                 .tint(.white)
 
             Text("Building knowledge graph...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.7))
 
             Text("Extracting entities from your memories")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.5))
         }
         .padding(32)
@@ -183,15 +183,15 @@ struct MemoryGraphPage: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "brain")
-                .font(.system(size: 64))
+                .scaledFont(size: 64)
                 .foregroundColor(.white.opacity(0.3))
 
             Text("No Knowledge Graph Yet")
-                .font(.system(size: 20, weight: .semibold))
+                .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(.white)
 
             Text("Build your knowledge graph from your memories\nto see connections between people, places, and concepts.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -205,7 +205,7 @@ struct MemoryGraphPage: View {
                     Image(systemName: "sparkles")
                     Text("Build Graph")
                 }
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(.white)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)

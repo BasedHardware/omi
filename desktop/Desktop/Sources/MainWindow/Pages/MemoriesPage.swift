@@ -986,18 +986,18 @@ struct MemoriesPage: View {
         if viewModel.pendingDeleteMemory != nil {
             HStack(spacing: 12) {
                 Image(systemName: "trash")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Memory deleted")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 // Progress indicator
                 Text(String(format: "%.0fs", viewModel.undoTimeRemaining))
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
                     .monospacedDigit()
 
@@ -1005,7 +1005,7 @@ struct MemoriesPage: View {
                     viewModel.undoDelete()
                 } label: {
                     Text("Undo")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
                 .buttonStyle(.plain)
@@ -1015,7 +1015,7 @@ struct MemoriesPage: View {
                     viewModel.confirmDelete()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -1042,23 +1042,23 @@ struct MemoriesPage: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Memories")
-                    .font(.system(size: 24, weight: .semibold))
+                    .scaledFont(size: 24, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
                     if !viewModel.searchText.isEmpty {
                         Text("\(viewModel.filteredMemories.count) results")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     } else {
                         Text("\(viewModel.totalMemoriesCount) memories")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     if viewModel.unreadTipsCount > 0 && viewModel.searchText.isEmpty {
                         Text("\(viewModel.unreadTipsCount) new tips")
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
@@ -1076,7 +1076,7 @@ struct MemoriesPage: View {
                     showingMemoryGraph = true
                 } label: {
                     Image(systemName: "brain")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 32, height: 32)
                         .background(OmiColors.backgroundTertiary)
@@ -1092,7 +1092,7 @@ struct MemoriesPage: View {
                         Image(systemName: "plus")
                         Text("Add Memory")
                     }
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(.black)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -1110,7 +1110,7 @@ struct MemoriesPage: View {
                     Task { await viewModel.loadMemories() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 32, height: 32)
                         .background(OmiColors.backgroundTertiary)
@@ -1127,7 +1127,7 @@ struct MemoriesPage: View {
                     showManagementMenu = true
                 } label: {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(.black)
                         .frame(width: 32, height: 32)
                         .background(Color.white)
@@ -1221,11 +1221,11 @@ struct MemoriesPage: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal.decrease")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                     Text(categoryFilterLabel)
-                        .font(.system(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium))
+                        .scaledFont(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                 }
                 .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
                 .padding(.horizontal, 12)
@@ -1252,11 +1252,11 @@ struct MemoriesPage: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(OmiColors.textTertiary)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
 
                 TextField("Search categories...", text: $categorySearchText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if !categorySearchText.isEmpty {
@@ -1265,7 +1265,7 @@ struct MemoriesPage: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(OmiColors.textTertiary)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     .buttonStyle(.plain)
                 }
@@ -1290,13 +1290,13 @@ struct MemoriesPage: View {
                     } label: {
                         HStack {
                             Image(systemName: "tray.full")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .frame(width: 20)
                             Text("All")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                             Spacer()
                             Text("\(viewModel.totalMemoriesCount)")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -1304,7 +1304,7 @@ struct MemoriesPage: View {
                                 .cornerRadius(4)
                             if pendingSelectedTags.isEmpty {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .scaledFont(size: 12, weight: .medium)
                                     .foregroundColor(.white)
                             }
                         }
@@ -1334,13 +1334,13 @@ struct MemoriesPage: View {
                         } label: {
                             HStack {
                                 Image(systemName: tag.icon)
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .frame(width: 20)
                                 Text(tag.displayName)
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                 Spacer()
                                 Text("\(count)")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -1348,7 +1348,7 @@ struct MemoriesPage: View {
                                     .cornerRadius(4)
                                 if isSelected {
                                     Image(systemName: "checkmark")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .scaledFont(size: 12, weight: .medium)
                                         .foregroundColor(.white)
                                 }
                             }
@@ -1376,7 +1376,7 @@ struct MemoriesPage: View {
                     pendingSelectedTags.removeAll()
                 } label: {
                     Text("Clear")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -1390,7 +1390,7 @@ struct MemoriesPage: View {
                     showCategoryFilter = false
                 } label: {
                     Text("Apply")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(.black)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -1411,7 +1411,7 @@ struct MemoriesPage: View {
         VStack(alignment: .leading, spacing: 0) {
             // Visibility section
             Text("Visibility")
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -1423,10 +1423,10 @@ struct MemoriesPage: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "lock")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .frame(width: 20)
                     Text("Make All Private")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Spacer()
                 }
                 .foregroundColor(OmiColors.textPrimary)
@@ -1444,10 +1444,10 @@ struct MemoriesPage: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "globe")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .frame(width: 20)
                     Text("Make All Public")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Spacer()
                 }
                 .foregroundColor(OmiColors.textPrimary)
@@ -1470,10 +1470,10 @@ struct MemoriesPage: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "trash")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .frame(width: 20)
                     Text("Delete All Memories")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Spacer()
                 }
                 .foregroundColor(OmiColors.error)
@@ -1522,7 +1522,7 @@ struct MemoriesPage: View {
                         ProgressView()
                             .scaleEffect(0.8)
                         Text("Loading more...")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .frame(maxWidth: .infinity)
@@ -1539,7 +1539,7 @@ struct MemoriesPage: View {
                                 Image(systemName: "arrow.down.circle")
                                 Text("Load more memories")
                             }
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
@@ -1557,7 +1557,7 @@ struct MemoriesPage: View {
                                 Image(systemName: "arrow.down.circle")
                                 Text("Load more memories")
                             }
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
@@ -1578,9 +1578,9 @@ struct MemoriesPage: View {
     private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
         }
         .foregroundColor(OmiColors.textSecondary)
     }
@@ -1623,15 +1623,15 @@ struct MemoriesPage: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "brain.head.profile")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Memories Yet")
-                .font(.system(size: 20, weight: .semibold))
+                .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Your memories and tips will appear here.\nMemories are extracted from your conversations.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
@@ -1642,7 +1642,7 @@ struct MemoriesPage: View {
                     Image(systemName: "plus")
                     Text("Add Your First Memory")
                 }
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
@@ -1662,15 +1662,15 @@ struct MemoriesPage: View {
     private var noResultsView: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 36))
+                .scaledFont(size: 36)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Results")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Try a different search or filter")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
 
             if !viewModel.selectedTags.isEmpty {
@@ -1678,7 +1678,7 @@ struct MemoriesPage: View {
                     viewModel.selectedTags.removeAll()
                 } label: {
                     Text("Clear Filters")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -1694,7 +1694,7 @@ struct MemoriesPage: View {
                 .scaleEffect(1.2)
 
             Text("Loading memories...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1703,15 +1703,15 @@ struct MemoriesPage: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 36))
+                .scaledFont(size: 36)
                 .foregroundColor(OmiColors.error)
 
             Text("Failed to Load Memories")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(message)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
 
             Button {
@@ -1721,7 +1721,7 @@ struct MemoriesPage: View {
                     Image(systemName: "arrow.clockwise")
                     Text("Retry")
                 }
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
@@ -1762,7 +1762,7 @@ private struct MemoryCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Content
             Text(memory.content)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1786,27 +1786,27 @@ private struct MemoryCardView: View {
                 if memory.isTip {
                     HStack(spacing: 4) {
                         Image(systemName: "lightbulb.fill")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("Tips")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(OmiColors.textSecondary)
 
                     if let tipCat = memory.tipCategory {
                         HStack(spacing: 4) {
                             Image(systemName: memory.tipCategoryIcon)
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text(tipCat.capitalized)
-                                .font(.system(size: 11, weight: .medium))
+                                .scaledFont(size: 11, weight: .medium)
                         }
                         .foregroundColor(OmiColors.textSecondary)
                     }
                 } else {
                     HStack(spacing: 4) {
                         Image(systemName: categoryIcon(memory.category))
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text(memory.category.displayName)
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(OmiColors.textSecondary)
                 }
@@ -1823,12 +1823,12 @@ private struct MemoryCardView: View {
                 if !displayTags.isEmpty {
                     ForEach(Array(displayTags.prefix(3)), id: \.self) { tag in
                         Text(tag)
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                             .foregroundColor(tagColorFor(tag))
                     }
                     if displayTags.count > 3 {
                         Text("+\(displayTags.count - 3)")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)
@@ -1839,18 +1839,18 @@ private struct MemoryCardView: View {
                 if let sourceApp = memory.sourceApp {
                     HStack(spacing: 4) {
                         Image(systemName: memory.sourceIcon)
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text(sourceApp)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                     }
                     .foregroundColor(OmiColors.textSecondary)
                     .help(memory.windowTitle ?? sourceApp)
                 } else if let sourceName = memory.sourceName {
                     HStack(spacing: 4) {
                         Image(systemName: memory.sourceIcon)
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text(sourceName)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                     }
                     .foregroundColor(OmiColors.textSecondary)
                 }
@@ -1859,13 +1859,13 @@ private struct MemoryCardView: View {
 
                 // Date
                 Text(formatDate(memory.createdAt))
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Click hint on hover
                 if isHovered {
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .medium))
+                        .scaledFont(size: 10, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -1937,7 +1937,7 @@ struct MemoryDetailSheet: View {
                     // Public toggle
                     HStack(spacing: 6) {
                         Text("Public")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
                         if viewModel.isTogglingVisibility {
                             ProgressView()
@@ -1964,7 +1964,7 @@ struct MemoryDetailSheet: View {
                         }
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.error)
                     }
                     .buttonStyle(.plain)
@@ -1976,7 +1976,7 @@ struct MemoryDetailSheet: View {
                 if isEditingContent {
                     VStack(alignment: .trailing, spacing: 8) {
                         TextEditor(text: $editContentText)
-                            .font(.system(size: 15))
+                            .scaledFont(size: 15)
                             .foregroundColor(OmiColors.textPrimary)
                             .scrollContentBackground(.hidden)
                             .padding(8)
@@ -1989,7 +1989,7 @@ struct MemoryDetailSheet: View {
                                 isEditingContent = false
                             } label: {
                                 Text("Cancel")
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textSecondary)
                             }
                             .buttonStyle(.plain)
@@ -2002,7 +2002,7 @@ struct MemoryDetailSheet: View {
                                 }
                             } label: {
                                 Text("Save")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .scaledFont(size: 13, weight: .medium)
                                     .foregroundColor(.black)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)
@@ -2015,7 +2015,7 @@ struct MemoryDetailSheet: View {
                     }
                 } else {
                     Text(memory.content)
-                        .font(.system(size: 15))
+                        .scaledFont(size: 15)
                         .foregroundColor(OmiColors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentShape(Rectangle())
@@ -2029,12 +2029,13 @@ struct MemoryDetailSheet: View {
                 if let reasoning = memory.reasoning, !reasoning.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Why this tip?")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textSecondary)
 
                         Text(reasoning)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textPrimary)
+                            .textSelection(.enabled)
                     }
                     .padding(12)
                     .background(OmiColors.backgroundTertiary)
@@ -2045,23 +2046,25 @@ struct MemoryDetailSheet: View {
                 if memory.currentActivity != nil || memory.contextSummary != nil {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Context")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textSecondary)
 
                         if let activity = memory.currentActivity {
                             HStack(spacing: 6) {
                                 Image(systemName: "figure.walk")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                 Text(activity)
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
+                                    .textSelection(.enabled)
                             }
                             .foregroundColor(OmiColors.textTertiary)
                         }
 
                         if let context = memory.contextSummary {
                             Text(context)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
+                                .textSelection(.enabled)
                         }
                     }
                     .padding(12)
@@ -2079,7 +2082,7 @@ struct MemoryDetailSheet: View {
                             Text(confidence)
                                 .foregroundColor(OmiColors.textPrimary)
                         }
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     }
 
                     if let sourceApp = memory.sourceApp {
@@ -2090,7 +2093,7 @@ struct MemoryDetailSheet: View {
                             Text(sourceApp)
                                 .foregroundColor(OmiColors.textPrimary)
                         }
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     }
 
                     if let sourceName = memory.sourceName {
@@ -2104,7 +2107,7 @@ struct MemoryDetailSheet: View {
                             }
                             .foregroundColor(OmiColors.textPrimary)
                         }
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     }
 
                     if let micName = memory.inputDeviceName, memory.source == "desktop" {
@@ -2118,7 +2121,7 @@ struct MemoryDetailSheet: View {
                             }
                             .foregroundColor(OmiColors.textPrimary)
                         }
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     }
 
                     HStack {
@@ -2128,18 +2131,18 @@ struct MemoryDetailSheet: View {
                         Text(formatDate(memory.createdAt))
                             .foregroundColor(OmiColors.textPrimary)
                     }
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
 
                     if !memory.tags.isEmpty {
                         HStack(alignment: .top) {
                             Text("Tags")
                                 .foregroundColor(OmiColors.textSecondary)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                             Spacer()
                             FlowLayout(spacing: 4) {
                                 ForEach(memory.tags, id: \.self) { tag in
                                     Text(tag)
-                                        .font(.system(size: 11, weight: .medium))
+                                        .scaledFont(size: 11, weight: .medium)
                                         .foregroundColor(tagColorFor(tag))
                                 }
                             }
@@ -2201,9 +2204,9 @@ struct MemoryDetailSheet: View {
     private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .scaledFont(size: 11, weight: .medium)
         }
         .foregroundColor(OmiColors.textSecondary)
     }
@@ -2231,11 +2234,11 @@ private struct MemoryActionRow: View {
             Spacer()
             if let trailing = trailingIcon {
                 Image(systemName: trailing)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .font(.system(size: 14))
+        .scaledFont(size: 14)
         .foregroundColor(textColor)
         .padding(12)
         .background(backgroundColor)
@@ -2298,14 +2301,14 @@ struct AddMemorySheet: View {
             // Header with close button
             HStack {
                 Text("Add Memory")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
 
             TextEditor(text: $viewModel.newMemoryText)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
                 .scrollContentBackground(.hidden)
                 .padding(12)
@@ -2326,7 +2329,7 @@ struct AddMemorySheet: View {
                     Task { await viewModel.createMemory() }
                 } label: {
                     Text("Save")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(viewModel.newMemoryText.isEmpty ? OmiColors.textTertiary : .black)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)
@@ -2370,14 +2373,14 @@ struct EditMemorySheet: View {
             // Header with close button
             HStack {
                 Text("Edit Memory")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: dismissSheet)
             }
 
             TextEditor(text: $viewModel.editText)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
                 .scrollContentBackground(.hidden)
                 .padding(12)
@@ -2398,7 +2401,7 @@ struct EditMemorySheet: View {
                     Task { await viewModel.saveEditedMemory(memory) }
                 } label: {
                     Text("Save")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(viewModel.editText.isEmpty ? OmiColors.textTertiary : .black)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 8)

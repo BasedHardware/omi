@@ -1,6 +1,26 @@
 {
   "releases": [
     {
+      "version": "0.8.0",
+      "date": "2026-02-13",
+      "changes": [
+        "Floating control bar: always-accessible AI assistant and push-to-talk voice input from any app",
+        "Follow-up messages: continue conversations and interrupt AI responses mid-stream",
+        "Cloud agent VM: automatic provisioning for background AI tasks",
+        "Data & Privacy settings with configurable protection levels",
+        "Expanded transcript view in Rewind for full recording review",
+        "Screen and audio recording controls directly in Rewind page",
+        "Streamlined onboarding: single permissions step, no more skipping",
+        "Task undo: deleted tasks can be recovered with an undo toast",
+        "Keyboard shortcuts for task management",
+        "Optimistic task updates for instant UI feedback",
+        "Conversations embedded in dashboard instead of separate page",
+        "WebSocket streaming for faster AI agent responses",
+        "Fixed resize flicker and stale state flashing in floating bar",
+        "Fixed stream errors and client aborts during database upload"
+      ]
+    },
+    {
       "version": "0.7.1",
       "date": "2026-02-13",
       "changes": [

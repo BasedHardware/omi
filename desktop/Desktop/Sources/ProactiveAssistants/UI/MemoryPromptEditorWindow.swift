@@ -31,7 +31,7 @@ class MemoryPromptEditorWindow: NSWindow {
 
         contentView = NSHostingView(rootView: MemoryPromptEditorView(onClose: { [weak self] in
             self?.close()
-        }))
+        }).withFontScaling())
     }
 }
 
@@ -53,10 +53,10 @@ struct MemoryPromptEditorView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Memory Extraction Prompt")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
 
                     Text("Customize how the AI extracts memories from screenshots")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
 
@@ -64,7 +64,7 @@ struct MemoryPromptEditorView: View {
 
                 if hasChanges {
                     Text("Unsaved changes")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.orange)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -78,7 +78,7 @@ struct MemoryPromptEditorView: View {
 
             // Editor
             TextEditor(text: $promptText)
-                .font(.system(size: 13, design: .monospaced))
+                .scaledFont(size: 13, design: .monospaced)
                 .padding(8)
                 .onChange(of: promptText) { _, newValue in
                     hasChanges = newValue != MemoryAssistantSettings.shared.analysisPrompt

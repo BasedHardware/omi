@@ -2,6 +2,7 @@
 
 pub mod action_items;
 pub mod advice;
+pub mod agent;
 pub mod apps;
 pub mod auth;
 pub mod chat;
@@ -24,6 +25,7 @@ pub mod webhooks;
 
 pub use action_items::action_items_routes;
 pub use advice::advice_routes;
+pub use agent::agent_routes;
 pub use apps::apps_routes;
 pub use auth::auth_routes;
 pub use chat::chat_routes;

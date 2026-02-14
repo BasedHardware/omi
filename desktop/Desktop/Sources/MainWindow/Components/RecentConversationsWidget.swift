@@ -12,14 +12,14 @@ struct RecentConversationsWidget: View {
             // Header
             HStack {
                 Text("Recent Conversations")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onViewAll) {
                     Text("View All")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
                 .buttonStyle(.plain)
@@ -28,7 +28,7 @@ struct RecentConversationsWidget: View {
             if conversations.isEmpty {
                 VStack(spacing: 8) {
                     Text("No conversations yet")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity)

@@ -21,7 +21,7 @@ struct GoalsWidget: View {
             // Header
             HStack {
                 Text("Goals")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -29,7 +29,7 @@ struct GoalsWidget: View {
                 // History button
                 Button(action: { showingHistory = true }) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -43,7 +43,7 @@ struct GoalsWidget: View {
                                 .frame(width: 14, height: 14)
                         } else {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
                         }
                     }
@@ -55,7 +55,7 @@ struct GoalsWidget: View {
                 if goals.count < 3 {
                     Button(action: { showingCreateSheet = true }) {
                         Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -69,10 +69,10 @@ struct GoalsWidget: View {
                         HStack {
                             Spacer()
                             Image(systemName: "plus")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textTertiary)
                             Text("Tap to add goal")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                             Spacer()
                         }
@@ -90,10 +90,10 @@ struct GoalsWidget: View {
                                     .frame(width: 12, height: 12)
                             } else {
                                 Image(systemName: "sparkles")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                             }
                             Text(isGeneratingGoal ? "Generating..." : "Generate AI Goal")
-                                .font(.system(size: 12, weight: .medium))
+                                .scaledFont(size: 12, weight: .medium)
                         }
                         .foregroundColor(OmiColors.purplePrimary)
                         .padding(.horizontal, 12)
@@ -241,7 +241,7 @@ struct GoalRowView: View {
                     .fill(OmiColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 32, height: 32)
                 Text(goalEmoji)
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
             }
             .onTapGesture { onTap() }
 
@@ -249,7 +249,7 @@ struct GoalRowView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(goal.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
                         .onTapGesture { onTap() }
@@ -264,7 +264,7 @@ struct GoalRowView: View {
                             }
                         }) {
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 9, weight: .medium))
+                                .scaledFont(size: 9, weight: .medium)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -274,7 +274,7 @@ struct GoalRowView: View {
                     if isHovering, let onGetAdvice = onGetAdvice {
                         Button(action: onGetAdvice) {
                             Image(systemName: "lightbulb.fill")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.yellow)
                         }
                         .buttonStyle(.plain)
@@ -283,7 +283,7 @@ struct GoalRowView: View {
 
                     // Progress value (current/target)
                     Text(dragProgressText)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(isDragging ? OmiColors.textPrimary : OmiColors.textTertiary)
                         .animation(.easeInOut(duration: 0.15), value: isDragging)
                 }
@@ -341,7 +341,7 @@ struct GoalRowView: View {
                         // Description
                         if let desc = goal.description, !desc.isEmpty {
                             Text(desc)
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(3)
                         }
@@ -350,18 +350,18 @@ struct GoalRowView: View {
                         if !linkedTasks.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Linked Tasks")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .scaledFont(size: 10, weight: .semibold)
                                     .foregroundColor(OmiColors.textTertiary)
                                     .textCase(.uppercase)
 
                                 ForEach(linkedTasks) { task in
                                     HStack(spacing: 6) {
                                         Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-                                            .font(.system(size: 11))
+                                            .scaledFont(size: 11)
                                             .foregroundColor(task.completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : OmiColors.textTertiary)
 
                                         Text(task.description)
-                                            .font(.system(size: 12))
+                                            .scaledFont(size: 12)
                                             .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
                                             .strikethrough(task.completed)
                                             .lineLimit(1)
@@ -602,14 +602,14 @@ struct GoalEditSheet: View {
             // Header
             HStack {
                 Text(isNewGoal ? "Add Goal" : "Edit Goal")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(OmiColors.backgroundTertiary.opacity(0.5))
@@ -630,7 +630,7 @@ struct GoalEditSheet: View {
                     if !isNewGoal {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Icon")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -638,7 +638,7 @@ struct GoalEditSheet: View {
                                     ForEach(availableEmojis, id: \.self) { emoji in
                                         Button(action: { selectedEmoji = emoji }) {
                                             Text(emoji)
-                                                .font(.system(size: 20))
+                                                .scaledFont(size: 20)
                                                 .frame(width: 40, height: 40)
                                                 .background(
                                                     RoundedRectangle(cornerRadius: 10)
@@ -661,12 +661,12 @@ struct GoalEditSheet: View {
                     // Title field
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Goal Title")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
 
                         TextField("Enter goal title", text: $title)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textPrimary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -680,12 +680,12 @@ struct GoalEditSheet: View {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Current")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             TextField("0", text: $currentValue)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textPrimary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
@@ -697,12 +697,12 @@ struct GoalEditSheet: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Target")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             TextField("100", text: $targetValue)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textPrimary)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
@@ -728,7 +728,7 @@ struct GoalEditSheet: View {
                         onDismiss()
                     }) {
                         Text("Delete")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(.red)
                     }
                     .buttonStyle(.plain)
@@ -739,7 +739,7 @@ struct GoalEditSheet: View {
                 // Cancel button
                 Button(action: onDismiss) {
                     Text("Cancel")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -752,7 +752,7 @@ struct GoalEditSheet: View {
                     onDismiss()
                 }) {
                     Text(isNewGoal ? "Add Goal" : "Save")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
@@ -799,10 +799,10 @@ struct GoalAdviceSheet: View {
             HStack {
                 HStack(spacing: 8) {
                     Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(.yellow)
                     Text("Goal Advice")
-                        .font(.system(size: 18, weight: .semibold))
+                        .scaledFont(size: 18, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
 
@@ -810,7 +810,7 @@ struct GoalAdviceSheet: View {
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(OmiColors.backgroundTertiary.opacity(0.5))
@@ -829,12 +829,12 @@ struct GoalAdviceSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(goal.title)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     Text("\(Int(goal.currentValue))/\(Int(goal.targetValue)) (\(Int(goal.progress))%)")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -862,17 +862,17 @@ struct GoalAdviceSheet: View {
                         ProgressView()
                             .scaleEffect(1.2)
                         Text("Getting personalized advice...")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let error = errorMessage {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 32))
+                            .scaledFont(size: 32)
                             .foregroundColor(.orange)
                         Text(error)
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     }
@@ -880,11 +880,11 @@ struct GoalAdviceSheet: View {
                 } else if let advice = advice {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("This week's action:")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
 
                         Text(advice)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -903,10 +903,10 @@ struct GoalAdviceSheet: View {
                 Button(action: loadAdvice) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                         Text("Refresh")
                     }
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -917,7 +917,7 @@ struct GoalAdviceSheet: View {
                 // Done button
                 Button(action: onDismiss) {
                     Text("Done")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)

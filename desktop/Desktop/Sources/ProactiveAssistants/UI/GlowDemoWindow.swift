@@ -71,7 +71,7 @@ class GlowDemoWindow: NSWindow {
 
         // Create demo content
         let demoView = GlowDemoContentView()
-        let hostingView = NSHostingView(rootView: demoView)
+        let hostingView = NSHostingView(rootView: demoView.withFontScaling())
         self.contentView = hostingView
     }
 }
@@ -94,7 +94,7 @@ struct GlowDemoContentView: View {
 
                 // Arrow between states
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 16, weight: .medium))
+                    .scaledFont(size: 16, weight: .medium)
                     .foregroundColor(.secondary.opacity(0.5))
 
                 // Distracted state
@@ -113,11 +113,11 @@ struct GlowDemoContentView: View {
                     ProgressView()
                         .scaleEffect(0.6)
                     Text(state.phase == .focused ? "Showing focused glow..." : "Showing distracted glow...")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 } else {
                     Text("Watch the border effect")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary.opacity(0.6))
                 }
             }
@@ -160,11 +160,11 @@ struct GlowDemoContentView: View {
 
             // Labels
             Text(title)
-                .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                .scaledFont(size: 13, weight: isActive ? .semibold : .regular)
                 .foregroundColor(isActive ? .primary : .secondary)
 
             Text(description)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(.secondary.opacity(0.8))
         }
         .frame(maxWidth: .infinity)

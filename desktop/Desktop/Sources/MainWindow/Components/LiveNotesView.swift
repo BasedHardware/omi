@@ -42,7 +42,7 @@ struct LiveNotesView: View {
     private var headerView: some View {
         HStack {
             Text("Notes")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
@@ -50,7 +50,7 @@ struct LiveNotesView: View {
             // AI toggle
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(monitor.isAiEnabled ? OmiColors.purplePrimary : OmiColors.textQuaternary)
 
                 Toggle("", isOn: $monitor.isAiEnabled)
@@ -77,16 +77,16 @@ struct LiveNotesView: View {
             Spacer()
 
             Image(systemName: "note.text")
-                .font(.system(size: 32))
+                .scaledFont(size: 32)
                 .foregroundColor(OmiColors.textQuaternary)
 
             Text("Notes will appear here")
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textTertiary)
 
             if monitor.isAiEnabled {
                 Text("AI generates notes as you speak")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -137,7 +137,7 @@ struct LiveNotesView: View {
             HStack(spacing: 8) {
                 TextField("Add a note...", text: $manualNoteText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textPrimary)
                     .focused($isInputFocused)
                     .onSubmit {
@@ -146,7 +146,7 @@ struct LiveNotesView: View {
 
                 Button(action: addManualNote) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 18))
+                        .scaledFont(size: 18)
                         .foregroundColor(manualNoteText.isEmpty ? OmiColors.textQuaternary : OmiColors.purplePrimary)
                 }
                 .buttonStyle(.plain)
@@ -219,12 +219,12 @@ private struct NoteRowView: View {
             // AI indicator
             if note.isAiGenerated {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.purplePrimary)
                     .frame(width: 14)
             } else {
                 Image(systemName: "pencil")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 14)
             }
@@ -234,7 +234,7 @@ private struct NoteRowView: View {
                     // Edit mode
                     TextField("", text: $editText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textPrimary)
                         .focused($isEditFocused)
                         .onSubmit { onSaveEdit() }
@@ -243,7 +243,7 @@ private struct NoteRowView: View {
                 } else {
                     // Display mode
                     Text(note.text)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(nil)
                         .onTapGesture(count: 2) {
@@ -253,7 +253,7 @@ private struct NoteRowView: View {
 
                 // Timestamp
                 Text(formattedTime)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
@@ -265,28 +265,28 @@ private struct NoteRowView: View {
                     if isEditing {
                         Button(action: onSaveEdit) {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.success)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onCancelEdit) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
                     } else {
                         Button(action: onStartEdit) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
 
                         Button(action: onDelete) {
                             Image(systemName: "trash")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.error)
                         }
                         .buttonStyle(.plain)

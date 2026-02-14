@@ -22,7 +22,7 @@ struct SettingsSidebar: View {
 
             // Settings title
             Text("Settings")
-                .font(.system(size: 22, weight: .bold))
+                .scaledFont(size: 22, weight: .bold)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
@@ -71,11 +71,11 @@ struct SettingsSidebar: View {
     private var backButton: some View {
         HStack(spacing: 8) {
             Image(systemName: "chevron.left")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text("Back")
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
@@ -123,12 +123,12 @@ struct SettingsSidebarItem: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 17))
+                .scaledFont(size: 17)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
                 .frame(width: iconWidth)
 
             Text(section.rawValue)
-                .font(.system(size: 14, weight: isSelected ? .medium : .regular))
+                .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
             Spacer()
@@ -167,12 +167,12 @@ struct SettingsSubsectionItem: View {
                 .frame(width: iconWidth + 12)
 
             Image(systemName: subsection.icon)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
                 .frame(width: 16)
 
             Text(subsection.rawValue)
-                .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
                 .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
             Spacer()

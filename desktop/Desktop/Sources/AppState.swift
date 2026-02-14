@@ -591,25 +591,24 @@ class AppState: ObservableObject {
     /// Uses AEDeterminePermissionToAutomateTarget to query TCC status for System Events
     func checkAutomationPermission() {
         Task.detached {
+            let bundleIDString = "com.apple.systemevents"
             var addressDesc = AEAddressDesc()
-            let bundleID = "com.apple.systemevents" as CFString
-            let utf8 = CFStringGetCStringPtr(bundleID, CFStringBuiltInEncodings.UTF8.rawValue)
-            AECreateDesc(
-                keyAddressAttr,
-                utf8!,
-                strlen(utf8!),
-                &addressDesc
-            )
-            let status = AEDeterminePermissionToAutomateTarget(
-                &addressDesc,
-                typeWildCard,
-                typeWildCard,
-                false // askUserIfNeeded = false → never shows dialog
-            )
-            AEDisposeDesc(&addressDesc)
 
-            // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, procNotFound (-600) = not asked yet
+            let status: OSStatus = bundleIDString.withCString { cString in
+                AECreateDesc(typeApplicationBundleID, cString, strlen(cString), &addressDesc)
+                let result = AEDeterminePermissionToAutomateTarget(
+                    &addressDesc,
+                    typeWildCard,
+                    typeWildCard,
+                    false // askUserIfNeeded = false → never shows dialog
+                )
+                AEDisposeDesc(&addressDesc)
+                return result
+            }
+
+            // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, -1744 = not determined
             let hasPermission = status == noErr
+            log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
 
             await MainActor.run {
                 self.hasAutomationPermission = hasPermission

@@ -18,7 +18,7 @@ class FeedbackWindow {
             window = nil
         }
 
-        let hostingController = NSHostingController(rootView: feedbackView)
+        let hostingController = NSHostingController(rootView: feedbackView.withFontScaling())
 
         let newWindow = NSWindow(contentViewController: hostingController)
         newWindow.title = "Report Issue"
@@ -60,7 +60,7 @@ struct FeedbackView: View {
                 // Success state
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
+                        .scaledFont(size: 48)
                         .foregroundColor(.green)
 
                     Text("Report sent!")

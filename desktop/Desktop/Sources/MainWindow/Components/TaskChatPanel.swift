@@ -16,30 +16,51 @@ struct TaskChatPanel: View {
             Divider()
                 .background(OmiColors.backgroundTertiary)
 
-            // Messages area
-            ChatMessagesView(
-                messages: chatProvider.messages,
-                isSending: chatProvider.isSending,
-                hasMoreMessages: chatProvider.hasMoreMessages,
-                isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-                isLoadingInitial: chatProvider.isLoading,
-                app: nil,
-                onLoadMore: { await chatProvider.loadMoreMessages() },
-                onRate: { messageId, rating in
-                    Task { await chatProvider.rateMessage(messageId, rating: rating) }
-                },
-                welcomeContent: { taskWelcome }
-            )
+            if coordinator.isOpening {
+                // Loading state while session is being created
+                VStack(spacing: 12) {
+                    Spacer()
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Setting up chat...")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // Messages area
+                ChatMessagesView(
+                    messages: chatProvider.messages,
+                    isSending: chatProvider.isSending,
+                    hasMoreMessages: chatProvider.hasMoreMessages,
+                    isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
+                    isLoadingInitial: chatProvider.isLoading,
+                    app: nil,
+                    onLoadMore: { await chatProvider.loadMoreMessages() },
+                    onRate: { messageId, rating in
+                        Task { await chatProvider.rateMessage(messageId, rating: rating) }
+                    },
+                    welcomeContent: { taskWelcome }
+                )
 
-            // Input area
-            ChatInputView(
-                onSend: { text in
-                    Task { await chatProvider.sendMessage(text) }
-                },
-                isSending: chatProvider.isSending,
-                placeholder: "Ask about this task..."
-            )
-            .padding(12)
+                // Input area
+                ChatInputView(
+                    onSend: { text in
+                        Task { await chatProvider.sendMessage(text) }
+                    },
+                    onFollowUp: { text in
+                        Task { await chatProvider.sendFollowUp(text) }
+                    },
+                    onStop: {
+                        chatProvider.stopAgent()
+                    },
+                    isSending: chatProvider.isSending,
+                    placeholder: "Ask about this task...",
+                    mode: $chatProvider.chatMode
+                )
+                .padding(12)
+            }
         }
         .background(OmiColors.backgroundPrimary)
     }
@@ -60,16 +81,16 @@ struct TaskChatPanel: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Task Chat")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if let task = task {
                     Text(task.description)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -79,7 +100,7 @@ struct TaskChatPanel: View {
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 20, height: 20)
                 }
@@ -90,9 +111,9 @@ struct TaskChatPanel: View {
             // Workspace path indicator
             HStack(spacing: 4) {
                 Image(systemName: "folder")
-                    .font(.system(size: 9))
+                    .scaledFont(size: 9)
                 Text(displayPath)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
@@ -110,15 +131,15 @@ struct TaskChatPanel: View {
     private var taskWelcome: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 32))
+                .scaledFont(size: 32)
                 .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
             Text("Chat about this task")
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text("Ask questions, get suggestions, or discuss implementation details.")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
