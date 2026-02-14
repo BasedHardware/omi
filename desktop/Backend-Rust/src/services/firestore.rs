@@ -2567,8 +2567,8 @@ impl FirestoreService {
             .await?;
 
         // Filter: has conversation_id → created by old save_action_items path
-        let bad_items: Vec<&ActionItemDB> = all_items
-            .iter()
+        let bad_items: Vec<ActionItemDB> = all_items
+            .into_iter()
             .filter(|item| item.conversation_id.is_some())
             .collect();
 
@@ -2583,46 +2583,17 @@ impl FirestoreService {
             uid
         );
 
-        let mut migrated = 0;
-        let mut deleted = 0;
-
-        for item in &bad_items {
-            // Create as staged task
-            if let Err(e) = self
-                .create_staged_task(
-                    uid,
-                    &item.description,
-                    item.due_at,
-                    Some("transcription"),
-                    item.priority.as_deref(),
-                    None,
-                    item.category.as_deref(),
-                    None, // no relevance_score — will be ranked by prioritization service
-                )
-                .await
-            {
-                tracing::error!("Failed to create staged task during migration: {}", e);
-                continue;
-            }
-            migrated += 1;
-
-            // Hard-delete the original action item
-            if let Err(e) = self.delete_action_item(uid, &item.id).await {
-                tracing::error!("Failed to delete migrated action item {}: {}", item.id, e);
-            } else {
-                deleted += 1;
-            }
-        }
+        // Use batch_migrate_to_staged for fast batch commits (250 items per batch)
+        let migrated = self.batch_migrate_to_staged(uid, &bad_items).await?;
 
         tracing::info!(
-            "Migration complete for user {}: {} staged, {} deleted out of {} candidates",
+            "Migration complete for user {}: {} migrated out of {} candidates",
             uid,
             migrated,
-            deleted,
             bad_items.len()
         );
 
-        Ok((migrated, deleted))
+        Ok((migrated, migrated))
     }
 
     /// Get staged tasks ordered by relevance_score ASC (best ranked first).
