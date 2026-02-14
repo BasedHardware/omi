@@ -38,6 +38,8 @@ actor TaskAssistant: ProactiveAssistant {
     private var latestFrame: CapturedFrame?
     /// Fallback timer that fires after extractionInterval if no context switch occurs
     private var fallbackTimerTask: Task<Void, Never>?
+    /// Timestamp of last context switch yield, for throttling rapid switches
+    private var lastContextSwitchYieldTime: Date = .distantPast
 
     // Cached goals (refreshed every 5 minutes)
     private var cachedGoals: [Goal] = []
@@ -548,11 +550,25 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Context switch from \(frame.appName) (window: \(frame.windowTitle ?? "nil")) -> \(newApp)")
 
+        // Throttle context switch yields using the analysis delay setting
+        let analysisDelay = await MainActor.run { AssistantSettings.shared.analysisDelay }
+        if analysisDelay > 0 {
+            let elapsed = Date().timeIntervalSince(lastContextSwitchYieldTime)
+            if elapsed < TimeInterval(analysisDelay) {
+                log("Task: Context switch throttled (\(Int(elapsed))s < \(analysisDelay)s delay)")
+                // Still cancel fallback timer so it resets
+                fallbackTimerTask?.cancel()
+                fallbackTimerTask = nil
+                return
+            }
+        }
+
         // Cancel fallback timer — context switch replaces it
         fallbackTimerTask?.cancel()
         fallbackTimerTask = nil
 
         // Yield context switch trigger with the frame
+        lastContextSwitchYieldTime = Date()
         triggerContinuation.yield(.contextSwitch(frame))
     }
 
