@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use crate::encryption;
 
 use crate::models::{
-    ActionItem, ActionItemDB, AdviceCategory, AdviceDB, App, AppReview, AppSummary, Category,
+    ActionItemDB, AdviceCategory, AdviceDB, App, AppReview, AppSummary, Category,
     ChatSessionDB, Conversation, DailySummarySettings, DistractionEntry, Folder, FocusSessionDB,
     FocusStats, FocusStatus, GoalDB, GoalHistoryEntry, GoalType, Memory, MemoryCategory, MemoryDB, MessageDB,
     NotificationSettings, PersonaDB, Structured, TranscriptSegment, TranscriptionPreferences,
@@ -3985,7 +3985,7 @@ impl FirestoreService {
             let description = self.parse_string(map_fields, "description").unwrap_or_default();
             let completed = self.parse_bool(map_fields, "completed").unwrap_or(false);
             let due_at = self.parse_timestamp_optional(map_fields, "due_at");
-            Some(crate::models::ActionItem { description, completed, due_at })
+            Some(crate::models::ActionItem { description, completed, due_at, confidence: None, priority: None })
         }).collect()
     }
 
