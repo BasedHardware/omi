@@ -250,6 +250,8 @@ def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
         goals_by_id = {}
         for goal in goals:
             goal_id = goal.get('id', '')
+            if not goal_id:
+                continue
             goal_title = goal.get('title', '')
             current_value = goal.get('current_value', 0)
             target_value = goal.get('target_value', 10)
@@ -258,6 +260,9 @@ def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
                 f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
             )
             goals_by_id[goal_id] = goal
+
+        if not goals_list:
+            return None
 
         goals_text = '\n'.join(goals_list)
 
@@ -268,50 +273,60 @@ Goals:
 
 User Message: "{text[:500]}"
 
-For each goal where the message mentions a NEW progress value, extract it.
-Handle formats like: "1k users" → 1000, "500k" → 500000, "1.5 million" → 1500000, percentages relative to goal.
+For each goal where the message mentions a NEW absolute progress value, extract it.
+Convert shorthand to numbers: "1k" → 1000, "500k" → 500000, "1.5 million" → 1500000.
+The "value" MUST be the absolute current total, NOT a relative change or percentage.
 
-Return a JSON array of results. Include ONLY goals where you found progress (found=true). If no goals match, return an empty array [].
-Format: [{{"goal_id": "...", "found": true, "value": <number>, "reasoning": "brief explanation"}}]
+Return ONLY a JSON array, no other text. Include ONLY goals where progress was found.
+If no goals match, return an empty array: []
+
+Example output: [{{"goal_id": "goal_abc123", "found": true, "value": 2500, "reasoning": "user said total is $2,500"}}]
+
 Only include a goal if you're confident the message is about that SPECIFIC goal."""
 
         with track_usage(uid, Features.GOALS):
             response = llm_mini.invoke(prompt).content
 
-        # Extract JSON array from response
-        match = re.search(r'\[.*\]', response, re.DOTALL)
-        if not match:
+        # Parse JSON array from response using non-greedy extraction
+        results = _parse_json_array(response)
+        if results is None:
             return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
 
-        results = json.loads(match.group())
-        if not isinstance(results, list):
-            results = [results]
-
         updates = []
+        seen_goal_ids = set()
         for result in results:
-            if not result.get('found') or result.get('value') is None:
+            try:
+                if not isinstance(result, dict) or not result.get('found') or result.get('value') is None:
+                    continue
+                goal_id = result.get('goal_id', '')
+                if not goal_id or goal_id in seen_goal_ids:
+                    continue
+                seen_goal_ids.add(goal_id)
+                goal = goals_by_id.get(goal_id)
+                if not goal:
+                    continue
+                new_value = float(result['value'])
+                # Validate: reject NaN, inf, and negative values
+                if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
+                    continue
+                old_value = goal.get('current_value', 0)
+                if new_value != old_value:
+                    goals_db.update_goal_progress(uid, goal_id, new_value)
+                    goal_title = goal.get('title', '')
+                    print(
+                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                    )
+                    updates.append(
+                        {
+                            "goal_id": goal_id,
+                            "goal_title": goal_title,
+                            "old_value": old_value,
+                            "new_value": new_value,
+                            "reasoning": result.get('reasoning'),
+                        }
+                    )
+            except (ValueError, TypeError, KeyError):
                 continue
-            goal_id = result.get('goal_id', '')
-            goal = goals_by_id.get(goal_id)
-            if not goal:
-                continue
-            new_value = float(result['value'])
-            old_value = goal.get('current_value', 0)
-            if new_value != old_value:
-                goals_db.update_goal_progress(uid, goal_id, new_value)
-                goal_title = goal.get('title', '')
-                print(
-                    f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
-                )
-                updates.append(
-                    {
-                        "goal_id": goal_id,
-                        "goal_title": goal_title,
-                        "old_value": old_value,
-                        "new_value": new_value,
-                        "reasoning": result.get('reasoning'),
-                    }
-                )
 
         if updates:
             return {"status": "updated", "updates": updates}
@@ -319,3 +334,19 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
     except Exception as e:
         print(f"Error in extract_and_update_goal_progress: {e}")
         return {"status": "error", "message": str(e)}
+
+
+def _parse_json_array(text: str) -> Optional[List]:
+    """Extract and parse the first JSON array from LLM response text."""
+    # Find the first '[' and try to parse from there
+    start = text.find('[')
+    if start == -1:
+        return None
+    try:
+        decoder = json.JSONDecoder()
+        result, _ = decoder.raw_decode(text, start)
+        if isinstance(result, list):
+            return result
+        return [result]
+    except (json.JSONDecodeError, ValueError):
+        return None

@@ -301,3 +301,87 @@ class TestEdgeCases:
             result = _import_fn()("uid-1", "I saved $500 today")
 
         assert result["status"] == "error"
+
+    def test_negative_value_rejected(self):
+        """Negative values from LLM should be ignored."""
+        mock_goals_db.get_user_goals.return_value = [GOAL_A]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content=json.dumps([{"goal_id": "goal-a", "found": True, "value": -500, "reasoning": "negative"}])
+        )
+
+        with patch("utils.llm.goals.llm_mini", mock_llm):
+            result = _import_fn()("uid-1", "I lost $500")
+
+        assert result["status"] == "no_update"
+        mock_goals_db.update_goal_progress.assert_not_called()
+
+    def test_nan_value_rejected(self):
+        """NaN values should be ignored."""
+        mock_goals_db.get_user_goals.return_value = [GOAL_A]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='[{"goal_id": "goal-a", "found": true, "value": NaN, "reasoning": "bad"}]'
+        )
+
+        with patch("utils.llm.goals.llm_mini", mock_llm):
+            result = _import_fn()("uid-1", "Something happened")
+
+        # NaN in JSON is invalid, so parsing fails gracefully
+        assert result["status"] == "no_update"
+        mock_goals_db.update_goal_progress.assert_not_called()
+
+    def test_duplicate_goal_id_deduped(self):
+        """If LLM returns same goal_id twice, only process first occurrence."""
+        mock_goals_db.get_user_goals.return_value = [GOAL_A]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content=json.dumps(
+                [
+                    {"goal_id": "goal-a", "found": True, "value": 3000, "reasoning": "first"},
+                    {"goal_id": "goal-a", "found": True, "value": 5000, "reasoning": "duplicate"},
+                ]
+            )
+        )
+
+        with patch("utils.llm.goals.llm_mini", mock_llm):
+            result = _import_fn()("uid-1", "I saved $3000 or maybe $5000")
+
+        assert result["status"] == "updated"
+        assert len(result["updates"]) == 1
+        assert result["updates"][0]["new_value"] == 3000
+        mock_goals_db.update_goal_progress.assert_called_once()
+
+    def test_llm_returns_array_with_extra_text(self):
+        """LLM wraps JSON in prose — parser should still extract the array."""
+        mock_goals_db.get_user_goals.return_value = [GOAL_A]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content='Here is the analysis:\n[{"goal_id": "goal-a", "found": true, "value": 4000, "reasoning": "saved more"}]\nHope this helps!'
+        )
+
+        with patch("utils.llm.goals.llm_mini", mock_llm):
+            result = _import_fn()("uid-1", "I now have $4000 saved")
+
+        assert result["status"] == "updated"
+        assert result["updates"][0]["new_value"] == 4000
+
+    def test_one_bad_result_doesnt_block_others(self):
+        """A malformed result shouldn't prevent processing valid ones."""
+        mock_goals_db.get_user_goals.return_value = [GOAL_A, GOAL_B]
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(
+            content=json.dumps(
+                [
+                    {"goal_id": "goal-a", "found": True, "value": "not_a_number", "reasoning": "bad"},
+                    {"goal_id": "goal-b", "found": True, "value": 50, "reasoning": "ran 50 miles"},
+                ]
+            )
+        )
+
+        with patch("utils.llm.goals.llm_mini", mock_llm):
+            result = _import_fn()("uid-1", "I ran 50 miles and saved some money")
+
+        assert result["status"] == "updated"
+        assert len(result["updates"]) == 1
+        assert result["updates"][0]["goal_id"] == "goal-b"
