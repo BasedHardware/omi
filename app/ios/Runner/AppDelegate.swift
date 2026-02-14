@@ -122,6 +122,7 @@ extension FlutterError: Error {}
   // MARK: - Silent Push for Apple Reminders Auto-Sync
 
   private let syncEventStore = EKEventStore()
+  private let syncQueue = DispatchQueue(label: "com.omi.apple-reminders-sync")
 
   override func application(
       _ application: UIApplication,
@@ -152,58 +153,104 @@ extension FlutterError: Error {}
       completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
       guard let actionItemId = userInfo["action_item_id"] as? String,
-            let description = userInfo["description"] as? String else {
+            let reminderTitle = userInfo["description"] as? String else {
           completionHandler(.failed)
           return
       }
 
-      // Check permission - handle iOS 17+ new authorization states
+      // Check permission - require fullAccess on iOS 17+ (need read for dedup)
       let status = EKEventStore.authorizationStatus(for: .reminder)
 
-      // iOS 17+ uses .fullAccess and .writeOnly, older iOS uses .authorized
-      var hasAccess = false
       if #available(iOS 17.0, *) {
-          hasAccess = status == .fullAccess || status == .writeOnly
+          if status == .writeOnly {
+              // Need fullAccess for reading reminders; re-prompt
+              syncEventStore.requestFullAccessToReminders { granted, _ in
+                  if !granted {
+                      completionHandler(.noData)
+                  } else {
+                      self.syncQueue.async {
+                          self.createReminderIfNeeded(actionItemId: actionItemId, reminderTitle: reminderTitle, userInfo: userInfo, completionHandler: completionHandler)
+                      }
+                  }
+              }
+              return
+          }
+          guard status == .fullAccess else {
+              completionHandler(.failed)
+              return
+          }
       } else {
-          hasAccess = status == .authorized
+          guard status == .authorized else {
+              completionHandler(.failed)
+              return
+          }
       }
 
-      guard hasAccess else {
+      syncQueue.async {
+          self.createReminderIfNeeded(actionItemId: actionItemId, reminderTitle: reminderTitle, userInfo: userInfo, completionHandler: completionHandler)
+      }
+  }
+
+  private func createReminderIfNeeded(
+      actionItemId: String,
+      reminderTitle: String,
+      userInfo: [AnyHashable: Any],
+      completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+      let dedupTag = "omi:\(actionItemId)"
+
+      guard let calendar = syncEventStore.defaultCalendarForNewReminders() else {
           completionHandler(.failed)
           return
       }
 
-      // Parse due date
-      let dueDate: Date? = {
-          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
+      let predicate = syncEventStore.predicateForReminders(in: [calendar])
+      syncEventStore.fetchReminders(matching: predicate) { [weak self] existingReminders in
+          guard let self = self else {
+              completionHandler(.failed)
+              return
           }
-          return nil
-      }()
+          // Dispatch back onto syncQueue for thread-safe check+save
+          self.syncQueue.async {
+              if let reminders = existingReminders,
+                 reminders.contains(where: { $0.notes?.contains(dedupTag) == true }) {
+                  // Already exists — skip
+                  completionHandler(.noData)
+                  return
+              }
 
-      // Create reminder
-      let reminder = EKReminder(eventStore: syncEventStore)
-      reminder.title = description
-      reminder.notes = "From Omi"
-      reminder.calendar = syncEventStore.defaultCalendarForNewReminders()
+              // Parse due date
+              let dueDate: Date? = {
+                  if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
+                      return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
+                  }
+                  return nil
+              }()
 
-      if let due = dueDate {
-          reminder.dueDateComponents = Calendar.current.dateComponents(
-              [.year, .month, .day, .hour, .minute], from: due
-          )
-      }
+              // Create reminder
+              let reminder = EKReminder(eventStore: self.syncEventStore)
+              reminder.title = reminderTitle
+              reminder.notes = "From Omi\n\(dedupTag)"
+              reminder.calendar = calendar
 
-      do {
-          try syncEventStore.save(reminder, commit: true)
+              if let due = dueDate {
+                  reminder.dueDateComponents = Calendar.current.dateComponents(
+                      [.year, .month, .day, .hour, .minute], from: due
+                  )
+              }
 
-          // Notify Flutter to mark as exported via API
-          DispatchQueue.main.async {
-              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+              do {
+                  try self.syncEventStore.save(reminder, commit: true)
+
+                  DispatchQueue.main.async {
+                      self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+                  }
+
+                  completionHandler(.newData)
+              } catch {
+                  completionHandler(.failed)
+              }
           }
-
-          completionHandler(.newData)
-      } catch {
-          completionHandler(.failed)
       }
   }
 
