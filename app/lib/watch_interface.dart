@@ -39,6 +39,8 @@ abstract class WatchRecorderHostAPI {
   void requestWatchBatteryUpdate();
   @SwiftFunction('getWatchInfo()')
   Map<String, String> getWatchInfo();
+  @SwiftFunction('sendDeviceState(isRecording:isConnected:batteryLevel:)')
+  void sendDeviceState(bool isRecording, bool isConnected, int batteryLevel);
 }
 
 @FlutterApi()
