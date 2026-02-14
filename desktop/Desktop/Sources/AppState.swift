@@ -65,6 +65,15 @@ class AppState: ObservableObject {
     @Published var folders: [Folder] = []
     @Published var isLoadingFolders: Bool = false
 
+    // People (speaker voice profiles)
+    @Published var people: [Person] = []
+    var peopleById: [String: Person] {
+        Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+    }
+
+    /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
+    @Published var liveSpeakerPersonMap: [Int: String] = [:]
+
     // Permission states for onboarding
     @Published var hasNotificationPermission = false
     @Published var notificationAlertStyle: UNAlertStyle = .none  // .none, .banner, or .alert
@@ -786,6 +795,7 @@ class AppState: ObservableObject {
             audioSource = effectiveSource
             currentTranscript = ""
             speakerSegments = []
+            liveSpeakerPersonMap = [:]
             LiveTranscriptMonitor.shared.clear()
             recordingStartTime = Date()
             AudioLevelMonitor.shared.reset()
@@ -1001,6 +1011,68 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Finish the current conversation and keep recording for a new one
+    func finishConversation() async -> FinishConversationResult {
+        guard !speakerSegments.isEmpty else {
+            log("Transcription: No segments to finish")
+            return .discarded
+        }
+
+        log("Transcription: Finishing conversation, keeping recording active")
+
+        let result = await finalizeConversation()
+
+        // Clear segments for the next conversation but keep recording
+        speakerSegments = []
+        liveSpeakerPersonMap = [:]
+        LiveTranscriptMonitor.shared.clear()
+        LiveNotesMonitor.shared.endSession()
+        LiveNotesMonitor.shared.clear()
+
+        // Reset the recording start time for the next conversation
+        recordingStartTime = Date()
+        RecordingTimer.shared.restart()
+
+        // Restart the 4-hour max recording timer
+        maxRecordingTimer?.invalidate()
+        maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.isTranscribing else { return }
+                log("Transcription: 4-hour limit reached - finalizing conversation")
+                _ = await self.finalizeConversation()
+                self.stopAudioCapture()
+                self.clearTranscriptionState()
+                self.startTranscription()
+            }
+        }
+
+        // Start a new DB session for the next conversation
+        let lang = AssistantSettings.shared.effectiveTranscriptionLanguage
+        Task {
+            do {
+                let sessionId = try await TranscriptionStorage.shared.startSession(
+                    source: currentConversationSource.rawValue,
+                    language: lang,
+                    timezone: TimeZone.current.identifier,
+                    inputDeviceName: recordingInputDeviceName
+                )
+                await MainActor.run {
+                    self.currentSessionId = sessionId
+                    LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+                }
+                log("Transcription: Created new DB session \(sessionId) for next conversation")
+            } catch {
+                logError("Transcription: Failed to create DB session for next conversation", error: error)
+            }
+        }
+
+        // Refresh the conversations list to show the new conversation
+        await loadConversations()
+
+        log("Transcription: Ready for next conversation")
+        return result
+    }
+
     /// Stop audio capture services (but keep transcript data for saving)
     private func stopAudioCapture() {
         // Cancel timers
@@ -1051,6 +1123,7 @@ class AppState: ObservableObject {
 
         // Clear segments after finalization
         speakerSegments = []
+        liveSpeakerPersonMap = [:]
         LiveTranscriptMonitor.shared.clear()
         LiveNotesMonitor.shared.clear()
         recordingStartTime = nil
@@ -1312,6 +1385,54 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - People (Speaker Profiles)
+
+    /// Fetches all people from the OMI API
+    func fetchPeople() async {
+        do {
+            let fetchedPeople = try await APIClient.shared.getPeople()
+            people = fetchedPeople
+            log("People: Loaded \(fetchedPeople.count) people")
+        } catch {
+            logError("People: Failed to load", error: error)
+        }
+    }
+
+    /// Creates a new person and adds to local cache
+    func createPerson(name: String) async -> Person? {
+        do {
+            let person = try await APIClient.shared.createPerson(name: name)
+            people.append(person)
+            log("People: Created person '\(name)' with id \(person.id)")
+            return person
+        } catch {
+            logError("People: Failed to create person", error: error)
+            return nil
+        }
+    }
+
+    /// Assigns segments to a person or user via bulk API
+    func assignSpeakerToSegments(
+        conversationId: String,
+        segmentIds: [Int],
+        personId: String?,
+        isUser: Bool
+    ) async -> Bool {
+        do {
+            try await APIClient.shared.assignSegmentsBulk(
+                conversationId: conversationId,
+                segmentIds: segmentIds.map(String.init),
+                isUser: isUser,
+                personId: personId
+            )
+            log("People: Assigned \(segmentIds.count) segments in conversation \(conversationId)")
+            return true
+        } catch {
+            logError("People: Failed to assign segments", error: error)
+            return false
+        }
+    }
+
     /// Finalize and save the current conversation to the backend
     /// Uses DB as source of truth for crash safety
     private func finalizeConversation() async -> FinishConversationResult {
@@ -1362,13 +1483,15 @@ class AppState: ObservableObject {
 
         log("Transcription: Finalizing conversation with \(segmentsToUpload.count) segments")
 
-        // Convert SpeakerSegment to API request format
+        // Convert SpeakerSegment to API request format (include person_id from live naming)
+        let speakerPersonMap = liveSpeakerPersonMap
         let apiSegments = segmentsToUpload.map { segment in
             APIClient.TranscriptSegmentRequest(
                 text: segment.text,
                 speaker: "SPEAKER_\(String(format: "%02d", segment.speaker))",
                 speakerId: segment.speaker,
                 isUser: segment.speaker == 0,  // Assume speaker 0 is the user
+                personId: speakerPersonMap[segment.speaker],
                 start: segment.start,
                 end: segment.end
             )
@@ -1516,9 +1639,17 @@ class AppState: ObservableObject {
             }
         }
 
-        // Log current segments summary
+        // Log current segments summary (only last 5 segments when count > 20 to avoid log spam)
         log("Transcript [SEGMENTS] Total: \(speakerSegments.count) segments")
-        for (i, seg) in speakerSegments.enumerated() {
+        let logSegments = speakerSegments.count > 20
+            ? Array(speakerSegments.suffix(5))
+            : speakerSegments
+        let startIdx = speakerSegments.count > 20 ? speakerSegments.count - 5 : 0
+        if speakerSegments.count > 20 {
+            log("  ... (\(speakerSegments.count - 5) earlier segments omitted)")
+        }
+        for (offset, seg) in logSegments.enumerated() {
+            let i = startIdx + offset
             let speakerLabel = seg.speaker == 0 ? "user" : "other"
             log("  [\(i)] Speaker \(seg.speaker)(\(speakerLabel)) [\(String(format: "%.1f", seg.start))s-\(String(format: "%.1f", seg.end))s]: \(seg.text)")
         }
@@ -1664,6 +1795,7 @@ class AppState: ObservableObject {
         let onboardingKeys = [
             "hasCompletedOnboarding",
             "onboardingStep",
+            "hasSeenRewindIntro",
             "hasTriggeredNotification",
             "hasTriggeredAutomation",
             "hasTriggeredScreenRecording",

@@ -15,6 +15,12 @@ struct ConversationDetailView: View {
     var onDelete: (() -> Void)?
     var onTitleUpdated: ((String) -> Void)?
 
+    // People (speaker naming)
+    var people: [Person] = []
+    var onFetchPeople: (() async -> Void)?
+    var onCreatePerson: ((String) async -> Person?)?
+    var onAssignSpeaker: ((String, [Int], String?, Bool) async -> Bool)?
+
     @StateObject private var appProvider = AppProvider()
     @State private var showAppSelector = false
     @State private var isReprocessing = false
@@ -34,6 +40,10 @@ struct ConversationDetailView: View {
     @State private var isUpdatingTitle = false
     @State private var isCopyingLink = false
     @State private var isDeleting = false
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSegmentForNaming: TranscriptSegment? = nil
 
     /// The conversation to display - use loaded version if available, otherwise use prop
     private var displayConversation: ServerConversation {
@@ -83,6 +93,7 @@ struct ConversationDetailView: View {
         }
         .task {
             await appProvider.fetchApps()
+            await onFetchPeople?()
             AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
 
             // Load segments from local database if not already present
@@ -131,6 +142,46 @@ struct ConversationDetailView: View {
                 onDismiss: { showAppSelector = false }
             )
             .frame(width: 400, height: 500)
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSegmentForNaming {
+                NameSpeakerSheet(
+                    segment: segment,
+                    allSegments: displayConversation.transcriptSegments,
+                    people: people,
+                    onSave: { personId, isUser, segmentIds in
+                        Task {
+                            let success = await onAssignSpeaker?(conversation.id, segmentIds, personId, isUser) ?? false
+                            if success {
+                                // Update local segments with the new personId/isUser
+                                var updated = displayConversation
+                                for idx in segmentIds where idx < updated.transcriptSegments.count {
+                                    let old = updated.transcriptSegments[idx]
+                                    updated.transcriptSegments[idx] = TranscriptSegment(
+                                        id: old.id,
+                                        text: old.text,
+                                        speaker: old.speaker,
+                                        isUser: isUser ? true : old.isUser,
+                                        personId: personId ?? old.personId,
+                                        start: old.start,
+                                        end: old.end
+                                    )
+                                }
+                                loadedConversation = updated
+                            }
+                            showNameSpeakerSheet = false
+                            selectedSegmentForNaming = nil
+                        }
+                    },
+                    onCreatePerson: { name in
+                        await onCreatePerson?(name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                        selectedSegmentForNaming = nil
+                    }
+                )
+            }
         }
     }
 
@@ -297,8 +348,16 @@ struct ConversationDetailView: View {
     // MARK: - Actions
 
     private func copyTranscript() {
+        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
-            let speakerName = segment.isUser ? "You" : "Speaker \(segment.speaker ?? "Unknown")"
+            let speakerName: String
+            if segment.isUser {
+                speakerName = "You"
+            } else if let personId = segment.personId, let person = peopleDict[personId] {
+                speakerName = person.name
+            } else {
+                speakerName = "Speaker \(segment.speaker ?? "Unknown")"
+            }
             return "[\(speakerName)]: \(segment.text)"
         }.joined(separator: "\n\n")
 
@@ -489,20 +548,32 @@ struct ConversationDetailView: View {
             }
 
             // Transcript content
-            VStack(spacing: 12) {
-                ForEach(displayConversation.transcriptSegments) { segment in
-                    SpeakerBubbleView(
-                        segment: segment,
-                        isUser: segment.isUser
-                    )
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundSecondary)
-            )
+            transcriptBubblesView
         }
+    }
+
+    // MARK: - Transcript Bubbles (shared)
+
+    private var transcriptBubblesView: some View {
+        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        return VStack(spacing: 12) {
+            ForEach(displayConversation.transcriptSegments) { segment in
+                SpeakerBubbleView(
+                    segment: segment,
+                    isUser: segment.isUser,
+                    personName: segment.personId.flatMap { peopleDict[$0]?.name },
+                    onSpeakerTapped: segment.isUser ? nil : {
+                        selectedSegmentForNaming = segment
+                        showNameSpeakerSheet = true
+                    }
+                )
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundSecondary)
+        )
     }
 
     // MARK: - Overview Section
@@ -603,19 +674,7 @@ struct ConversationDetailView: View {
             }
 
             // Transcript content
-            VStack(spacing: 12) {
-                ForEach(displayConversation.transcriptSegments) { segment in
-                    SpeakerBubbleView(
-                        segment: segment,
-                        isUser: segment.isUser
-                    )
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundSecondary)
-            )
+            transcriptBubblesView
         }
     }
 

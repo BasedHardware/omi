@@ -445,6 +445,8 @@ async fn migrate_ai_tasks(
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await
             {

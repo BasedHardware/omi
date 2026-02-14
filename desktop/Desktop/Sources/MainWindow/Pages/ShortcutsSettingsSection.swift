@@ -99,6 +99,9 @@ struct ShortcutsSettingsSection: View {
             if settings.doubleTapForLock {
                 shortcutRow(label: "Locked listening", keys: settings.pttKey.symbol + " \u{00D7}2")
             }
+            shortcutRow(label: "Increase font size", keys: "\u{2318}+")
+            shortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
+            shortcutRow(label: "Reset font size", keys: "\u{2318}0")
         }
         .padding(20)
         .background(

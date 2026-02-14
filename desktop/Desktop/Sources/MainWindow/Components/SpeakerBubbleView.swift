@@ -4,6 +4,8 @@ import SwiftUI
 struct SpeakerBubbleView: View {
     let segment: TranscriptSegment
     let isUser: Bool
+    var personName: String? = nil
+    var onSpeakerTapped: (() -> Void)? = nil
 
     /// Get speaker color based on speaker ID
     private var bubbleColor: Color {
@@ -23,7 +25,17 @@ struct SpeakerBubbleView: View {
     }
 
     private var speakerLabel: String {
-        isUser ? "You" : "Speaker \(segment.speakerId)"
+        if isUser { return "You" }
+        if let name = personName { return name }
+        return "Speaker \(segment.speakerId)"
+    }
+
+    private var avatarInitial: String {
+        if isUser { return "Y" }
+        if let name = personName, let first = name.first {
+            return String(first).uppercased()
+        }
+        return String(segment.speakerId)
     }
 
     var body: some View {
@@ -34,10 +46,32 @@ struct SpeakerBubbleView: View {
             }
 
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                // Speaker label
-                Text(speakerLabel)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                // Speaker label — clickable for non-user speakers
+                if !isUser, let onTap = onSpeakerTapped {
+                    Button(action: onTap) {
+                        HStack(spacing: 4) {
+                            Text(speakerLabel)
+                                .scaledFont(size: 12, weight: .medium)
+                            if personName == nil {
+                                Image(systemName: "pencil")
+                                    .scaledFont(size: 10)
+                            }
+                        }
+                        .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                } else {
+                    Text(speakerLabel)
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
 
                 // Message bubble
                 Text(segment.text)
@@ -67,10 +101,10 @@ struct SpeakerBubbleView: View {
 
     private var avatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary)
+            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary))
             .frame(width: 32, height: 32)
             .overlay(
-                Text(isUser ? "Y" : String(segment.speakerId))
+                Text(avatarInitial)
                     .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
             )

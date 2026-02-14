@@ -25,16 +25,32 @@ class TaskAgentSettings: ObservableObject {
         didSet { UserDefaults.standard.set(customPromptPrefix, forKey: "taskAgentPromptPrefix") }
     }
 
+    /// Default instructions template for how the agent should work with tasks
+    @Published var defaultPrompt: String {
+        didSet { UserDefaults.standard.set(defaultPrompt, forKey: "taskAgentDefaultPrompt") }
+    }
+
     /// Whether to use --dangerously-skip-permissions flag
     @Published var skipPermissions: Bool {
         didSet { UserDefaults.standard.set(skipPermissions, forKey: "taskAgentSkipPermissions") }
     }
+
+    static let defaultPromptTemplate = """
+    Analyze this task and create an implementation plan. Consider:
+    1. What files need to be modified
+    2. What is the approach
+    3. Any potential issues or considerations
+    4. Estimated complexity
+
+    After creating the plan, wait for user approval before implementing.
+    """
 
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "taskAgentEnabled")
         self.autoLaunch = UserDefaults.standard.bool(forKey: "taskAgentAutoLaunch")
         self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? ""
         self.customPromptPrefix = UserDefaults.standard.string(forKey: "taskAgentPromptPrefix") ?? ""
+        self.defaultPrompt = UserDefaults.standard.string(forKey: "taskAgentDefaultPrompt") ?? Self.defaultPromptTemplate
         self.skipPermissions = UserDefaults.standard.object(forKey: "taskAgentSkipPermissions") as? Bool ?? true
     }
 
@@ -44,7 +60,30 @@ class TaskAgentSettings: ObservableObject {
         autoLaunch = false
         workingDirectory = ""
         customPromptPrefix = ""
+        defaultPrompt = Self.defaultPromptTemplate
         skipPermissions = true
+    }
+
+    /// Build the full prompt for a task, shared by both the tmux agent and the chat sidebar.
+    func buildTaskPrompt(for task: TaskActionItem) -> String {
+        var prompt = "# Task\n\n\(task.chatContext)"
+
+        let customPrefix = customPromptPrefix
+        if !customPrefix.isEmpty {
+            prompt += "\n\nAdditional context:\n\(customPrefix)"
+        }
+
+        let instructions = defaultPrompt
+        prompt += "\n\n## Instructions\n\n\(instructions)"
+
+        // Live agent output (from running/completed session)
+        if let session = TaskAgentManager.shared.getSession(for: task.id),
+           let output = session.output, !output.isEmpty {
+            let truncated = String(output.prefix(2000))
+            prompt += "\n\nAgent output so far:\n\(truncated)"
+        }
+
+        return prompt
     }
 
     /// Validate that required tools are installed
@@ -156,6 +195,28 @@ struct TaskAgentSettingsView: View {
                         .foregroundColor(.secondary)
                 } header: {
                     Label("Custom Prompt Prefix", systemImage: "text.quote")
+                }
+
+                Section {
+                    TextEditor(text: $settings.defaultPrompt)
+                        .frame(minHeight: 120)
+                        .font(.system(.body, design: .monospaced))
+
+                    HStack {
+                        Text("Instructions appended to every agent prompt")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Button("Reset to Default") {
+                            settings.defaultPrompt = TaskAgentSettings.defaultPromptTemplate
+                        }
+                        .font(.caption)
+                        .disabled(settings.defaultPrompt == TaskAgentSettings.defaultPromptTemplate)
+                    }
+                } header: {
+                    Label("Default Prompt", systemImage: "text.page")
                 }
 
                 Section {

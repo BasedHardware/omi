@@ -295,6 +295,48 @@ class TasksStore: ObservableObject {
         return result
     }
 
+    // MARK: - Reload from Local Cache
+
+    /// Reload tasks from SQLite without hitting the API.
+    /// Call this when the local database has been modified externally (e.g., by an AI tool call).
+    func reloadFromLocalCache() async {
+        guard hasLoadedIncomplete else { return }
+
+        do {
+            let reloadLimit = max(pageSize, incompleteTasks.count + 10)
+            let cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: reloadLimit,
+                offset: 0,
+                completed: false
+            )
+            if cachedTasks != incompleteTasks {
+                incompleteTasks = cachedTasks
+                incompleteOffset = cachedTasks.count
+                log("TasksStore: Reloaded \(cachedTasks.count) incomplete tasks from local cache (external change)")
+            }
+        } catch {
+            logError("TasksStore: Failed to reload incomplete tasks from cache", error: error)
+        }
+
+        // Also reload completed if already loaded
+        if hasLoadedCompleted {
+            do {
+                let cachedCompleted = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: pageSize,
+                    offset: 0,
+                    completed: true
+                )
+                if cachedCompleted != completedTasks {
+                    completedTasks = cachedCompleted
+                    completedOffset = cachedCompleted.count
+                    log("TasksStore: Reloaded \(cachedCompleted.count) completed tasks from local cache (external change)")
+                }
+            } catch {
+                logError("TasksStore: Failed to reload completed tasks from cache", error: error)
+            }
+        }
+    }
+
     // MARK: - Load Tasks
 
     /// Load incomplete tasks if not already loaded (call this on app launch)

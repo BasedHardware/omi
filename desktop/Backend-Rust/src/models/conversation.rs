@@ -17,6 +17,8 @@ pub struct TranscriptSegment {
     #[serde(default)]
     pub is_user: bool,
     #[serde(default)]
+    pub person_id: Option<String>,
+    #[serde(default)]
     pub start: f64,
     #[serde(default)]
     pub end: f64,

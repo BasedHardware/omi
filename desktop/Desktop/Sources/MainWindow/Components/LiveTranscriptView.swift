@@ -3,6 +3,8 @@ import SwiftUI
 /// Live transcript view showing speaker segments during recording
 struct LiveTranscriptView: View {
     let segments: [SpeakerSegment]
+    var speakerNames: [Int: String] = [:]
+    var onSpeakerTapped: ((SpeakerSegment) -> Void)? = nil
 
     /// Format timestamp as MM:SS
     private func formatTime(_ seconds: Double) -> String {
@@ -19,7 +21,9 @@ struct LiveTranscriptView: View {
                     ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
                         LiveSegmentView(
                             segment: segment,
-                            formatTime: formatTime
+                            formatTime: formatTime,
+                            personName: speakerNames[segment.speaker],
+                            onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
                         )
                         .id(index)
                     }
@@ -42,13 +46,19 @@ struct LiveTranscriptView: View {
 private struct LiveSegmentView: View {
     let segment: SpeakerSegment
     let formatTime: (Double) -> String
+    var personName: String? = nil
+    var onSpeakerTapped: (() -> Void)? = nil
+
+    @State private var isHovered = false
 
     private var isUser: Bool {
         segment.speaker == 0
     }
 
     private var speakerLabel: String {
-        isUser ? "You" : "Speaker \(segment.speaker)"
+        if isUser { return "You" }
+        if let name = personName { return name }
+        return "Speaker \(segment.speaker)"
     }
 
     private var bubbleColor: Color {
@@ -77,9 +87,35 @@ private struct LiveSegmentView: View {
                     speakerAvatar
                 }
 
-                Text(speakerLabel)
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
+                if !isUser, let onTap = onSpeakerTapped {
+                    Button(action: onTap) {
+                        HStack(spacing: 4) {
+                            Text(speakerLabel)
+                                .scaledFont(size: 12, weight: personName != nil ? .semibold : .medium)
+                                .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+
+                            if personName == nil {
+                                Image(systemName: "pencil")
+                                    .scaledFont(size: 9)
+                                    .foregroundColor(OmiColors.textQuaternary)
+                                    .opacity(isHovered ? 1 : 0)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHovered = hovering
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                } else {
+                    Text(speakerLabel)
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
 
                 Text(formatTime(segment.start))
                     .scaledFont(size: 11)
@@ -106,10 +142,10 @@ private struct LiveSegmentView: View {
 
     private var speakerAvatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary)
+            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.6) : OmiColors.backgroundQuaternary))
             .frame(width: 24, height: 24)
             .overlay(
-                Text(isUser ? "Y" : String(segment.speaker))
+                Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
                     .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
             )

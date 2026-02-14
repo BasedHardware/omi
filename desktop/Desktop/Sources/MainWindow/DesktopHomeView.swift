@@ -115,6 +115,14 @@ struct DesktopHomeView: View {
                             // Backend-based check: ensure user has a cloud agent VM
                             await AgentVMService.shared.ensureProvisioned()
                         }
+                        // Refresh conversations when app becomes active (e.g. switching back from another app)
+                        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                            Task { await appState.loadConversations() }
+                        }
+                        // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
+                        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+                            Task { await appState.loadConversations() }
+                        }
 
                     if !viewModelContainer.isInitialLoadComplete {
                         VStack(spacing: 24) {
@@ -299,8 +307,9 @@ struct DesktopHomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
-            // Navigate to settings > advanced where Task Agent settings live
+            // Navigate to settings > advanced > task assistant subsection
             selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .taskAssistant
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }

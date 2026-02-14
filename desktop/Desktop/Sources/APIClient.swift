@@ -72,9 +72,11 @@ actor APIClient {
 
     func get<T: Decodable>(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -113,9 +115,11 @@ actor APIClient {
 
     func delete(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -1173,6 +1177,7 @@ extension APIClient {
         let speaker: String
         let speakerId: Int
         let isUser: Bool
+        let personId: String?
         let start: Double
         let end: Double
 
@@ -1180,6 +1185,7 @@ extension APIClient {
             case text, speaker
             case speakerId = "speaker_id"
             case isUser = "is_user"
+            case personId = "person_id"
             case start, end
         }
     }
@@ -1373,9 +1379,11 @@ extension APIClient {
     func patch<T: Decodable, B: Encodable>(
         _ endpoint: String,
         body: B,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -3798,18 +3806,11 @@ extension APIClient {
         struct SaveRequest: Encodable {
             let text: String
             let sender: String
+            let app_id: String?
+            let session_id: String?
         }
-        let body = SaveRequest(text: text, sender: sender)
-        // app_id must be a query parameter (backend reads it from URL, not body)
-        var endpoint = "v2/messages"
-        var queryItems: [String] = []
-        if let appId = appId {
-            queryItems.append("app_id=\(appId)")
-        }
-        if !queryItems.isEmpty {
-            endpoint += "?\(queryItems.joined(separator: "&"))"
-        }
-        return try await post(endpoint, body: body)
+        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId)
+        return try await post("v2/messages", body: body)
     }
 
     /// Fetch chat message history
@@ -4291,5 +4292,96 @@ extension APIClient {
     /// Get current agent VM status
     func getAgentStatus() async throws -> AgentStatusResponse? {
         return try await get("v2/agent/status")
+    }
+}
+
+// MARK: - People Models
+
+struct Person: Codable, Identifiable {
+    let id: String
+    let name: String
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - People API
+
+extension APIClient {
+
+    /// Fetches all people for the current user
+    func getPeople() async throws -> [Person] {
+        return try await get("v1/users/people")
+    }
+
+    /// Creates a new person
+    func createPerson(name: String) async throws -> Person {
+        struct CreatePersonRequest: Encodable {
+            let name: String
+        }
+        return try await post("v1/users/people", body: CreatePersonRequest(name: name))
+    }
+
+    /// Updates a person's name
+    func updatePersonName(personId: String, newName: String) async throws {
+        let encodedName = newName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? newName
+        let url = URL(string: baseURL + "v1/users/people/\(personId)/name?value=\(encodedName)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    /// Deletes a person
+    func deletePerson(personId: String) async throws {
+        try await delete("v1/users/people/\(personId)")
+    }
+
+    /// Bulk assigns segments to a person or user
+    func assignSegmentsBulk(
+        conversationId: String,
+        segmentIds: [String],
+        isUser: Bool,
+        personId: String?
+    ) async throws {
+        struct AssignBulkRequest: Encodable {
+            let assignType: String
+            let value: String?
+            let segmentIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case assignType = "assign_type"
+                case value
+                case segmentIds = "segment_ids"
+            }
+        }
+
+        let body = AssignBulkRequest(
+            assignType: isUser ? "is_user" : "person_id",
+            value: isUser ? "true" : personId,
+            segmentIds: segmentIds
+        )
+
+        let url = URL(string: baseURL + "v1/conversations/\(conversationId)/segments/assign-bulk")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
     }
 }

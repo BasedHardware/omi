@@ -330,6 +330,13 @@ class ChatProvider: ObservableObject {
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
 
+    // MARK: - CLAUDE.md & Skills
+    @Published var claudeMdContent: String?
+    @Published var claudeMdPath: String?
+    @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
+    @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
+    @AppStorage("enabledSkillsJSON") private var enabledSkillsJSON: String = "[]"
+
     // MARK: - Current Session ID
     var currentSessionId: String? {
         currentSession?.id
@@ -477,8 +484,8 @@ class ChatProvider: ObservableObject {
     }
 
     /// Select a session and load its messages
-    func selectSession(_ session: ChatSession) async {
-        guard currentSession?.id != session.id || isInDefaultChat else { return }
+    func selectSession(_ session: ChatSession, force: Bool = false) async {
+        guard force || currentSession?.id != session.id || isInDefaultChat else { return }
 
         currentSession = session
         isInDefaultChat = false
@@ -868,9 +875,26 @@ class ChatProvider: ObservableObject {
             prompt += "\n\n<conversation_history>\n\(history)\n</conversation_history>"
         }
 
+        // Append CLAUDE.md instructions if enabled
+        if claudeMdEnabled, let claudeMd = claudeMdContent {
+            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
+        }
+
+        // Append enabled skills as available context
+        let enabledSkillNames = getEnabledSkillNames()
+        if !enabledSkillNames.isEmpty {
+            let skillDescriptions = discoveredSkills
+                .filter { enabledSkillNames.contains($0.name) }
+                .map { "- \($0.name): \($0.description)" }
+                .joined(separator: "\n")
+            if !skillDescriptions.isEmpty {
+                prompt += "\n\n<available_skills>\n\(skillDescriptions)\n</available_skills>"
+            }
+        }
+
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), prompt_length: \(prompt.count) chars")
 
         return prompt
     }
@@ -961,6 +985,7 @@ class ChatProvider: ObservableObject {
         await loadGoalsIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
+        discoverClaudeConfig()
     }
 
     /// Reinitialize after settings change
@@ -970,6 +995,82 @@ class ChatProvider: ObservableObject {
         currentSession = nil
         isInDefaultChat = true
         await initialize()
+    }
+
+    // MARK: - CLAUDE.md & Skills Discovery
+
+    /// Discover ~/.claude/CLAUDE.md and skills from ~/.claude/skills/
+    func discoverClaudeConfig() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeDir = "\(home)/.claude"
+
+        // Discover CLAUDE.md
+        let mdPath = "\(claudeDir)/CLAUDE.md"
+        if FileManager.default.fileExists(atPath: mdPath),
+           let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
+            claudeMdContent = content
+            claudeMdPath = mdPath
+        } else {
+            claudeMdContent = nil
+            claudeMdPath = nil
+        }
+
+        // Discover skills
+        var skills: [(name: String, description: String, path: String)] = []
+        let skillsDir = "\(claudeDir)/skills"
+        if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
+            for dir in skillDirs.sorted() {
+                let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+                if FileManager.default.fileExists(atPath: skillPath),
+                   let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                    let desc = extractSkillDescription(from: content)
+                    skills.append((name: dir, description: desc, path: skillPath))
+                }
+            }
+        }
+        discoveredSkills = skills
+        log("ChatProvider: discovered CLAUDE.md=\(claudeMdContent != nil), skills=\(skills.count)")
+    }
+
+    /// Extract description from YAML frontmatter in SKILL.md
+    private func extractSkillDescription(from content: String) -> String {
+        guard content.hasPrefix("---") else {
+            // No frontmatter — use first non-empty line as description
+            let lines = content.components(separatedBy: "\n")
+            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
+        }
+        let lines = content.components(separatedBy: "\n")
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
+                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
+                value = value.trimmingCharacters(in: .whitespaces)
+                // Remove surrounding quotes if present
+                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
+                   (value.hasPrefix("'") && value.hasSuffix("'")) {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value
+            }
+        }
+        return ""
+    }
+
+    /// Get the set of enabled skill names from UserDefaults
+    func getEnabledSkillNames() -> Set<String> {
+        guard let data = enabledSkillsJSON.data(using: .utf8),
+              let names = try? JSONDecoder().decode([String].self, from: data) else {
+            return Set(discoveredSkills.map { $0.name }) // Default: all enabled
+        }
+        return Set(names)
+    }
+
+    /// Save the set of enabled skill names to UserDefaults
+    func setEnabledSkillNames(_ names: Set<String>) {
+        if let data = try? JSONEncoder().encode(Array(names)),
+           let json = String(data: data, encoding: .utf8) {
+            enabledSkillsJSON = json
+        }
     }
 
     /// Switch to the default chat (messages without session_id, syncs with Flutter app)

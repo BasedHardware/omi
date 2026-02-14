@@ -78,11 +78,18 @@ linkedin-*.md
 # Session logs / transcripts
 /*.txt
 
+# Runtime log files
+*.log
+
 # Skills (user-local)
 skills/
 
 # Agent configs (user-local)
 .agents/
+
+# Demo project (Remotion)
+demo/node_modules/
+demo/out/
 
 # Claude project instructions (user-local, contains absolute paths)
 CLAUDE.md

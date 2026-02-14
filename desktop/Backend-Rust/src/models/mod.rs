@@ -13,11 +13,12 @@ pub mod goal;
 pub mod knowledge_graph;
 pub mod memory;
 pub mod message;
+pub mod person;
 pub mod persona;
 pub mod request;
 pub mod user_settings;
 
-pub use action_item::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, CreateActionItemRequest, PromoteResponse, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};
+pub use action_item::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, BatchUpdateSortOrdersRequest, CreateActionItemRequest, PromoteResponse, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};
 pub use advice::{AdviceCategory, AdviceDB, AdviceStatusResponse, CreateAdviceRequest, GetAdviceQuery, UpdateAdviceRequest};
 pub use app::{
     App, AppCapabilityDef, AppCategory, AppGroup, AppReview, AppSummary, AppsV2Meta, AppsV2Query,
@@ -65,6 +66,7 @@ pub use goal::{
     GoalHistoryResponse, GoalStatusResponse, GoalType, GoalsListResponse, ScoreData, ScoreResponse,
     UpdateGoalProgressQuery, UpdateGoalRequest,
 };
+pub use person::{BulkAssignSegmentsRequest, CreatePersonRequest, Person};
 pub use persona::{
     CheckUsernameQuery, CreatePersonaRequest, GeneratePromptRequest, GeneratePromptResponse,
     PersonaDB, PersonaResponse, PersonaStatusResponse, UpdatePersonaRequest,

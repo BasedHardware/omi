@@ -15,6 +15,20 @@ struct RecordingViewWithNotes: View {
     /// Whether notes panel is visible
     @State private var isNotesPanelVisible: Bool = true
 
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let totalWidth = geometry.size.width
@@ -54,6 +68,29 @@ struct RecordingViewWithNotes: View {
                 .help(isNotesPanelVisible ? "Hide notes panel" : "Show notes panel")
             }
         }
+        .task {
+            await appState.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Transcript Panel
@@ -71,7 +108,14 @@ struct RecordingViewWithNotes: View {
             if liveTranscript.isEmpty {
                 emptyTranscriptView
             } else {
-                LiveTranscriptView(segments: liveTranscript.segments)
+                LiveTranscriptView(
+                    segments: liveTranscript.segments,
+                    speakerNames: speakerNames,
+                    onSpeakerTapped: { segment in
+                        selectedSpeakerSegment = segment
+                        showNameSpeakerSheet = true
+                    }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

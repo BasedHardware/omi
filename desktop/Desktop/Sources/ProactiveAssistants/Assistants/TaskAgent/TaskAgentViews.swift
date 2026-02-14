@@ -15,14 +15,16 @@ struct TaskClassificationBadge: View {
 
 // MARK: - Agent Status Indicator
 
-/// Shows the status of a Claude agent working on a task
-/// Main click opens the detail modal; terminal icon opens Terminal directly
-/// Shows a launch button when no session exists
+/// Shows the status of a Claude agent working on a task.
+/// Terminal icon launches the agent (if none) or opens Terminal directly (if running/done).
+/// No detail modal — purely a quick-action control.
 struct AgentStatusIndicator: View {
     let task: TaskActionItem
-    @Binding var showAgentDetail: Bool
-    var onLaunchWithChat: ((TaskActionItem) -> Void)? = nil
     @ObservedObject private var manager = TaskAgentManager.shared
+    @ObservedObject private var settings = TaskAgentSettings.shared
+    @State private var isLaunching = false
+    @State private var showError = false
+    @State private var errorMessage = ""
 
     private var taskId: String { task.id }
 
@@ -49,37 +51,78 @@ struct AgentStatusIndicator: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            // Terminal icon — always visible, opens detail modal
-            Button {
-                showAgentDetail = true
-            } label: {
-                Image(systemName: "terminal")
-                    .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .help("View Agent Details")
-
             if let session = session {
-                // Status text — opens detail modal
+                // Has a session — terminal icon opens Terminal directly
                 Button {
-                    showAgentDetail = true
+                    manager.openInTerminal(taskId: taskId)
                 } label: {
-                    HStack(spacing: 4) {
-                        statusIcon(for: session.status)
-
-                        Text(statusText)
-                            .scaledFont(size: 10, weight: .medium)
-                    }
-                    .foregroundColor(statusColor(for: session.status))
+                    Image(systemName: "terminal")
+                        .scaledFont(size: 10)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
-                .help("View Agent Details")
-            } else {
-                // Run Agent button — launches immediately
-                AgentLaunchButton(task: task, onLaunchWithChat: onLaunchWithChat)
+                .help("Open in Terminal")
+
+                // Status text
+                HStack(spacing: 4) {
+                    statusIcon(for: session.status)
+
+                    Text(statusText)
+                        .scaledFont(size: 10, weight: .medium)
+                }
+                .foregroundColor(statusColor(for: session.status))
+            } else if settings.isEnabled {
+                // No session — terminal icon launches the agent
+                Button {
+                    launchAgent()
+                } label: {
+                    HStack(spacing: 4) {
+                        if isLaunching {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "terminal")
+                                .scaledFont(size: 10)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .frame(width: 20, height: 20)
+                        }
+
+                        Text(isLaunching ? "Launching..." : "Run Agent")
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isLaunching)
+                .help("Launch Claude agent for this task")
+                .alert("Agent Error", isPresented: $showError) {
+                    Button("OK") {}
+                } message: {
+                    Text(errorMessage)
+                }
             }
+        }
+    }
+
+    private func launchAgent() {
+        isLaunching = true
+
+        Task {
+            do {
+                let store = TasksStore.shared
+                let latestTask = store.incompleteTasks.first(where: { $0.id == task.id })
+                    ?? store.completedTasks.first(where: { $0.id == task.id })
+                    ?? task
+
+                let context = TaskAgentContext()
+                try await manager.launchAgent(for: latestTask, context: context)
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+            isLaunching = false
         }
     }
 
@@ -106,80 +149,6 @@ struct AgentStatusIndicator: View {
         case .editing: return OmiColors.textSecondary
         case .completed: return OmiColors.textPrimary
         case .failed: return OmiColors.textTertiary
-        }
-    }
-}
-
-// MARK: - Agent Launch Button
-
-/// Button to launch a Claude agent for a task
-struct AgentLaunchButton: View {
-    let task: TaskActionItem
-    var onLaunchWithChat: ((TaskActionItem) -> Void)? = nil
-    @ObservedObject private var manager = TaskAgentManager.shared
-    @ObservedObject private var settings = TaskAgentSettings.shared
-    @State private var isLaunching = false
-    @State private var showError = false
-    @State private var errorMessage = ""
-
-    private var canLaunch: Bool {
-        settings.isEnabled && !manager.hasSession(for: task.id)
-    }
-
-    var body: some View {
-        if canLaunch {
-            Button {
-                launchAgent()
-            } label: {
-                HStack(spacing: 4) {
-                    if isLaunching {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 12, height: 12)
-                    }
-
-                    Text(isLaunching ? "Launching..." : "Run Agent")
-                        .scaledFont(size: 10, weight: .medium)
-                }
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(OmiColors.textSecondary.opacity(0.15))
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isLaunching)
-            .alert("Agent Error", isPresented: $showError) {
-                Button("OK") {}
-            } message: {
-                Text(errorMessage)
-            }
-        }
-    }
-
-    private func launchAgent() {
-        isLaunching = true
-
-        Task {
-            do {
-                // Re-fetch the latest task from the store in case the user edited it
-                let store = TasksStore.shared
-                let latestTask = store.incompleteTasks.first(where: { $0.id == task.id })
-                    ?? store.completedTasks.first(where: { $0.id == task.id })
-                    ?? task
-
-                let context = TaskAgentContext()
-                try await manager.launchAgent(for: latestTask, context: context)
-
-                // Also open chat panel for this task
-                onLaunchWithChat?(latestTask)
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
-            isLaunching = false
         }
     }
 }
@@ -412,8 +381,6 @@ struct TaskAgentDetailView: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
-
-                AgentLaunchButton(task: task)
             }
             .frame(maxWidth: .infinity)
             .padding(20)
@@ -650,7 +617,7 @@ struct TaskAgentDetailView: View {
 
 #Preview("Agent Status") {
     VStack(spacing: 16) {
-        AgentStatusIndicator(task: TaskActionItem(id: "test-1", description: "Test task", completed: false, createdAt: Date()), showAgentDetail: .constant(false))
+        AgentStatusIndicator(task: TaskActionItem(id: "test-1", description: "Test task", completed: false, createdAt: Date()))
     }
     .padding()
 }

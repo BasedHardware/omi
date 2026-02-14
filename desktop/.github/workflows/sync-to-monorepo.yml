@@ -1,0 +1,46 @@
+name: Sync to OMI monorepo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout omi-desktop
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout omi monorepo
+        uses: actions/checkout@v4
+        with:
+          repository: BasedHardware/omi
+          token: ${{ secrets.OMI_MONOREPO_TOKEN }}
+          path: monorepo
+          fetch-depth: 1
+
+      - name: Sync desktop/ folder
+        run: |
+          # Remove old desktop/ contents (but keep .git)
+          rm -rf monorepo/desktop
+
+          # Copy current repo into desktop/
+          rsync -a --exclude='.git' --exclude='monorepo' . monorepo/desktop/
+
+          cd monorepo
+
+          # Check if there are changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/
+          git commit -m "Sync desktop/ from omi-desktop ($(git -C ../. rev-parse --short HEAD))"
+          git push origin main

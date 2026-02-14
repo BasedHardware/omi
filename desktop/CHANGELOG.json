@@ -1,6 +1,27 @@
 {
   "releases": [
     {
+      "version": "0.8.1",
+      "date": "2026-02-13",
+      "changes": [
+        "Speaker naming: tap any speaker in live or recorded transcripts to assign a name",
+        "Ask/Act mode toggle: restrict AI chat to read-only queries for safer browsing",
+        "Font scaling: adjust text size across the entire app from settings or menu shortcuts",
+        "Thinking and tool visibility: see AI reasoning and tool inputs/outputs in chat",
+        "Inline task creation with keyboard navigation and sort order/indentation support",
+        "Saved filter views for quickly switching between task lists",
+        "Text selection enabled across conversations, transcripts, notes, and advice",
+        "Rewind intro video overlay for first-time users",
+        "Chat input redesigned: Enter to submit, Shift+Enter for newline, auto-growing field",
+        "Conversations auto-refresh on app focus and every 30 seconds",
+        "WebSocket watchdog with automatic reconnection",
+        "Encrypted and compressed transcript segments for better privacy",
+        "New app icon",
+        "Fixed timeline crashes and chat auto-scroll performance",
+        "Fixed task hover crashes and chat input sizing issues"
+      ]
+    },
+    {
       "version": "0.8.0",
       "date": "2026-02-13",
       "changes": [

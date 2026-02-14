@@ -1,5 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { createOmiMcpServer, resolveToolCall } from "./omi-tools.js";
+import { createOmiMcpServer, resolveToolCall, setQueryMode } from "./omi-tools.js";
 import type {
   InboundMessage,
   OutboundMessage,
@@ -61,11 +61,24 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     // This ensures cross-platform sync (mobile messages are included in context)
     const mode = msg.mode ?? "act";
     const isAskMode = mode === "ask";
+    setQueryMode(mode);
+    logErr(`Query mode: ${mode}`);
 
     // In ask mode, only allow read-only tools (no Write, Edit, Bash)
     const allowedTools = isAskMode
       ? ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
       : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
+
+    // In ask mode, exclude playwright (no browser actions)
+    const mcpServers: Record<string, unknown> = {
+      "omi-tools": omiServer,
+    };
+    if (!isAskMode) {
+      mcpServers["playwright"] = {
+        command: process.execPath,
+        args: [playwrightCli],
+      };
+    }
 
     const options: Record<string, unknown> = {
       model: "claude-opus-4-6",
@@ -76,13 +89,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       allowDangerouslySkipPermissions: true,
       maxTurns: 15,
       cwd: msg.cwd || process.env.HOME || "/",
-      mcpServers: {
-        "omi-tools": omiServer,
-        "playwright": {
-          command: process.execPath,
-          args: [playwrightCli],
-        },
-      },
+      mcpServers,
       includePartialMessages: true,
     };
 

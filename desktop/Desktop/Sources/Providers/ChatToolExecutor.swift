@@ -162,6 +162,16 @@ class ChatToolExecutor {
         }
 
         log("Tool execute_sql write: \(changes) row(s) affected")
+
+        // If the query modified the action_items table, refresh TasksStore from local cache
+        if changes > 0 {
+            let upper = query.uppercased()
+            if upper.contains("ACTION_ITEMS") {
+                log("Tool execute_sql: action_items modified, refreshing TasksStore")
+                await TasksStore.shared.reloadFromLocalCache()
+            }
+        }
+
         return "OK: \(changes) row(s) affected"
     }
 

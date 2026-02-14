@@ -128,6 +128,7 @@ struct AIResponseView: View {
             } else {
                 ScrollView {
                     Markdown(responseText)
+                        .scaledMarkdownTheme(.ai)
                         .textSelection(.enabled)
                         .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)

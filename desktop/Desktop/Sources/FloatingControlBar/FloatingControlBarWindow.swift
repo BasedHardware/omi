@@ -331,9 +331,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         )
         let newOrigin = originForTopLeftAnchor(newSize: constrainedSize)
 
-        // Trace resize calls for debugging
-        let caller = Thread.callStackSymbols.prefix(6).joined(separator: "\n")
-        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)\n\(caller)")
+        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
         if makeResizable {
             styleMask.insert(.resizable)
@@ -511,6 +509,11 @@ class FloatingControlBarManager {
             }
 
         self.window = barWindow
+    }
+
+    /// Whether the floating bar window is currently visible.
+    var isVisible: Bool {
+        window?.isVisible ?? false
     }
 
     /// Show the floating bar.

@@ -8,9 +8,10 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync } from "fs";
 import { createInflateRaw, createGunzip } from "zlib";
+import { homedir } from "os";
 
 // --- Configuration ---
-const DB_PATH = process.env.DB_PATH || "/home/matthewdi/omi-agent/data/omi.db";
+const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
 const PORT = parseInt(process.env.PORT || "8080", 10);
@@ -693,7 +694,7 @@ if (args[0] === "--serve") {
   console.log("  node agent.mjs --serve                     # WebSocket server mode");
   console.log("");
   console.log("Environment variables:");
-  console.log("  DB_PATH       Path to omi.db (default: /home/matthewdi/omi-agent/data/omi.db)");
+  console.log("  DB_PATH       Path to omi.db (default: ~/omi-agent/data/omi.db)");
   console.log("  GEMINI_API_KEY  For semantic search embeddings");
   console.log("  AUTH_TOKEN    Required for server mode (bearer token for WebSocket auth)");
   console.log("  PORT          Server port (default: 8080)");

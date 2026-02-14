@@ -511,7 +511,7 @@ struct ChatBubble: View {
                         case .text(_, let text):
                             if !text.isEmpty {
                                 Markdown(text)
-                                    .markdownTheme(.aiMessage)
+                                    .scaledMarkdownTheme(.ai)
                                     .textSelection(.enabled)
                                     .if_available_writingToolsNone()
                                     .padding(.horizontal, 14)
@@ -536,7 +536,7 @@ struct ChatBubble: View {
                 } else {
                     // User messages or AI messages without content blocks (loaded from Firestore)
                     Markdown(message.text)
-                        .markdownTheme(message.sender == .user ? .userMessage : .aiMessage)
+                        .scaledMarkdownTheme(message.sender)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .padding(.horizontal, 14)
@@ -1285,53 +1285,72 @@ struct HistorySessionRow: View {
 // MARK: - Markdown Themes
 
 extension Theme {
-    static let userMessage = Theme()
-        .text {
-            ForegroundColor(.white)
-            FontSize(14)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(13)
-            ForegroundColor(.white.opacity(0.9))
-            BackgroundColor(.white.opacity(0.15))
-        }
-        .strong {
-            FontWeight(.semibold)
-        }
-        .link {
-            ForegroundColor(.white.opacity(0.9))
-            UnderlineStyle(.single)
-        }
-
-    static let aiMessage = Theme()
-        .text {
-            ForegroundColor(OmiColors.textPrimary)
-            FontSize(14)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(13)
-            ForegroundColor(OmiColors.textPrimary)
-            BackgroundColor(OmiColors.backgroundTertiary)
-        }
-        .codeBlock { configuration in
-            ScrollView(.horizontal, showsIndicators: false) {
-                configuration.label
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(13)
-                        ForegroundColor(OmiColors.textPrimary)
-                    }
+    static func userMessage(scale: CGFloat = 1.0) -> Theme {
+        Theme()
+            .text {
+                ForegroundColor(.white)
+                FontSize(round(14 * scale))
             }
-            .padding(12)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
-        }
-        .strong {
-            FontWeight(.semibold)
-        }
-        .link {
-            ForegroundColor(OmiColors.purplePrimary)
-        }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(round(13 * scale))
+                ForegroundColor(.white.opacity(0.9))
+                BackgroundColor(.white.opacity(0.15))
+            }
+            .strong {
+                FontWeight(.semibold)
+            }
+            .link {
+                ForegroundColor(.white.opacity(0.9))
+                UnderlineStyle(.single)
+            }
+    }
+
+    static func aiMessage(scale: CGFloat = 1.0) -> Theme {
+        Theme()
+            .text {
+                ForegroundColor(OmiColors.textPrimary)
+                FontSize(round(14 * scale))
+            }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(round(13 * scale))
+                ForegroundColor(OmiColors.textPrimary)
+                BackgroundColor(OmiColors.backgroundTertiary)
+            }
+            .codeBlock { configuration in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    configuration.label
+                        .markdownTextStyle {
+                            FontFamilyVariant(.monospaced)
+                            FontSize(round(13 * scale))
+                            ForegroundColor(OmiColors.textPrimary)
+                        }
+                }
+                .padding(12)
+                .background(OmiColors.backgroundTertiary)
+                .cornerRadius(8)
+            }
+            .strong {
+                FontWeight(.semibold)
+            }
+            .link {
+                ForegroundColor(OmiColors.purplePrimary)
+            }
+    }
+}
+
+struct ScaledMarkdownTheme: ViewModifier {
+    @Environment(\.fontScale) private var fontScale
+    let sender: ChatSender
+
+    func body(content: Content) -> some View {
+        content.markdownTheme(sender == .user ? .userMessage(scale: fontScale) : .aiMessage(scale: fontScale))
+    }
+}
+
+extension View {
+    func scaledMarkdownTheme(_ sender: ChatSender) -> some View {
+        modifier(ScaledMarkdownTheme(sender: sender))
+    }
 }

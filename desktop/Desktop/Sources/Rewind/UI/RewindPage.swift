@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVKit
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -32,6 +33,9 @@ struct RewindPage: View {
     // Expanded transcript state
     @State private var isTranscriptExpanded = false
     @State private var savedTranscriptSegments: [SpeakerSegment] = []
+
+    // Rewind intro video (first-time experience)
+    @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
 
     enum SearchViewMode {
         case results  // Full-screen search results
@@ -89,6 +93,11 @@ struct RewindPage: View {
                         }
                     }
                 }
+            }
+
+            // Rewind intro video overlay (first-time experience)
+            if !hasSeenRewindIntro {
+                rewindIntroOverlay
             }
         }
         .task {
@@ -885,6 +894,49 @@ struct RewindPage: View {
         seekToIndex(currentIndex + 1)
     }
 
+
+    // MARK: - Rewind Intro Video
+
+    private var rewindIntroOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                RewindIntroVideoView()
+                    .frame(maxWidth: 700, maxHeight: 394) // 16:9 aspect
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: OmiColors.purplePrimary.opacity(0.3), radius: 20)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Get Started")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 10)
+                        .background(OmiColors.purplePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Skip")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
+    }
 
     // MARK: - Empty States
 
@@ -1707,6 +1759,45 @@ struct ScrollWheelMonitor: ViewModifier {
 extension View {
     func onScrollWheel(_ handler: @escaping (CGFloat) -> Void) -> some View {
         modifier(ScrollWheelMonitor(onScroll: handler))
+    }
+}
+
+// MARK: - Rewind Intro Video Player
+
+struct RewindIntroVideoView: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let playerView = AVPlayerView()
+        if let url = Bundle.resourceBundle.url(forResource: "rewind-demo", withExtension: "mp4") {
+            let player = AVPlayer(url: url)
+            playerView.player = player
+            playerView.controlsStyle = .inline
+            playerView.showsFullScreenToggleButton = false
+            player.play()
+
+            NotificationCenter.default.addObserver(
+                context.coordinator,
+                selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
+                name: .AVPlayerItemDidPlayToEndTime,
+                object: player.currentItem
+            )
+            context.coordinator.player = player
+        }
+        return playerView
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
+
+    class Coordinator: NSObject {
+        var player: AVPlayer?
+
+        @objc func playerDidFinishPlaying(_ notification: Notification) {
+            player?.seek(to: .zero)
+            player?.play()
+        }
     }
 }
 

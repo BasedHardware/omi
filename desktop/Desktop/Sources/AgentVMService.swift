@@ -24,7 +24,12 @@ actor AgentVMService {
                 let status = try await APIClient.shared.getAgentStatus()
                 if let status = status, status.status == "ready", let ip = status.ip {
                     log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
-                    await uploadDatabase(vmIP: ip, authToken: status.authToken)
+                    // Only upload if the VM doesn't have a database yet
+                    if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
+                        await uploadDatabase(vmIP: ip, authToken: status.authToken)
+                    } else {
+                        log("AgentVMService: VM already has database, skipping upload")
+                    }
                     return
                 }
                 if let status = status, status.status == "provisioning" {
@@ -117,6 +122,25 @@ actor AgentVMService {
             try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
         }
         return nil
+    }
+
+    /// Check if the VM needs a database upload by hitting its /health endpoint.
+    private func checkVMNeedsDatabase(vmIP: String, authToken: String) async -> Bool {
+        let healthURL = URL(string: "http://\(vmIP):8080/health")!
+        var request = URLRequest(url: healthURL)
+        request.timeoutInterval = 10
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let dbReady = json["databaseReady"] as? Bool {
+                return !dbReady
+            }
+        } catch {
+            log("AgentVMService: Health check failed — \(error.localizedDescription)")
+        }
+        // If we can't reach the health endpoint, assume it needs a DB
+        return true
     }
 
     /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.

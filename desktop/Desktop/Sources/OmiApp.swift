@@ -102,6 +102,32 @@ struct OMIApp: App {
         }
         .windowStyle(.titleBar)
         .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
+        .commands {
+            CommandGroup(after: .textFormatting) {
+                Button("Increase Font Size") {
+                    let s = FontScaleSettings.shared
+                    s.scale = min(2.0, round((s.scale + 0.05) * 20) / 20)
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Decrease Font Size") {
+                    let s = FontScaleSettings.shared
+                    s.scale = max(0.5, round((s.scale - 0.05) * 20) / 20)
+                }
+                .keyboardShortcut("-", modifiers: .command)
+
+                Button("Reset Font Size") {
+                    FontScaleSettings.shared.resetToDefault()
+                }
+                .keyboardShortcut("0", modifiers: .command)
+
+                Divider()
+
+                Button("Reset Window Size") {
+                    resetWindowToDefaultSize()
+                }
+            }
+        }
 
         // Note: Menu bar is now handled by NSStatusBar in AppDelegate.setupMenuBar()
         // for better reliability on macOS Sequoia (SwiftUI MenuBarExtra had rendering issues)
@@ -273,6 +299,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     foundOmiWindow = true
                     window.makeKeyAndOrderFront(nil)
                     window.appearance = NSAppearance(named: .darkAqua)
+                    // Ensure fullscreen always creates a dedicated Space
+                    window.collectionBehavior.insert(.fullScreenPrimary)
                     // Show dock icon when main window is visible
                     NSApp.setActivationPolicy(.regular)
                     log("AppDelegate: Dock icon shown on launch")

@@ -5,6 +5,20 @@ struct RecordingView: View {
     @ObservedObject var appState: AppState
     @ObservedObject private var liveTranscript = LiveTranscriptMonitor.shared
 
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Recording header with status and audio levels
@@ -18,10 +32,40 @@ struct RecordingView: View {
             if liveTranscript.isEmpty {
                 emptyTranscriptView
             } else {
-                LiveTranscriptView(segments: liveTranscript.segments)
+                LiveTranscriptView(
+                    segments: liveTranscript.segments,
+                    speakerNames: speakerNames,
+                    onSpeakerTapped: { segment in
+                        selectedSpeakerSegment = segment
+                        showNameSpeakerSheet = true
+                    }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            await appState.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
     }
 
     private var emptyTranscriptView: some View {

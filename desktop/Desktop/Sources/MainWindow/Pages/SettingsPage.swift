@@ -66,6 +66,9 @@ struct SettingsContentView: View {
     @State private var isToggling: Bool = false
     @State private var permissionError: String?
 
+    // Ask Omi floating bar state
+    @State private var showAskOmiBar: Bool = false
+
     // Transcription state
     @State private var isTranscribing: Bool
     @State private var isTogglingTranscription: Bool = false
@@ -176,6 +179,17 @@ struct SettingsContentView: View {
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
     @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
+    // AI Chat settings
+    @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
+    @State private var aiChatClaudeMdContent: String?
+    @State private var aiChatClaudeMdPath: String?
+    @State private var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @State private var aiChatEnabledSkills: Set<String> = []
+    @State private var showFileViewer = false
+    @State private var fileViewerContent = ""
+    @State private var fileViewerTitle = ""
+    @State private var skillSearchQuery = ""
+
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
@@ -188,6 +202,7 @@ struct SettingsContentView: View {
         case notifications = "Notifications"
         case privacy = "Privacy"
         case account = "Account"
+        case aiChat = "AI Chat"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -283,6 +298,8 @@ struct SettingsContentView: View {
                     privacySection
                 case .account:
                     accountSection
+                case .aiChat:
+                    aiChatSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -297,6 +314,8 @@ struct SettingsContentView: View {
             loadBackendSettings()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
+            // Sync floating bar state
+            showAskOmiBar = FloatingControlBarManager.shared.isVisible
             // Refresh notification permission state
             appState.checkNotificationPermission()
         }
@@ -310,6 +329,7 @@ struct SettingsContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
+            selectedAdvancedSubsection = .taskAssistant
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -465,6 +485,39 @@ struct SettingsContentView: View {
                 }
             }
 
+            // Ask Omi floating bar toggle
+            settingsCard {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Ask Omi")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(showAskOmiBar ? "Floating bar is visible (⌘\\)" : "Floating bar is hidden (⌘\\)")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $showAskOmiBar)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: showAskOmiBar) { _, newValue in
+                            if newValue {
+                                FloatingControlBarManager.shared.show()
+                            } else {
+                                FloatingControlBarManager.shared.hide()
+                            }
+                        }
+                }
+            }
+
             // Font Size
             settingsCard {
                 VStack(spacing: 12) {
@@ -501,7 +554,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textTertiary)
 
-                        Slider(value: $fontScaleSettings.scale, in: 0.85...1.3, step: 0.05)
+                        Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
                             .tint(OmiColors.purplePrimary)
 
                         Text("A")
@@ -514,6 +567,28 @@ struct SettingsContentView: View {
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
+
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            resetWindowToDefaultSize()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.uturn.backward")
+                                    .scaledFont(size: 11)
+                                Text("Reset Window Size")
+                                    .scaledFont(size: 12, weight: .medium)
+                            }
+                            .foregroundColor(OmiColors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.backgroundTertiary)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
 
@@ -1321,6 +1396,296 @@ struct SettingsContentView: View {
 //                    .tint(OmiColors.purplePrimary)
 //                }
 //            }
+        }
+    }
+
+    // MARK: - AI Chat Section
+
+    private var aiChatSection: some View {
+        VStack(spacing: 20) {
+            // CLAUDE.md card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "doc.text")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("CLAUDE.md")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        if aiChatClaudeMdContent != nil {
+                            Button("View") {
+                                fileViewerTitle = "CLAUDE.md"
+                                fileViewerContent = aiChatClaudeMdContent ?? ""
+                                showFileViewer = true
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Toggle("", isOn: $claudeMdEnabled)
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .labelsHidden()
+                        }
+                    }
+
+                    if let path = aiChatClaudeMdPath, let content = aiChatClaudeMdContent {
+                        let sizeKB = Double(content.utf8.count) / 1024.0
+                        Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text("Personal instructions loaded into AI chat")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("No CLAUDE.md found at ~/.claude/CLAUDE.md")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+            }
+
+            // Skills card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Skills (\(aiChatDiscoveredSkills.count) discovered)")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Button(action: { refreshAIChatConfig() }) {
+                            Image(systemName: "arrow.clockwise")
+                                .scaledFont(size: 13)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    if aiChatDiscoveredSkills.isEmpty {
+                        Text("No skills found in ~/.claude/skills/")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("Skill descriptions are included in the AI chat system prompt")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        // Search field
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            TextField("Search skills...", text: $skillSearchQuery)
+                                .textFieldStyle(.plain)
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if !skillSearchQuery.isEmpty {
+                                Button(action: { skillSearchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .scaledFont(size: 12)
+                                        .foregroundColor(OmiColors.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                        )
+
+                        ScrollView {
+                            let filteredSkills = aiChatDiscoveredSkills.enumerated().filter { _, skill in
+                                skillSearchQuery.isEmpty ||
+                                skill.name.localizedCaseInsensitiveContains(skillSearchQuery) ||
+                                skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
+                            }
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(filteredSkills.enumerated()), id: \.offset) { filteredIndex, item in
+                                    let skill = item.element
+                                    HStack(spacing: 10) {
+                                        Toggle("", isOn: Binding(
+                                            get: { aiChatEnabledSkills.contains(skill.name) },
+                                            set: { enabled in
+                                                if enabled {
+                                                    aiChatEnabledSkills.insert(skill.name)
+                                                } else {
+                                                    aiChatEnabledSkills.remove(skill.name)
+                                                }
+                                                saveEnabledSkills()
+                                            }
+                                        ))
+                                        .toggleStyle(.checkbox)
+                                        .labelsHidden()
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(skill.name)
+                                                .scaledFont(size: 13, weight: .medium)
+                                                .foregroundColor(OmiColors.textPrimary)
+
+                                            if !skill.description.isEmpty {
+                                                Text(skill.description)
+                                                    .scaledFont(size: 11)
+                                                    .foregroundColor(OmiColors.textTertiary)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
+                                            }
+                                        }
+
+                                        Spacer()
+
+                                        Button("View") {
+                                            fileViewerTitle = "\(skill.name)/SKILL.md"
+                                            fileViewerContent = (try? String(contentsOfFile: skill.path, encoding: .utf8)) ?? "Unable to read file"
+                                            showFileViewer = true
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.mini)
+                                    }
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+
+                                    if filteredIndex < filteredSkills.count - 1 {
+                                        Divider()
+                                            .opacity(0.3)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 300)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            refreshAIChatConfig()
+        }
+        .sheet(isPresented: $showFileViewer) {
+            fileViewerSheet
+        }
+    }
+
+    private var fileViewerSheet: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text(fileViewerTitle)
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button(action: { showFileViewer = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .scaledFont(size: 18)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+
+            Divider().opacity(0.3)
+
+            // Content
+            ScrollView {
+                Text(fileViewerContent)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(OmiColors.textSecondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+        }
+        .frame(width: 600, height: 500)
+        .background(OmiColors.backgroundSecondary)
+    }
+
+    private func refreshAIChatConfig() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeDir = "\(home)/.claude"
+
+        // Discover CLAUDE.md
+        let mdPath = "\(claudeDir)/CLAUDE.md"
+        if FileManager.default.fileExists(atPath: mdPath),
+           let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
+            aiChatClaudeMdContent = content
+            aiChatClaudeMdPath = mdPath
+        } else {
+            aiChatClaudeMdContent = nil
+            aiChatClaudeMdPath = nil
+        }
+
+        // Discover skills
+        var skills: [(name: String, description: String, path: String)] = []
+        let skillsDir = "\(claudeDir)/skills"
+        if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
+            for dir in skillDirs.sorted() {
+                let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+                if FileManager.default.fileExists(atPath: skillPath),
+                   let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                    let desc = extractSkillDescription(from: content)
+                    skills.append((name: dir, description: desc, path: skillPath))
+                }
+            }
+        }
+        aiChatDiscoveredSkills = skills
+
+        // Load enabled skills from UserDefaults
+        loadEnabledSkills()
+    }
+
+    private func extractSkillDescription(from content: String) -> String {
+        guard content.hasPrefix("---") else {
+            let lines = content.components(separatedBy: "\n")
+            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
+        }
+        let lines = content.components(separatedBy: "\n")
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
+                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
+                value = value.trimmingCharacters(in: .whitespaces)
+                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
+                   (value.hasPrefix("'") && value.hasSuffix("'")) {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value
+            }
+        }
+        return ""
+    }
+
+    private func loadEnabledSkills() {
+        let json = UserDefaults.standard.string(forKey: "enabledSkillsJSON") ?? "[]"
+        guard let data = json.data(using: .utf8),
+              let names = try? JSONDecoder().decode([String].self, from: data) else {
+            // Default: all enabled
+            aiChatEnabledSkills = Set(aiChatDiscoveredSkills.map { $0.name })
+            return
+        }
+        aiChatEnabledSkills = Set(names)
+    }
+
+    private func saveEnabledSkills() {
+        if let data = try? JSONEncoder().encode(Array(aiChatEnabledSkills)),
+           let json = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(json, forKey: "enabledSkillsJSON")
         }
     }
 

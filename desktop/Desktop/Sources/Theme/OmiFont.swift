@@ -86,6 +86,19 @@ extension View {
     }
 }
 
+// MARK: - Window Size Reset
+
+func resetWindowToDefaultSize() {
+    guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title.contains("omi") || $0.title.contains("Omi") }) else { return }
+    let defaultSize = NSSize(width: 1200, height: 800)
+    let frame = window.frame
+    let newOrigin = NSPoint(
+        x: frame.midX - defaultSize.width / 2,
+        y: frame.midY - defaultSize.height / 2
+    )
+    window.setFrame(NSRect(origin: newOrigin, size: defaultSize), display: true, animate: true)
+}
+
 // MARK: - Font Scale Environment Injection
 
 struct FontScaleEnvironmentModifier: ViewModifier {
