@@ -202,37 +202,6 @@ struct DashboardPage: View {
 
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Dashboard")
-                        .scaledFont(size: 24, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-
-                    Text(formattedDate)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                Spacer()
-
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-
-                Button(action: {
-                    Task {
-                        await viewModel.loadDashboardData()
-                    }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
-                }
-                .buttonStyle(.plain)
-            }
-
             // 4 Widgets in 2x2 grid
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
                 // Top row: Score + Focus
@@ -293,11 +262,6 @@ struct DashboardPage: View {
         .padding(.bottom, 8)
     }
 
-    private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
-        return formatter.string(from: Date())
-    }
 }
 
 #Preview {
