@@ -352,23 +352,24 @@ actor ActionItemStorage {
                 .fetchCount(database)
 
             // Category/tag counts - count each known tag using LIKE on tagsJson
+            // Only count incomplete tasks so numbers match the default (todo) view
             var categories: [String: Int] = [:]
             let knownTags = ["personal", "work", "feature", "bug", "code", "research", "communication", "finance", "health", "other"]
             for tag in knownTags {
                 let count = try Int.fetchOne(database, sql: """
                     SELECT COUNT(*) FROM action_items
-                    WHERE deleted = 0 AND (tagsJson LIKE ? OR (tagsJson IS NULL AND category = ?))
+                    WHERE deleted = 0 AND completed = 0 AND (tagsJson LIKE ? OR (tagsJson IS NULL AND category = ?))
                 """, arguments: ["%\"\(tag)\"%", tag]) ?? 0
                 if count > 0 {
                     categories[tag] = count
                 }
             }
 
-            // Source counts
+            // Source counts (incomplete only to match default view)
             var sources: [String: Int] = [:]
             let sourceRows = try Row.fetchAll(database, sql: """
                 SELECT source, COUNT(*) as count FROM action_items
-                WHERE deleted = 0 AND source IS NOT NULL
+                WHERE deleted = 0 AND completed = 0 AND source IS NOT NULL
                 GROUP BY source
             """)
             for row in sourceRows {
@@ -377,11 +378,11 @@ actor ActionItemStorage {
                 }
             }
 
-            // Priority counts
+            // Priority counts (incomplete only to match default view)
             var priorities: [String: Int] = [:]
             let priorityRows = try Row.fetchAll(database, sql: """
                 SELECT priority, COUNT(*) as count FROM action_items
-                WHERE deleted = 0 AND priority IS NOT NULL
+                WHERE deleted = 0 AND completed = 0 AND priority IS NOT NULL
                 GROUP BY priority
             """)
             for row in priorityRows {
@@ -396,7 +397,7 @@ actor ActionItemStorage {
             for origin in knownOrigins {
                 let count = try Int.fetchOne(database, sql: """
                     SELECT COUNT(*) FROM action_items
-                    WHERE deleted = 0 AND metadataJson LIKE ?
+                    WHERE deleted = 0 AND completed = 0 AND metadataJson LIKE ?
                 """, arguments: ["%\"source_category\":\"\(origin)\"%"]) ?? 0
                 if count > 0 {
                     origins[origin] = count
@@ -476,7 +477,10 @@ actor ActionItemStorage {
     }
 
     /// Sync multiple TaskActionItems to local storage (batch upsert with full data)
-    func syncTaskActionItems(_ items: [TaskActionItem]) async throws {
+    /// - Parameter overrideStagedDeletions: When true, API data overrides local "staged" deletions
+    ///   (used during full sync where we have the complete dataset). When false (default),
+    ///   staged deletions are preserved to avoid un-deleting tasks during partial refreshes.
+    func syncTaskActionItems(_ items: [TaskActionItem], overrideStagedDeletions: Bool = false) async throws {
         let db = try await ensureInitialized()
 
         let (skipped, adopted) = try await db.write { database -> (Int, Int) in
@@ -489,9 +493,11 @@ actor ActionItemStorage {
                     // Skip if local record is newer than incoming API data
                     // This prevents auto-refresh from overwriting recent local changes
                     // (e.g. toggling a task) with stale backend data.
-                    // Fall back to createdAt when updatedAt is nil (legacy tasks without updated_at)
+                    // Exception: during full sync, accept API data for records we locally
+                    // marked as "staged" since that was our guess and the API is the source of truth.
                     let incomingTimestamp = item.updatedAt ?? item.createdAt
-                    if existingRecord.updatedAt > incomingTimestamp {
+                    let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
+                    if existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
                         skipped += 1
                         continue
                     }
@@ -535,6 +541,39 @@ actor ActionItemStorage {
         }
     }
 
+
+    /// Mark incomplete tasks NOT present in the API response as staged (soft-deleted).
+    /// This cleans up tasks that were moved to staged_tasks on the backend
+    /// but still linger in local SQLite, preventing phantom entries in the task list.
+    func markAbsentTasksAsStaged(apiIds: Set<String>) async throws {
+        let db = try await ensureInitialized()
+
+        let marked = try await db.write { database -> Int in
+            // Find recent incomplete, non-deleted tasks whose backendId is NOT in the API set
+            let records = try ActionItemRecord
+                .filter(Column("completed") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("backendId") != nil)
+                .fetchAll(database)
+
+            var count = 0
+            for var record in records {
+                guard let backendId = record.backendId, !backendId.isEmpty else { continue }
+                if !apiIds.contains(backendId) {
+                    record.deleted = true
+                    record.deletedBy = "staged"
+                    record.updatedAt = Date()
+                    try record.update(database)
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        if marked > 0 {
+            log("ActionItemStorage: Marked \(marked) absent tasks as staged")
+        }
+    }
 
     /// Returns all active scored tasks for batch-syncing scores to backend
     func getAllScoredTasks() async throws -> [TaskActionItem] {
@@ -660,6 +699,91 @@ actor ActionItemStorage {
         }
 
         log("ActionItemStorage: Soft deleted action item \(id)")
+    }
+
+    /// Optimistically update completion status locally (before API call)
+    /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
+    func updateCompletionStatus(backendId: String, completed: Bool) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try ActionItemRecord
+                .filter(Column("backendId") == backendId)
+                .fetchOne(database) else {
+                throw ActionItemStorageError.recordNotFound
+            }
+            record.completed = completed
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+
+        log("ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    }
+
+    /// Optimistically update task fields locally (before API call)
+    /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
+    func updateActionItemFields(
+        backendId: String,
+        description: String? = nil,
+        dueAt: Date? = nil,
+        priority: String? = nil,
+        metadata: [String: Any]? = nil
+    ) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try ActionItemRecord
+                .filter(Column("backendId") == backendId)
+                .fetchOne(database) else {
+                throw ActionItemStorageError.recordNotFound
+            }
+            if let description = description {
+                record.description = description
+            }
+            if let dueAt = dueAt {
+                record.dueAt = dueAt
+            }
+            if let priority = priority {
+                record.priority = priority
+            }
+            if let metadata = metadata {
+                record.setMetadata(metadata)
+            }
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+
+        log("ActionItemStorage: Locally updated fields for \(backendId)")
+    }
+
+    /// Batch update sort orders and indent levels in SQLite
+    func updateSortOrders(_ updates: [(backendId: String, sortOrder: Int, indentLevel: Int)]) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            for update in updates {
+                try database.execute(
+                    sql: "UPDATE action_items SET sortOrder = ?, indentLevel = ?, updatedAt = ? WHERE backendId = ?",
+                    arguments: [update.sortOrder, update.indentLevel, Date(), update.backendId]
+                )
+            }
+        }
+
+        log("ActionItemStorage: Updated sort orders for \(updates.count) items")
+    }
+
+    /// Un-soft-delete an action item by backend ID (for undo)
+    func undeleteActionItemByBackendId(_ backendId: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE action_items SET deleted = 0, deletedBy = NULL, updatedAt = ? WHERE backendId = ?",
+                arguments: [Date(), backendId]
+            )
+        }
+
+        log("ActionItemStorage: Undeleted action item with backendId \(backendId)")
     }
 
     /// Soft delete an action item by backend ID

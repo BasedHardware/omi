@@ -192,14 +192,14 @@ struct SidebarView: View {
                                     showAudioBars: true
                                 )
                             } else if item == .rewind {
-                                // Rewind - shows pulsing recording icon when active
+                                // Rewind - shows pulsing recording icon when both audio and screen are active
                                 NavItemWithStatusView(
                                     icon: item.icon,
                                     label: item.title,
                                     isSelected: selectedIndex == item.rawValue,
                                     isCollapsed: isCollapsed,
                                     iconWidth: iconWidth,
-                                    isOn: isMonitoring,
+                                    isOn: isMonitoring && appState.isTranscribing,
                                     isToggling: isTogglingMonitoring,
                                     isPageLoading: isRewindPageLoading,
                                     onTap: {
@@ -294,6 +294,17 @@ struct SidebarView: View {
                     if appState.hasMissingPermissions {
                         permissionWarningButton
                     }
+
+                    // Floating control bar toggle
+                    BottomNavItemView(
+                        icon: "rectangle.bottomhalf.filled",
+                        label: isCollapsed ? "Ask Omi" : "Ask Omi  ⌘\\",
+                        isCollapsed: isCollapsed,
+                        iconWidth: iconWidth,
+                        onTap: {
+                            FloatingControlBarManager.shared.toggle()
+                        }
+                    )
 
                     // Secondary navigation items
                     if currentTierLevel == 0 || currentTierLevel >= 4 {
@@ -441,7 +452,7 @@ struct SidebarView: View {
             } else {
                 // Fallback SF Symbol
                 Image(systemName: "circle.fill")
-                    .font(.system(size: 17))
+                    .scaledFont(size: 17)
                     .foregroundColor(OmiColors.purplePrimary)
                     .frame(width: iconWidth)
             }
@@ -449,7 +460,7 @@ struct SidebarView: View {
             if !isCollapsed {
                 // Brand name
                 Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")
-                    .font(.system(size: 22, weight: .bold))
+                    .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
 
@@ -462,7 +473,7 @@ struct SidebarView: View {
                     }
                 }) {
                     Image(systemName: "sidebar.left")
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -484,7 +495,7 @@ struct SidebarView: View {
             }
         }) {
             Image(systemName: "sidebar.left")
-                .font(.system(size: 17))
+                .scaledFont(size: 17)
                 .foregroundColor(OmiColors.textTertiary)
                 .frame(width: iconWidth)
         }
@@ -496,7 +507,7 @@ struct SidebarView: View {
 
     private var proBadge: some View {
         Text("Pro")
-            .font(.system(size: 11, weight: .semibold))
+            .scaledFont(size: 11, weight: .semibold)
             .foregroundColor(OmiColors.purplePrimary)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -519,13 +530,13 @@ struct SidebarView: View {
 //        }) {
 //            HStack(spacing: 12) {
 //                Image(systemName: "bolt.fill")
-//                    .font(.system(size: 17))
+//                    .scaledFont(size: 17)
 //                    .foregroundColor(.white)
 //                    .frame(width: iconWidth)
 //
 //                if !isCollapsed {
 //                    Text("Upgrade to Pro")
-//                        .font(.system(size: 14, weight: .semibold))
+//                        .scaledFont(size: 14, weight: .semibold)
 //                        .foregroundColor(.white)
 //
 //                    Spacer()
@@ -560,7 +571,7 @@ struct SidebarView: View {
                 } else {
                     // Fallback SF Symbol
                     Image(systemName: "wave.3.right.circle.fill")
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundColor(OmiColors.purplePrimary)
                         .frame(width: iconWidth)
                 }
@@ -569,11 +580,11 @@ struct SidebarView: View {
                     // Text content
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Get Omi Device")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("Your wearable AI companion")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary.opacity(0.8))
                     }
 
@@ -585,7 +596,7 @@ struct SidebarView: View {
                         }
                     }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .medium))
+                            .scaledFont(size: 10, weight: .medium)
                             .foregroundColor(OmiColors.textTertiary)
                             .padding(6)
                     }
@@ -617,19 +628,19 @@ struct SidebarView: View {
         }) {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 17))
+                    .scaledFont(size: 17)
                     .foregroundColor(.white)
                     .frame(width: iconWidth)
 
                 if !isCollapsed {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Update Available")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(.white)
 
                         if !updaterViewModel.availableVersion.isEmpty {
                             Text("v\(updaterViewModel.availableVersion)")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.white.opacity(0.8))
                         }
                     }
@@ -637,7 +648,7 @@ struct SidebarView: View {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
@@ -677,7 +688,7 @@ struct SidebarView: View {
                             .opacity(deviceProvider.isConnected ? 1.0 : 0.5)
                     } else {
                         Image(systemName: "wave.3.right.circle.fill")
-                            .font(.system(size: 17))
+                            .scaledFont(size: 17)
                             .foregroundColor(deviceProvider.isConnected ? OmiColors.purplePrimary : OmiColors.textTertiary)
                             .frame(width: iconWidth)
                     }
@@ -694,7 +705,7 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         if let device = deviceProvider.connectedDevice ?? deviceProvider.pairedDevice {
                             Text(device.displayName)
-                                .font(.system(size: 13, weight: .semibold))
+                                .scaledFont(size: 13, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
                                 .lineLimit(1)
 
@@ -703,19 +714,19 @@ struct SidebarView: View {
                                     if deviceProvider.batteryLevel >= 0 {
                                         // Battery indicator
                                         Image(systemName: batteryIconName(level: deviceProvider.batteryLevel))
-                                            .font(.system(size: 10))
+                                            .scaledFont(size: 10)
                                             .foregroundColor(batteryColor(level: deviceProvider.batteryLevel))
                                         Text("\(deviceProvider.batteryLevel)%")
-                                            .font(.system(size: 11))
+                                            .scaledFont(size: 11)
                                             .foregroundColor(batteryColor(level: deviceProvider.batteryLevel))
                                     } else {
                                         Text("Connected")
-                                            .font(.system(size: 11))
+                                            .scaledFont(size: 11)
                                             .foregroundColor(.green)
                                     }
                                 } else {
                                     Text("Disconnected")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                         .foregroundColor(.orange)
                                 }
                             }
@@ -725,7 +736,7 @@ struct SidebarView: View {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -826,14 +837,14 @@ struct SidebarView: View {
 
         return HStack(spacing: 8) {
             Image(systemName: (isDenied || isBroken) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
-                .font(.system(size: 15))
+                .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
                 .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
                 Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
 
@@ -853,7 +864,7 @@ struct SidebarView: View {
                     }
                 }) {
                     Text(needsReset ? "Reset" : "Grant")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -884,14 +895,14 @@ struct SidebarView: View {
 
         return HStack(spacing: 8) {
             Image(systemName: isDenied ? "mic.slash.fill" : "mic.fill")
-                .font(.system(size: 15))
+                .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
                 .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
 
             if !isCollapsed {
                 Text("Microphone")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
 
@@ -907,7 +918,7 @@ struct SidebarView: View {
                     }
                 }) {
                     Text(isDenied ? "Fix" : "Grant")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -940,14 +951,14 @@ struct SidebarView: View {
 
         return HStack(spacing: 8) {
             Image(systemName: isDenied ? "bell.slash.fill" : (isBannerDisabled ? "bell.badge.slash.fill" : "bell.fill"))
-                .font(.system(size: 15))
+                .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
                 .scaleEffect(permissionPulse && needsAttention ? 1.1 : 1.0)
 
             if !isCollapsed {
                 Text(isBannerDisabled ? "Banners Off" : "Notifications")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
 
@@ -958,7 +969,7 @@ struct SidebarView: View {
                     appState.openNotificationPreferences()
                 }) {
                     Text("Fix")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -989,14 +1000,14 @@ struct SidebarView: View {
 
         return HStack(spacing: 8) {
             Image(systemName: isDenied ? "hand.raised.slash.fill" : "hand.raised.fill")
-                .font(.system(size: 15))
+                .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
                 .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
 
             if !isCollapsed {
                 Text("Accessibility")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
 
@@ -1007,7 +1018,7 @@ struct SidebarView: View {
                     appState.triggerAccessibilityPermission()
                 }) {
                     Text(isDenied ? "Fix" : "Grant")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -1185,7 +1196,7 @@ struct NavItemView: View {
                         .frame(width: iconWidth, height: 17)
                 } else {
                     Image(systemName: icon)
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundColor(isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textTertiary))
                         .frame(width: iconWidth)
                 }
@@ -1209,7 +1220,7 @@ struct NavItemView: View {
                 // Lock badge when collapsed
                 if isCollapsed && isLocked {
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 8))
+                        .scaledFont(size: 8)
                         .foregroundColor(lockedColor)
                         .offset(x: 4, y: -4)
                 }
@@ -1217,7 +1228,7 @@ struct NavItemView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .font(.system(size: 14, weight: isSelected ? .medium : .regular))
+                    .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
                     .foregroundColor(isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textSecondary))
 
                 Spacer()
@@ -1225,7 +1236,7 @@ struct NavItemView: View {
                 if isLocked {
                     // Lock icon when expanded
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(lockedColor)
                 } else {
                     // Status indicator when expanded (for Focus)
@@ -1238,7 +1249,7 @@ struct NavItemView: View {
                     // Badge count when expanded
                     if badge > 0 {
                         Text("\(badge)")
-                            .font(.system(size: 11, weight: .semibold))
+                            .scaledFont(size: 11, weight: .semibold)
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -1326,7 +1337,7 @@ struct NavItemWithStatusView: View {
                         .frame(width: iconWidth)
                 } else {
                     Image(systemName: icon)
-                        .font(.system(size: 17))
+                        .scaledFont(size: 17)
                         .foregroundColor(iconColor)
                         .frame(width: iconWidth)
                 }
@@ -1348,7 +1359,7 @@ struct NavItemWithStatusView: View {
 
             if !isCollapsed {
                 Text(label)
-                    .font(.system(size: 14, weight: isSelected ? .medium : .regular))
+                    .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
                     .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1566,7 +1577,7 @@ struct TierUnlockCelebration: View {
             // Phase 3: Glowing "Unlocked!" text
             if phase == .text {
                 Text("Unlocked!")
-                    .font(.system(size: 11, weight: .bold))
+                    .scaledFont(size: 11, weight: .bold)
                     .foregroundColor(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -1691,13 +1702,13 @@ struct BottomNavItemView: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 17))
+                .scaledFont(size: 17)
                 .foregroundColor(OmiColors.textTertiary)
                 .frame(width: iconWidth)
 
             if !isCollapsed {
                 Text(label)
-                    .font(.system(size: 14, weight: .regular))
+                    .scaledFont(size: 14, weight: .regular)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()

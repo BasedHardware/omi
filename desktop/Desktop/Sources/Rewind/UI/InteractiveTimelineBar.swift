@@ -373,7 +373,7 @@ class TimeBasedTimelineNSView: NSView {
     private func showTooltip(for screenshot: Screenshot, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot))
+        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
         tooltipView.frame.size = tooltipView.fittingSize
 
         let windowPoint = convert(point, to: nil)
@@ -399,7 +399,7 @@ class TimeBasedTimelineNSView: NSView {
     private func showGapTooltip(for segment: TimelineSegment, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration))
+        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
         tooltipView.frame.size = tooltipView.fittingSize
 
         let windowPoint = convert(point, to: nil)
@@ -627,11 +627,11 @@ struct TooltipView: View {
         HStack(spacing: 6) {
             AppIconView(appName: screenshot.appName, size: 14)
             Text(screenshot.appName)
-                .font(.system(size: 10, weight: .medium))
+                .scaledFont(size: 10, weight: .medium)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Text(screenshot.formattedTime)
-                .font(.system(size: 10, design: .monospaced))
+                .scaledFont(size: 10, design: .monospaced)
                 .foregroundColor(.white.opacity(0.7))
         }
         .padding(.horizontal, 8)
@@ -653,10 +653,10 @@ struct GapTooltipView: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("No capture")
-                .font(.system(size: 9, weight: .medium))
+                .scaledFont(size: 9, weight: .medium)
                 .foregroundColor(.white.opacity(0.6))
             Text(formatDuration(duration))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .scaledFont(size: 11, weight: .semibold, design: .monospaced)
                 .foregroundColor(.white)
         }
         .padding(.horizontal, 10)

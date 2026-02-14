@@ -206,11 +206,11 @@ struct DashboardPage: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Dashboard")
-                        .font(.system(size: 24, weight: .bold))
+                        .scaledFont(size: 24, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(formattedDate)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -227,7 +227,7 @@ struct DashboardPage: View {
                     }
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .buttonStyle(.plain)

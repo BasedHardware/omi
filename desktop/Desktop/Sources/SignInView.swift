@@ -24,7 +24,7 @@ struct SignInView: View {
                     }
 
                     Text("Omi")
-                        .font(.system(size: 48, weight: .bold))
+                        .scaledFont(size: 48, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text("Sign in to continue")
@@ -50,9 +50,9 @@ struct SignInView: View {
                     }) {
                         HStack(spacing: 8) {
                             Image(systemName: "applelogo")
-                                .font(.system(size: 18))
+                                .scaledFont(size: 18)
                             Text("Sign in with Apple")
-                                .font(.system(size: 17, weight: .medium))
+                                .scaledFont(size: 17, weight: .medium)
                         }
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
@@ -78,7 +78,7 @@ struct SignInView: View {
                         HStack(spacing: 8) {
                             // Google "G" logo using SF Symbol or text
                             Text("G")
-                                .font(.system(size: 20, weight: .bold))
+                                .scaledFont(size: 20, weight: .bold)
                                 .foregroundStyle(
                                     LinearGradient(
                                         colors: [.blue, .green, .yellow, .red],
@@ -87,7 +87,7 @@ struct SignInView: View {
                                     )
                                 )
                             Text("Sign in with Google")
-                                .font(.system(size: 17, weight: .medium))
+                                .scaledFont(size: 17, weight: .medium)
                         }
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)

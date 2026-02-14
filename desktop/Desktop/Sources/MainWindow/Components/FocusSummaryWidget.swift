@@ -20,7 +20,7 @@ struct FocusSummaryWidget: View {
             // Header with tabs
             HStack {
                 Text("Focus")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -34,7 +34,7 @@ struct FocusSummaryWidget: View {
                             }
                         }) {
                             Text(tab.rawValue)
-                                .font(.system(size: 11, weight: selectedTab == tab ? .semibold : .regular))
+                                .scaledFont(size: 11, weight: selectedTab == tab ? .semibold : .regular)
                                 .foregroundColor(selectedTab == tab ? OmiColors.textPrimary : OmiColors.textTertiary)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
@@ -114,17 +114,17 @@ struct FocusStatCard: View {
         VStack(alignment: .center, spacing: 4) {
             HStack(alignment: .center, spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
 
                 HStack(alignment: .lastTextBaseline, spacing: 1) {
                     Text(value)
-                        .font(.system(size: 18, weight: .bold))
+                        .scaledFont(size: 18, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     if !unit.isEmpty {
                         Text(unit)
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -133,7 +133,7 @@ struct FocusStatCard: View {
             .minimumScaleFactor(0.5)
 
             Text(title)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity)

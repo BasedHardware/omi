@@ -126,17 +126,17 @@ struct AdvicePage: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Advice")
-                    .font(.system(size: 24, weight: .semibold))
+                    .scaledFont(size: 24, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
                     Text("\(viewModel.totalCount) tips")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if viewModel.unreadCount > 0 {
                         Text("\(viewModel.unreadCount) new")
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
@@ -158,7 +158,7 @@ struct AdvicePage: View {
                             Image(systemName: "checkmark.circle")
                             Text("Mark All Read")
                         }
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textSecondary)
                     }
                     .buttonStyle(.plain)
@@ -177,7 +177,7 @@ struct AdvicePage: View {
                     .disabled(storage.adviceHistory.isEmpty)
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 18))
+                        .scaledFont(size: 18)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -241,15 +241,15 @@ struct AdvicePage: View {
             HStack(spacing: 6) {
                 if let cat = category {
                     Image(systemName: cat.icon)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                 }
 
                 Text(title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
 
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -299,15 +299,15 @@ struct AdvicePage: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "lightbulb.fill")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Advice Yet")
-                .font(.system(size: 20, weight: .semibold))
+                .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Proactive advice from your AI assistant will appear here.\nMake sure the Advice Assistant is enabled in Settings.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -315,9 +315,9 @@ struct AdvicePage: View {
             // Info about where to enable
             HStack(spacing: 8) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                 Text("Go to Settings > Proactive Assistants to configure")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
             }
             .foregroundColor(OmiColors.textTertiary)
             .padding(.top, 8)
@@ -328,15 +328,15 @@ struct AdvicePage: View {
     private var noResultsView: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 36))
+                .scaledFont(size: 36)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Results")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Try a different search or filter")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
 
             if viewModel.selectedCategory != nil || !viewModel.searchText.isEmpty {
@@ -360,9 +360,9 @@ struct AdvicePage: View {
             HStack {
                 HStack(spacing: 8) {
                     Image(systemName: advice.advice.category.icon)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                     Text(advice.advice.category.displayName)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                 }
                 .foregroundColor(categoryColor(advice.advice.category))
                 .padding(.horizontal, 10)
@@ -376,7 +376,7 @@ struct AdvicePage: View {
                     selectedAdvice = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .scaledFont(size: 20)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -384,21 +384,23 @@ struct AdvicePage: View {
 
             // Main advice
             Text(advice.advice.advice)
-                .font(.system(size: 18, weight: .medium))
+                .scaledFont(size: 18, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
 
             // Reasoning
             if let reasoning = advice.advice.reasoning {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Why this advice?")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(OmiColors.textTertiary)
                         .textCase(.uppercase)
 
                     Text(reasoning)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
+                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(12)
@@ -409,42 +411,45 @@ struct AdvicePage: View {
             // Context
             VStack(alignment: .leading, spacing: 12) {
                 Text("Context")
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(OmiColors.textTertiary)
                     .textCase(.uppercase)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "app.fill")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.advice.sourceApp)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
+                            .textSelection(.enabled)
                     }
 
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "figure.walk")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.currentActivity)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
+                            .textSelection(.enabled)
                     }
 
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "doc.text")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                             .frame(width: 16)
 
                         Text(advice.contextSummary)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
+                            .textSelection(.enabled)
                     }
                 }
             }
@@ -457,9 +462,9 @@ struct AdvicePage: View {
                 // Confidence
                 HStack(spacing: 4) {
                     Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                     Text("\(Int(advice.advice.confidence * 100))% confidence")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                 }
                 .foregroundColor(OmiColors.textTertiary)
 
@@ -467,7 +472,7 @@ struct AdvicePage: View {
 
                 // Date
                 Text(formatDate(advice.createdAt))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
@@ -514,7 +519,7 @@ struct AdviceCard: View {
                         .frame(width: 36, height: 36)
 
                     Image(systemName: advice.advice.category.icon)
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(categoryColor)
                 }
 
@@ -529,7 +534,7 @@ struct AdviceCard: View {
                         }
 
                         Text(advice.advice.advice)
-                            .font(.system(size: 14, weight: advice.isRead ? .regular : .medium))
+                            .scaledFont(size: 14, weight: advice.isRead ? .regular : .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -541,18 +546,18 @@ struct AdviceCard: View {
                         // Source app
                         HStack(spacing: 4) {
                             Image(systemName: "app.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text(advice.advice.sourceApp)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                         }
                         .foregroundColor(OmiColors.textTertiary)
 
                         // Confidence
                         HStack(spacing: 4) {
                             Image(systemName: "chart.bar.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text("\(Int(advice.advice.confidence * 100))%")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                         }
                         .foregroundColor(OmiColors.textTertiary)
 
@@ -560,7 +565,7 @@ struct AdviceCard: View {
 
                         // Date
                         Text(formatDate(advice.createdAt))
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -572,7 +577,7 @@ struct AdviceCard: View {
                             onDismiss()
                         } label: {
                             Image(systemName: "eye.slash")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -582,7 +587,7 @@ struct AdviceCard: View {
                             showDeleteConfirmation = true
                         } label: {
                             Image(systemName: "trash")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)

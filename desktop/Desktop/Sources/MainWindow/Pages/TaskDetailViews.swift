@@ -11,7 +11,7 @@ struct TaskDetailButton: View {
             showDetail = true
         } label: {
             Image(systemName: "info.circle")
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
                 .foregroundColor(OmiColors.textTertiary)
                 .frame(width: 20, height: 20)
         }
@@ -97,12 +97,12 @@ struct TaskDetailView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Task Details")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if let source = task.source {
                     Text(source)
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -128,7 +128,7 @@ struct TaskDetailView: View {
             sectionHeader("Task")
 
             Text(task.description)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -154,7 +154,7 @@ struct TaskDetailView: View {
                    let url = URL(string: urlString) {
                     HStack {
                         Text("Link")
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 100, alignment: .leading)
 
@@ -163,9 +163,9 @@ struct TaskDetailView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Text("Open in Sentry")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                 Image(systemName: "arrow.up.right.square")
-                                    .font(.system(size: 10))
+                                    .scaledFont(size: 10)
                             }
                             .foregroundColor(.blue)
                         }
@@ -332,19 +332,19 @@ struct TaskDetailView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
+            .scaledFont(size: 13, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
                 .frame(width: 100, alignment: .leading)
 
             Text(value)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()
@@ -354,11 +354,11 @@ struct TaskDetailView: View {
     private func detailBlock(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text(value)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textPrimary)
                 .textSelection(.enabled)
                 .if_available_writingToolsNone()

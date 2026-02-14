@@ -25,11 +25,11 @@ struct SearchResultsFilmstrip: View {
                 if let query = searchQuery {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("\(screenshots.count) results for \"\(query)\"")
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.white)
                     }
                 }
@@ -38,7 +38,7 @@ struct SearchResultsFilmstrip: View {
 
                 // Navigation hint
                 Text("← scroll or use arrow keys →")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(.white.opacity(0.4))
 
                 // Keyboard shortcuts
@@ -127,7 +127,7 @@ struct SearchResultsFilmstrip: View {
     private func keyHint(_ key: String, action: String) -> some View {
         HStack(spacing: 3) {
             Text(key)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .scaledFont(size: 10, weight: .medium, design: .monospaced)
                 .foregroundColor(.white.opacity(0.7))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -135,7 +135,7 @@ struct SearchResultsFilmstrip: View {
                 .cornerRadius(3)
 
             Text(action)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
                 .foregroundColor(.white.opacity(0.4))
         }
     }
@@ -254,7 +254,7 @@ struct FilmstripThumbnail: View {
                                 .fill(Color.white.opacity(0.05))
                                 .overlay(
                                     Image(systemName: "photo")
-                                        .font(.system(size: 20))
+                                        .scaledFont(size: 20)
                                         .foregroundColor(.white.opacity(0.2))
                                 )
                         }
@@ -270,7 +270,7 @@ struct FilmstripThumbnail: View {
                             HStack {
                                 Spacer()
                                 Text("\(matchCount)")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .scaledFont(size: 10, weight: .bold)
                                     .foregroundColor(.black)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -325,14 +325,14 @@ struct FilmstripThumbnail: View {
 
                 // Time label
                 Text(screenshot.formattedTime)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular, design: .monospaced))
+                    .scaledFont(size: 11, weight: isSelected ? .semibold : .regular, design: .monospaced)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : .white.opacity(0.7))
                     .offset(y: liftOffset / 2)
 
                 // App name (shows on hover or selection)
                 if isSelected || isHovered {
                     Text(screenshot.appName)
-                        .font(.system(size: 10, weight: .medium))
+                        .scaledFont(size: 10, weight: .medium)
                         .foregroundColor(.white.opacity(0.6))
                         .lineLimit(1)
                         .offset(y: liftOffset / 2)

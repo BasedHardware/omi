@@ -78,11 +78,11 @@ private struct LiveSegmentView: View {
                 }
 
                 Text(speakerLabel)
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
 
                 Text(formatTime(segment.start))
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textQuaternary)
 
                 if isUser {
@@ -92,8 +92,9 @@ private struct LiveSegmentView: View {
 
             // Message bubble
             Text(segment.text)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
+                .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -109,7 +110,7 @@ private struct LiveSegmentView: View {
             .frame(width: 24, height: 24)
             .overlay(
                 Text(isUser ? "Y" : String(segment.speaker))
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
             )
     }

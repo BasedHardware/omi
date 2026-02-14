@@ -40,7 +40,7 @@ struct DeviceSettingsPage: View {
     private var headerSection: some View {
         HStack {
             Text("Device")
-                .font(.system(size: 28, weight: .bold))
+                .scaledFont(size: 28, weight: .bold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
@@ -52,7 +52,7 @@ struct DeviceSettingsPage: View {
                     .frame(width: 8, height: 8)
 
                 Text(bluetoothStatusText)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
@@ -93,7 +93,7 @@ struct DeviceSettingsPage: View {
         VStack(alignment: .leading, spacing: 16) {
             // Section header
             Text("Connected Device")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
                 .textCase(.uppercase)
 
@@ -107,11 +107,11 @@ struct DeviceSettingsPage: View {
                     // Device info
                     VStack(alignment: .leading, spacing: 4) {
                         Text(device.displayName)
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(device.type.displayName)
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -151,7 +151,7 @@ struct DeviceSettingsPage: View {
                         }
                     }) {
                         Text("Disconnect")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -169,7 +169,7 @@ struct DeviceSettingsPage: View {
                         }
                     }) {
                         Text("Unpair")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(.red)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
@@ -199,7 +199,7 @@ struct DeviceSettingsPage: View {
         VStack(alignment: .leading, spacing: 16) {
             // Section header
             Text("Paired Device")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
                 .textCase(.uppercase)
 
@@ -212,7 +212,7 @@ struct DeviceSettingsPage: View {
                 // Device info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(device.displayName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     HStack(spacing: 6) {
@@ -220,7 +220,7 @@ struct DeviceSettingsPage: View {
                             .fill(Color.orange)
                             .frame(width: 6, height: 6)
                         Text("Disconnected")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -239,7 +239,7 @@ struct DeviceSettingsPage: View {
                         }
                     }) {
                         Text("Connect")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -270,7 +270,7 @@ struct DeviceSettingsPage: View {
             // Section header
             HStack {
                 Text("Find Devices")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textTertiary)
                     .textCase(.uppercase)
 
@@ -281,7 +281,7 @@ struct DeviceSettingsPage: View {
                         ProgressView()
                             .scaleEffect(0.6)
                         Text("Scanning...")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -297,10 +297,10 @@ struct DeviceSettingsPage: View {
             }) {
                 HStack {
                     Image(systemName: deviceProvider.isScanning ? "stop.fill" : "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
 
                     Text(deviceProvider.isScanning ? "Stop Scanning" : "Scan for Devices")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -321,7 +321,7 @@ struct DeviceSettingsPage: View {
         VStack(alignment: .leading, spacing: 16) {
             // Section header
             Text("Available Devices (\(deviceProvider.discoveredDevices.count))")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
                 .textCase(.uppercase)
 
@@ -346,12 +346,12 @@ struct DeviceSettingsPage: View {
             // Device info
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.displayName)
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
                     Text(device.type.displayName)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
 
                     // Signal strength
@@ -367,7 +367,7 @@ struct DeviceSettingsPage: View {
                     .scaleEffect(0.7)
             } else if deviceProvider.connectedDevice?.id == device.id {
                 Text("Connected")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.green)
             } else {
                 Button(action: {
@@ -376,7 +376,7 @@ struct DeviceSettingsPage: View {
                     }
                 }) {
                     Text("Connect")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
                 .buttonStyle(.plain)
@@ -400,7 +400,7 @@ struct DeviceSettingsPage: View {
                 .frame(width: size, height: size)
 
             Image(systemName: deviceIconName(for: type))
-                .font(.system(size: size * 0.4))
+                .scaledFont(size: size * 0.4)
                 .foregroundColor(OmiColors.purplePrimary)
         }
     }
@@ -425,11 +425,11 @@ struct DeviceSettingsPage: View {
     private func batteryIndicator(level: Int) -> some View {
         HStack(spacing: 4) {
             Image(systemName: batteryIconName(level: level))
-                .font(.system(size: 16))
+                .scaledFont(size: 16)
                 .foregroundColor(batteryColor(level: level))
 
             Text("\(level)%")
-                .font(.system(size: 13, weight: .medium))
+                .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(batteryColor(level: level))
         }
     }
@@ -478,13 +478,13 @@ struct DeviceSettingsPage: View {
     private func detailRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textTertiary)
 
             Spacer()
 
             Text(value)
-                .font(.system(size: 13, weight: .medium))
+                .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
         }
     }

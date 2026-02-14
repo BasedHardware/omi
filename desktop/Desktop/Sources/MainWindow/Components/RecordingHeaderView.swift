@@ -40,13 +40,13 @@ struct RecordingHeaderView: View {
                 )
 
                 Text("Listening")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Text(formattedDuration)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 14, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Stop recording button
@@ -55,9 +55,9 @@ struct RecordingHeaderView: View {
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "stop.circle.fill")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                         Text("Stop Recording")
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
@@ -75,7 +75,7 @@ struct RecordingHeaderView: View {
                 // Microphone level
                 HStack(spacing: 8) {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
 
                     AudioLevelWaveformView(
@@ -84,14 +84,14 @@ struct RecordingHeaderView: View {
                     )
 
                     Text("Mic")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
                 // System audio level
                 HStack(spacing: 8) {
                     Image(systemName: "speaker.wave.2.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
 
                     AudioLevelWaveformView(
@@ -100,7 +100,7 @@ struct RecordingHeaderView: View {
                     )
 
                     Text("System Audio")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 

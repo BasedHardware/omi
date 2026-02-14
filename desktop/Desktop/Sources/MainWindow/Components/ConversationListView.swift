@@ -91,7 +91,7 @@ struct ConversationListView: View {
                 .tint(OmiColors.purplePrimary)
 
             Text("Loading conversations...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -100,21 +100,21 @@ struct ConversationListView: View {
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .scaledFont(size: 40)
                 .foregroundColor(OmiColors.warning)
 
             Text("Failed to load conversations")
-                .font(.system(size: 16, weight: .medium))
+                .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(error)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             Button(action: onRefresh) {
                 Text("Try Again")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
@@ -132,15 +132,15 @@ struct ConversationListView: View {
     private var emptyView: some View {
         VStack(spacing: 16) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Conversations")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Start recording to capture your first conversation")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
@@ -153,7 +153,7 @@ struct ConversationListView: View {
             ForEach(groupedConversations, id: \.0) { group, convos in
                 // Date header
                 Text(group)
-                    .font(.system(size: 12, weight: .semibold))
+                    .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(OmiColors.textTertiary)
                     .padding(.top, group == groupedConversations.first?.0 ? 0 : 16)
                     .padding(.bottom, 8)

@@ -4,20 +4,75 @@ import Database from "better-sqlite3";
 import { z } from "zod";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
+import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync } from "fs";
+import { createInflateRaw, createGunzip } from "zlib";
 
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || "/home/matthewdi/omi-agent/data/omi.db";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const AUTH_TOKEN = process.env.AUTH_TOKEN;
+const PORT = parseInt(process.env.PORT || "8080", 10);
 const EMBEDDING_DIM = 3072;
+// Max upload size: 10GB
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
 
-// --- Database Setup ---
-const db = Database(DB_PATH, { readonly: true });
-db.pragma("journal_mode = WAL");
+// --- Database Setup (lazy — opened on first use or after upload) ---
+let db = null;
+let defaultSystemPrompt = null;
+let omiServer = null;
 
-// Get schema for system prompt
+function openDatabase() {
+  if (db) {
+    try { db.close(); } catch {}
+    db = null;
+  }
+  if (!existsSync(DB_PATH)) {
+    return false;
+  }
+  db = Database(DB_PATH, { readonly: true });
+  db.pragma("journal_mode = WAL");
+
+  // Rebuild schema + system prompt + MCP server
+  const schema = getSchema();
+  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database.
+This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
+
+DATABASE SCHEMA:
+${schema}
+
+TOOLS:
+- **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
+- **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
+- **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
+
+GUIDELINES:
+- Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
+- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding
+- Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
+- Transcription sessions have: title, overview, startedAt, finishedAt, source
+- For "what did I do today/yesterday" queries, use screenshots table grouped by appName
+- For task queries, use action_items table
+- For conversation queries, use transcription_sessions + transcription_segments
+- Be concise and helpful. Format results clearly.`;
+
+  omiServer = createSdkMcpServer({
+    name: "omi-tools",
+    tools: [executeSqlTool, semanticSearchTool],
+  });
+
+  console.log(`[db] Database opened: ${DB_PATH}`);
+  return true;
+}
+
+function isDatabaseReady() {
+  return db !== null;
+}
+
 function getSchema() {
   const tables = db
     .prepare(
@@ -40,6 +95,7 @@ function getSchema() {
 const BLOCKED_KEYWORDS = ["DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH", "VACUUM"];
 
 function executeSqlQuery(sqlQuery) {
+  if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
   const upper = sqlQuery.toUpperCase();
   for (const kw of BLOCKED_KEYWORDS) {
     if (new RegExp(`\\b${kw}\\b`).test(upper)) {
@@ -99,6 +155,7 @@ function readEmbeddingFromBlob(buffer) {
 }
 
 async function performSemanticSearch(searchQuery, days = 7, appFilter = null) {
+  if (!db) return JSON.stringify({ error: "Database not loaded. Upload omi.db first." });
   if (!GEMINI_API_KEY) {
     return JSON.stringify({ error: "GEMINI_API_KEY not set" });
   }
@@ -175,46 +232,23 @@ e.g. "reading about machine learning", "working on design mockups"`,
   }
 );
 
-// Create MCP server for OMI tools
-const omiServer = createSdkMcpServer({
-  name: "omi-tools",
-  tools: [executeSqlTool, semanticSearchTool],
-});
+// --- Shared Agent Query Handler ---
 
-// --- Build System Prompt ---
+async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
+  if (!isDatabaseReady()) {
+    send({ type: "error", message: "Database not available. Upload omi.db first." });
+    return { text: "", sessionId: "", costUsd: 0 };
+  }
 
-const schema = getSchema();
-const systemPrompt = `You are an AI assistant with access to the user's OMI desktop database.
-This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
-
-DATABASE SCHEMA:
-${schema}
-
-TOOLS:
-- **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
-- **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
-- **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
-
-GUIDELINES:
-- Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
-- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding
-- Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
-- Transcription sessions have: title, overview, startedAt, finishedAt, source
-- For "what did I do today/yesterday" queries, use screenshots table grouped by appName
-- For task queries, use action_items table
-- For conversation queries, use transcription_sessions + transcription_segments
-- Be concise and helpful. Format results clearly.`;
-
-// --- Run Agent ---
-
-async function runAgent(userMessage) {
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`User: ${userMessage}`);
-  console.log("=".repeat(60));
+  let sessionId = "";
+  let fullText = "";
+  let costUsd = 0;
+  const pendingTools = [];
 
   const options = {
     model: "claude-opus-4-6",
-    systemPrompt,
+    abortController,
+    systemPrompt: systemPrompt || defaultSystemPrompt,
     allowedTools: [
       "Read",
       "Write",
@@ -228,7 +262,7 @@ async function runAgent(userMessage) {
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: 15,
-    cwd: process.env.HOME || "/",
+    cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
       "playwright": {
@@ -243,37 +277,54 @@ async function runAgent(userMessage) {
     },
   };
 
-  let fullText = "";
-
-  const q = query({ prompt: userMessage, options });
+  const q = query({ prompt, options });
 
   for await (const message of q) {
+    if (abortController.signal.aborted) break;
+
     switch (message.type) {
       case "system":
         if ("session_id" in message) {
-          console.log(`[Session: ${message.session_id}]`);
+          sessionId = message.session_id;
+          send({ type: "init", sessionId });
         }
         break;
 
       case "stream_event": {
         const event = message.event;
+
         if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
-          console.log(`\n[Tool started: ${event.content_block.name}]`);
+          const name = event.content_block.name;
+          pendingTools.push(name);
+          send({ type: "tool_activity", name, status: "started" });
         }
+
         if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          if (pendingTools.length > 0) {
+            for (const name of pendingTools) {
+              send({ type: "tool_activity", name, status: "completed" });
+            }
+            pendingTools.length = 0;
+          }
           const text = event.delta.text;
           fullText += text;
-          process.stdout.write(text);
+          send({ type: "text_delta", text });
         }
         break;
       }
 
       case "assistant": {
+        // Fallback: if streaming didn't capture text (e.g. after tool calls),
+        // extract it from the complete assistant message
         const content = message.message?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
-            if (block.type === "tool_use") {
-              console.log(`\n[Tool: ${block.name}(${JSON.stringify(block.input).slice(0, 200)})]`);
+            if (block.type === "text" && typeof block.text === "string") {
+              // Check if this text was already sent via stream_event deltas
+              if (!fullText.includes(block.text)) {
+                fullText += block.text;
+                send({ type: "text_delta", text: block.text });
+              }
             }
           }
         }
@@ -281,37 +332,370 @@ async function runAgent(userMessage) {
       }
 
       case "result": {
+        for (const name of pendingTools) {
+          send({ type: "tool_activity", name, status: "completed" });
+        }
+        pendingTools.length = 0;
+
         if (message.subtype === "success") {
-          const cost = message.total_cost_usd || 0;
-          // Print the final result text which includes the full response
-          if (message.result && message.result !== fullText) {
-            // Only print the part we haven't streamed yet
-            const newText = fullText ? message.result.replace(fullText, "") : message.result;
-            if (newText.trim()) {
-              process.stdout.write(newText);
+          costUsd = message.total_cost_usd || 0;
+          // Send any final text that wasn't captured during streaming
+          if (message.result) {
+            const remaining = message.result.replace(fullText, "").trim();
+            if (remaining) {
+              send({ type: "text_delta", text: remaining });
+              fullText += remaining;
             }
           }
-          console.log(`\n\n[Done — cost: $${cost.toFixed(4)}]`);
         } else {
-          console.error(`\n[Agent error (${message.subtype}): ${(message.errors || []).join(", ")}]`);
+          const errors = message.errors || [];
+          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
         }
         break;
       }
     }
   }
 
-  console.log("");
+  return { text: fullText, sessionId, costUsd };
 }
 
-// --- CLI ---
-const userQuery = process.argv.slice(2).join(" ");
-if (!userQuery) {
-  console.log("Usage: node agent.mjs <your question>");
-  console.log('Example: node agent.mjs "What did I do today?"');
-  console.log('Example: node agent.mjs "Find where I was reading about AI"');
-  console.log('Example: node agent.mjs "Go to omi.me and take a screenshot"');
+// --- Mode: CLI ---
+
+async function runCli(userMessage) {
+  if (!openDatabase()) {
+    console.error(`ERROR: Database not found at ${DB_PATH}`);
+    process.exit(1);
+  }
+
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`User: ${userMessage}`);
+  console.log("=".repeat(60));
+
+  const abortController = new AbortController();
+  const send = (msg) => {
+    switch (msg.type) {
+      case "init":
+        console.log(`[Session: ${msg.sessionId}]`);
+        break;
+      case "text_delta":
+        process.stdout.write(msg.text);
+        break;
+      case "tool_activity":
+        console.log(`\n[Tool ${msg.status}: ${msg.name}]`);
+        break;
+      case "error":
+        console.error(`\n[Error: ${msg.message}]`);
+        break;
+    }
+  };
+
+  const result = await handleQuery({ prompt: userMessage, send, abortController });
+  console.log(`\n\n[Done — cost: $${result.costUsd.toFixed(4)}]`);
+  db.close();
+}
+
+// --- Auth helper for HTTP endpoints ---
+
+function verifyAuth(req) {
+  const authHeader = req.headers["authorization"];
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const tokenParam = url.searchParams.get("token");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : tokenParam;
+  return token === AUTH_TOKEN;
+}
+
+// --- Mode: WebSocket Server ---
+
+function startServer() {
+  const log = (msg) => console.log(`[server] ${msg}`);
+
+  if (!AUTH_TOKEN) {
+    console.error("ERROR: AUTH_TOKEN environment variable is required for server mode.");
+    process.exit(1);
+  }
+
+  // Try to open DB if it exists (may not exist yet for fresh VMs)
+  if (openDatabase()) {
+    log("Database loaded at startup");
+  } else {
+    log(`Database not found at ${DB_PATH} — waiting for upload`);
+  }
+
+  // Ensure data directory exists for uploads
+  const dataDir = dirname(DB_PATH);
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
+  }
+
+  const httpServer = createServer((req, res) => {
+    // Health check endpoint (no auth)
+    if (req.url === "/health" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: "ok",
+        uptime: process.uptime(),
+        databaseReady: isDatabaseReady(),
+      }));
+      return;
+    }
+
+    // Database upload endpoint
+    if (req.url?.startsWith("/upload") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      const contentLength = parseInt(req.headers["content-length"] || "0", 10);
+      if (contentLength > MAX_UPLOAD_BYTES) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "File too large", maxBytes: MAX_UPLOAD_BYTES }));
+        return;
+      }
+
+      const encoding = (req.headers["content-encoding"] || "").toLowerCase();
+      const isCompressed = encoding === "gzip" || encoding === "deflate" || encoding === "zlib";
+      log(`Upload started (${(contentLength / 1024 / 1024).toFixed(1)} MB${isCompressed ? ", " + encoding + " compressed" : ""})`);
+
+      // Write to temp file first, then rename (atomic)
+      const tmpPath = DB_PATH + ".uploading";
+      const stream = createWriteStream(tmpPath);
+      let bytesReceived = 0;
+      let aborted = false;
+
+      // If compressed, pipe through decompressor
+      let decompressor = null;
+      if (encoding === "gzip") {
+        decompressor = createGunzip();
+      } else if (encoding === "deflate" || encoding === "zlib") {
+        decompressor = createInflateRaw();
+      }
+
+      const writeTarget = decompressor || stream;
+
+      if (decompressor) {
+        decompressor.pipe(stream);
+        decompressor.on("error", (err) => {
+          log(`Upload decompression error: ${err.message}`);
+          aborted = true;
+          stream.destroy();
+          try { unlinkSync(tmpPath); } catch {}
+        });
+      }
+
+      stream.on("error", (err) => {
+        log(`Upload stream error: ${err.message}`);
+        aborted = true;
+        try { unlinkSync(tmpPath); } catch {}
+      });
+
+      req.on("data", (chunk) => {
+        if (aborted) return;
+        bytesReceived += chunk.length;
+        if (decompressor) {
+          decompressor.write(chunk);
+        } else {
+          stream.write(chunk);
+        }
+      });
+
+      const finalize = () => {
+        // Close existing DB connection before replacing the file
+        if (db) {
+          try { db.close(); } catch {}
+          db = null;
+        }
+
+        // Remove WAL/SHM files if they exist (stale from previous DB)
+        try { unlinkSync(DB_PATH + "-wal"); } catch {}
+        try { unlinkSync(DB_PATH + "-shm"); } catch {}
+
+        // Atomic rename
+        renameSync(tmpPath, DB_PATH);
+
+        const finalSize = statSync(DB_PATH).size;
+        log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
+
+        // Re-open the database
+        if (openDatabase()) {
+          log("Database loaded after upload");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            status: "ok",
+            bytesReceived,
+            finalSize,
+            databaseReady: true,
+          }));
+        } else {
+          log("ERROR: Failed to open database after upload");
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Failed to open uploaded database" }));
+        }
+      };
+
+      req.on("end", () => {
+        if (aborted) return;
+        if (decompressor) {
+          // End the decompressor; stream.end is called via pipe when decompressor finishes
+          decompressor.end();
+          stream.on("finish", finalize);
+        } else {
+          stream.end(finalize);
+        }
+      });
+
+      req.on("error", (err) => {
+        log(`Upload error: ${err.message}`);
+        aborted = true;
+        if (decompressor) decompressor.destroy();
+        stream.destroy();
+        try { unlinkSync(tmpPath); } catch {}
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+
+      req.on("aborted", () => {
+        log("Upload aborted by client");
+        aborted = true;
+        stream.destroy();
+        try { unlinkSync(tmpPath); } catch {}
+      });
+
+      return;
+    }
+
+    res.writeHead(404);
+    res.end();
+  });
+
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws",
+    verifyClient: ({ req }, done) => {
+      if (!verifyAuth(req)) {
+        log("Rejected connection: invalid token");
+        done(false, 401, "Unauthorized");
+        return;
+      }
+      done(true);
+    },
+  });
+
+  wss.on("connection", (ws) => {
+    log("Client connected");
+    let activeAbort = null;
+
+    const send = (msg) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    };
+
+    ws.on("message", async (data) => {
+      let msg;
+      try {
+        msg = JSON.parse(data.toString());
+      } catch {
+        send({ type: "error", message: "Invalid JSON" });
+        return;
+      }
+
+      switch (msg.type) {
+        case "query": {
+          // Cancel any prior query
+          if (activeAbort) {
+            activeAbort.abort();
+            activeAbort = null;
+          }
+
+          const abortController = new AbortController();
+          activeAbort = abortController;
+
+          log(`Query: ${msg.prompt?.slice(0, 100)}`);
+
+          try {
+            const result = await handleQuery({
+              prompt: msg.prompt,
+              systemPrompt: msg.systemPrompt,
+              cwd: msg.cwd,
+              send,
+              abortController,
+            });
+
+            if (!abortController.signal.aborted) {
+              send({ type: "result", text: result.text, sessionId: result.sessionId, costUsd: result.costUsd });
+            }
+          } catch (err) {
+            if (!abortController.signal.aborted) {
+              log(`Query error: ${err.message}`);
+              send({ type: "error", message: err.message });
+            }
+          } finally {
+            if (activeAbort === abortController) {
+              activeAbort = null;
+            }
+          }
+          break;
+        }
+
+        case "stop":
+          log("Stop requested");
+          if (activeAbort) {
+            activeAbort.abort();
+            activeAbort = null;
+          }
+          break;
+
+        default:
+          send({ type: "error", message: `Unknown message type: ${msg.type}` });
+      }
+    });
+
+    ws.on("close", () => {
+      log("Client disconnected");
+      if (activeAbort) {
+        activeAbort.abort();
+        activeAbort = null;
+      }
+    });
+
+    ws.on("error", (err) => {
+      log(`WebSocket error: ${err.message}`);
+    });
+
+    // Signal readiness
+    send({ type: "init", sessionId: "" });
+  });
+
+  httpServer.listen(PORT, () => {
+    log(`Listening on port ${PORT}`);
+    log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
+    log(`Health check: http://0.0.0.0:${PORT}/health`);
+    log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
+  });
+}
+
+// --- Main ---
+
+const args = process.argv.slice(2);
+
+if (args[0] === "--serve") {
+  startServer();
+} else if (args.length > 0) {
+  // CLI mode
+  await runCli(args.join(" "));
+} else {
+  console.log("Usage:");
+  console.log('  node agent.mjs "What did I do today?"     # CLI mode');
+  console.log("  node agent.mjs --serve                     # WebSocket server mode");
+  console.log("");
+  console.log("Environment variables:");
+  console.log("  DB_PATH       Path to omi.db (default: /home/matthewdi/omi-agent/data/omi.db)");
+  console.log("  GEMINI_API_KEY  For semantic search embeddings");
+  console.log("  AUTH_TOKEN    Required for server mode (bearer token for WebSocket auth)");
+  console.log("  PORT          Server port (default: 8080)");
   process.exit(0);
 }
-
-await runAgent(userQuery);
-db.close();

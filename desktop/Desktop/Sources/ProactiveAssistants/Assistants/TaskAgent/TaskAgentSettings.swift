@@ -33,7 +33,7 @@ class TaskAgentSettings: ObservableObject {
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "taskAgentEnabled")
         self.autoLaunch = UserDefaults.standard.bool(forKey: "taskAgentAutoLaunch")
-        self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? NSHomeDirectory()
+        self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? ""
         self.customPromptPrefix = UserDefaults.standard.string(forKey: "taskAgentPromptPrefix") ?? ""
         self.skipPermissions = UserDefaults.standard.object(forKey: "taskAgentSkipPermissions") as? Bool ?? true
     }
@@ -42,7 +42,7 @@ class TaskAgentSettings: ObservableObject {
     func resetToDefaults() {
         isEnabled = false
         autoLaunch = false
-        workingDirectory = NSHomeDirectory()
+        workingDirectory = ""
         customPromptPrefix = ""
         skipPermissions = true
     }

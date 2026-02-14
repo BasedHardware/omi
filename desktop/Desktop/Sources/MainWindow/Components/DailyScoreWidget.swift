@@ -90,7 +90,7 @@ struct ScoreWidget: View {
                         }
                     }) {
                         Text(tab.rawValue)
-                            .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
+                            .scaledFont(size: 12, weight: selectedTab == tab ? .semibold : .regular)
                             .foregroundColor(selectedTab == tab ? OmiColors.textPrimary : OmiColors.textTertiary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 10)
@@ -127,7 +127,7 @@ struct ScoreWidget: View {
                     // Score text
                     VStack(spacing: 2) {
                         Text("\(Int(currentScore.score))%")
-                            .font(.system(size: 28, weight: .bold))
+                            .scaledFont(size: 28, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
                             .contentTransition(.numericText())
                     }
@@ -139,21 +139,21 @@ struct ScoreWidget: View {
                     if currentScore.hasTasks {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(scoreColor)
                             Text("\(currentScore.completedTasks) of \(currentScore.totalTasks) tasks completed")
-                                .font(.system(size: 12).monospacedDigit())
+                                .scaledMonospacedDigitFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                                 .contentTransition(.numericText())
                         }
                     } else {
                         Text(noTasksText)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     Text(subtitleText)
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(OmiColors.textQuaternary)
                 }
             }
@@ -217,7 +217,7 @@ struct DailyScoreWidget: View {
             // Header
             HStack {
                 Text("Daily Score")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
             }
@@ -238,7 +238,7 @@ struct DailyScoreWidget: View {
                 // Score text
                 VStack(spacing: 2) {
                     Text("\(Int(score))%")
-                        .font(.system(size: 28, weight: .bold))
+                        .scaledFont(size: 28, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
                 .offset(y: 10)
@@ -248,15 +248,15 @@ struct DailyScoreWidget: View {
             if let ds = dailyScore, ds.totalTasks > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(scoreColor)
                     Text("\(ds.completedTasks) of \(ds.totalTasks) tasks completed")
-                        .font(.system(size: 12).monospacedDigit())
+                        .scaledMonospacedDigitFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             } else {
                 Text("No tasks due today")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }

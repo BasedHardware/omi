@@ -186,7 +186,7 @@ struct RewindTimelineView: View {
         HStack {
             if let oldest = screenshots.last {
                 Text(oldest.formattedTime)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 10, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -195,11 +195,11 @@ struct RewindTimelineView: View {
             if let selected = selectedScreenshot {
                 VStack(spacing: 2) {
                     Text(selected.formattedTime)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .scaledFont(size: 12, weight: .semibold, design: .monospaced)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(selected.appName)
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(OmiColors.textSecondary)
                 }
             }
@@ -208,7 +208,7 @@ struct RewindTimelineView: View {
 
             if let newest = screenshots.first {
                 Text(newest.formattedTime)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 10, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
@@ -358,11 +358,11 @@ struct HoverPreviewTooltip: View {
             // Info
             VStack(spacing: 2) {
                 Text(screenshot.formattedTime)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .scaledFont(size: 11, weight: .semibold, design: .monospaced)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text(screenshot.appName)
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.textSecondary)
             }
         }
@@ -423,12 +423,12 @@ struct ScreenshotPreviewView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(screenshot.appName)
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         if let title = screenshot.windowTitle, !title.isEmpty {
                             Text(title)
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(1)
                         }
@@ -443,9 +443,9 @@ struct ScreenshotPreviewView: View {
                     if matchCount > 0 {
                         HStack(spacing: 4) {
                             Image(systemName: "text.magnifyingglass")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                             Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                         }
                         .foregroundColor(OmiColors.purplePrimary)
                         .padding(.horizontal, 8)
@@ -457,7 +457,7 @@ struct ScreenshotPreviewView: View {
 
                 // Time
                 Text(screenshot.formattedDate)
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 13, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Keyboard hints
@@ -471,7 +471,7 @@ struct ScreenshotPreviewView: View {
                 // Close button
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 28, height: 28)
                         .background(OmiColors.backgroundTertiary)
@@ -514,7 +514,7 @@ struct ScreenshotPreviewView: View {
                             .progressViewStyle(.circular)
                     } else {
                         Image(systemName: "photo")
-                            .font(.system(size: 48))
+                            .scaledFont(size: 48)
                             .foregroundColor(OmiColors.textQuaternary)
                     }
 
@@ -546,7 +546,7 @@ struct ScreenshotPreviewView: View {
     private func keyboardHint(_ key: String, label: String) -> some View {
         HStack(spacing: 4) {
             Text(key)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .scaledFont(size: 10, weight: .medium, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
@@ -554,7 +554,7 @@ struct ScreenshotPreviewView: View {
                 .cornerRadius(4)
 
             Text(label)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }
@@ -562,7 +562,7 @@ struct ScreenshotPreviewView: View {
     private func navButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 16, weight: .semibold))
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(.white)
                 .frame(width: 40, height: 40)
                 .background(Color.black.opacity(0.5))
@@ -575,11 +575,11 @@ struct ScreenshotPreviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "doc.text.viewfinder")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
 
                 Text("Extracted Text")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -592,7 +592,7 @@ struct ScreenshotPreviewView: View {
                         Image(systemName: "doc.on.doc")
                         Text("Copy")
                     }
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -602,13 +602,13 @@ struct ScreenshotPreviewView: View {
                 // Highlight search query in text if present
                 if let query = searchQuery {
                     Text(highlightedText(text, query: query))
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text(text)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textSecondary)
                         .textSelection(.enabled)
                         .if_available_writingToolsNone()

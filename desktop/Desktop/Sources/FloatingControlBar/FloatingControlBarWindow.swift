@@ -6,8 +6,8 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 200, height: 60)
-    private static let minBarSize = NSSize(width: 200, height: 60)
+    private static let defaultSize = NSSize(width: 210, height: 50)
+    private static let minBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
 
@@ -65,6 +65,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
+    override func keyDown(with event: NSEvent) {
+        // Esc closes the AI conversation, or hides the bar if collapsed
+        if event.keyCode == 53 { // Escape
+            if state.showingAIConversation {
+                closeAIConversation()
+            } else {
+                hideBar()
+            }
+            return
+        }
+        super.keyDown(with: event)
+    }
+
     private func setupViews() {
         let swiftUIView = FloatingControlBarView(
             window: self,
@@ -79,11 +92,36 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         hostingView = NSHostingView(rootView: AnyView(
             swiftUIView
+                .withFontScaling()
                 .preferredColorScheme(.dark)
                 .environment(\.colorScheme, .dark)
         ))
         hostingView?.appearance = NSAppearance(named: .vibrantDark)
-        self.contentView = hostingView
+
+        // CRITICAL: Use a container view instead of making NSHostingView the contentView directly.
+        // When NSHostingView IS the contentView of a borderless window, it tries to negotiate
+        // window sizing through updateWindowContentSizeExtremaIfNecessary and updateAnimatedWindowSize,
+        // causing re-entrant constraint updates that crash in _postWindowNeedsUpdateConstraints.
+        // Wrapping in a container breaks that "I own this window" relationship.
+        //
+        // sizingOptions: Remove .intrinsicContentSize so the hosting view can expand beyond
+        // its SwiftUI ideal size. Keep .minSize and .maxSize for proper min/max constraints.
+        // Setting [] removes ALL sizing info (broken). Default includes .intrinsicContentSize
+        // which pins the view to its ideal size (prevents expansion). [.minSize, .maxSize] is correct.
+        let container = NSView()
+        self.contentView = container
+
+        if let hosting = hostingView {
+            hosting.sizingOptions = [.minSize, .maxSize]
+            hosting.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(hosting)
+            NSLayoutConstraint.activate([
+                hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                hosting.topAnchor.constraint(equalTo: container.topAnchor),
+                hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
 
         NotificationCenter.default.addObserver(
             forName: .floatingBarDragDidStart, object: nil, queue: .main
@@ -112,11 +150,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             // Showing response, close it
             closeAIConversation()
         } else {
+            AnalyticsManager.shared.floatingBarAskOmiOpened(source: "button")
             onAskAI?()
         }
     }
 
-    func captureScreenshot() {
+    func captureScreenshot(thenFocusInput: Bool = false) {
         // Temporarily hide the bar to avoid capturing it in the screenshot
         let wasVisible = isVisible
         if wasVisible { orderOut(nil) }
@@ -130,10 +169,35 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.orderFront(nil)
                 self?.makeKeyAndOrderFront(nil)
             }
+
+            if thenFocusInput {
+                // Focus after a short delay to let SwiftUI create the text view
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self?.focusInputField()
+                }
+            }
+        }
+    }
+
+    /// Focus the text input field by finding the NSTextView in the view hierarchy
+    func focusInputField() {
+        guard let contentView = self.contentView else { return }
+        // Find the NSTextView inside the hosting view hierarchy
+        func findTextView(in view: NSView) -> NSTextView? {
+            if let textView = view as? NSTextView { return textView }
+            for subview in view.subviews {
+                if let found = findTextView(in: subview) { return found }
+            }
+            return nil
+        }
+        if let textView = findTextView(in: contentView) {
+            makeKeyAndOrderFront(nil)
+            makeFirstResponder(textView)
         }
     }
 
     func closeAIConversation() {
+        AnalyticsManager.shared.floatingBarAskOmiClosed()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
@@ -141,7 +205,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.aiResponseText = ""
             state.screenshotURL = nil
         }
-        resizeToFixedHeight(60, animated: true)
+        resizeToFixedHeight(FloatingControlBarWindow.minBarSize.height, animated: true)
     }
 
     private func resetToInputView() {
@@ -170,19 +234,32 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func showAIConversation() {
-        // Capture screenshot before showing the AI panel
-        captureScreenshot()
-
+        // Show input and focus immediately — don't block on screenshot
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             state.showingAIConversation = true
             state.showingAIResponse = false
-            state.isAILoading = true
+            state.isAILoading = false
             state.aiInputText = ""
             state.aiResponseText = ""
             state.inputViewHeight = 100
         }
         resizeToFixedHeight(120, animated: true)
         setupInputHeightObserver()
+
+        // Focus input ASAP (minimal delay for SwiftUI to create the text view)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.makeKeyAndOrderFront(nil)
+            self?.focusInputField()
+        }
+
+        // Capture screenshot in background without hiding the bar
+        Task.detached { [weak self] in
+            let url = ScreenCaptureManager.captureScreen()
+            let capturedSelf = self
+            await MainActor.run {
+                capturedSelf?.state.screenshotURL = url
+            }
+        }
     }
 
     private func setupInputHeightObserver() {
@@ -197,6 +274,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 else { return }
                 self.resizeToFixedHeight(height)
             }
+    }
+
+    func cancelInputHeightObserver() {
+        inputHeightCancellable?.cancel()
+        inputHeightCancellable = nil
     }
 
     func updateAIResponse(type: String, text: String) {
@@ -239,11 +321,19 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false) {
+        // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+
         let constrainedSize = NSSize(
             width: max(size.width, FloatingControlBarWindow.minBarSize.width),
             height: max(size.height, FloatingControlBarWindow.minBarSize.height)
         )
         let newOrigin = originForTopLeftAnchor(newSize: constrainedSize)
+
+        // Trace resize calls for debugging
+        let caller = Thread.callStackSymbols.prefix(6).joined(separator: "\n")
+        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)\n\(caller)")
 
         if makeResizable {
             styleMask.insert(.resizable)
@@ -265,7 +355,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
         // Use narrow width for collapsed bar, expanded for AI panels
-        let width = height <= 60 ? FloatingControlBarWindow.defaultSize.width : FloatingControlBarWindow.expandedWidth
+        let width = height <= FloatingControlBarWindow.minBarSize.height ? FloatingControlBarWindow.defaultSize.width : FloatingControlBarWindow.expandedWidth
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
@@ -278,7 +368,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     /// Resize window for PTT state (expanded when listening, narrow when idle)
     func resizeForPTTState(expanded: Bool) {
         let width = expanded ? FloatingControlBarWindow.expandedWidth : FloatingControlBarWindow.defaultSize.width
-        let size = NSSize(width: width, height: 60)
+        let size = NSSize(width: width, height: FloatingControlBarWindow.minBarSize.height)
         resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
@@ -426,8 +516,15 @@ class FloatingControlBarManager {
     /// Show the floating bar.
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
-        window?.orderFront(nil)
+        window?.makeKeyAndOrderFront(nil)
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
+
+        // Auto-focus input if AI conversation is open
+        if let window = window, window.state.showingAIConversation && !window.state.showingAIResponse {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                window.focusInputField()
+            }
+        }
     }
 
     /// Hide the floating bar.
@@ -439,8 +536,10 @@ class FloatingControlBarManager {
     func toggle() {
         guard let window = window else { return }
         if window.isVisible {
+            AnalyticsManager.shared.floatingBarToggled(visible: false, source: "shortcut")
             hide()
         } else {
+            AnalyticsManager.shared.floatingBarToggled(visible: true, source: "shortcut")
             show()
         }
     }
@@ -448,6 +547,7 @@ class FloatingControlBarManager {
     /// Open the AI input panel.
     func openAIInput() {
         guard let window = window else { return }
+        AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
         if !window.isVisible {
             show()
         }
@@ -459,8 +559,18 @@ class FloatingControlBarManager {
     func openAIInputWithQuery(_ query: String, screenshot: URL?) {
         guard let window = window else { return }
 
-        // Close any existing conversation and create fresh ChatProvider
-        window.closeAIConversation()
+        // Cancel stale subscriptions immediately to prevent old data from flashing
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        window.cancelInputHeightObserver()
+
+        // Reset state directly (no animation) to avoid contract-then-expand flicker
+        window.state.showingAIConversation = false
+        window.state.showingAIResponse = false
+        window.state.aiInputText = ""
+        window.state.aiResponseText = ""
+        window.state.screenshotURL = nil
+
         let provider = ChatProvider()
         self.chatProvider = provider
 
@@ -476,11 +586,12 @@ class FloatingControlBarManager {
             show()
         }
 
-        // Set up state for immediate response view
+        // Set up state — go straight to response view (skip input view to avoid resize flicker)
         window.state.showingAIConversation = true
-        window.state.showingAIResponse = false
+        window.state.showingAIResponse = true
         window.state.isAILoading = true
         window.state.aiInputText = query
+        window.state.displayedQuery = query
         window.state.aiResponseText = ""
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
@@ -504,6 +615,8 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, screenshotURL: URL?, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotURL != nil)
+
         // Initialize the provider if needed
         if provider.messages.isEmpty {
             await provider.initialize()
@@ -511,7 +624,10 @@ class FloatingControlBarManager {
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
+        barWindow.state.aiResponseText = ""
+        barWindow.state.isAILoading = true
         chatCancellable = provider.$messages
+            .dropFirst()  // Skip initial emission to prevent old response from flashing
             .receive(on: DispatchQueue.main)
             .sink { [weak barWindow] messages in
                 guard let lastMessage = messages.last, lastMessage.sender == .ai else { return }

@@ -95,11 +95,11 @@ struct TaskTestRunnerView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Task Extraction Test Runner")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.primary)
 
                     Text("Replay departing frames from context switches through the extraction pipeline")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
 
@@ -107,7 +107,7 @@ struct TaskTestRunnerView: View {
 
                 Button(action: { onClose?() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -117,7 +117,7 @@ struct TaskTestRunnerView: View {
                 // Context switch count picker
                 HStack(spacing: 8) {
                     Text("Context switches:")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(.secondary)
 
                     Picker("", selection: $screenshotCount) {
@@ -130,7 +130,7 @@ struct TaskTestRunnerView: View {
                     .disabled(isRunning)
 
                     Text("(last 24h)")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary.opacity(0.7))
                 }
 
@@ -141,9 +141,9 @@ struct TaskTestRunnerView: View {
                     Button(action: { cancellationRequested = true }) {
                         HStack(spacing: 4) {
                             Image(systemName: "stop.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text("Stop")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -153,9 +153,9 @@ struct TaskTestRunnerView: View {
                     Button(action: runTest) {
                         HStack(spacing: 4) {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text("Run Test")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -170,7 +170,7 @@ struct TaskTestRunnerView: View {
                         .tint(.accentColor)
 
                     Text(statusMessage)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
             }
@@ -200,7 +200,7 @@ struct TaskTestRunnerView: View {
             Text("Time")
                 .frame(width: 50, alignment: .trailing)
         }
-        .font(.system(size: 11, weight: .medium))
+        .scaledFont(size: 11, weight: .medium)
         .foregroundColor(.secondary.opacity(0.7))
     }
 
@@ -210,26 +210,26 @@ struct TaskTestRunnerView: View {
         HStack(spacing: 16) {
             // Index
             Text("\(testResult.index)")
-                .font(.system(size: 12, design: .monospaced))
+                .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .trailing)
 
             // Timestamp
             Text(testResult.timestamp, format: .dateTime.hour().minute().second())
-                .font(.system(size: 12, design: .monospaced))
+                .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 90, alignment: .leading)
 
             // App name
             Text(testResult.appName)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
                 .lineLimit(1)
 
             // Window title
             Text(testResult.windowTitle ?? "—")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.secondary)
                 .frame(width: 250, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -242,9 +242,9 @@ struct TaskTestRunnerView: View {
             if testResult.searchCount > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 9))
+                        .scaledFont(size: 9)
                     Text("×\(testResult.searchCount)")
-                        .font(.system(size: 11, design: .monospaced))
+                        .scaledFont(size: 11, design: .monospaced)
                 }
                 .foregroundColor(.secondary)
                 .frame(width: 40, alignment: .leading)
@@ -256,39 +256,39 @@ struct TaskTestRunnerView: View {
             // Task title or context summary
             if let error = testResult.error {
                 Text(error)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.orange)
                     .lineLimit(2)
             } else if let result = testResult.result {
                 if result.hasNewTask, let task = result.task {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(task.title)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(.primary)
                             .lineLimit(2)
                         HStack(spacing: 8) {
                             Text(task.priority.rawValue)
-                                .font(.system(size: 10, weight: .medium))
+                                .scaledFont(size: 10, weight: .medium)
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
                                 .background(priorityColor(task.priority))
                                 .cornerRadius(3)
                             Text("\(task.sourceCategory)/\(task.sourceSubcategory)")
-                                .font(.system(size: 10, weight: .medium))
+                                .scaledFont(size: 10, weight: .medium)
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
                                 .background(Color.purple.opacity(0.7))
                                 .cornerRadius(3)
                             Text(task.tags.joined(separator: ", "))
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                                 .foregroundColor(.secondary)
                         }
                     }
                 } else {
                     Text(result.contextSummary)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
@@ -299,7 +299,7 @@ struct TaskTestRunnerView: View {
             // Confidence (only for tasks)
             if let result = testResult.result, result.hasNewTask, let task = result.task {
                 Text("\(Int(task.confidence * 100))%")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 12, weight: .medium, design: .monospaced)
                     .foregroundColor(.green)
                     .frame(width: 40, alignment: .trailing)
             } else {
@@ -309,7 +309,7 @@ struct TaskTestRunnerView: View {
 
             // Duration
             Text(String(format: "%.1fs", testResult.duration))
-                .font(.system(size: 12, design: .monospaced))
+                .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary.opacity(0.7))
                 .frame(width: 50, alignment: .trailing)
         }
@@ -323,26 +323,26 @@ struct TaskTestRunnerView: View {
             if testResult.error != nil {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                     Text("Error")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                 }
                 .foregroundColor(.orange)
             } else if let result = testResult.result {
                 if result.hasNewTask {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("New Task")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.green)
                 } else {
                     HStack(spacing: 4) {
                         Image(systemName: "minus.circle")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("No Task")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.secondary)
                 }
@@ -365,32 +365,32 @@ struct TaskTestRunnerView: View {
             if !results.isEmpty {
                 HStack(spacing: 16) {
                     Label("\(results.count)/\(screenshotCount)", systemImage: "arrow.triangle.swap")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.secondary)
 
                     Label("\(tasksFound) tasks", systemImage: "checkmark.circle")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(tasksFound > 0 ? .green : .secondary)
 
                     Label("\(totalSearches) searches", systemImage: "magnifyingglass")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(totalSearches > 0 ? .blue : .secondary)
 
                     if errorsCount > 0 {
                         Label("\(errorsCount) errors", systemImage: "exclamationmark.triangle")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.orange)
                     }
 
                     if elapsedTime > 0 {
                         Label(String(format: "%.1fs total", elapsedTime), systemImage: "clock")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.secondary)
                     }
                 }
             } else {
                 Text("Select context switch count and click Run Test")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.secondary.opacity(0.7))
             }
 

@@ -218,7 +218,7 @@ else
     # Make executable and ad-hoc sign (required for Apple Silicon)
     chmod +x "$FFMPEG_RESOURCE"
     xattr -cr "$FFMPEG_RESOURCE"
-    codesign -s - "$FFMPEG_RESOURCE"
+    codesign -f -s - "$FFMPEG_RESOURCE"
 
     # Verify it's universal
     if file "$FFMPEG_RESOURCE" | grep -q "universal binary"; then

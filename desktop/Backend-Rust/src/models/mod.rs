@@ -2,6 +2,7 @@
 
 pub mod action_item;
 pub mod advice;
+pub mod agent;
 pub mod app;
 pub mod category;
 pub mod chat_session;

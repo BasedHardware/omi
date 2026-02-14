@@ -78,7 +78,7 @@ struct RewindTimelinePlayerView: View {
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
                     .background(Color.white.opacity(0.2))
@@ -90,7 +90,7 @@ struct RewindTimelinePlayerView: View {
 
             // Screenshot count
             Text("\(viewModel.currentIndex + 1) / \(viewModel.screenshots.count)")
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .scaledFont(size: 14, weight: .medium, design: .monospaced)
                 .foregroundColor(.white.opacity(0.8))
 
             Spacer()
@@ -114,7 +114,7 @@ struct RewindTimelinePlayerView: View {
                     Image(systemName: "speedometer")
                     Text("\(viewModel.playbackSpeed, specifier: "%.1f")x")
                 }
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(.white.opacity(0.8))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -145,10 +145,10 @@ struct RewindTimelinePlayerView: View {
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "photo")
-                        .font(.system(size: 48))
+                        .scaledFont(size: 48)
                         .foregroundColor(.white.opacity(0.5))
                     Text("Failed to load frame")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
@@ -209,7 +209,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.seekToIndex(0)
             } label: {
                 Image(systemName: "backward.end.fill")
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -221,7 +221,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.previousFrame()
             } label: {
                 Image(systemName: "backward.frame.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -233,7 +233,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.togglePlayback()
             } label: {
                 Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 32))
+                    .scaledFont(size: 32)
                     .foregroundColor(OmiColors.textPrimary)
                     .frame(width: 64, height: 64)
                     .background(Color.white)
@@ -246,7 +246,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.nextFrame()
             } label: {
                 Image(systemName: "forward.frame.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -258,7 +258,7 @@ struct RewindTimelinePlayerView: View {
                 viewModel.seekToIndex(viewModel.screenshots.count - 1)
             } label: {
                 Image(systemName: "forward.end.fill")
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(.white)
             }
             .buttonStyle(.plain)
@@ -276,7 +276,7 @@ struct RewindTimelinePlayerView: View {
                 HStack(spacing: 8) {
                     AppIconView(appName: screenshot.appName, size: 20)
                     Text(screenshot.appName)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(.white)
                 }
 
@@ -284,7 +284,7 @@ struct RewindTimelinePlayerView: View {
 
                 // Timestamp
                 Text(screenshot.formattedDate)
-                    .font(.system(size: 13, design: .monospaced))
+                    .scaledFont(size: 13, design: .monospaced)
                     .foregroundColor(.white.opacity(0.8))
             }
         }

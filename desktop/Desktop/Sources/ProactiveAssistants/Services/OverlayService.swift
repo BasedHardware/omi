@@ -55,7 +55,7 @@ class OverlayService {
 
             // Create the SwiftUI glow view for this edge
             let glowView = GlowEdgeView(edge: edge, colorMode: colorMode)
-            let hostingView = NSHostingView(rootView: glowView)
+            let hostingView = NSHostingView(rootView: glowView.withFontScaling())
             hostingView.frame = edgeWindow.contentView?.bounds ?? .zero
             hostingView.autoresizingMask = [.width, .height]
 

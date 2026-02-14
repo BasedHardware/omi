@@ -1816,6 +1816,11 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addActionItemSortOrder") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN sortOrder INTEGER")
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN indentLevel INTEGER")
+        }
+
         try migrator.migrate(queue)
     }
 
