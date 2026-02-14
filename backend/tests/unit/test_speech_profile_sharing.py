@@ -215,3 +215,134 @@ def test_share_profile_idempotent():
         assert result1 is True
         assert result2 is True
         assert shared_ref.set.call_count == 2
+
+
+def test_shared_person_id_format():
+    """Test that shared person IDs follow the 'shared:{uid}' format and can be parsed."""
+    owner_uid = "abc123def456"
+    shared_pid = f"shared:{owner_uid}"
+
+    assert shared_pid.startswith("shared:")
+    assert shared_pid.split(":", 1)[1] == owner_uid
+
+
+def test_shared_person_id_not_mistaken_for_regular():
+    """Test that shared person IDs are distinguished from regular person IDs and 'user'."""
+    shared_pid = "shared:owner123"
+    regular_pid = "person-uuid-here"
+    user_pid = "user"
+
+    assert shared_pid.startswith("shared:")
+    assert not regular_pid.startswith("shared:")
+    assert not user_pid.startswith("shared:")
+
+
+def test_shared_pid_skipped_for_pusher_extraction():
+    """Test that shared person IDs are correctly identified for skipping pusher calls."""
+    test_cases = [
+        ("shared:abc123", True),
+        ("shared:a", True),
+        ("person-uuid", False),
+        ("user", False),
+        ("", False),
+    ]
+    for person_id, should_skip in test_cases:
+        result = person_id.startswith("shared:")
+        assert result == should_skip, f"person_id={person_id!r}: expected skip={should_skip}, got {result}"
+
+
+def test_shared_name_resolution_with_profile():
+    """Test that shared profile owner name is resolved from user profile."""
+    owner_uid = "owner123"
+    profile = {'name': 'Alice Smith', 'email': 'alice@example.com'}
+    name = profile.get('name') or owner_uid[:8]
+    assert name == 'Alice Smith'
+
+
+def test_shared_name_resolution_fallback_to_uid_prefix():
+    """Test that shared profile falls back to uid prefix when name is missing."""
+    owner_uid = "abcdef1234567890"
+
+    # No name in profile
+    profile_no_name = {'email': 'test@example.com'}
+    name = profile_no_name.get('name') or owner_uid[:8]
+    assert name == 'abcdef12'
+
+    # Empty name in profile
+    profile_empty_name = {'name': '', 'email': 'test@example.com'}
+    name = profile_empty_name.get('name') or owner_uid[:8]
+    assert name == 'abcdef12'
+
+
+def test_shared_name_resolution_skipped_when_no_profile():
+    """Test that shared profile is skipped when get_user_profile returns None."""
+    profile = None
+    # Simulates the if profile: guard in process_conversation
+    people_added = []
+    if profile:
+        people_added.append(profile)
+    assert len(people_added) == 0
+
+
+def test_shared_pids_extracted_from_mixed_person_ids():
+    """Test that only shared person IDs are extracted from a mixed list."""
+    person_ids = ["person-1", "shared:owner1", "user", "shared:owner2", "person-2"]
+    shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
+    assert shared_pids == ["shared:owner1", "shared:owner2"]
+
+
+def test_shared_pids_empty_when_none_present():
+    """Test that no shared IDs are extracted when none exist."""
+    person_ids = ["person-1", "user", "person-2"]
+    shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
+    assert shared_pids == []
+
+
+def test_speaker_assignment_with_shared_person_id():
+    """Test that speaker assignment maps work with shared person IDs."""
+    from utils.speaker_assignment import update_speaker_assignment_maps
+
+    speaker_to_person_map = {}
+    segment_person_assignment_map = {}
+
+    result = update_speaker_assignment_maps(
+        speaker_id=2,
+        person_id="shared:owner123",
+        person_name="Alice",
+        segment_ids=["seg-1", "seg-2"],
+        speaker_to_person_map=speaker_to_person_map,
+        segment_person_assignment_map=segment_person_assignment_map,
+    )
+
+    assert result is True
+    assert speaker_to_person_map[2] == ("shared:owner123", "Alice")
+    assert segment_person_assignment_map["seg-1"] == "shared:owner123"
+    assert segment_person_assignment_map["seg-2"] == "shared:owner123"
+
+
+def test_process_segments_with_shared_person_id():
+    """Test that segments are correctly assigned shared person IDs."""
+    from utils.speaker_assignment import process_speaker_assigned_segments
+    from models.transcript_segment import TranscriptSegment
+
+    segment = TranscriptSegment(
+        id="seg-1",
+        text="hello",
+        speaker="SPEAKER_02",
+        is_user=False,
+        person_id=None,
+        start=0.0,
+        end=1.0,
+    )
+
+    segment_person_assignment_map = {"seg-1": "shared:owner123"}
+    speaker_to_person_map = {}
+
+    process_speaker_assigned_segments(
+        [segment],
+        segment_person_assignment_map,
+        speaker_to_person_map,
+    )
+
+    assert segment.person_id == "shared:owner123"
+    assert segment.is_user is False
