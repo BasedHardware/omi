@@ -31,15 +31,16 @@ class WatchAskQuestionService {
   }
 
   Future<void> _handleAskQuestion(String pcmFilePath, double sampleRate) async {
+    final pcmFile = File(pcmFilePath);
+    File? wavFile;
     try {
-      final pcmFile = File(pcmFilePath);
       if (!await pcmFile.exists()) {
         Logger.error('Ask question PCM file not found: $pcmFilePath');
         return;
       }
 
       final pcmData = await pcmFile.readAsBytes();
-      final wavFile = await _pcmToWav(pcmData, sampleRate.toInt());
+      wavFile = await _pcmToWav(pcmData, sampleRate.toInt());
 
       String answer = '';
       await for (var chunk in sendVoiceMessageStreamServer([wavFile])) {
@@ -53,11 +54,15 @@ class WatchAskQuestionService {
       if (answer.isNotEmpty) {
         await _sendNotification('Omi', answer);
       }
-
-      await pcmFile.delete();
-      await wavFile.delete();
     } catch (e) {
       Logger.error('Failed to handle ask question: $e');
+    } finally {
+      try {
+        await pcmFile.delete();
+      } catch (_) {}
+      try {
+        if (wavFile != null) await wavFile.delete();
+      } catch (_) {}
     }
   }
 
@@ -99,7 +104,7 @@ class WatchAskQuestionService {
     header.setUint8(39, 0x61); // a
     header.setUint32(40, dataSize, Endian.little);
 
-    final wavPath = '${pcmData.hashCode}_ask_question.wav';
+    final wavPath = '${DateTime.now().millisecondsSinceEpoch}_ask_question.wav';
     final tempDir = Directory.systemTemp;
     final wavFile = File('${tempDir.path}/$wavPath');
     await wavFile.writeAsBytes([...header.buffer.asUint8List(), ...pcmData]);
