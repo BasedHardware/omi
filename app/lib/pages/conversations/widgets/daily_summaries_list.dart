@@ -156,9 +156,10 @@ class _DailySummariesListState extends State<DailySummariesList> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(height: 40),
-            const Text(
-              '📊',
-              style: TextStyle(fontSize: 64),
+            Icon(
+              Icons.auto_awesome_outlined,
+              size: 64,
+              color: Colors.grey.shade500,
             ),
             const SizedBox(height: 16),
             Text(
