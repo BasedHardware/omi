@@ -76,9 +76,12 @@ WORKFLOW:
    - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
    - Would missing this have real consequences? If not obvious, SKIP IT
    - Better to extract 0 implicit tasks than flood the user with noise
-4. FOURTH: Extract timing information separately and put it in the due_at field
-5. FIFTH: Clean the description - remove ALL time references and vague words
-6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+4. FOURTH: FORGETTABILITY CHECK - Ask: "Will the user forget this after the conversation ends?"
+   - YES → extract (that's why we exist)
+   - NO (it's their active focus, or tracked in a tool) → skip
+5. FIFTH: Extract timing information separately and put it in the due_at field
+6. SIXTH: Clean the description - remove ALL time references and vague words
+7. SEVENTH: Final check - description should be timeless, specific, and name a person/project/artifact
 
 CRITICAL CONTEXT:
 • These action items are primarily for the PRIMARY USER who is having/recording this conversation
@@ -160,11 +163,33 @@ EXCLUDE these types of items (be aggressive about exclusion):
 • Things that are obvious or don't need a reminder
 • Updates or status reports about ongoing work
 
-FORMAT REQUIREMENTS:
-• Keep each action item SHORT and concise (maximum 15 words, strict limit)
-• Use clear, direct language
-• Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
-• Include only essential details
+TITLE SPECIFICITY REQUIREMENTS (CRITICAL):
+• Each description MUST be 6–15 words
+• MUST start with a verb (Call, Send, Review, Pay, Submit, Follow up, etc.)
+• MUST name a specific person, project, or artifact — if you cannot name one, DO NOT extract
+• NEVER use generic titles — if the title could apply to any project/person, it's too vague
+
+GOOD TITLE EXAMPLES (follow this level of specificity):
+✅ "Reply to Stan about 'Where's the developer section?'"
+✅ "Send Nik list of 10 recommended advisors"
+✅ "Review Sasza's cofounder alignment example document"
+✅ "Submit quarterly metrics to LG Technology Ventures"
+✅ "Follow up with Sarah about Q2 budget proposal"
+✅ "Pay electricity bill for the office by Friday"
+✅ "Schedule dentist appointment at Dr. Chen's office"
+✅ "Buy birthday gift for Mom before Saturday"
+
+BAD TITLE EXAMPLES (NEVER produce these):
+❌ "Investigate" — single word, completely useless
+❌ "Check logs" — no context whatsoever
+❌ "Clean up the data" — what data? where?
+❌ "Look into the issue" — what issue? be specific
+❌ "Fix the bug" — which bug? in what?
+❌ "Update the document" — which document?
+❌ "Follow up on that" — on what? with whom?
+❌ "Send the email" — to whom? about what?
+❌ "Review the code" — whose code? what PR?
+❌ "Check the status" — of what?
 
 • CRITICAL - Resolve ALL vague references:
   - Read the ENTIRE conversation to understand what is being discussed
@@ -179,25 +204,30 @@ FORMAT REQUIREMENTS:
     * User says: "planning Sarah's birthday party" then later "buy decorations for it"
       → Extract: "Buy decorations for Sarah's birthday party"
     * User says: "car making weird noise" then later "take it to mechanic"
-      → Extract: "Take car to mechanic"
+      → Extract: "Take car to mechanic for weird noise diagnosis"
     * User says: "quarterly sales report" then later "send it to the team"
-      → Extract: "Send quarterly sales report to team"
+      → Extract: "Send quarterly sales report to the team"
 
 • CRITICAL - Remove time references from description (they go in due_at field):
   - NEVER include timing words in the action item description itself
   - Remove: "by tomorrow", "by evening", "today", "next week", "by Friday", etc.
   - The timing information is captured in the due_at field separately
   - Focus ONLY on the action and what needs to be done
-  - Examples:
-    * "buy groceries by tomorrow" → "Buy groceries"
-    * "call dentist by next Monday" → "Call dentist"
-    * "pay electricity bill by Friday" → "Pay electricity bill"
-    * "submit insurance claim today" → "Submit insurance claim"
-    * "book flight tickets by evening" → "Book flight tickets"
 
 • Remove filler words and unnecessary context
 • Merge duplicates
 • Order by: due date → urgency → alphabetical
+
+CONFIDENCE SCORING (required for every item):
+• 0.9–1.0: Explicit request ("Remind me to...", "Add task...", "Don't forget...")
+• 0.7–0.89: Clear implicit task with timing signal and real importance
+• 0.5–0.69: Ambiguous — mentioned but unclear if user wants to track it
+• Below 0.5: Do not extract
+
+PRIORITY CLASSIFICATION (required for every item):
+• "high": Urgent, due today, or has hard deadline within 24 hours
+• "medium": Due this week, important but not urgent
+• "low": No deadline, nice-to-have, or can be done anytime
 
 DUE DATE EXTRACTION (CRITICAL):
 IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
@@ -240,7 +270,7 @@ User timezone: {tz}
 Content:
 ```{transcript_text}```
 
-Respond with JSON: {"action_items": [{"description": "...", "due_at": "..."}]}"#;
+Respond with JSON: {"action_items": [{"description": "...", "due_at": "...", "confidence": 0.0, "priority": "medium"}]}"#;
 
 /// Calendar context section for action items prompt (when calendar meeting context is available)
 /// Placeholders: {calendar_context_str}
