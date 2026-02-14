@@ -1821,6 +1821,38 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN indentLevel INTEGER")
         }
 
+        // Migration: Delete orphaned unsynced memories that have synced duplicates.
+        // Same race condition as action_items migration 32: insertLocalMemory succeeded
+        // but before markSynced ran, syncServerMemories pulled the same memory from the
+        // API and inserted a second record with the proper backendId.
+        migrator.registerMigration("deleteOrphanedUnsyncedMemories") { db in
+            let deleted = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM memories
+                WHERE (backendId IS NULL OR backendId = '')
+                  AND backendSynced = 0
+                  AND EXISTS (
+                    SELECT 1 FROM memories dup
+                    WHERE dup.content = memories.content
+                      AND dup.backendId IS NOT NULL AND dup.backendId <> ''
+                      AND dup.id <> memories.id
+                  )
+            """) ?? 0
+
+            try db.execute(sql: """
+                DELETE FROM memories
+                WHERE (backendId IS NULL OR backendId = '')
+                  AND backendSynced = 0
+                  AND EXISTS (
+                    SELECT 1 FROM memories dup
+                    WHERE dup.content = memories.content
+                      AND dup.backendId IS NOT NULL AND dup.backendId <> ''
+                      AND dup.id <> memories.id
+                  )
+            """)
+
+            print("[RewindDatabase] Migration: Deleted \(deleted) orphaned unsynced memories with synced duplicates")
+        }
+
         try migrator.migrate(queue)
     }
 
