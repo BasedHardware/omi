@@ -897,6 +897,20 @@ impl FirestoreService {
             }));
         }
 
+        // Filter by first tag in Firestore (ARRAY_CONTAINS supports one tag per query).
+        // Additional tags (if any) are still filtered in-memory below.
+        if let Some(filter_tags) = tags {
+            if let Some(first_tag) = filter_tags.first() {
+                filters.push(json!({
+                    "fieldFilter": {
+                        "field": {"fieldPath": "tags"},
+                        "op": "ARRAY_CONTAINS",
+                        "value": {"stringValue": first_tag}
+                    }
+                }));
+            }
+        }
+
         // NOTE: We do NOT filter is_dismissed in Firestore query because existing memories
         // don't have this field. Firestore only returns documents where the field EXISTS and
         // matches the value. Instead, we filter in-memory below (matching Python behavior).
@@ -969,11 +983,11 @@ impl FirestoreService {
                 // Filter out dismissed memories in-memory (not in Firestore query, since existing
                 // memories don't have is_dismissed field - Firestore requires field to exist for filters)
                 .filter(|m| include_dismissed || !m.is_dismissed)
-                // Filter by tags in-memory (Firestore doesn't support multiple array-contains)
+                // Filter by remaining tags in-memory (first tag is already filtered by Firestore ARRAY_CONTAINS)
                 .filter(|m| {
                     match tags {
-                        Some(filter_tags) if !filter_tags.is_empty() => {
-                            filter_tags.iter().all(|tag| m.tags.contains(tag))
+                        Some(filter_tags) if filter_tags.len() > 1 => {
+                            filter_tags[1..].iter().all(|tag| m.tags.contains(tag))
                         }
                         _ => true,
                     }
