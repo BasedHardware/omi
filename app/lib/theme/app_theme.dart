@@ -62,6 +62,14 @@ class AppTheme {
         cardColor: AppColors.backgroundTertiary,
         dividerColor: AppColors.backgroundQuaternary,
         brightness: Brightness.dark,
+        appBarTheme: AppBarTheme(
+          titleTextStyle: TextStyle(
+            fontFamily: fontFamily,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
         textTheme: const TextTheme(
           displayLarge: TextStyle(
             fontSize: 57,
