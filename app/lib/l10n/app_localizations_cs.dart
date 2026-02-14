@@ -7985,13 +7985,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get couldNotOpenUrl => 'Nepodařilo se otevřít URL. Zkuste to prosím znovu.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nový úkol';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Zobrazit vše';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Přidat úkol';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8054,4 +8054,123 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Zvukový soubor není k dispozici pro přehrávání';
+
+  @override
+  String get audioPlaybackFailed => 'Nelze přehrát zvuk. Soubor může být poškozený nebo chybět.';
+
+  @override
+  String get connectionGuide => 'Průvodce připojením';
+
+  @override
+  String get iveDoneThis => 'Hotovo';
+
+  @override
+  String get pairNewDevice => 'Spárovat nové zařízení';
+
+  @override
+  String get dontSeeYourDevice => 'Nevidíte své zařízení?';
+
+  @override
+  String get reportAnIssue => 'Nahlásit problém';
+
+  @override
+  String get pairingTitleOmi => 'Zapněte Omi';
+
+  @override
+  String get pairingDescOmi => 'Stiskněte a podržte zařízení, dokud nezavibruje, pro zapnutí.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Přepněte Omi DevKit do režimu párování';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Stiskněte tlačítko jednou pro zapnutí. LED bude blikat fialově v režimu párování.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Zapněte Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Stiskněte a podržte boční tlačítko po dobu 3 sekund pro zapnutí.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Přepněte Plaud Note do režimu párování';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Stiskněte a podržte boční tlačítko po dobu 2 sekund. Červená LED bude blikat, když je připraveno k párování.';
+
+  @override
+  String get pairingTitleBee => 'Přepněte Bee do režimu párování';
+
+  @override
+  String get pairingDescBee => 'Stiskněte tlačítko 5krát za sebou. Kontrolka začne blikat modře a zeleně.';
+
+  @override
+  String get pairingTitleLimitless => 'Přepněte Limitless do režimu párování';
+
+  @override
+  String get pairingDescLimitless =>
+      'Když svítí jakýkoli indikátor, stiskněte jednou a poté stiskněte a podržte, dokud zařízení neukáže růžové světlo, poté uvolněte.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Přepněte Friend Pendant do režimu párování';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Stiskněte tlačítko na přívěsku pro zapnutí. Automaticky přejde do režimu párování.';
+
+  @override
+  String get pairingTitleFieldy => 'Přepněte Fieldy do režimu párování';
+
+  @override
+  String get pairingDescFieldy => 'Stiskněte a podržte zařízení, dokud se nerozsvítí kontrolka pro zapnutí.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Připojte Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Nainstalujte a otevřete aplikaci Omi na Apple Watch, poté klepněte na Připojit v aplikaci.';
+
+  @override
+  String get pairingTitleNeoOne => 'Přepněte Neo One do režimu párování';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Stiskněte a podržte tlačítko napájení, dokud LED nezabliká. Zařízení bude viditelné.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Co je nového ve $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Přidat do seznamu úkolů?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodařilo se vytvořit odkaz ke sdílení';
+
+  @override
+  String get deleteGoal => 'Smazat cíl';
+
+  @override
+  String get deviceUpToDate => 'Vaše zařízení je aktuální';
+
+  @override
+  String get wifiConfiguration => 'Konfigurace WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadejte přihlašovací údaje WiFi, aby zařízení mohlo stáhnout firmware.';
+
+  @override
+  String get networkNameSsid => 'Název sítě (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadejte název WiFi sítě';
+
+  @override
+  String get enterWifiPassword => 'Zadejte heslo WiFi';
 }

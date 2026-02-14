@@ -105,6 +105,23 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  Future<void> saveEditingSegmentText(int segmentIndex, String newText) async {
+    final segment = conversation.transcriptSegments[segmentIndex];
+    final oldText = segment.text;
+
+    if (newText.trim().isEmpty || newText.trim() == oldText) return;
+
+    // Optimistic update
+    segment.text = newText.trim();
+    notifyListeners();
+
+    final success = await updateConversationSegmentText(conversation.id, segment.id, newText.trim());
+    if (!success && !_isDisposed) {
+      conversation.transcriptSegments[segmentIndex].text = oldText;
+      notifyListeners();
+    }
+  }
+
   void toggleIsTranscriptExpanded() {
     isTranscriptExpanded = !isTranscriptExpanded;
     notifyListeners();

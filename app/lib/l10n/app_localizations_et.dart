@@ -7989,13 +7989,13 @@ class AppLocalizationsEt extends AppLocalizations {
   String get couldNotOpenUrl => 'URL-i avamine ebaõnnestus. Palun proovige uuesti.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Uus ülesanne';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Vaata kõiki';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Lisa ülesanne';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8058,4 +8058,121 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Helifail ei ole esitamiseks saadaval';
+
+  @override
+  String get audioPlaybackFailed => 'Heli esitamine ebaõnnestus. Fail võib olla rikutud või puududa.';
+
+  @override
+  String get connectionGuide => 'Ühendamisjuhend';
+
+  @override
+  String get iveDoneThis => 'Olen seda teinud';
+
+  @override
+  String get pairNewDevice => 'Sidu uus seade';
+
+  @override
+  String get dontSeeYourDevice => 'Ei näe oma seadet?';
+
+  @override
+  String get reportAnIssue => 'Teata probleemist';
+
+  @override
+  String get pairingTitleOmi => 'Lülitage Omi sisse';
+
+  @override
+  String get pairingDescOmi => 'Vajutage ja hoidke seadet all, kuni see vibreerib, et seda sisse lülitada.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Lülitage Omi DevKit sidumisrežiimi';
+
+  @override
+  String get pairingDescOmiDevkit => 'Vajutage nuppu üks kord sisselülitamiseks. LED vilgub sidumisrežiimis lillana.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Lülitage Omi Glass sisse';
+
+  @override
+  String get pairingDescOmiGlass => 'Vajutage ja hoidke külgnuppu 3 sekundit sisselülitamiseks.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Lülitage Plaud Note sidumisrežiimi';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Vajutage ja hoidke külgnuppu 2 sekundit. Punane LED vilgub, kui seade on sidumiseks valmis.';
+
+  @override
+  String get pairingTitleBee => 'Lülitage Bee sidumisrežiimi';
+
+  @override
+  String get pairingDescBee => 'Vajutage nuppu 5 korda järjest. Tuli hakkab vilkuma siniselt ja roheliselt.';
+
+  @override
+  String get pairingTitleLimitless => 'Lülitage Limitless sidumisrežiimi';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kui mõni tuli põleb, vajutage üks kord ja seejärel vajutage ja hoidke all, kuni seade näitab roosat valgust, seejärel vabastage.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Lülitage Friend Pendant sidumisrežiimi';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Vajutage ripatsil olevat nuppu selle sisselülitamiseks. See lülitub automaatselt sidumisrežiimi.';
+
+  @override
+  String get pairingTitleFieldy => 'Lülitage Fieldy sidumisrežiimi';
+
+  @override
+  String get pairingDescFieldy => 'Vajutage ja hoidke seadet all, kuni ilmub valgus, et seda sisse lülitada.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Ühendage Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installige ja avage Omi rakendus oma Apple Watchis, seejärel puudutage rakenduses Ühenda.';
+
+  @override
+  String get pairingTitleNeoOne => 'Lülitage Neo One sidumisrežiimi';
+
+  @override
+  String get pairingDescNeoOne => 'Vajutage ja hoidke toitenuppu, kuni LED vilgub. Seade on leitav.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Mis on uut versioonis $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lisada oma ülesannete loendisse?';
+
+  @override
+  String get failedToCreateShareLink => 'Jagamislingi loomine ebaõnnestus';
+
+  @override
+  String get deleteGoal => 'Kustuta eesmärk';
+
+  @override
+  String get deviceUpToDate => 'Teie seade on ajakohane';
+
+  @override
+  String get wifiConfiguration => 'WiFi seadistamine';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Sisestage WiFi andmed, et seade saaks püsivara alla laadida.';
+
+  @override
+  String get networkNameSsid => 'Võrgu nimi (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Sisestage WiFi võrgu nimi';
+
+  @override
+  String get enterWifiPassword => 'Sisestage WiFi parool';
 }

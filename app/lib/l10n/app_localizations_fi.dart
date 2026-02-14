@@ -7988,13 +7988,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get couldNotOpenUrl => 'URL-osoitetta ei voitu avata. Yritä uudelleen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Uusi tehtävä';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Näytä kaikki';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Lisää tehtävä';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8057,4 +8057,122 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Äänitiedosto ei ole saatavilla toistettavaksi';
+
+  @override
+  String get audioPlaybackFailed => 'Ääntä ei voi toistaa. Tiedosto saattaa olla vioittunut tai puuttua.';
+
+  @override
+  String get connectionGuide => 'Yhteysopas';
+
+  @override
+  String get iveDoneThis => 'Olen tehnyt tämän';
+
+  @override
+  String get pairNewDevice => 'Yhdistä uusi laite';
+
+  @override
+  String get dontSeeYourDevice => 'Etkö näe laitettasi?';
+
+  @override
+  String get reportAnIssue => 'Ilmoita ongelmasta';
+
+  @override
+  String get pairingTitleOmi => 'Käynnistä Omi';
+
+  @override
+  String get pairingDescOmi => 'Pidä laitetta painettuna, kunnes se värisee, käynnistääksesi sen.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Aseta Omi DevKit pariliitostilaan';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Paina painiketta kerran käynnistääksesi. LED vilkkuu violettina pariliitostilassa.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Käynnistä Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Pidä sivupainiketta painettuna 3 sekuntia käynnistääksesi.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Aseta Plaud Note pariliitostilaan';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Pidä sivupainiketta painettuna 2 sekuntia. Punainen LED vilkkuu, kun se on valmis pariliitokseen.';
+
+  @override
+  String get pairingTitleBee => 'Aseta Bee pariliitostilaan';
+
+  @override
+  String get pairingDescBee => 'Paina painiketta 5 kertaa peräkkäin. Valo alkaa vilkkua sinisenä ja vihreänä.';
+
+  @override
+  String get pairingTitleLimitless => 'Aseta Limitless pariliitostilaan';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kun mikä tahansa valo on näkyvissä, paina kerran ja paina sitten pitkään, kunnes laite näyttää vaaleanpunaista valoa, vapauta sitten.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Aseta Friend Pendant pariliitostilaan';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Paina riipuksen painiketta käynnistääksesi sen. Se siirtyy automaattisesti pariliitostilaan.';
+
+  @override
+  String get pairingTitleFieldy => 'Aseta Fieldy pariliitostilaan';
+
+  @override
+  String get pairingDescFieldy => 'Pidä laitetta painettuna, kunnes valo syttyy, käynnistääksesi sen.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Yhdistä Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Asenna ja avaa Omi-sovellus Apple Watchissasi, napauta sitten Yhdistä sovelluksessa.';
+
+  @override
+  String get pairingTitleNeoOne => 'Aseta Neo One pariliitostilaan';
+
+  @override
+  String get pairingDescNeoOne => 'Pidä virtapainiketta painettuna, kunnes LED vilkkuu. Laite on löydettävissä.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Uutta versiossa $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lisätäänkö tehtävälistallesi?';
+
+  @override
+  String get failedToCreateShareLink => 'Jakolinkin luominen epäonnistui';
+
+  @override
+  String get deleteGoal => 'Poista tavoite';
+
+  @override
+  String get deviceUpToDate => 'Laitteesi on ajan tasalla';
+
+  @override
+  String get wifiConfiguration => 'WiFi-asetukset';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Syötä WiFi-tunnuksesi, jotta laite voi ladata laiteohjelmiston.';
+
+  @override
+  String get networkNameSsid => 'Verkon nimi (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Syötä WiFi-verkon nimi';
+
+  @override
+  String get enterWifiPassword => 'Syötä WiFi-salasana';
 }

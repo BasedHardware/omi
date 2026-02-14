@@ -7952,13 +7952,13 @@ class AppLocalizationsTh extends AppLocalizations {
   String get couldNotOpenUrl => 'ไม่สามารถเปิด URL ได้ กรุณาลองอีกครั้ง';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'งานใหม่';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'ดูทั้งหมด';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'เพิ่มงาน';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8021,4 +8021,117 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ไฟล์เสียงไม่พร้อมสำหรับการเล่น';
+
+  @override
+  String get audioPlaybackFailed => 'ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป';
+
+  @override
+  String get connectionGuide => 'คู่มือการเชื่อมต่อ';
+
+  @override
+  String get iveDoneThis => 'ฉันทำแล้ว';
+
+  @override
+  String get pairNewDevice => 'จับคู่อุปกรณ์ใหม่';
+
+  @override
+  String get dontSeeYourDevice => 'ไม่เห็นอุปกรณ์ของคุณ?';
+
+  @override
+  String get reportAnIssue => 'รายงานปัญหา';
+
+  @override
+  String get pairingTitleOmi => 'เปิด Omi';
+
+  @override
+  String get pairingDescOmi => 'กดค้างที่อุปกรณ์จนกว่าจะสั่นเพื่อเปิดเครื่อง';
+
+  @override
+  String get pairingTitleOmiDevkit => 'ตั้งค่า Omi DevKit ในโหมดจับคู่';
+
+  @override
+  String get pairingDescOmiDevkit => 'กดปุ่มหนึ่งครั้งเพื่อเปิด ไฟ LED จะกะพริบสีม่วงเมื่ออยู่ในโหมดจับคู่';
+
+  @override
+  String get pairingTitleOmiGlass => 'เปิด Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'กดปุ่มด้านข้างค้างไว้ 3 วินาทีเพื่อเปิดเครื่อง';
+
+  @override
+  String get pairingTitlePlaudNote => 'ตั้งค่า Plaud Note ในโหมดจับคู่';
+
+  @override
+  String get pairingDescPlaudNote => 'กดปุ่มด้านข้างค้างไว้ 2 วินาที ไฟ LED สีแดงจะกะพริบเมื่อพร้อมจับคู่';
+
+  @override
+  String get pairingTitleBee => 'ตั้งค่า Bee ในโหมดจับคู่';
+
+  @override
+  String get pairingDescBee => 'กดปุ่ม 5 ครั้งติดต่อกัน ไฟจะเริ่มกะพริบเป็นสีน้ำเงินและเขียว';
+
+  @override
+  String get pairingTitleLimitless => 'ตั้งค่า Limitless ในโหมดจับคู่';
+
+  @override
+  String get pairingDescLimitless => 'เมื่อมีไฟสว่าง กดหนึ่งครั้งแล้วกดค้างจนกว่าอุปกรณ์จะแสดงไฟสีชมพู จากนั้นปล่อย';
+
+  @override
+  String get pairingTitleFriendPendant => 'ตั้งค่า Friend Pendant ในโหมดจับคู่';
+
+  @override
+  String get pairingDescFriendPendant => 'กดปุ่มบนจี้เพื่อเปิด อุปกรณ์จะเข้าสู่โหมดจับคู่โดยอัตโนมัติ';
+
+  @override
+  String get pairingTitleFieldy => 'ตั้งค่า Fieldy ในโหมดจับคู่';
+
+  @override
+  String get pairingDescFieldy => 'กดค้างที่อุปกรณ์จนกว่าไฟจะปรากฏเพื่อเปิดเครื่อง';
+
+  @override
+  String get pairingTitleAppleWatch => 'เชื่อมต่อ Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => 'ติดตั้งและเปิดแอป Omi บน Apple Watch ของคุณ จากนั้นแตะเชื่อมต่อในแอป';
+
+  @override
+  String get pairingTitleNeoOne => 'ตั้งค่า Neo One ในโหมดจับคู่';
+
+  @override
+  String get pairingDescNeoOne => 'กดปุ่มเปิด/ปิดค้างจนกว่า LED จะกะพริบ อุปกรณ์จะสามารถค้นหาได้';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'มีอะไรใหม่ใน $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'เพิ่มในรายการงานของคุณ?';
+
+  @override
+  String get failedToCreateShareLink => 'ไม่สามารถสร้างลิงก์แชร์ได้';
+
+  @override
+  String get deleteGoal => 'ลบเป้าหมาย';
+
+  @override
+  String get deviceUpToDate => 'อุปกรณ์ของคุณเป็นเวอร์ชันล่าสุดแล้ว';
+
+  @override
+  String get wifiConfiguration => 'การตั้งค่า WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'ป้อนข้อมูล WiFi เพื่อให้อุปกรณ์ดาวน์โหลดเฟิร์มแวร์ได้';
+
+  @override
+  String get networkNameSsid => 'ชื่อเครือข่าย (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'ป้อนชื่อเครือข่าย WiFi';
+
+  @override
+  String get enterWifiPassword => 'ป้อนรหัสผ่าน WiFi';
 }

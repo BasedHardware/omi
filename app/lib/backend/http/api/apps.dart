@@ -230,6 +230,23 @@ Future<List<App>> retrievePopularApps() async {
   return SharedPreferencesUtil().appsList;
 }
 
+Future<List<String>> getEnabledAppsServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/enabled',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    return (jsonDecode(response.body) as List).cast<String>();
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',

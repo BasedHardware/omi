@@ -11,7 +11,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/main.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
 class AudioPlayerUtils extends ChangeNotifier {
@@ -66,7 +69,11 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   Future<void> togglePlayback(Wal wal) async {
     if (!canPlayOrShare(wal)) {
-      throw Exception('Audio file not available for playback');
+      Logger.error('AudioPlayerUtils: Audio file not available for playback, WAL ${wal.id}');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.audioPlaybackUnavailable ?? 'Audio file is not available for playback',
+      );
+      return;
     }
 
     if (_isProcessingAudio) return;
@@ -100,7 +107,12 @@ class AudioPlayerUtils extends ChangeNotifier {
     final audioFilePath = await _getOrCreateAudioFile(wal);
     if (audioFilePath == null) {
       _resetPlaybackState();
-      throw Exception('Unable to create playable audio file');
+      Logger.error('AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}');
+      AppSnackbar.showSnackbarError(
+        MyApp.navigatorKey.currentContext?.l10n.audioPlaybackFailed ??
+            'Unable to play audio. The file may be corrupted or missing.',
+      );
+      return;
     }
 
     _currentPlayingId = wal.id;

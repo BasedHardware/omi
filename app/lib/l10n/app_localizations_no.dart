@@ -7985,13 +7985,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get couldNotOpenUrl => 'Kunne ikke åpne URL. Vennligst prøv igjen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Ny oppgave';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Vis alle';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Legg til oppgave';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8054,4 +8054,121 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Lydfilen er ikke tilgjengelig for avspilling';
+
+  @override
+  String get audioPlaybackFailed => 'Kan ikke spille av lyd. Filen kan være skadet eller mangler.';
+
+  @override
+  String get connectionGuide => 'Tilkoblingsguide';
+
+  @override
+  String get iveDoneThis => 'Jeg har gjort dette';
+
+  @override
+  String get pairNewDevice => 'Par ny enhet';
+
+  @override
+  String get dontSeeYourDevice => 'Ser du ikke enheten din?';
+
+  @override
+  String get reportAnIssue => 'Rapporter et problem';
+
+  @override
+  String get pairingTitleOmi => 'Slå på Omi';
+
+  @override
+  String get pairingDescOmi => 'Trykk og hold enheten til den vibrerer for å slå den på.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sett Omi DevKit i paringsmodus';
+
+  @override
+  String get pairingDescOmiDevkit => 'Trykk på knappen én gang for å slå på. LED-en blinker lilla i paringsmodus.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Slå på Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Trykk og hold sideknappen i 3 sekunder for å slå på.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sett Plaud Note i paringsmodus';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Trykk og hold sideknappen i 2 sekunder. Den røde LED-en blinker når den er klar til paring.';
+
+  @override
+  String get pairingTitleBee => 'Sett Bee i paringsmodus';
+
+  @override
+  String get pairingDescBee => 'Trykk på knappen 5 ganger etter hverandre. Lyset begynner å blinke blått og grønt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sett Limitless i paringsmodus';
+
+  @override
+  String get pairingDescLimitless =>
+      'Når et lys er synlig, trykk én gang og trykk deretter og hold til enheten viser et rosa lys, slipp deretter.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sett Friend Pendant i paringsmodus';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Trykk på knappen på anhengeren for å slå den på. Den går automatisk i paringsmodus.';
+
+  @override
+  String get pairingTitleFieldy => 'Sett Fieldy i paringsmodus';
+
+  @override
+  String get pairingDescFieldy => 'Trykk og hold enheten til lyset vises for å slå den på.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Koble til Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installer og åpne Omi-appen på Apple Watch, trykk deretter på Koble til i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sett Neo One i paringsmodus';
+
+  @override
+  String get pairingDescNeoOne => 'Trykk og hold strømknappen til LED-en blinker. Enheten vil være synlig.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Legge til i oppgavelisten din?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunne ikke opprette delingslenke';
+
+  @override
+  String get deleteGoal => 'Slett mål';
+
+  @override
+  String get deviceUpToDate => 'Enheten din er oppdatert';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfigurasjon';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Skriv inn WiFi-legitimasjonen din slik at enheten kan laste ned fastvaren.';
+
+  @override
+  String get networkNameSsid => 'Nettverksnavn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Skriv inn WiFi-nettverksnavn';
+
+  @override
+  String get enterWifiPassword => 'Skriv inn WiFi-passord';
 }

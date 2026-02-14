@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -185,8 +186,15 @@ class AuthService {
             SharedPreferencesUtil().familyName = '';
           }
         }
+        return newToken?.token;
       }
-      return newToken?.token;
+      // Fallback: use cached token if Firebase has no user (for dev builds)
+      final cachedToken = SharedPreferencesUtil().authToken;
+      if (cachedToken.isNotEmpty) {
+        print('DEBUG AuthService.getIdToken: Using cached token fallback');
+        return cachedToken;
+      }
+      return null;
     } catch (e) {
       Logger.debug(e.toString());
       return SharedPreferencesUtil().authToken;
@@ -436,8 +444,44 @@ class AuthService {
       Logger.debug('Given Name: ${SharedPreferencesUtil().givenName}');
       Logger.debug('Family Name: ${SharedPreferencesUtil().familyName}');
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
+
+      // Restore onboarding state from server
+      await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
+    }
+  }
+
+  /// Restore onboarding state from server. Call this on app startup when using cached credentials.
+  Future<void> restoreOnboardingState() async {
+    return _restoreOnboardingState();
+  }
+
+  Future<void> _restoreOnboardingState() async {
+    try {
+      print('DEBUG _restoreOnboardingState: fetching from server...');
+      final state = await getUserOnboardingState();
+      print('DEBUG _restoreOnboardingState: got state=$state');
+      if (state != null) {
+        if (state['completed'] == true) {
+          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
+          SharedPreferencesUtil().onboardingCompleted = true;
+        }
+        final acquisitionSource = state['acquisition_source'] as String? ?? '';
+        if (acquisitionSource.isNotEmpty) {
+          SharedPreferencesUtil().foundOmiSource = acquisitionSource;
+        }
+        // Restore language from server if not already set locally
+        final serverLanguage = await getUserPrimaryLanguage();
+        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+          SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
+          SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        }
+        print(
+            'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+      }
+    } catch (e) {
+      print('DEBUG _restoreOnboardingState: error=$e');
     }
   }
 

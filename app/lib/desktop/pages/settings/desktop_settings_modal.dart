@@ -642,7 +642,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             _buildSettingsRow(
               title: context.l10n.name,
-              subtitle:
+              value:
                   SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
               onTap: () async {
                 MixpanelManager().pageOpened('Profile Change Name');
@@ -654,7 +654,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             ),
             _buildSettingsRow(
               title: context.l10n.email,
-              subtitle: SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
+              value: SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
               onTap: () {},
               showChevron: false,
             ),
@@ -670,7 +670,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
 
                 return _buildSettingsRow(
                   title: context.l10n.language,
-                  subtitle: languageName,
+                  value: languageName,
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Language');
                     await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
@@ -752,7 +752,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                     uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                 return _buildSettingsRow(
                   title: context.l10n.userId,
-                  subtitle: truncatedUid,
+                  value: truncatedUid,
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: uid));
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -2341,7 +2341,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
           children: [
             _buildSettingsRow(
               title: context.l10n.userId,
-              subtitle: SharedPreferencesUtil().uid,
+              value: SharedPreferencesUtil().uid,
               trailing: OmiIconButton(
                 icon: FontAwesomeIcons.copy,
                 style: OmiIconButtonStyle.neutral,
@@ -2418,6 +2418,7 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   Widget _buildSettingsRow({
     required String title,
     String? subtitle,
+    String? value,
     Widget? trailing,
     VoidCallback? onTap,
     bool isDestructive = false,
@@ -2458,7 +2459,26 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   ],
                 ),
               ),
-              if (trailing != null) trailing,
+              if (value != null) ...[
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: ResponsiveHelper.textSecondary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+                if (trailing == null && showChevron) const SizedBox(width: 8),
+              ],
+              if (trailing != null) ...[
+                if (value != null) const SizedBox(width: 8),
+                trailing,
+              ],
               if (onTap != null && trailing == null && showChevron)
                 const Icon(
                   FontAwesomeIcons.chevronRight,

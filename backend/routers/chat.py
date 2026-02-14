@@ -38,6 +38,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
@@ -165,24 +166,35 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        # Using the new agentic system via graph routing
-        async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session, context=data.context
-        ):
-            if chunk:
-                msg = chunk.replace("\n", "__CRLF__")
-                yield f'{msg}\n\n'
-            else:
-                response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
-                        'utf-8'
-                    )
-                    yield f"done: {encoded_response}\n\n"
+        # Set usage context for streaming (can't use 'with' across yields)
+        usage_token = set_usage_context(uid, Features.CHAT)
+        try:
+            # Using the new agentic system via graph routing
+            async for chunk in execute_graph_chat_stream(
+                uid,
+                messages,
+                app,
+                cited=True,
+                callback_data=callback_data,
+                chat_session=chat_session,
+                context=data.context,
+            ):
+                if chunk:
+                    msg = chunk.replace("\n", "__CRLF__")
+                    yield f'{msg}\n\n'
+                else:
+                    response = callback_data.get('answer')
+                    if response:
+                        ai_message, ask_for_nps = process_message(response, callback_data)
+                        ai_message_dict = ai_message.dict()
+                        response_message = ResponseMessage(**ai_message_dict)
+                        response_message.ask_for_nps = ask_for_nps
+                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                            'utf-8'
+                        )
+                        yield f"done: {encoded_response}\n\n"
+        finally:
+            reset_usage_context(usage_token)
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 

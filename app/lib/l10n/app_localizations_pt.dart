@@ -7990,13 +7990,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get couldNotOpenUrl => 'Não foi possível abrir o URL. Por favor, tente novamente.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nova tarefa';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Ver tudo';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Adicionar tarefa';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8059,4 +8059,124 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'O arquivo de áudio não está disponível para reprodução';
+
+  @override
+  String get audioPlaybackFailed => 'Não foi possível reproduzir o áudio. O arquivo pode estar corrompido ou ausente.';
+
+  @override
+  String get connectionGuide => 'Guia de Conexão';
+
+  @override
+  String get iveDoneThis => 'Já fiz isso';
+
+  @override
+  String get pairNewDevice => 'Emparelhar novo dispositivo';
+
+  @override
+  String get dontSeeYourDevice => 'Não vê o seu dispositivo?';
+
+  @override
+  String get reportAnIssue => 'Reportar um problema';
+
+  @override
+  String get pairingTitleOmi => 'Ligue o Omi';
+
+  @override
+  String get pairingDescOmi => 'Pressione e segure o dispositivo até que vibre para ligá-lo.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Coloque o Omi DevKit no modo de emparelhamento';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Pressione o botão uma vez para ligar. O LED piscará em roxo no modo de emparelhamento.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ligue o Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Pressione e segure o botão lateral por 3 segundos para ligar.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Coloque o Plaud Note no modo de emparelhamento';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Pressione e segure o botão lateral por 2 segundos. O LED vermelho piscará quando estiver pronto para emparelhar.';
+
+  @override
+  String get pairingTitleBee => 'Coloque o Bee no modo de emparelhamento';
+
+  @override
+  String get pairingDescBee => 'Pressione o botão 5 vezes seguidas. A luz começará a piscar em azul e verde.';
+
+  @override
+  String get pairingTitleLimitless => 'Coloque o Limitless no modo de emparelhamento';
+
+  @override
+  String get pairingDescLimitless =>
+      'Quando qualquer luz estiver visível, pressione uma vez e depois pressione e segure até que o dispositivo mostre uma luz rosa, depois solte.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Coloque o Friend Pendant no modo de emparelhamento';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Pressione o botão no pingente para ligá-lo. Ele entrará no modo de emparelhamento automaticamente.';
+
+  @override
+  String get pairingTitleFieldy => 'Coloque o Fieldy no modo de emparelhamento';
+
+  @override
+  String get pairingDescFieldy => 'Pressione e segure o dispositivo até que a luz apareça para ligá-lo.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Conectar Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instale e abra o aplicativo Omi no seu Apple Watch, depois toque em Conectar no aplicativo.';
+
+  @override
+  String get pairingTitleNeoOne => 'Coloque o Neo One no modo de emparelhamento';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Pressione e segure o botão de energia até que o LED pisque. O dispositivo estará visível.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novidades na $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Adicionar à sua lista de tarefas?';
+
+  @override
+  String get failedToCreateShareLink => 'Falha ao criar link de compartilhamento';
+
+  @override
+  String get deleteGoal => 'Excluir meta';
+
+  @override
+  String get deviceUpToDate => 'Seu dispositivo está atualizado';
+
+  @override
+  String get wifiConfiguration => 'Configuração WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Insira suas credenciais WiFi para permitir que o dispositivo baixe o firmware.';
+
+  @override
+  String get networkNameSsid => 'Nome da rede (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Insira o nome da rede WiFi';
+
+  @override
+  String get enterWifiPassword => 'Insira a senha do WiFi';
 }

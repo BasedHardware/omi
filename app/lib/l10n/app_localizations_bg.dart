@@ -8022,13 +8022,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get couldNotOpenUrl => 'Не можа да се отвори URL адресът. Моля, опитайте отново.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Нова задача';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Виж всички';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Добавяне на задача';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8091,4 +8091,124 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Аудио файлът не е наличен за възпроизвеждане';
+
+  @override
+  String get audioPlaybackFailed => 'Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ.';
+
+  @override
+  String get connectionGuide => 'Ръководство за свързване';
+
+  @override
+  String get iveDoneThis => 'Направих го';
+
+  @override
+  String get pairNewDevice => 'Сдвояване на ново устройство';
+
+  @override
+  String get dontSeeYourDevice => 'Не виждате устройството си?';
+
+  @override
+  String get reportAnIssue => 'Докладване на проблем';
+
+  @override
+  String get pairingTitleOmi => 'Включете Omi';
+
+  @override
+  String get pairingDescOmi => 'Натиснете и задръжте устройството, докато завибрира, за да го включите.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Поставете Omi DevKit в режим на сдвояване';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Натиснете бутона веднъж, за да включите. Светодиодът ще мига в лилаво в режим на сдвояване.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Включете Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Натиснете и задръжте страничния бутон за 3 секунди, за да включите.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Поставете Plaud Note в режим на сдвояване';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Натиснете и задръжте страничния бутон за 2 секунди. Червеният светодиод ще мига, когато е готов за сдвояване.';
+
+  @override
+  String get pairingTitleBee => 'Поставете Bee в режим на сдвояване';
+
+  @override
+  String get pairingDescBee =>
+      'Натиснете бутона 5 пъти последователно. Светлината ще започне да мига в синьо и зелено.';
+
+  @override
+  String get pairingTitleLimitless => 'Поставете Limitless в режим на сдвояване';
+
+  @override
+  String get pairingDescLimitless =>
+      'Когато свети индикатор, натиснете веднъж, след това натиснете и задръжте, докато устройството покаже розова светлина, след което отпуснете.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Поставете Friend Pendant в режим на сдвояване';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Натиснете бутона на медальона, за да го включите. Той ще влезе в режим на сдвояване автоматично.';
+
+  @override
+  String get pairingTitleFieldy => 'Поставете Fieldy в режим на сдвояване';
+
+  @override
+  String get pairingDescFieldy => 'Натиснете и задръжте устройството, докато се появи светлината, за да го включите.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Свържете Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Инсталирайте и отворете приложението Omi на вашия Apple Watch, след което натиснете Свързване в приложението.';
+
+  @override
+  String get pairingTitleNeoOne => 'Поставете Neo One в режим на сдвояване';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Натиснете и задръжте бутона за захранване, докато светодиодът мигне. Устройството ще бъде видимо.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Какво ново във $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Добавяне към списъка ви със задачи?';
+
+  @override
+  String get failedToCreateShareLink => 'Неуспешно създаване на линк за споделяне';
+
+  @override
+  String get deleteGoal => 'Изтриване на целта';
+
+  @override
+  String get deviceUpToDate => 'Устройството ви е актуално';
+
+  @override
+  String get wifiConfiguration => 'WiFi конфигурация';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Въведете данните за WiFi, за да може устройството да изтегли фърмуера.';
+
+  @override
+  String get networkNameSsid => 'Име на мрежата (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Въведете името на WiFi мрежата';
+
+  @override
+  String get enterWifiPassword => 'Въведете парола за WiFi';
 }

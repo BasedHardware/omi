@@ -30,6 +30,8 @@ class ConnectedDevice extends StatefulWidget {
 }
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
+  CaptureProvider? _captureProvider;
+
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -55,15 +57,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     // where widget unmounts before async getDeviceInfo completes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<CaptureProvider>().addMetricsListener();
+      _captureProvider = context.read<CaptureProvider>();
+      _captureProvider!.addMetricsListener();
       context.read<DeviceProvider>().getDeviceInfo();
     });
   }
 
   @override
   void dispose() {
-    // Unregister as a metrics listener when widget is unmounted
-    context.read<CaptureProvider>().removeMetricsListener();
+    _captureProvider?.removeMetricsListener();
     super.dispose();
   }
 

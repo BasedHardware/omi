@@ -7974,13 +7974,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get couldNotOpenUrl => 'Kunne ikke åbne URL. Prøv venligst igen.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Ny opgave';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Vis alle';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Tilføj opgave';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8043,4 +8043,121 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Lydfilen er ikke tilgængelig til afspilning';
+
+  @override
+  String get audioPlaybackFailed => 'Kan ikke afspille lyd. Filen kan være beskadiget eller manglende.';
+
+  @override
+  String get connectionGuide => 'Tilslutningsguide';
+
+  @override
+  String get iveDoneThis => 'Det har jeg gjort';
+
+  @override
+  String get pairNewDevice => 'Par ny enhed';
+
+  @override
+  String get dontSeeYourDevice => 'Kan du ikke se din enhed?';
+
+  @override
+  String get reportAnIssue => 'Rapportér et problem';
+
+  @override
+  String get pairingTitleOmi => 'Tænd Omi';
+
+  @override
+  String get pairingDescOmi => 'Tryk og hold på enheden, indtil den vibrerer, for at tænde den.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sæt Omi DevKit i parringstilstand';
+
+  @override
+  String get pairingDescOmiDevkit => 'Tryk på knappen én gang for at tænde. LED\'en blinker lilla i parringstilstand.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Tænd Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tryk og hold sideknappen i 3 sekunder for at tænde.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sæt Plaud Note i parringstilstand';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tryk og hold sideknappen i 2 sekunder. Den røde LED blinker, når den er klar til parring.';
+
+  @override
+  String get pairingTitleBee => 'Sæt Bee i parringstilstand';
+
+  @override
+  String get pairingDescBee => 'Tryk på knappen 5 gange i træk. Lyset begynder at blinke blåt og grønt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sæt Limitless i parringstilstand';
+
+  @override
+  String get pairingDescLimitless =>
+      'Når et lys er synligt, tryk én gang og tryk derefter og hold, indtil enheden viser et pink lys, slip derefter.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sæt Friend Pendant i parringstilstand';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tryk på knappen på vedhænget for at tænde det. Det går automatisk i parringstilstand.';
+
+  @override
+  String get pairingTitleFieldy => 'Sæt Fieldy i parringstilstand';
+
+  @override
+  String get pairingDescFieldy => 'Tryk og hold på enheden, indtil lyset vises, for at tænde den.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Tilslut Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installer og åbn Omi-appen på dit Apple Watch, tryk derefter på Tilslut i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sæt Neo One i parringstilstand';
+
+  @override
+  String get pairingDescNeoOne => 'Tryk og hold tænd/sluk-knappen, indtil LED\'en blinker. Enheden vil være synlig.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheder i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tilføj til din opgaveliste?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunne ikke oprette delingslink';
+
+  @override
+  String get deleteGoal => 'Slet mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhed er opdateret';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.';
+
+  @override
+  String get networkNameSsid => 'Netværksnavn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Indtast WiFi-netværksnavn';
+
+  @override
+  String get enterWifiPassword => 'Indtast WiFi-adgangskode';
 }

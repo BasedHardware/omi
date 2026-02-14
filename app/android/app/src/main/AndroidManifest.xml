@@ -54,7 +54,6 @@
     <!-- In the permission part of your manifest, these permission are needed if you target Android 14 phones -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
@@ -78,7 +77,7 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync|connectedDevice"
+            android:foregroundServiceType="connectedDevice|location"
             android:stopWithTask="true" />
          <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
@@ -147,6 +146,15 @@
                     android:host="h.omi.me"
                     android:scheme="https"
                     android:path="/unlimited" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:pathPattern="/tasks/.*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
