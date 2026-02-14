@@ -16,7 +16,17 @@ class TaskChatCoordinator: ObservableObject {
     /// The workspace path used for file-system tools in task chat
     @Published var workspacePath: String = TaskAgentSettings.shared.workingDirectory
 
+    // MARK: - Chat Status Tracking
+
+    /// Which task currently has an active AI stream
+    @Published var streamingTaskId: String?
+    /// Tasks with unseen AI responses (finished while user wasn't viewing)
+    @Published var unreadTaskIds: Set<String> = []
+    /// Human-readable status text for the active stream (e.g. "Thinking...", "Querying database")
+    @Published var streamingStatus: String = ""
+
     private let chatProvider: ChatProvider
+    private var cancellables = Set<AnyCancellable>()
 
     /// Saved state from before we switched to task chat
     private var savedSession: ChatSession?
@@ -33,6 +43,62 @@ class TaskChatCoordinator: ObservableObject {
 
     init(chatProvider: ChatProvider) {
         self.chatProvider = chatProvider
+        observeChatStatus()
+    }
+
+    // MARK: - Status Observation
+
+    private func observeChatStatus() {
+        // Track when streaming starts/stops
+        chatProvider.$isSending
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isSending in
+                guard let self else { return }
+                if isSending {
+                    // Streaming started — record which task is streaming
+                    self.streamingTaskId = self.activeTaskId
+                } else if let taskId = self.streamingTaskId {
+                    // Streaming finished — mark unread if panel not showing this task
+                    if !self.isPanelOpen || self.activeTaskId != taskId {
+                        self.unreadTaskIds.insert(taskId)
+                    }
+                    self.streamingTaskId = nil
+                    self.streamingStatus = ""
+                }
+            }
+            .store(in: &cancellables)
+
+        // Derive status text from the last AI message's content blocks
+        chatProvider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] messages in
+                guard let self, self.chatProvider.isSending else { return }
+                self.streamingStatus = self.deriveStreamingStatus(from: messages)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func deriveStreamingStatus(from messages: [ChatMessage]) -> String {
+        guard let lastAI = messages.last(where: { $0.sender == .ai }),
+              lastAI.isStreaming else {
+            return "Responding..."
+        }
+
+        // Check content blocks in reverse for most recent activity
+        for block in lastAI.contentBlocks.reversed() {
+            if case .toolCall(_, let name, .running, _, _, _) = block {
+                return ChatContentBlock.displayName(for: name)
+            }
+            if case .thinking = block {
+                return "Thinking..."
+            }
+        }
+        return "Responding..."
+    }
+
+    /// Mark a task's chat as read (clears unread dot)
+    func markAsRead(_ taskId: String) {
+        unreadTaskIds.remove(taskId)
     }
 
     /// Open (or resume) a chat panel for a task.
@@ -45,6 +111,7 @@ class TaskChatCoordinator: ObservableObject {
         // (another page may have changed the shared provider while we were away)
         if activeTaskId == task.id {
             log("TaskChatCoordinator: same task, restoring provider state")
+            markAsRead(task.id)
             chatProvider.overrideAppId = Self.taskChatAppId
 
             // If bridge is still streaming for this task, restore cached messages
@@ -84,6 +151,7 @@ class TaskChatCoordinator: ObservableObject {
         }
 
         activeTaskId = task.id
+        markAsRead(task.id)
 
         // Set workspace path for file-system tools (only if explicitly configured)
         let configuredPath = TaskAgentSettings.shared.workingDirectory
