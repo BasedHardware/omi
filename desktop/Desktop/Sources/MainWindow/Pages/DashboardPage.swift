@@ -50,7 +50,7 @@ class DashboardViewModel: ObservableObject {
 
         // Load all data in parallel
         async let scoreTask: Void = loadScores()
-        async let tasksTask: Void = tasksStore.loadTasks()  // Use shared store
+        async let tasksTask: Void = tasksStore.loadTasksIfNeeded()  // Don't re-fetch if ViewModelContainer already loaded
         async let goalsTask: Void = loadGoals()
 
         let _ = await (scoreTask, tasksTask, goalsTask)

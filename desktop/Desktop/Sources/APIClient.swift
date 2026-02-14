@@ -21,6 +21,12 @@ actor APIClient {
     let session: URLSession
     private let decoder: JSONDecoder
 
+    // Short-lived caches to deduplicate simultaneous calls from multiple services
+    private var goalsCacheTime: Date?
+    private var goalsCache: [Goal]?
+    private var conversationsCountCacheTime: Date?
+    private var conversationsCountCache: Int?
+
     init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -369,11 +375,15 @@ extension APIClient {
         return try await post("v1/conversations/search", body: body)
     }
 
-    /// Gets the total count of conversations
+    /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
     func getConversationsCount(
         includeDiscarded: Bool = false,
         statuses: [ConversationStatus] = [.completed, .processing]
     ) async throws -> Int {
+        if let cache = conversationsCountCache, let time = conversationsCountCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
+
         var queryItems: [String] = [
             "include_discarded=\(includeDiscarded)"
         ]
@@ -390,6 +400,8 @@ extension APIClient {
         }
 
         let response: CountResponse = try await get(endpoint)
+        conversationsCountCache = response.count
+        conversationsCountCacheTime = Date()
         return response.count
     }
 
@@ -1885,9 +1897,14 @@ struct PromoteResponse: Codable {
 
 extension APIClient {
 
-    /// Fetches all active goals (up to 3)
+    /// Fetches all active goals (up to 3). Uses 5-second cache to deduplicate parallel calls.
     func getGoals() async throws -> [Goal] {
+        if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
         let response: GoalsListResponse = try await get("v1/goals/all")
+        goalsCache = response.goals
+        goalsCacheTime = Date()
         return response.goals
     }
 
