@@ -224,7 +224,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             color: Colors.black.withOpacity(0.3),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          child: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
         ),
         onPressed: () => Navigator.pop(context),
       ),
