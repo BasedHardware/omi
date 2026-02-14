@@ -443,17 +443,13 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       child: Consumer<DeveloperModeProvider>(
         builder: (context, provider, child) {
           return Scaffold(
-            backgroundColor: const Color(0xFF0D0D0D),
+            backgroundColor: Theme.of(context).colorScheme.primary,
             appBar: AppBar(
-              backgroundColor: const Color(0xFF0D0D0D),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               elevation: 0,
-              leading: IconButton(
-                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
               title: Text(
                 context.l10n.developerSettings,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               centerTitle: true,
               actions: [
