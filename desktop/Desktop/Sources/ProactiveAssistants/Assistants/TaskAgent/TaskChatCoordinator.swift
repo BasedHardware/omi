@@ -49,11 +49,13 @@ class TaskChatCoordinator: ObservableObject {
     // MARK: - Status Observation
 
     private func observeChatStatus() {
-        // Track when streaming starts/stops
+        // Track when streaming starts/stops (only for task chat sessions)
         chatProvider.$isSending
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isSending in
                 guard let self else { return }
+                // Only track when we're in task chat mode
+                guard self.chatProvider.overrideAppId == Self.taskChatAppId else { return }
                 if isSending {
                     // Streaming started — record which task is streaming
                     self.streamingTaskId = self.activeTaskId
@@ -72,7 +74,9 @@ class TaskChatCoordinator: ObservableObject {
         chatProvider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak self] messages in
-                guard let self, self.chatProvider.isSending else { return }
+                guard let self,
+                      self.chatProvider.isSending,
+                      self.streamingTaskId != nil else { return }
                 self.streamingStatus = self.deriveStreamingStatus(from: messages)
             }
             .store(in: &cancellables)

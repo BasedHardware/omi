@@ -2840,6 +2840,7 @@ struct TasksPage: View {
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
                                     activeChatTaskId: chatCoordinator.activeTaskId,
+                                    chatCoordinator: chatCoordinator,
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
                                         viewModel.isAnyTaskEditing = editing
@@ -2877,6 +2878,7 @@ struct TasksPage: View {
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
                                     activeChatTaskId: chatCoordinator.activeTaskId,
+                                    chatCoordinator: chatCoordinator,
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
                                         viewModel.isAnyTaskEditing = editing
@@ -2990,6 +2992,7 @@ struct TaskCategorySection: View {
     var onHover: ((String?) -> Void)?
     var isChatActive: Bool = false
     var activeChatTaskId: String?
+    var chatCoordinator: TaskChatCoordinator?
 
     // Edit mode support
     var editingTaskId: String?
@@ -3056,6 +3059,7 @@ struct TaskCategorySection: View {
                                 onHover: onHover,
                                 isChatActive: isChatActive,
                                 activeChatTaskId: activeChatTaskId,
+                                chatCoordinator: chatCoordinator,
                                 editingTaskId: editingTaskId,
                                 onEditingChanged: onEditingChanged
                             )
@@ -3127,6 +3131,49 @@ struct TaskDragPreview: View {
     }
 }
 
+// MARK: - Chat Session Status Indicator
+
+/// Shows streaming activity or unread dot for a task's chat session.
+/// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+struct ChatSessionStatusIndicator: View {
+    let task: TaskActionItem
+    @ObservedObject var coordinator: TaskChatCoordinator
+    var onOpenChat: ((TaskActionItem) -> Void)?
+
+    var body: some View {
+        if coordinator.streamingTaskId == task.id {
+            // Streaming: spinning indicator + status text
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 10, height: 10)
+
+                Text(coordinator.streamingStatus.isEmpty ? "Responding..." : coordinator.streamingStatus)
+                    .scaledFont(size: 10, weight: .medium)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .lineLimit(1)
+            }
+        } else if coordinator.unreadTaskIds.contains(task.id) {
+            // Unread: purple dot
+            Button {
+                onOpenChat?(task)
+            } label: {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(OmiColors.purplePrimary)
+                        .frame(width: 8, height: 8)
+
+                    Text("New reply")
+                        .scaledFont(size: 10, weight: .medium)
+                        .foregroundColor(OmiColors.purplePrimary)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Open chat — new reply available")
+        }
+    }
+}
+
 // MARK: - Task Row
 
 struct TaskRow: View {
@@ -3151,6 +3198,7 @@ struct TaskRow: View {
     var onHover: ((String?) -> Void)?
     var isChatActive: Bool = false
     var activeChatTaskId: String?
+    var chatCoordinator: TaskChatCoordinator?
 
     // Edit mode support (external trigger from keyboard navigation)
     var editingTaskId: String?
@@ -3530,6 +3578,11 @@ struct TaskRow: View {
                     // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
                     if TaskAgentSettings.shared.isEnabled {
                         AgentStatusIndicator(task: task)
+                    }
+
+                    // Chat session status (streaming indicator or unread dot)
+                    if let coordinator = chatCoordinator {
+                        ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
                     }
 
                     // Task detail button (hover for preview, click for full detail)
