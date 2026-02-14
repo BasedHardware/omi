@@ -277,16 +277,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(context.l10n.yourOmiInsights),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        title: Text(context.l10n.yourOmiInsights, style: const TextStyle(fontWeight: FontWeight.w600)),
         centerTitle: true,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         actions: [
           IconButton(
             icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
