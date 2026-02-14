@@ -168,6 +168,9 @@ class TasksStore: ObservableObject {
     /// Uses local-first pattern: sync API to cache, then reload from cache
     /// Merges changes in-place to avoid wholesale array replacement (which kills SwiftUI gestures)
     private func refreshTasksIfNeeded() async {
+        // Skip if not signed in
+        guard AuthService.shared.isSignedIn else { return }
+
         // Skip if page is not visible
         guard isActive else { return }
 
