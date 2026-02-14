@@ -2266,64 +2266,6 @@ impl FirestoreService {
     }
 
     /// Save action items to Firestore
-    /// Copied from Python save_action_items
-    pub async fn save_action_items(
-        &self,
-        uid: &str,
-        conversation_id: &str,
-        action_items: &[ActionItem],
-    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut saved_ids = Vec::new();
-        let now = Utc::now();
-
-        for item in action_items {
-            let item_id = uuid::Uuid::new_v4().to_string();
-
-            let url = format!(
-                "{}/{}/{}/{}/{}",
-                self.base_url(),
-                USERS_COLLECTION,
-                uid,
-                ACTION_ITEMS_SUBCOLLECTION,
-                item_id
-            );
-
-            let mut fields = json!({
-                "description": {"stringValue": item.description},
-                "completed": {"booleanValue": item.completed},
-                "conversation_id": {"stringValue": conversation_id},
-                "created_at": {"timestampValue": now.to_rfc3339()},
-                "updated_at": {"timestampValue": now.to_rfc3339()}
-            });
-
-            if let Some(due_at) = &item.due_at {
-                fields["due_at"] = json!({"timestampValue": due_at.to_rfc3339()});
-            }
-
-            let doc = json!({"fields": fields});
-
-            let response = self
-                .build_request(reqwest::Method::PATCH, &url)
-                .await?
-                .json(&doc)
-                .send()
-                .await?;
-
-            if response.status().is_success() {
-                saved_ids.push(item_id);
-            } else {
-                tracing::warn!("Failed to save action item: {}", response.text().await?);
-            }
-        }
-
-        tracing::info!(
-            "Saved {} action items for conversation {}",
-            saved_ids.len(),
-            conversation_id
-        );
-        Ok(saved_ids)
-    }
-
     /// Create a single action item (for API/desktop creation)
     pub async fn create_action_item(
         &self,
@@ -2605,6 +2547,82 @@ impl FirestoreService {
             source
         );
         Ok(item)
+    }
+
+    /// Migrate action items that were created by the old conversation extraction path
+    /// (have conversation_id but no source field) to staged_tasks.
+    /// Returns (migrated_count, deleted_count).
+    pub async fn migrate_conversation_action_items_to_staged(
+        &self,
+        uid: &str,
+    ) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch all incomplete, non-deleted action items
+        let all_items = self
+            .get_action_items(uid, 10000, 0, Some(false), None, None, None, None, None, None, None)
+            .await?;
+
+        // Filter: has conversation_id but no source → created by old save_action_items path
+        let bad_items: Vec<&ActionItemDB> = all_items
+            .iter()
+            .filter(|item| {
+                item.conversation_id.is_some()
+                    && (item.source.is_none()
+                        || item.source.as_deref() == Some("")
+                        || item.source.as_deref() == Some("unknown"))
+            })
+            .collect();
+
+        if bad_items.is_empty() {
+            tracing::info!("No conversation action items to migrate for user {}", uid);
+            return Ok((0, 0));
+        }
+
+        tracing::info!(
+            "Found {} conversation action items to migrate for user {}",
+            bad_items.len(),
+            uid
+        );
+
+        let mut migrated = 0;
+        let mut deleted = 0;
+
+        for item in &bad_items {
+            // Create as staged task
+            if let Err(e) = self
+                .create_staged_task(
+                    uid,
+                    &item.description,
+                    item.due_at,
+                    Some("transcription"),
+                    item.priority.as_deref(),
+                    None,
+                    item.category.as_deref(),
+                    None, // no relevance_score — will be ranked by prioritization service
+                )
+                .await
+            {
+                tracing::error!("Failed to create staged task during migration: {}", e);
+                continue;
+            }
+            migrated += 1;
+
+            // Hard-delete the original action item
+            if let Err(e) = self.delete_action_item(uid, &item.id).await {
+                tracing::error!("Failed to delete migrated action item {}: {}", item.id, e);
+            } else {
+                deleted += 1;
+            }
+        }
+
+        tracing::info!(
+            "Migration complete for user {}: {} staged, {} deleted out of {} candidates",
+            uid,
+            migrated,
+            deleted,
+            bad_items.len()
+        );
+
+        Ok((migrated, deleted))
     }
 
     /// Get staged tasks ordered by relevance_score ASC (best ranked first).
