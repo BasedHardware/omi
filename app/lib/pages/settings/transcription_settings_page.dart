@@ -777,15 +777,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         title: Text(context.l10n.transcription, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        centerTitle: true,
         actions: [
           if (_useCustomStt) ...[
             IconButton(
@@ -2524,15 +2521,12 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
         title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        centerTitle: true,
         actions: [
           TextButton(
             onPressed: _resetToTemplate,
