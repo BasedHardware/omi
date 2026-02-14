@@ -200,7 +200,6 @@ FORMAT REQUIREMENTS:
 • Order by: due date → urgency → alphabetical
 
 DUE DATE EXTRACTION (CRITICAL):
-IMPORTANT: EVERY action item MUST have a due_at value. Never return null for due_at.
 IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
 IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
 
@@ -211,7 +210,6 @@ Step-by-step date parsing process:
    - "Monday", "Tuesday", etc. → next occurrence of that weekday
    - "next week" → same day next week
    - Specific date (e.g., "March 15") → that date
-   - NO DATE MENTIONED → default to current date from {started_at} (the task is relevant now)
 
 2. IDENTIFY THE TIME (if mentioned):
    - "before 10am", "by 10am", "at 10am" → 10:00 AM
@@ -226,17 +224,15 @@ Step-by-step date parsing process:
 3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
 
 Examples of CORRECT date parsing:
-If started_at is "2025-10-03T13:25:00Z" (Oct 3) and tz is "America/New_York":
-- "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 ET" → Convert to UTC → "2025-10-04T14:00:00Z"
-- "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 ET" → Convert to UTC → "2025-10-03T22:00:00Z"
-- "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 ET" → Convert to UTC → "2025-10-05T03:59:00Z"
-- "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 ET" → Convert to UTC → "2025-10-06T18:00:00Z"
-- "urgent" or "ASAP" → 2 hours from started_at → "2025-10-03T15:25:00Z"
-- No date or time mentioned at all → end of conversation day: "2025-10-03 23:59 ET" → Convert to UTC → "2025-10-04T03:59:00Z"
+If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+- "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
+- "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
+- "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
+- "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
+- "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
 
 CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
 DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
-CRITICAL: due_at must NEVER be null. Always provide a date.
 
 Reference time: {started_at}
 User timezone: {tz}
