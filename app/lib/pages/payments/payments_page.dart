@@ -74,12 +74,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
       return Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: Text(context.l10n.payments, style: const TextStyle(color: Colors.white)),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
-          ),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          title: Text(context.l10n.payments, style: const TextStyle(fontWeight: FontWeight.w600)),
+          centerTitle: true,
+          elevation: 0,
         ),
         body: Skeletonizer(
           enabled: provider.isLoading,
