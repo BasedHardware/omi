@@ -53,7 +53,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          title: Text(context.l10n.deleteAccountTitle),
+          title: Text(context.l10n.deleteAccountTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
+          centerTitle: true,
+          elevation: 0,
         ),
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
