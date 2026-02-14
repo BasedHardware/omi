@@ -57,6 +57,12 @@ pub struct ActionItem {
     pub completed: bool,
     /// When the action item is due (ISO 8601 UTC)
     pub due_at: Option<DateTime<Utc>>,
+    /// LLM confidence score (0.0-1.0). Items below 0.75 are filtered out.
+    #[serde(default)]
+    pub confidence: Option<f64>,
+    /// Priority classification: "high", "medium", "low"
+    #[serde(default)]
+    pub priority: Option<String>,
 }
 
 /// An event extracted from conversation

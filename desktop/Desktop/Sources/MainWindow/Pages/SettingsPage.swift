@@ -9,45 +9,43 @@ struct SettingsPage: View {
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Section header
-                    HStack {
-                        Text(selectedSection.rawValue)
-                            .scaledFont(size: 28, weight: .bold)
-                            .foregroundColor(OmiColors.textPrimary)
-                            .id(selectedSection)
-                            .transition(.opacity)
-                            .animation(.easeInOut(duration: 0.15), value: selectedSection)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 32)
-                    .padding(.top, 32)
-                    .padding(.bottom, 24)
-
-                    // Settings content - embedded SettingsView with dark theme override
-                    SettingsContentView(
-                        appState: appState,
-                        selectedSection: $selectedSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection
-                    )
-                    .padding(.horizontal, 32)
+        ScrollView {
+            VStack(spacing: 0) {
+                // Section header
+                HStack {
+                    Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
+                         ? selectedAdvancedSubsection!.rawValue
+                         : selectedSection.rawValue)
+                        .scaledFont(size: 28, weight: .bold)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .id(selectedSection)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.15), value: selectedSection)
 
                     Spacer()
                 }
+                .padding(.horizontal, 32)
+                .padding(.top, 32)
+                .padding(.bottom, 24)
+
+                // Settings content - embedded SettingsView with dark theme override
+                SettingsContentView(
+                    appState: appState,
+                    selectedSection: $selectedSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                )
+                .padding(.horizontal, 32)
+
+                Spacer()
             }
-            .background(OmiColors.backgroundSecondary.opacity(0.3))
-            .onAppear {
-                AnalyticsManager.shared.settingsPageOpened()
-            }
-            .onChange(of: selectedAdvancedSubsection) { _, newValue in
-                if let subsection = newValue {
-                    withAnimation {
-                        proxy.scrollTo(subsection, anchor: .top)
-                    }
-                }
+        }
+        .background(OmiColors.backgroundSecondary.opacity(0.3))
+        .onAppear {
+            AnalyticsManager.shared.settingsPageOpened()
+        }
+        .onChange(of: selectedSection) { _, newValue in
+            if newValue == .advanced && selectedAdvancedSubsection == nil {
+                selectedAdvancedSubsection = .aiUserProfile
             }
         }
     }
@@ -1712,8 +1710,36 @@ struct SettingsContentView: View {
     }
 
     private var advancedSection: some View {
+        Group {
+            switch selectedAdvancedSubsection {
+            case .aiUserProfile, .none:
+                aiUserProfileSubsection
+            case .stats:
+                statsSubsection
+            case .featureTiers:
+                featureTiersSubsection
+            case .focusAssistant:
+                focusAssistantSubsection
+            case .taskAssistant:
+                taskAssistantSubsection
+            case .adviceAssistant:
+                adviceAssistantSubsection
+            case .memoryAssistant:
+                memoryAssistantSubsection
+            case .analysisThrottle:
+                analysisThrottleSubsection
+            case .preferences:
+                preferencesSubsection
+            case .troubleshooting:
+                troubleshootingSubsection
+            }
+        }
+    }
+
+    // MARK: - Advanced Subsections
+
+    private var aiUserProfileSubsection: some View {
         VStack(spacing: 20) {
-            // AI User Profile card
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
@@ -1844,8 +1870,32 @@ struct SettingsContentView: View {
                     }
                 }
             }
-            .id(AdvancedSubsection.aiUserProfile)
+        }
+        .task {
+            // Try loading immediately (covers all restarts after first generation)
+            if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                aiProfileId = profile.id
+                aiProfileText = profile.profileText
+                aiProfileGeneratedAt = profile.generatedAt
+                aiProfileDataSourcesUsed = profile.dataSourcesUsed
+                return
+            }
+            // No profile yet — first-ever generation may be in progress, poll briefly
+            for _ in 0..<6 {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                    aiProfileId = profile.id
+                    aiProfileText = profile.profileText
+                    aiProfileGeneratedAt = profile.generatedAt
+                    aiProfileDataSourcesUsed = profile.dataSourcesUsed
+                    return
+                }
+            }
+        }
+    }
 
+    private var statsSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
@@ -1903,9 +1953,17 @@ struct SettingsContentView: View {
                     }
                 }
             }
-            .id(AdvancedSubsection.stats)
+        }
+        .task {
+            await loadAdvancedStats()
+        }
+        .task {
+            await loadChatMessageCount()
+        }
+    }
 
-            // Feature Tiers card
+    private var featureTiersSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
@@ -1991,9 +2049,11 @@ struct SettingsContentView: View {
                     }
                 }
             }
-            .id(AdvancedSubsection.featureTiers)
+        }
+    }
 
-            // Focus Assistant Settings
+    private var focusAssistantSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -2130,9 +2190,11 @@ struct SettingsContentView: View {
                     } // end if focusEnabled
                 }
             }
-            .id(AdvancedSubsection.focusAssistant)
+        }
+    }
 
-            // Task Assistant Settings
+    private var taskAssistantSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -2370,9 +2432,17 @@ struct SettingsContentView: View {
                     } // end if taskEnabled
                 }
             }
-            .id(AdvancedSubsection.taskAssistant)
 
-            // Advice Assistant Settings
+
+            // Task Agent Settings (merged into Task Assistant subsection)
+            settingsCard {
+                TaskAgentSettingsView()
+            }
+        }
+    }
+
+    private var adviceAssistantSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -2540,9 +2610,11 @@ struct SettingsContentView: View {
                     } // end if adviceEnabled
                 }
             }
-            .id(AdvancedSubsection.adviceAssistant)
+        }
+    }
 
-            // Memory Assistant Settings
+    private var memoryAssistantSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -2710,9 +2782,11 @@ struct SettingsContentView: View {
                     } // end if memoryEnabled
                 }
             }
-            .id(AdvancedSubsection.memoryAssistant)
+        }
+    }
 
-            // Analysis Throttle (global — affects all assistants)
+    private var analysisThrottleSubsection: some View {
+        VStack(spacing: 20) {
             settingsCard {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -2744,7 +2818,11 @@ struct SettingsContentView: View {
                         }
                 }
             }
+        }
+    }
 
+    private var preferencesSubsection: some View {
+        VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
             settingsCard {
                 HStack(spacing: 16) {
@@ -2833,7 +2911,11 @@ struct SettingsContentView: View {
                         .labelsHidden()
                 }
             }
+        }
+    }
 
+    private var troubleshootingSubsection: some View {
+        VStack(spacing: 20) {
             // Report Issue
             settingsCard {
                 HStack(spacing: 16) {
@@ -2912,38 +2994,6 @@ struct SettingsContentView: View {
                 }
             } message: {
                 Text("This will reset all permissions and restart the app. You'll need to grant permissions again during setup.")
-            }
-
-            // Task Agent Settings
-            settingsCard {
-                TaskAgentSettingsView()
-            }
-        }
-        .task {
-            await loadAdvancedStats()
-        }
-        .task {
-            await loadChatMessageCount()
-        }
-        .task {
-            // Try loading immediately (covers all restarts after first generation)
-            if let profile = await AIUserProfileService.shared.getLatestProfile() {
-                aiProfileId = profile.id
-                aiProfileText = profile.profileText
-                aiProfileGeneratedAt = profile.generatedAt
-                aiProfileDataSourcesUsed = profile.dataSourcesUsed
-                return
-            }
-            // No profile yet — first-ever generation may be in progress, poll briefly
-            for _ in 0..<6 {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                if let profile = await AIUserProfileService.shared.getLatestProfile() {
-                    aiProfileId = profile.id
-                    aiProfileText = profile.profileText
-                    aiProfileGeneratedAt = profile.generatedAt
-                    aiProfileDataSourcesUsed = profile.dataSourcesUsed
-                    return
-                }
             }
         }
     }

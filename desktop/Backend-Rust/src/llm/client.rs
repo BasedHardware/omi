@@ -391,7 +391,7 @@ impl LlmClient {
             .replace("{existing_items_context}", &existing_items_context)
             .replace("{calendar_prompt_section}", &calendar_prompt_section);
 
-        // Define schema for structured output
+        // Define schema for structured output (includes confidence and priority)
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -401,9 +401,11 @@ impl LlmClient {
                         "type": "object",
                         "properties": {
                             "description": {"type": "string"},
-                            "due_at": {"type": "string"}
+                            "due_at": {"type": "string"},
+                            "confidence": {"type": "number"},
+                            "priority": {"type": "string"}
                         },
-                        "required": ["description"]
+                        "required": ["description", "confidence", "priority"]
                     }
                 }
             },
@@ -421,17 +423,36 @@ impl LlmClient {
         struct ActionItemResponse {
             description: String,
             due_at: Option<String>,
+            #[serde(default)]
+            confidence: Option<f64>,
+            #[serde(default)]
+            priority: Option<String>,
         }
 
         let result: ActionItemsResponse = serde_json::from_str(&response)
             .map_err(|e| format!("Failed to parse action items response: {} - {}", e, response))?;
 
-        Ok(result.action_items.into_iter().map(|item| ActionItem {
-            description: item.description,
-            completed: false,
-            due_at: item.due_at.and_then(|d| chrono::DateTime::parse_from_rfc3339(&d).ok())
-                .map(|dt| dt.with_timezone(&chrono::Utc)),
-        }).collect())
+        let items: Vec<ActionItem> = result.action_items.into_iter()
+            .filter(|item| {
+                let conf = item.confidence.unwrap_or(0.0);
+                if conf < 0.75 {
+                    tracing::info!("Filtering out low-confidence action item ({}): {}", conf, item.description);
+                    false
+                } else {
+                    true
+                }
+            })
+            .map(|item| ActionItem {
+                description: item.description,
+                completed: false,
+                due_at: item.due_at.and_then(|d| chrono::DateTime::parse_from_rfc3339(&d).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc)),
+                confidence: item.confidence,
+                priority: item.priority,
+            })
+            .collect();
+
+        Ok(items)
     }
 
     /// Extract memories from transcript
@@ -577,42 +598,23 @@ impl LlmClient {
         ).await
     }
 
-    /// Process conversation without task extraction (structure + memories only).
-    /// Used for non-desktop sources where task extraction is handled by the Python backend.
-    pub async fn process_conversation_no_tasks(
-        &self,
-        segments: &[TranscriptSegment],
-        started_at: &str,
-        timezone: &str,
-        language: &str,
-        user_name: &str,
-        existing_memories: &[MemoryDB],
-    ) -> Result<ProcessedConversation, Box<dyn std::error::Error + Send + Sync>> {
-        let transcript = TranscriptSegment::to_transcript_text(segments);
-        let word_count = transcript.split_whitespace().count();
-
-        if word_count < BRIEF_TRANSCRIPT_THRESHOLD {
-            tracing::info!("Brief transcript ({} words < {}), using simplified processing", word_count, BRIEF_TRANSCRIPT_THRESHOLD);
-            let structured = self.extract_brief_structure(&transcript, language).await?;
-            return Ok(ProcessedConversation {
-                discarded: false,
-                structured,
-                action_items: vec![],
-                memories: vec![],
-            });
-        }
-
-        tracing::info!("Processing conversation without task extraction ({} words)", word_count);
-
-        let structured = self.extract_structure(&transcript, started_at, timezone, language, None).await?;
-        let memories = self.extract_memories(&transcript, user_name, existing_memories).await?;
-
-        Ok(ProcessedConversation {
+    /// Skip all LLM extraction for non-desktop sources.
+    /// The Python backend handles structure, memories, and tasks for OMI/bee/etc.
+    /// Returns a minimal ProcessedConversation with no LLM calls.
+    pub fn skip_extraction() -> ProcessedConversation {
+        ProcessedConversation {
             discarded: false,
-            structured,
+            structured: Structured {
+                title: String::new(),
+                overview: String::new(),
+                emoji: String::new(),
+                category: crate::models::Category::Other,
+                action_items: vec![],
+                events: vec![],
+            },
             action_items: vec![],
-            memories,
-        })
+            memories: vec![],
+        }
     }
 
     /// Full conversation processing pipeline with calendar context
