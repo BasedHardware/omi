@@ -137,10 +137,10 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
   }
 
   Widget _buildHeader() {
-    String title = "What's New";
+    String title = AppLocalizations.of(context)!.whatsNew;
     if (!_isLoading && _orderedChangelogs.isNotEmpty) {
       final version = _orderedChangelogs[_currentPage].appVersion ?? '';
-      title = "What's New in $version";
+      title = AppLocalizations.of(context)!.whatsNewInVersion(version);
     }
 
     return Container(
