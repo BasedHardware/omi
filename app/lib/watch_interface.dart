@@ -53,4 +53,5 @@ abstract class WatchRecorderFlutterAPI {
   void onMicrophonePermissionResult(bool granted);
   void onMainAppMicrophonePermissionResult(bool granted);
   void onWatchBatteryUpdate(double batteryLevel, int batteryState);
+  void onDeviceRecordingRequested();
 }
