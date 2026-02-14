@@ -724,7 +724,7 @@ class TasksStore: ObservableObject {
     /// These were created by the old save_action_items path that bypassed the staging pipeline.
     private func migrateConversationItemsToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "conversationItemsMigrationCompleted_v3_\(userId)"
+        let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
 
@@ -733,7 +733,14 @@ class TasksStore: ObservableObject {
 
         do {
             try await APIClient.shared.migrateConversationItemsToStaged()
-            log("TasksStore: Conversation items migration completed")
+            log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
+
+            // Reset full sync flag so it re-runs and marks migrated items as staged locally
+            let syncKey = "tasksFullSyncCompleted_v4_\(userId)"
+            UserDefaults.standard.set(false, forKey: syncKey)
+
+            // Run full sync now to clean up local SQLite
+            await performFullSyncIfNeeded()
         } catch {
             log("TasksStore: Conversation items migration fired (may complete in background): \(error.localizedDescription)")
         }
