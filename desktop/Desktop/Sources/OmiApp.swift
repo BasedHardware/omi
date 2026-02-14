@@ -174,6 +174,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.debug = false
             options.enableAutoSessionTracking = true
             options.environment = isDev ? "development" : "production"
+            options.beforeSend = { event in
+                // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
+                if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
+                    return nil
+                }
+                return event
+            }
         }
         log("Sentry initialized (environment: \(isDev ? "development" : "production"))")
 
