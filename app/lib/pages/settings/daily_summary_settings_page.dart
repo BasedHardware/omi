@@ -217,8 +217,9 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: Text(context.l10n.dailySummary),
+        title: Text(context.l10n.dailySummary, style: const TextStyle(fontWeight: FontWeight.w600)),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        centerTitle: true,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
