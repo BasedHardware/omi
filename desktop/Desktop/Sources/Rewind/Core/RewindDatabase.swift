@@ -2043,6 +2043,20 @@ actor RewindDatabase {
         }
     }
 
+    /// Clear skippedForBattery flag for a screenshot that can't be processed (e.g. missing file)
+    func clearSkippedForBattery(id: Int64) throws {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE screenshots SET skippedForBattery = 0 WHERE id = ?",
+                arguments: [id]
+            )
+        }
+    }
+
     /// Get screenshot by ID
     func getScreenshot(id: Int64) throws -> Screenshot? {
         guard let dbQueue = dbQueue else {
