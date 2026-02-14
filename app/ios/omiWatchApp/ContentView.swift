@@ -92,7 +92,7 @@ struct WatchRecorderView: View {
                 viewModel.startRecording()
             }
             if autoStartDeviceRecording {
-                viewModel.session.sendMessage(["method": "startRecording"], replyHandler: nil, errorHandler: nil)
+                viewModel.session.sendMessage(["method": "startDeviceRecording"], replyHandler: nil, errorHandler: nil)
             }
         }
         .onChange(of: viewModel.isRecording) { isRecording in
