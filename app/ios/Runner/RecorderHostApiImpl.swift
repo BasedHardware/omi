@@ -150,6 +150,23 @@ class RecorderHostApiImpl: WatchRecorderHostAPI {
         
         return deviceInfo
     }
+
+    func sendDeviceState(isRecording: Bool, isConnected: Bool, batteryLevel: Int64) {
+        let message: [String: Any] = [
+            "method": "deviceStateUpdate",
+            "isRecording": isRecording,
+            "isConnected": isConnected,
+            "batteryLevel": Int(batteryLevel)
+        ]
+
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil, errorHandler: { _ in
+                self.session.transferUserInfo(message)
+            })
+        } else {
+            session.transferUserInfo(message)
+        }
+    }
 }
 
 
