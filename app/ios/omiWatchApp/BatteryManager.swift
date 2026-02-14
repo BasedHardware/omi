@@ -1,5 +1,6 @@
 import WatchKit
 import WatchConnectivity
+import WidgetKit
 
 class BatteryManager: NSObject {
     static let shared = BatteryManager()
@@ -29,6 +30,7 @@ class BatteryManager: NSObject {
     
     func sendBatteryLevel() {
         let level = WKInterfaceDevice.current().batteryLevel * 100  // 0.0–100.0
+        SharedState.deviceBatteryLevel = Float(level)
         let state = WKInterfaceDevice.current().batteryState.rawValue
         
         let data: [String: Any] = [
