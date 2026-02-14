@@ -399,13 +399,12 @@ class AppState: ObservableObject {
                 if settings.authorizationStatus == .notDetermined {
                     // First time - show the system prompt
                     NSApp.activate(ignoringOtherApps: true)
-                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
                         if let error = error {
                             print("Notification permission error: \(error)")
-                            return
                         }
-                        if granted {
-                            // Permission granted, no confirmation notification needed
+                        DispatchQueue.main.async {
+                            self?.checkNotificationPermission()
                         }
                     }
                 } else if settings.authorizationStatus == .denied {

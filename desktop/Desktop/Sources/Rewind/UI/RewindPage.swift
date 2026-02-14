@@ -65,15 +65,21 @@ struct RewindPage: View {
         if showSavedSuccess { return "Saved!" }
         if showDiscarded { return "Too Short" }
         if showError { return "Failed" }
-        return isFinishMode ? "Finish" : "Stop Recording"
+        return isFinishMode ? "Finish Conversation" : "Stop Recording"
     }
 
-    private var finishButtonColor: Color {
-        if isFinishing { return OmiColors.textTertiary }
+    private var finishButtonForeground: Color {
+        if showSavedSuccess { return .white }
+        if showDiscarded { return .white }
+        if showError { return .white }
+        return .black
+    }
+
+    private var finishButtonBackground: Color {
         if showSavedSuccess { return OmiColors.success }
         if showDiscarded { return OmiColors.warning }
         if showError { return OmiColors.error }
-        return OmiColors.purplePrimary
+        return .white
     }
 
     /// Compute speaker names from the live speaker-person map
@@ -1403,13 +1409,13 @@ struct RewindPage: View {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .scaledFont(size: 12)
                             } else {
-                                Image(systemName: isFinishMode ? "checkmark.circle.fill" : "stop.circle.fill")
+                                Image(systemName: "stop.circle.fill")
                                     .scaledFont(size: 12)
                             }
                             Text(finishButtonText)
                                 .scaledFont(size: 13, weight: .medium)
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(finishButtonForeground)
                         .padding(.leading, 14)
                         .padding(.trailing, 8)
                         .padding(.vertical, 6)
@@ -1419,14 +1425,14 @@ struct RewindPage: View {
 
                     // Divider line
                     Rectangle()
-                        .fill(Color.white.opacity(0.3))
+                        .fill(Color.black.opacity(0.15))
                         .frame(width: 1, height: 20)
 
                     // Dropdown chevron
                     Menu {
                         Button(action: { buttonMode = "finish" }) {
                             HStack {
-                                Text("Finish")
+                                Text("Finish Conversation")
                                 if buttonMode == "finish" {
                                     Image(systemName: "checkmark")
                                 }
@@ -1443,7 +1449,7 @@ struct RewindPage: View {
                     } label: {
                         Image(systemName: "chevron.down")
                             .scaledFont(size: 9, weight: .bold)
-                            .foregroundColor(.white)
+                            .foregroundColor(finishButtonForeground)
                             .padding(.leading, 8)
                             .padding(.trailing, 10)
                             .padding(.vertical, 6)
@@ -1453,8 +1459,10 @@ struct RewindPage: View {
                 }
                 .background(
                     Capsule()
-                        .fill(finishButtonColor)
+                        .fill(finishButtonBackground)
                 )
+                .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                .help("Finish Conversation: saves current conversation and starts a new one.\nStop Recording: stops the microphone completely.")
             } else if !appState.isSavingConversation {
                 Button(action: {
                     appState.startTranscription()

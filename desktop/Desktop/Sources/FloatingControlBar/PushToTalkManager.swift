@@ -98,6 +98,9 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Option Key Handling
 
   private func handleFlagsChanged(_ event: NSEvent) {
+    // Don't process PTT when the floating bar is hidden
+    guard FloatingControlBarManager.shared.isVisible else { return }
+
     let settings = ShortcutSettings.shared
 
     let pttActive: Bool
