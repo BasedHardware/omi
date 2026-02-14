@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from typing import List, Any
 
+import httpx
 import requests
 import websockets
 
@@ -149,25 +150,31 @@ def get_audio_bytes_webhook_seconds(uid: str):
         return
 
 
-async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
+async def send_audio_bytes_developer_webhook(
+    uid: str, sample_rate: int, data: bytes, timestamp: int | None = None
+):
     print("send_audio_bytes_developer_webhook", uid)
     # TODO: add a lock, send shorter segments, validate regex.
     toggled = user_webhook_status_db(uid, WebhookType.audio_bytes)
-    if toggled:
-        webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
-        webhook_url = webhook_url.split(',')[0]
-        if not webhook_url:
-            return
-        webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
-        try:
-            response = requests.post(
-                webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
-            )
-            print('send_audio_bytes_developer_webhook:', webhook_url, response.status_code)
-        except Exception as e:
-            print(f"Error sending audio bytes to developer webhook: {e}")
-    else:
+    if not toggled:
         return
+
+    webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
+    webhook_url = (webhook_url or '').split(',')[0]
+    if not webhook_url:
+        return
+
+    webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
+    if timestamp is not None:
+        webhook_url += f'&timestamp={timestamp}'
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                webhook_url, content=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
+            )
+        print('send_audio_bytes_developer_webhook:', webhook_url, response.status_code)
+    except httpx.RequestError as e:
+        print(f"Error sending audio bytes to developer webhook: {e}")
 
 
 # continue?
