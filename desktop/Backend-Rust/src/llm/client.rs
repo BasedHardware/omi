@@ -577,6 +577,44 @@ impl LlmClient {
         ).await
     }
 
+    /// Process conversation without task extraction (structure + memories only).
+    /// Used for non-desktop sources where task extraction is handled by the Python backend.
+    pub async fn process_conversation_no_tasks(
+        &self,
+        segments: &[TranscriptSegment],
+        started_at: &str,
+        timezone: &str,
+        language: &str,
+        user_name: &str,
+        existing_memories: &[MemoryDB],
+    ) -> Result<ProcessedConversation, Box<dyn std::error::Error + Send + Sync>> {
+        let transcript = TranscriptSegment::to_transcript_text(segments);
+        let word_count = transcript.split_whitespace().count();
+
+        if word_count < BRIEF_TRANSCRIPT_THRESHOLD {
+            tracing::info!("Brief transcript ({} words < {}), using simplified processing", word_count, BRIEF_TRANSCRIPT_THRESHOLD);
+            let structured = self.extract_brief_structure(&transcript, language).await?;
+            return Ok(ProcessedConversation {
+                discarded: false,
+                structured,
+                action_items: vec![],
+                memories: vec![],
+            });
+        }
+
+        tracing::info!("Processing conversation without task extraction ({} words)", word_count);
+
+        let structured = self.extract_structure(&transcript, started_at, timezone, language, None).await?;
+        let memories = self.extract_memories(&transcript, user_name, existing_memories).await?;
+
+        Ok(ProcessedConversation {
+            discarded: false,
+            structured,
+            action_items: vec![],
+            memories,
+        })
+    }
+
     /// Full conversation processing pipeline with calendar context
     pub async fn process_conversation_with_calendar(
         &self,

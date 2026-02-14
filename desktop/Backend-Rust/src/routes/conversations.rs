@@ -179,6 +179,10 @@ async fn create_conversation_from_segments(
         ));
     };
 
+    // Only extract tasks from desktop-originated conversations.
+    // Non-desktop sources (omi, bee, etc.) have task extraction handled by the Python backend.
+    let extract_tasks = request.source == ConversationSource::Desktop;
+
     // Get existing data for deduplication
     let existing_memories = state
         .firestore
@@ -193,21 +197,34 @@ async fn create_conversation_from_segments(
     let user_name = "User"; // TODO: Get from user profile
 
     // Process conversation with LLM
-    let processed = llm_client
-        .process_conversation(
-            &request.transcript_segments,
-            &started_at,
-            &request.timezone,
-            &request.language,
-            user_name,
-            &existing_action_items,
-            &existing_memories,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to process conversation: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
+    let processed = if extract_tasks {
+        llm_client
+            .process_conversation(
+                &request.transcript_segments,
+                &started_at,
+                &request.timezone,
+                &request.language,
+                user_name,
+                &existing_action_items,
+                &existing_memories,
+            )
+            .await
+    } else {
+        llm_client
+            .process_conversation_no_tasks(
+                &request.transcript_segments,
+                &started_at,
+                &request.timezone,
+                &request.language,
+                user_name,
+                &existing_memories,
+            )
+            .await
+    }
+    .map_err(|e| {
+        tracing::error!("Failed to process conversation: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
 
     // Generate conversation ID
     let conversation_id = uuid::Uuid::new_v4().to_string();
