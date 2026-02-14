@@ -93,7 +93,6 @@ from utils.stt.speaker_embedding import (
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 
-
 router = APIRouter()
 
 
@@ -1280,7 +1279,11 @@ async def _stream_handler(
                 except Exception as e:
                     print(f"Failed to load shared profile from {owner_uid}: {e}", uid, session_id)
 
-            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)", uid, session_id)
+            print(
+                f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)",
+                uid,
+                session_id,
+            )
         except Exception as e:
             print(f"Speaker ID: failed to load embeddings: {e}", uid, session_id)
             return
@@ -1513,8 +1516,11 @@ async def _stream_handler(
 
                 # Trigger realtime integrations (including mentor notifications)
                 from utils.app_integrations import trigger_realtime_integrations
+
                 try:
-                    await trigger_realtime_integrations(uid, [s.dict() for s in transcript_segments], current_conversation_id)
+                    await trigger_realtime_integrations(
+                        uid, [s.dict() for s in transcript_segments], current_conversation_id
+                    )
                 except Exception as e:
                     print(f"Error triggering realtime integrations: {e}", uid, session_id)
 
@@ -1830,6 +1836,7 @@ async def _stream_handler(
                                     if (
                                         person_id
                                         and person_id != 'user'
+                                        and not person_id.startswith("shared:")
                                         and private_cloud_sync_enabled
                                         and send_speaker_sample_request is not None
                                         and current_conversation_id

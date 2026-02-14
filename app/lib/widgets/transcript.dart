@@ -28,6 +28,7 @@ class TranscriptWidget extends StatefulWidget {
   final double bottomMargin;
   final Function(String, int)? editSegment;
   final Map<String, SpeakerLabelSuggestionEvent> suggestions;
+  final Map<int, String> sharedSpeakerNames;
   final List<String> taggingSegmentIds;
   final Function(SpeakerLabelSuggestionEvent)? onAcceptSuggestion;
   final String searchQuery;
@@ -47,6 +48,7 @@ class TranscriptWidget extends StatefulWidget {
     this.bottomMargin = 200,
     this.editSegment,
     this.suggestions = const {},
+    this.sharedSpeakerNames = const {},
     this.taggingSegmentIds = const [],
     this.onAcceptSuggestion,
     this.searchQuery = '',
@@ -531,7 +533,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     ? 'omi'
                                     : (suggestion != null && person == null
                                         ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                        : (person != null
+                                            ? person.name
+                                            : widget.sharedSpeakerNames[data.speakerId] ??
+                                                'Speaker ${data.speakerId}')),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300

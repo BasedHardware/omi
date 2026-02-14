@@ -1011,7 +1011,6 @@ def set_user_speaker_embedding(uid: str, embedding: list):
     )
 
 
-
 def share_speech_profile(owner_uid: str, target_uid: str):
     """Share the owner's speech profile with another user (target_uid)."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
@@ -1039,8 +1038,8 @@ def get_profiles_shared_with_user(target_uid: str):
 
     shares_query = (
         db.collection_group('shared_speech_profiles')
-        .where(filter=firestore.FieldFilter('shared_with_uid', '==', target_uid))
-        .where(filter=firestore.FieldFilter('revoked_at', '==', None))
+        .where(filter=FieldFilter('shared_with_uid', '==', target_uid))
+        .where(filter=FieldFilter('revoked_at', '==', None))
     )
 
     return [share.reference.parent.parent.id for share in shares_query.stream()]
@@ -1049,5 +1048,5 @@ def get_profiles_shared_with_user(target_uid: str):
 def get_users_shared_with(owner_uid: str):
     """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
-    shares_query = shared_ref.where(filter=firestore.FieldFilter('revoked_at', '==', None))
+    shares_query = shared_ref.where(filter=FieldFilter('revoked_at', '==', None))
     return [doc.to_dict()['shared_with_uid'] for doc in shares_query.stream()]
