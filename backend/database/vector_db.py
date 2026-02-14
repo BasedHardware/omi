@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List
 
 from pinecone import Pinecone
+from pinecone.exceptions import NotFoundException
 
 from models.conversation import Conversation
 from utils.llm.clients import embeddings
@@ -138,8 +139,11 @@ def delete_vector(uid: str, conversation_id: str):
     Note: Vectors are stored with ID format '{uid}-{conversation_id}'
     """
     vector_id = f'{uid}-{conversation_id}'
-    result = index.delete(ids=[vector_id], namespace="ns1")
-    print('delete_vector', vector_id, result)
+    try:
+        result = index.delete(ids=[vector_id], namespace="ns1")
+        print('delete_vector', vector_id, result)
+    except NotFoundException:
+        print('delete_vector namespace not found, skipping', vector_id)
 
 
 # ==========================================
@@ -245,5 +249,8 @@ def delete_memory_vector(uid: str, memory_id: str):
         return
 
     vector_id = f'{uid}-{memory_id}'
-    result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
-    print('delete_memory_vector', vector_id, result)
+    try:
+        result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
+        print('delete_memory_vector', vector_id, result)
+    except NotFoundException:
+        print('delete_memory_vector namespace not found, skipping', vector_id)
