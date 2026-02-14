@@ -3038,7 +3038,7 @@ struct TaskCategorySection: View {
 
             // Tasks in category with drag-and-drop reordering
             if !isMultiSelectMode {
-                VStack(spacing: 8) {
+                LazyVStack(spacing: 8) {
                     ForEach(visibleTasks) { task in
                         VStack(spacing: 0) {
                             TaskRow(

@@ -2,11 +2,28 @@ import Foundation
 import Sentry
 
 private let logFile = "/tmp/omi.log"
+private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm:ss.SSS"  // Added milliseconds for perf tracking
     return formatter
 }()
+
+/// Append data to the log file on a background queue (non-blocking)
+private func appendToLogFile(_ line: String) {
+    guard let data = (line + "\n").data(using: .utf8) else { return }
+    logQueue.async {
+        if FileManager.default.fileExists(atPath: logFile) {
+            if let handle = FileHandle(forWritingAtPath: logFile) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            }
+        } else {
+            FileManager.default.createFile(atPath: logFile, contents: data)
+        }
+    }
+}
 
 // MARK: - Performance Logging
 
@@ -33,18 +50,7 @@ func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
     print(line)
     fflush(stdout)
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }
 
 /// Timer for measuring operation duration
@@ -102,18 +108,7 @@ func log(_ message: String) {
     breadcrumb.message = message
     SentrySDK.addBreadcrumb(breadcrumb)
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }
 
 /// Log an error and capture it in Sentry
@@ -141,16 +136,5 @@ func logError(_ message: String, error: Error? = nil) {
         }
     }
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }
