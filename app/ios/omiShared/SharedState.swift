@@ -21,7 +21,7 @@ struct SharedState {
         }
     }
 
-    // MARK: - Device State (forwarded from iPhone via WatchConnectivity)
+    // MARK: - Omi Device State (Omi hardware state, forwarded from iPhone via WatchConnectivity)
 
     static var isDeviceRecording: Bool {
         get { defaults?.bool(forKey: "isDeviceRecording") ?? false }
@@ -50,15 +50,12 @@ struct SharedState {
         }
     }
 
-    // MARK: - Ask Omi State
-
-    static var lastQuestionStatus: String {
-        get { defaults?.string(forKey: "lastQuestionStatus") ?? "idle" }
-        set {
-            defaults?.set(newValue, forKey: "lastQuestionStatus")
-            defaults?.set(Date(), forKey: "lastUpdated")
-            WidgetCenter.shared.reloadAllTimelines()
-        }
+    static func updateDeviceState(isRecording: Bool, isConnected: Bool, batteryLevel: Float) {
+        defaults?.set(isRecording, forKey: "isDeviceRecording")
+        defaults?.set(isConnected, forKey: "isDeviceConnected")
+        defaults?.set(batteryLevel, forKey: "deviceBatteryLevel")
+        defaults?.set(Date(), forKey: "lastUpdated")
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     static var lastUpdated: Date {
