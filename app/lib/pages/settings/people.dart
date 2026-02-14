@@ -210,9 +210,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
-            title: Text(context.l10n.people),
+            title: Text(context.l10n.people, style: const TextStyle(fontWeight: FontWeight.w600)),
             backgroundColor: Theme.of(context).colorScheme.primary,
             centerTitle: true,
+            elevation: 0,
             actions: [
               IconButton(
                 icon: const Icon(Icons.add),
