@@ -34,6 +34,17 @@ struct RewindPage: View {
     @State private var isTranscriptExpanded = false
     @State private var savedTranscriptSegments: [SpeakerSegment] = []
 
+    // Split finish/stop button state
+    @State private var isFinishing = false
+    @State private var showSavedSuccess = false
+    @State private var showDiscarded = false
+    @State private var showError = false
+    @AppStorage("recordingButtonMode") private var buttonMode: String = "finish"
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
     // Rewind intro video (first-time experience)
     @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
 
@@ -45,6 +56,36 @@ struct RewindPage: View {
     /// Whether we're in search mode (has query or active search)
     private var isInSearchMode: Bool {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
+    }
+
+    private var isFinishMode: Bool { buttonMode == "finish" }
+
+    private var finishButtonText: String {
+        if isFinishing { return "Saving..." }
+        if showSavedSuccess { return "Saved!" }
+        if showDiscarded { return "Too Short" }
+        if showError { return "Failed" }
+        return isFinishMode ? "Finish" : "Stop Recording"
+    }
+
+    private var finishButtonColor: Color {
+        if isFinishing { return OmiColors.textTertiary }
+        if showSavedSuccess { return OmiColors.success }
+        if showDiscarded { return OmiColors.warning }
+        if showError { return OmiColors.error }
+        return OmiColors.purplePrimary
+    }
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        guard let appState = appState else { return [:] }
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
     }
 
     var body: some View {
@@ -1179,7 +1220,14 @@ struct RewindPage: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(32)
                         } else {
-                            LiveTranscriptView(segments: displaySegments)
+                            LiveTranscriptView(
+                                segments: displaySegments,
+                                speakerNames: speakerNames,
+                                onSpeakerTapped: { segment in
+                                    selectedSpeakerSegment = segment
+                                    showNameSpeakerSheet = true
+                                }
+                            )
                         }
                     }
                     .frame(width: transcriptWidth)
@@ -1197,6 +1245,29 @@ struct RewindPage: View {
             }
         }
         .background(OmiColors.backgroundPrimary)
+        .task {
+            await appState?.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment, let appState = appState {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Recording Bar
@@ -1306,24 +1377,84 @@ struct RewindPage: View {
 
             Spacer()
 
-            // Right: Start/Stop button (always present)
+            // Right: Split finish/stop button or start button
             if appState.isTranscribing {
-                Button(action: {
-                    appState.stopTranscription()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 12)
-                        Text("Stop Recording")
-                            .scaledFont(size: 13, weight: .medium)
+                HStack(spacing: 0) {
+                    // Main action button
+                    Button(action: {
+                        if isFinishMode {
+                            handleFinish(appState: appState)
+                        } else {
+                            appState.stopTranscription()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isFinishing {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12, height: 12)
+                            } else if showSavedSuccess {
+                                Image(systemName: "checkmark")
+                                    .scaledFont(size: 12, weight: .bold)
+                            } else if showDiscarded {
+                                Image(systemName: "xmark")
+                                    .scaledFont(size: 12, weight: .bold)
+                            } else if showError {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .scaledFont(size: 12)
+                            } else {
+                                Image(systemName: isFinishMode ? "checkmark.circle.fill" : "stop.circle.fill")
+                                    .scaledFont(size: 12)
+                            }
+                            Text(finishButtonText)
+                                .scaledFont(size: 13, weight: .medium)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.leading, 14)
+                        .padding(.trailing, 8)
+                        .padding(.vertical, 6)
                     }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                    .buttonStyle(.plain)
+                    .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+
+                    // Divider line
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(width: 1, height: 20)
+
+                    // Dropdown chevron
+                    Menu {
+                        Button(action: { buttonMode = "finish" }) {
+                            HStack {
+                                Text("Finish")
+                                if buttonMode == "finish" {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        Button(action: { buttonMode = "stop" }) {
+                            HStack {
+                                Text("Stop Recording")
+                                if buttonMode == "stop" {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .scaledFont(size: 9, weight: .bold)
+                            .foregroundColor(.white)
+                            .padding(.leading, 8)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 6)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
-                .buttonStyle(.plain)
+                .background(
+                    Capsule()
+                        .fill(finishButtonColor)
+                )
             } else if !appState.isSavingConversation {
                 Button(action: {
                     appState.startTranscription()
@@ -1346,6 +1477,43 @@ struct RewindPage: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Finish Conversation
+
+    private func handleFinish(appState: AppState) {
+        guard !isFinishing else { return }
+        isFinishing = true
+        Task {
+            let result = await appState.finishConversation()
+            isFinishing = false
+            switch result {
+            case .saved:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = false
+                }
+            case .discarded:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = false
+                }
+            case .error:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = false
+                }
+            }
+        }
     }
 }
 
