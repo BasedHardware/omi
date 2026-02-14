@@ -151,9 +151,12 @@ async def _websocket_util_trigger(
 
     # Bounded queues — prevent unbounded memory growth during backpressure
     speaker_sample_queue: deque = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
-    private_cloud_queue: deque = deque(maxlen=PRIVATE_CLOUD_QUEUE_WARN_SIZE)
     transcript_queue: deque = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
     audio_bytes_queue: deque = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
+
+    # private_cloud_queue stays unbounded — it carries irreplaceable user audio.
+    # Silent drops (via deque maxlen) would cause permanent data loss.
+    private_cloud_queue: List[dict] = []
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
     async def process_private_cloud_queue():
@@ -167,7 +170,7 @@ async def _websocket_util_trigger(
                 continue
 
             # Process all pending chunks
-            chunks_to_process = list(private_cloud_queue)
+            chunks_to_process = private_cloud_queue.copy()
             private_cloud_queue.clear()
 
             successful_conversation_ids = set()  # Track conversations with successful uploads
