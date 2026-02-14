@@ -50,8 +50,10 @@ class _PageWebViewState extends State<PageWebView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w600)),
         backgroundColor: Theme.of(context).colorScheme.primary,
+        centerTitle: true,
+        elevation: 0,
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
       body: progress != 100
