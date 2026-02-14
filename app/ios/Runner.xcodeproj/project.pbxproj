@@ -120,7 +120,7 @@
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		51B2C0C6DC8817A51E8E80AF /* omiWatchAppComplication.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = omiWatchAppComplication.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
-		5EC363DC52C4728F4BC45476 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS11.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		5EC363DC52C4728F4BC45476 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		5F7FD4162BF1232500923839 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		5FCEB2FA2C27586C00B17EE8 /* RunnerDebug-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-prod.entitlements"; sourceTree = "<group>"; };
 		5FCEB2FB2C27587100B17EE8 /* RunnerProfile-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerProfile-prod.entitlements"; sourceTree = "<group>"; };
@@ -161,16 +161,17 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		42A7BA352E788BD300138969 /* omiWatchApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = omiWatchApp;
 			sourceTree = "<group>";
 		};
 		A9334E8584236E9AC02B95A3 /* omiWatchAppComplication */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = omiWatchAppComplication;
+			sourceTree = "<group>";
+		};
+		B1C4D2E6F7A8390B5E1D64C2 /* omiShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = omiShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -274,6 +275,7 @@
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
 				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
 				A9334E8584236E9AC02B95A3 /* omiWatchAppComplication */,
+				B1C4D2E6F7A8390B5E1D64C2 /* omiShared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -334,6 +336,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				42A7BA352E788BD300138969 /* omiWatchApp */,
+				B1C4D2E6F7A8390B5E1D64C2 /* omiShared */,
 			);
 			name = omiWatchApp;
 			productName = omiWatchApp;
@@ -354,6 +357,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A9334E8584236E9AC02B95A3 /* omiWatchAppComplication */,
+				B1C4D2E6F7A8390B5E1D64C2 /* omiShared */,
 			);
 			name = omiWatchAppComplication;
 			productName = omiWatchAppComplication;
