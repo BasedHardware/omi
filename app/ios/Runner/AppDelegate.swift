@@ -12,6 +12,7 @@ extension FlutterError: Error {}
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
+  private var watchQuestionChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -59,6 +60,9 @@ extension FlutterError: Error {}
       self?.handleMethodCall(call, result: result)
     }
     
+    // Create watch question method channel
+    watchQuestionChannel = FlutterMethodChannel(name: "com.omi/watch_questions", binaryMessenger: controller!.binaryMessenger)
+
     // Create Apple Reminders method channel
     appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
@@ -236,7 +240,7 @@ extension FlutterError: Error {}
         do {
             try audioData.write(to: tempURL)
             DispatchQueue.main.async {
-                self.methodChannel?.invokeMethod("onAskQuestion", arguments: [
+                self.watchQuestionChannel?.invokeMethod("onAskQuestion", arguments: [
                     "filePath": tempURL.path,
                     "sampleRate": sampleRate
                 ])
