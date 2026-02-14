@@ -950,12 +950,13 @@ class TasksViewModel: ObservableObject {
         // Guard: don't navigate in multi-select mode
         guard !isMultiSelectMode else { return false }
 
-        // Arrow Up/Down navigation
-        if keyCode == 126 && modifiers.isEmpty { // Up
+        // Arrow Up/Down navigation (arrow keys set .numericPad/.function flags on macOS)
+        let userModifiers = modifiers.subtracting([.numericPad, .function])
+        if keyCode == 126 && userModifiers.isEmpty { // Up
             moveSelection(-1)
             return true
         }
-        if keyCode == 125 && modifiers.isEmpty { // Down
+        if keyCode == 125 && userModifiers.isEmpty { // Down
             moveSelection(1)
             return true
         }
