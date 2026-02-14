@@ -158,64 +158,37 @@ extension FlutterError: Error {}
           return
       }
 
-      // Check permission - require fullAccess on iOS 17+ (need read for dedup)
+      // Check permission - must already have access (can't prompt from background)
       let status = EKEventStore.authorizationStatus(for: .reminder)
-
+      let hasAccess: Bool
       if #available(iOS 17.0, *) {
-          if status == .writeOnly {
-              // Need fullAccess for reading reminders; re-prompt
-              syncEventStore.requestFullAccessToReminders { granted, _ in
-                  if !granted {
-                      completionHandler(.noData)
-                  } else {
-                      self.syncQueue.async {
-                          self.createReminderIfNeeded(actionItemId: actionItemId, reminderTitle: reminderTitle, userInfo: userInfo, completionHandler: completionHandler)
-                      }
-                  }
-              }
-              return
-          }
-          guard status == .fullAccess else {
-              completionHandler(.failed)
-              return
-          }
+          hasAccess = status == .fullAccess
       } else {
-          guard status == .authorized else {
-              completionHandler(.failed)
-              return
-          }
+          hasAccess = status == .authorized
       }
-
-      syncQueue.async {
-          self.createReminderIfNeeded(actionItemId: actionItemId, reminderTitle: reminderTitle, userInfo: userInfo, completionHandler: completionHandler)
-      }
-  }
-
-  private func createReminderIfNeeded(
-      actionItemId: String,
-      reminderTitle: String,
-      userInfo: [AnyHashable: Any],
-      completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-  ) {
-      let dedupTag = "omi:\(actionItemId)"
-
-      guard let calendar = syncEventStore.defaultCalendarForNewReminders() else {
+      guard hasAccess else {
           completionHandler(.failed)
           return
       }
 
-      let predicate = syncEventStore.predicateForReminders(in: [calendar])
-      syncEventStore.fetchReminders(matching: predicate) { [weak self] existingReminders in
-          guard let self = self else {
+      syncQueue.async {
+          let dedupTag = "omi:\(actionItemId)"
+
+          guard let calendar = self.syncEventStore.defaultCalendarForNewReminders() else {
               completionHandler(.failed)
               return
           }
-          // Dispatch back onto syncQueue for thread-safe check+save
-          self.syncQueue.async {
+
+          let predicate = self.syncEventStore.predicateForReminders(in: [calendar])
+          let semaphore = DispatchSemaphore(value: 0)
+          var fetchResult: UIBackgroundFetchResult = .failed
+
+          self.syncEventStore.fetchReminders(matching: predicate) { existingReminders in
+              defer { semaphore.signal() }
+
               if let reminders = existingReminders,
                  reminders.contains(where: { $0.notes?.contains(dedupTag) == true }) {
-                  // Already exists — skip
-                  completionHandler(.noData)
+                  fetchResult = .noData
                   return
               }
 
@@ -241,15 +214,20 @@ extension FlutterError: Error {}
 
               do {
                   try self.syncEventStore.save(reminder, commit: true)
-
                   DispatchQueue.main.async {
                       self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
                   }
-
-                  completionHandler(.newData)
+                  fetchResult = .newData
               } catch {
-                  completionHandler(.failed)
+                  fetchResult = .failed
               }
+          }
+
+          let waitResult = semaphore.wait(timeout: .now() + 25.0)
+          if waitResult == .timedOut {
+              completionHandler(.failed)
+          } else {
+              completionHandler(fetchResult)
           }
       }
   }
