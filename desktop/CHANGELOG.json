@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "0.8.2",
+      "date": "2026-02-14",
+      "changes": [
+        "Smarter action items: confidence scoring filters out low-quality tasks, priority classification added",
+        "Conversation action items now saved as staged tasks with automatic migration",
+        "Conversation source tracking for better platform-aware processing",
+        "Split finish/stop button in Rewind for clearer recording controls",
+        "Unread chat indicators and streaming status on task rows",
+        "Analysis throttle and troubleshooting settings in Advanced preferences",
+        "Fixed capture timer handling for sleep/wake and special system modes",
+        "Fixed memory duplication from orphaned records and sync races",
+        "Fixed token refresh clearing on non-definitive failures",
+        "Prevented empty or duplicate staged tasks from being created",
+        "Performance: lazy task rendering, background log writes, goal caching, deduplicated fetches",
+        "Prevented settings sync and task refresh when not signed in"
+      ]
+    },
+    {
       "version": "0.8.1",
       "date": "2026-02-13",
       "changes": [
