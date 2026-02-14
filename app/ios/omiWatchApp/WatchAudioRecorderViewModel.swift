@@ -377,6 +377,14 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
                 if let level = message["batteryLevel"] as? Float {
                     SharedState.deviceBatteryLevel = level
                 }
+            case "deviceStateUpdate":
+                if let isRecording = message["isRecording"] as? Bool,
+                   let isConnected = message["isConnected"] as? Bool,
+                   let batteryLevel = message["batteryLevel"] as? Int {
+                    SharedState.isDeviceRecording = isRecording
+                    SharedState.isDeviceConnected = isConnected
+                    SharedState.deviceBatteryLevel = Float(batteryLevel)
+                }
             default:
                 print("Unknown method: \(method)")
             }
@@ -402,6 +410,14 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
             case "deviceBatteryUpdate":
                 if let level = userInfo["batteryLevel"] as? Float {
                     SharedState.deviceBatteryLevel = level
+                }
+            case "deviceStateUpdate":
+                if let isRecording = userInfo["isRecording"] as? Bool,
+                   let isConnected = userInfo["isConnected"] as? Bool,
+                   let batteryLevel = userInfo["batteryLevel"] as? Int {
+                    SharedState.isDeviceRecording = isRecording
+                    SharedState.isDeviceConnected = isConnected
+                    SharedState.deviceBatteryLevel = Float(batteryLevel)
                 }
             default:
                 print("Unknown background method: \(method)")
