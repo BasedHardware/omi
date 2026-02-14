@@ -619,6 +619,16 @@ else
     echo "  Install with: brew install gh"
 fi
 
+# Upload DMG to GCS for direct downloads (avoids GitHub redirect chain that triggers Chrome warnings)
+GCS_BUCKET="gs://omi_macos_updates"
+echo "  Uploading DMG to GCS..."
+gcloud storage cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" 2>/dev/null && \
+gcloud storage cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg" 2>/dev/null && {
+    echo "  ✓ Uploaded DMG to GCS (direct download)"
+} || {
+    echo "  Warning: Could not upload DMG to GCS"
+}
+
 # Get the GitHub release download URL for Omi.zip
 DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG/Omi.zip"
 

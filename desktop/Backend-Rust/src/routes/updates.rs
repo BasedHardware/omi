@@ -173,16 +173,19 @@ async fn get_latest_version(State(state): State<AppState>) -> impl IntoResponse 
 }
 
 /// GET /download - Redirect to latest DMG download
-/// This derives the DMG URL from the ZIP URL stored in Firestore
+/// Redirects to GCS-hosted DMG for faster downloads and better browser trust
+/// (fewer redirect hops = fewer Chrome Safe Browsing warnings)
 async fn download_redirect(State(state): State<AppState>) -> impl IntoResponse {
     match state.firestore.get_desktop_releases().await {
         Ok(releases) => {
             if let Some(latest) = releases.into_iter().filter(|r| r.is_live).next() {
-                // Convert ZIP URL to DMG URL
-                // e.g., .../Omi.zip -> .../Omi.Beta.dmg
-                let dmg_url = latest.download_url.replace("Omi.zip", "Omi.Beta.dmg");
-                tracing::info!("Redirecting download to: {}", dmg_url);
-                axum::response::Redirect::temporary(&dmg_url).into_response()
+                // Serve from GCS bucket for direct download (avoids multi-hop GitHub redirects)
+                let gcs_url = format!(
+                    "https://storage.googleapis.com/omi_macos_updates/releases/v{}/Omi.Beta.dmg",
+                    latest.version
+                );
+                tracing::info!("Redirecting download to GCS: {}", gcs_url);
+                axum::response::Redirect::temporary(&gcs_url).into_response()
             } else {
                 (
                     StatusCode::NOT_FOUND,
