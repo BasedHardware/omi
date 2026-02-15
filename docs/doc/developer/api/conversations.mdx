@@ -175,6 +175,16 @@ description: "Create and retrieve conversations via the Developer API"
     | `transcript_segments` | array | Transcript segments (if `include_transcript=true`) |
     | `geolocation` | object | Location where conversation occurred (if available) |
   </Accordion>
+  <Accordion title="Transcript Segment Fields" icon="waveform-lines">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Segment identifier (optional) |
+    | `text` | string | The transcribed text |
+    | `speaker_id` | integer | Numeric speaker identifier (optional) |
+    | `speaker_name` | string | Human-readable speaker name (optional, added in [80ee0103](https://github.com/BasedHardware/omi/commit/80ee0103)) |
+    | `start` | float | Start timestamp in seconds |
+    | `end` | float | End timestamp in seconds |
+  </Accordion>
   <Accordion title="Geolocation Object Fields" icon="location-dot">
     | Field | Type | Description |
     |-------|------|-------------|
