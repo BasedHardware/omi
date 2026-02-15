@@ -15,6 +15,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var screenCaptureService: ScreenCaptureService?
     private var windowMonitor: WindowMonitor?
     private var focusAssistant: FocusAssistant?
+
+    /// Public read-only accessor for memory diagnostics
+    var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
     private var adviceAssistant: AdviceAssistant?
     private var memoryAssistant: MemoryAssistant?

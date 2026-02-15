@@ -194,6 +194,11 @@ class ResourceMonitor {
 
                 logError("ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold")
 
+                // Collect component diagnostics immediately at critical threshold
+                Task {
+                    await logComponentDiagnostics(snapshot: snapshot)
+                }
+
                 // Send Sentry event (skip in dev builds)
                 if !isDevBuild {
                     let threshold = self.memoryCriticalThreshold
