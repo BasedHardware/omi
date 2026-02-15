@@ -6,21 +6,18 @@ services:
     # Comment out for Coolify deployment (Traefik handles routing)
     # ports:
     #   - "6379:6379"
+    environment:
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
     volumes:
       - omi-redis-data:/data
     command: >
-      sh -c "redis-server
-      --appendonly yes
-      --requirepass $${REDIS_DB_PASSWORD:-}"
+      sh -c "if [ -n \"$$REDIS_DB_PASSWORD\" ]; then
+        redis-server --appendonly yes --requirepass \"$$REDIS_DB_PASSWORD\";
+      else
+        redis-server --appendonly yes;
+      fi"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "redis-cli",
-          "-a",
-          "$${REDIS_DB_PASSWORD:-}",
-          "ping",
-        ]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_DB_PASSWORD\" ping 2>/dev/null || redis-cli ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -49,6 +46,7 @@ services:
       - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
       # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
       - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - SERVICE_ACCOUNT_JSON_BASE64=${SERVICE_ACCOUNT_JSON_BASE64:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
       # Google Cloud project ID (required for authorized_user credentials)
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
@@ -91,6 +89,7 @@ services:
       - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
       # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
       - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - SERVICE_ACCOUNT_JSON_BASE64=${SERVICE_ACCOUNT_JSON_BASE64:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
       # Google Cloud project ID (required for authorized_user credentials)
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
