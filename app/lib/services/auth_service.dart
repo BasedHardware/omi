@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -175,11 +176,11 @@ class AuthService {
         SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
         SharedPreferencesUtil().authToken = newToken?.token ?? '';
 
-        // Log token for local development - copy from debug console
-        debugPrint('═══════════════════════════════════════════════════════════════');
-        debugPrint('🔑 AUTH TOKEN (for local development):');
-        debugPrint('${newToken?.token}');
-        debugPrint('═══════════════════════════════════════════════════════════════');
+        // Save token to file for local development
+        final token = newToken?.token ?? '';
+        final tokenFile = File('/tmp/omi_auth_token.txt');
+        await tokenFile.writeAsString(token);
+        debugPrint('🔑 Auth token saved to /tmp/omi_auth_token.txt');
 
         if (SharedPreferencesUtil().email.isEmpty) {
           SharedPreferencesUtil().email = user.email ?? '';
