@@ -3,18 +3,22 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// Firebase Cloud Messaging enabled notification service
@@ -68,7 +72,11 @@ class _FCMNotificationService implements NotificationInterface {
         ],
         debug: false);
 
-    debugPrint('initializeNotifications: $initialized');
+    Logger.debug('initializeNotifications: $initialized');
+
+// Reset badge to clear existing badge count if any
+    int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
+    if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
 
   @override
@@ -85,17 +93,21 @@ class _FCMNotificationService implements NotificationInterface {
     if (!allowed) {
       return;
     }
-    _awesomeNotifications.createNotification(
-      content: NotificationContent(
-        id: id,
-        channelKey: channel.channelKey!,
-        actionType: ActionType.Default,
-        title: title,
-        body: body,
-        payload: payload,
-        notificationLayout: layout,
-      ),
-    );
+    try {
+      await _awesomeNotifications.createNotification(
+        content: NotificationContent(
+          id: id,
+          channelKey: channel.channelKey!,
+          actionType: ActionType.Default,
+          title: title,
+          body: body,
+          payload: payload,
+          notificationLayout: layout,
+        ),
+      );
+    } catch (e) {
+      Logger.debug('Failed to create notification (channel may be disabled): $e');
+    }
   }
 
   @override
@@ -120,7 +132,7 @@ class _FCMNotificationService implements NotificationInterface {
         },
       );
     } catch (e) {
-      debugPrint('NotifOnKill error: $e');
+      Logger.debug('NotifOnKill error: $e');
     }
   }
 
@@ -147,24 +159,28 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
-    if (Platform.isIOS || Platform.isMacOS) {
-      String? apnsToken;
-      for (int i = 0; i < 10; i++) {
-        apnsToken = await _firebaseMessaging.getAPNSToken();
-        if (apnsToken != null) break;
-        await Future.delayed(const Duration(seconds: 1));
+    try {
+      if (Platform.isIOS || Platform.isMacOS) {
+        String? apnsToken;
+        for (int i = 0; i < 10; i++) {
+          apnsToken = await _firebaseMessaging.getAPNSToken();
+          if (apnsToken != null) break;
+          await Future.delayed(const Duration(seconds: 1));
+        }
+
+        if (apnsToken == null) {
+          Logger.debug('APNS token not available yet, will retry on refresh');
+          return;
+        }
       }
 
-      if (apnsToken == null) {
-        debugPrint('APNS token not available yet, will retry on refresh');
-        _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
-        return;
-      }
+      String? token = await _firebaseMessaging.getToken();
+      await saveFcmToken(token);
+    } catch (e) {
+      Logger.debug('Failed to save notification token: $e');
+    } finally {
+      _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
     }
-
-    String? token = await _firebaseMessaging.getToken();
-    await saveFcmToken(token);
-    _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
   }
 
   @override
@@ -180,9 +196,9 @@ class _FCMNotificationService implements NotificationInterface {
     Map<String, String?>? payload,
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
-    debugPrint('createNotification: $allowed');
+    Logger.debug('createNotification: $allowed');
     if (!allowed) return;
-    debugPrint('createNotification ~ Creating notification: $title');
+    Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
   }
 
@@ -202,10 +218,11 @@ class _FCMNotificationService implements NotificationInterface {
 
       // Plugin
       if (data.isNotEmpty) {
-        late Map<String, String> payload = <String, String>{};
-        payload.addAll({
-          "navigate_to": data['navigate_to'] ?? "",
-        });
+        final Map<String, String> payload = <String, String>{};
+        final navigateTo = data['navigate_to'];
+        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
+          payload['navigate_to'] = navigateTo.toString();
+        }
 
         // Handle action item data messages
         final messageType = data['type'];
@@ -220,6 +237,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
+          return;
+        } else if (messageType == 'important_conversation') {
+          ImportantConversationNotificationHandler.handleImportantConversation(
             data,
             channel.channelKey!,
             isAppInForeground: true,
@@ -256,6 +280,7 @@ class _FCMNotificationService implements NotificationInterface {
       {required RemoteNotification noti,
       NotificationLayout layout = NotificationLayout.Default,
       Map<String, String?>? payload}) async {
+    if (noti.title == null || noti.body == null) return;
     final id = Random().nextInt(10000);
     showNotification(id: id, title: noti.title!, body: noti.body!, layout: layout, payload: payload);
   }

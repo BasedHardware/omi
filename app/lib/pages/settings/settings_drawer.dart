@@ -7,6 +7,7 @@ import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -20,11 +21,14 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:omi/backend/http/api/announcements.dart';
+import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'wrapped_2025_page.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -74,10 +78,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         final iosInfo = await deviceInfoPlugin.iosInfo;
         return '${iosInfo.name} — iOS ${iosInfo.systemVersion}';
       } else {
-        return 'Unknown Device';
+        return context.l10n.unknownDevice;
       }
     } catch (e) {
-      return 'Unknown Device';
+      return context.l10n.unknownDevice;
     }
   }
 
@@ -96,7 +100,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          shortDeviceInfo = 'Unknown Device';
+          shortDeviceInfo = context.l10n.unknownDevice;
         });
       }
     }
@@ -147,9 +151,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           color: Colors.orange.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          'BETA',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.beta,
+                          style: const TextStyle(
                             color: Colors.orange,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -166,9 +170,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           color: Colors.green.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Text(
-                          'NEW',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.newTag,
+                          style: const TextStyle(
                             color: Colors.green,
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -244,7 +248,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
   Future<void> _copyVersionInfo() async {
     final versionPart = buildVersion != null ? 'Omi AI ${version ?? ""} ($buildVersion)' : 'Omi AI ${version ?? ""}';
-    final devicePart = shortDeviceInfo ?? 'Unknown Device';
+    final devicePart = shortDeviceInfo ?? context.l10n.unknownDevice;
     final fullVersionInfo = '$versionPart — $devicePart';
 
     await Clipboard.setData(ClipboardData(text: fullVersionInfo));
@@ -280,10 +284,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   ),
                 ],
               ),
-              child: const Text(
-                'App and device details copied',
+              child: Text(
+                context.l10n.appAndDeviceCopied,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           ),
@@ -305,25 +309,33 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           // Profile & Notifications Section
           _buildSectionContainer(
             children: [
+              // Wrapped 2025 - temporarily disabled
+              // _buildSettingsItem(
+              //   title: context.l10n.wrapped2025,
+              //   icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+              //   showNewTag: true,
+              //   onTap: () {
+              //     Navigator.of(context).push(
+              //       MaterialPageRoute(
+              //         builder: (context) => const Wrapped2025Page(),
+              //       ),
+              //     );
+              //   },
+              // ),
+              // const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Wrapped 2025',
-                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
-                showNewTag: true,
+                title: context.l10n.profile,
+                icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const Wrapped2025Page(),
-                    ),
-                  );
+                  routeToPage(context, const ProfilePage());
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Profile',
-                icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
+                title: context.l10n.notifications,
+                icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
-                  routeToPage(context, const ProfilePage());
+                  routeToPage(context, const NotificationsSettingsPage());
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -331,7 +343,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 builder: (context, usageProvider, child) {
                   final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
                   return _buildSettingsItem(
-                    title: 'Plan & Usage',
+                    title: context.l10n.planAndUsage,
                     icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
                     trailingChip: isUnlimited
                         ? Container(
@@ -340,18 +352,18 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               color: Colors.amber.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                FaIcon(
+                                const FaIcon(
                                   FontAwesomeIcons.crown,
                                   color: Colors.amber,
                                   size: 10,
                                 ),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'PRO',
-                                  style: TextStyle(
+                                  context.l10n.pro.toUpperCase(),
+                                  style: const TextStyle(
                                     color: Colors.amber,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
@@ -363,7 +375,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           )
                         : null,
                     onTap: () {
-                      Navigator.pop(context);
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const UsagePage(),
@@ -375,10 +386,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Offline Sync',
+                title: context.l10n.offlineSync,
                 icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const SyncPage(),
@@ -395,10 +405,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     children: [
                       const Divider(height: 1, color: Color(0xFF3C3C43)),
                       _buildSettingsItem(
-                        title: 'Device Settings',
+                        title: context.l10n.deviceSettings,
                         icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
                         onTap: () {
-                          Navigator.pop(context);
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => const DeviceSettings(),
@@ -412,11 +421,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Chat Tools',
+                title: context.l10n.integrations,
                 icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const IntegrationsPage(),
@@ -433,10 +441,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             children: [
               if (PlatformService.isIntercomSupported) ...[
                 _buildSettingsItem(
-                  title: 'Feedback / Bug',
+                  title: context.l10n.feedbackBug,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    Navigator.pop(context);
                     final Uri url = Uri.parse('https://feedback.omi.me/');
                     if (await canLaunchUrl(url)) {
                       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -445,24 +452,38 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
-                  title: 'Help Center',
+                  title: context.l10n.helpCenter,
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    Navigator.pop(context);
                     final Uri url = Uri.parse('https://help.omi.me/en/');
                     if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      try {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      } catch (e) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
                     }
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
               ],
               _buildSettingsItem(
-                title: 'Developer Settings',
+                title: context.l10n.developerSettings,
                 icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
-                  Navigator.pop(context);
                   await routeToPage(context, const DeveloperSettingsPage());
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: context.l10n.whatsNew,
+                icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  MixpanelManager().whatsNewOpened();
+                  ChangelogSheet.showWithLoading(
+                    context,
+                    () => getAppChangelogs(limit: 5),
+                  );
                 },
               ),
             ],
@@ -473,21 +494,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Get Omi for Mac',
+                title: context.l10n.getOmiForMac,
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
-                  Navigator.pop(context);
                   final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Referral Program',
+                title: context.l10n.referralProgram,
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 showNewTag: true,
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const ReferralPage(),
@@ -503,7 +522,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Sign Out',
+                title: context.l10n.signOut,
                 icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   // Capture the provider reference before any navigation
@@ -527,8 +546,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             routeToPage(context, const AppShell(), replace: true);
                           }
                         },
-                        "Sign Out?",
-                        "Are you sure you want to sign out?",
+                        context.l10n.signOutQuestion,
+                        context.l10n.signOutConfirmation,
                       );
                     },
                   );
@@ -553,10 +572,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _buildSectionContainer(
           children: [
             _buildSettingsItem(
-              title: 'Need Help? Chat with us',
+              title: context.l10n.needHelpChatWithUs,
               icon: const FaIcon(FontAwesomeIcons.solidComments, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
-                Navigator.pop(context);
                 await Intercom.instance.displayMessenger();
               },
             ),
@@ -568,7 +586,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _buildSectionContainer(
           children: [
             _buildSettingsItem(
-              title: 'Sign Out',
+              title: context.l10n.signOut,
               icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
                 // Capture the provider reference before any navigation
@@ -593,8 +611,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           routeToPage(context, const AppShell(), replace: true);
                         }
                       },
-                      "Sign Out?",
-                      "Are you sure you want to sign out?",
+                      context.l10n.signOutQuestion,
+                      context.l10n.signOutConfirmation,
                     );
                   },
                 );
@@ -640,10 +658,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             child: Stack(
               children: [
                 // Centered title
-                const Center(
+                Center(
                   child: Text(
-                    'Settings',
-                    style: TextStyle(
+                    context.l10n.settings,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -655,9 +673,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   right: 0,
                   child: GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,

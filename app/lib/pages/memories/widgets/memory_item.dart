@@ -2,22 +2,24 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
+
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/extensions/string.dart';
-
 import 'delete_confirmation.dart';
 
 class MemoryItem extends StatelessWidget {
@@ -41,11 +43,11 @@ class MemoryItem extends StatelessWidget {
         onTap(context, memory, provider);
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
@@ -146,10 +148,10 @@ class MemoryItem extends StatelessWidget {
         }
       },
       background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: AppStyles.error,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
@@ -232,8 +234,8 @@ class MemoryItem extends StatelessWidget {
 
   void _showConversationNotFoundError(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Conversation not found or has been deleted'),
+      SnackBar(
+        content: Text(context.l10n.conversationNotFoundOrDeleted),
         backgroundColor: Colors.red,
       ),
     );

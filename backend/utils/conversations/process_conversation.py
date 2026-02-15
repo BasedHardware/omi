@@ -3,6 +3,8 @@ import random
 import re
 import threading
 import uuid
+import logging
+import asyncio
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -18,6 +20,8 @@ import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
+from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
+from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -29,6 +33,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from utils.notifications import send_important_conversation_message
 from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
@@ -43,11 +48,14 @@ from utils.llm.conversation_processing import (
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
     assign_conversation_to_folder,
+    extract_action_items,
 )
 from utils.analytics import record_usage
+from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -61,6 +69,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
 
 
@@ -94,24 +103,35 @@ def _get_structured(
             or conversation.source == ConversationSource.external_integration
         ):
             if conversation.text_source == ExternalIntegrationConversationSource.audio:
-                structured = get_transcript_structure(
-                    conversation.text,
-                    conversation.started_at,
-                    language_code,
-                    tz,
-                    existing_action_items=existing_action_items,
-                    calendar_meeting_context=calendar_context,
-                )
+                with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+                    structured = get_transcript_structure(
+                        conversation.text,
+                        conversation.started_at,
+                        language_code,
+                        tz,
+                        calendar_meeting_context=calendar_context,
+                    )
+                with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+                    structured.action_items = extract_action_items(
+                        conversation.text,
+                        conversation.started_at,
+                        language_code,
+                        tz,
+                        existing_action_items=existing_action_items,
+                        calendar_meeting_context=calendar_context,
+                    )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.message:
-                structured = get_message_structure(
-                    conversation.text, conversation.started_at, language_code, tz, conversation.text_source_spec
-                )
+                with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+                    structured = get_message_structure(
+                        conversation.text, conversation.started_at, language_code, tz, conversation.text_source_spec
+                    )
                 return structured, False
 
             if conversation.text_source == ExternalIntegrationConversationSource.other:
-                structured = summarize_experience_text(conversation.text, conversation.text_source_spec)
+                with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+                    structured = summarize_experience_text(conversation.text, conversation.text_source_spec)
                 return structured, False
 
             # not supported conversation source
@@ -122,27 +142,44 @@ def _get_structured(
         # For re-processing, we don't discard, just re-structure.
         if force_process:
             # reprocess endpoint
-            return (
-                get_reprocess_transcript_structure(
+            with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+                structured = get_reprocess_transcript_structure(
                     transcript_text,
                     conversation.started_at,
                     language_code,
                     tz,
                     conversation.structured.title,
                     photos=conversation.photos,
+                )
+            with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+                structured.action_items = extract_action_items(
+                    transcript_text,
+                    conversation.started_at,
+                    language_code,
+                    tz,
+                    photos=conversation.photos,
                     existing_action_items=existing_action_items,
-                ),
-                False,
-            )
+                )
+            return structured, False
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
-        discarded = should_discard_conversation(transcript_text, conversation.photos)
+        with track_usage(uid, Features.CONVERSATION_DISCARD):
+            discarded = should_discard_conversation(transcript_text, conversation.photos)
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
-        return (
-            get_transcript_structure(
+        with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+            structured = get_transcript_structure(
+                transcript_text,
+                conversation.started_at,
+                language_code,
+                tz,
+                photos=conversation.photos,
+                calendar_meeting_context=calendar_context,
+            )
+        with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
+            structured.action_items = extract_action_items(
                 transcript_text,
                 conversation.started_at,
                 language_code,
@@ -150,9 +187,8 @@ def _get_structured(
                 photos=conversation.photos,
                 existing_action_items=existing_action_items,
                 calendar_meeting_context=calendar_context,
-            ),
-            False,
-        )
+            )
+        return structured, False
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
@@ -264,29 +300,30 @@ def _trigger_apps(
 
     app_to_run = None
 
-    # Always generate/update suggestions if not already set (even during reprocessing)
-    if not conversation.suggested_summarization_apps:
-        suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
-        conversation.suggested_summarization_apps = suggested_apps
-        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
         app_to_run = all_apps_dict.get(app_id)
     else:
-        # Check if user has a preferred app set
+        # Check preferred app first — skip the suggestion LLM call if user has one
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
             print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        elif conversation.suggested_summarization_apps:
-            # Use the first suggested app if available
-            first_suggested_app_id = conversation.suggested_summarization_apps[0]
-            app_to_run = all_apps_dict.get(first_suggested_app_id)
-            if app_to_run:
-                print(f"Using first suggested app: {app_to_run.name}")
-            else:
-                print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+        else:
+            # Only run suggestion LLM call when no preferred app is set
+            if not conversation.suggested_summarization_apps:
+                with track_usage(uid, Features.CONVERSATION_APPS):
+                    suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+                conversation.suggested_summarization_apps = suggested_apps
+                print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+
+            if conversation.suggested_summarization_apps:
+                first_suggested_app_id = conversation.suggested_summarization_apps[0]
+                app_to_run = all_apps_dict.get(first_suggested_app_id)
+                if app_to_run:
+                    print(f"Using first suggested app: {app_to_run.name}")
+                else:
+                    print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
@@ -299,9 +336,10 @@ def _trigger_apps(
     threads = []
 
     def execute_app(app):
-        result = get_app_result(
-            conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
-        ).strip()
+        with track_usage(uid, Features.CONVERSATION_APPS):
+            result = get_app_result(
+                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
+            ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -313,8 +351,37 @@ def _trigger_apps(
     [t.join() for t in threads]
 
 
+def _update_goal_progress(uid: str, conversation: Conversation):
+    """Extract and update goal progress from conversation text."""
+    try:
+        # Get conversation text
+        text = ""
+        if conversation.structured and conversation.structured.overview:
+            text = conversation.structured.overview
+        elif conversation.transcript_segments:
+            text = " ".join([s.text for s in conversation.transcript_segments[:20]])
+
+        if not text or len(text) < 10:
+            return
+
+        # Use utility function to extract and update goal progress
+        with track_usage(uid, Features.GOALS):
+            extract_and_update_goal_progress(uid, text)
+    except Exception as e:
+        print(f"[GOAL] Error updating progress: {e}")
+
+
 def _extract_memories(uid: str, conversation: Conversation):
-    # TODO: maybe instead (once they can edit them) we should not tie it this hard
+    with track_usage(uid, Features.MEMORIES):
+        _extract_memories_inner(uid, conversation)
+
+
+def _extract_memories_inner(uid: str, conversation: Conversation):
+    # Delete old memories for this conversation (if reprocessing)
+    # Also get the IDs to delete from Pinecone
+    existing_memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation.id)
+    for memory_id in existing_memory_ids:
+        delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
     new_memories: List[Memory] = []
@@ -331,11 +398,48 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     parsed_memories = []
+    memories_to_delete = []
+
     for memory in new_memories:
+        # Find similar existing memories
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+
+        # Fetch content for each similar memory
+        similar_memories = []
+        for match in similar_matches:
+            memory_data = memories_db.get_memory(uid, match['memory_id'])
+            if memory_data:
+                similar_memories.append(
+                    {
+                        'memory_id': match['memory_id'],
+                        'category': match['category'],
+                        'score': match['score'],
+                        'content': memory_data.get('content', ''),
+                    }
+                )
+
+        if similar_memories:
+            resolution = resolve_memory_conflict(memory.content, similar_memories)
+
+            if resolution.action == 'keep_existing':
+                continue
+
+            elif resolution.action == 'merge':
+                # Replace existing memory with merged version
+                if resolution.merged_content:
+                    memories_to_delete.append(similar_memories[0]['memory_id'])
+                    memory.content = resolution.merged_content
+
+            elif resolution.action == 'keep_both':
+                pass
+
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
-        # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
+
+    for memory_id in memories_to_delete:
+        delete_memory_vector(uid, memory_id)
+        memories_db.delete_memory(uid, memory_id)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
@@ -344,8 +448,27 @@ def _extract_memories(uid: str, conversation: Conversation):
     print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
+    for memory_db_obj in parsed_memories:
+        upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
+
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
+
+        try:
+            from utils.llm.knowledge_graph import extract_knowledge_from_memory
+            from database.auth import get_user_name
+
+            user_name = get_user_name(uid)
+
+            from database.memories import set_memory_kg_extracted
+
+            for memory_db_obj in parsed_memories:
+                if memory_db_obj.kg_extracted:
+                    continue
+                extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
+                set_memory_kg_extracted(uid, memory_db_obj.id)
+        except Exception:
+            logging.exception("Error extracting knowledge graph from memory.")
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
@@ -363,9 +486,10 @@ def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
 
 
 def _extract_trends(uid: str, conversation: Conversation):
-    extracted_items = trends_extractor(uid, conversation)
-    parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
-    trends_db.save_trends(conversation, parsed)
+    with track_usage(uid, Features.TRENDS):
+        extracted_items = trends_extractor(uid, conversation)
+        parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
+        trends_db.save_trends(conversation, parsed)
 
 
 def _save_action_items(uid: str, conversation: Conversation):
@@ -410,6 +534,14 @@ def _save_action_items(uid: str, conversation: Conversation):
                     description=action_item.description,
                     due_at=action_item.due_at.isoformat(),
                 )
+
+        # Auto-sync to task integration
+        created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
+
+        def _run_auto_sync():
+            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+
+        threading.Thread(target=_run_auto_sync, daemon=True).start()
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -502,17 +634,15 @@ def process_conversation(
                 user_folders = folders_db.initialize_system_folders(uid)
 
             if user_folders and conversation.structured:
-                folder_id, confidence, reasoning = assign_conversation_to_folder(
-                    transcript=(
-                        conversation.get_transcript(False, people=people)
-                        if hasattr(conversation, 'get_transcript')
-                        else ''
-                    ),
-                    title=conversation.structured.title or '',
-                    overview=conversation.structured.overview or '',
-                    category=conversation.structured.category.value if conversation.structured.category else 'other',
-                    user_folders=user_folders,
-                )
+                with track_usage(uid, Features.CONVERSATION_FOLDER):
+                    folder_id, confidence, reasoning = assign_conversation_to_folder(
+                        title=conversation.structured.title or '',
+                        overview=conversation.structured.overview or '',
+                        category=(
+                            conversation.structured.category.value if conversation.structured.category else 'other'
+                        ),
+                        user_folders=user_folders,
+                    )
                 if folder_id:
                     conversation.folder_id = folder_id
                     assigned_folder_id = folder_id
@@ -566,6 +696,7 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -599,10 +730,54 @@ def process_conversation(
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
+        # Disable important conversation for now
+        # Send important conversation notification for long conversations (>30 minutes)
+        # threading.Thread(
+        #     target=_send_important_conversation_notification_if_needed,
+        #     args=(uid, conversation),
+        # ).start()
+
     # TODO: trigger external integrations here too
 
     print('process_conversation completed conversation.id=', conversation.id)
     return conversation
+
+
+def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation):
+    """
+    Send notification for long conversations (>30 minutes) that just completed.
+    Only sends once per conversation using Redis deduplication.
+    """
+
+    # Skip if conversation is discarded
+    if conversation.discarded:
+        return
+
+    # Check if we have valid timestamps to compute duration
+    if not conversation.started_at or not conversation.finished_at:
+        print(f"Cannot compute duration for conversation {conversation.id}: missing timestamps")
+        return
+
+    # Calculate duration in seconds
+    duration_seconds = (conversation.finished_at - conversation.started_at).total_seconds()
+
+    # Only notify for conversations longer than 30 minutes (1800 seconds)
+    if duration_seconds < 1800:
+        return
+
+    # Check if notification was already sent for this conversation
+    if redis_db.has_important_conversation_notification_been_sent(uid, conversation.id):
+        print(f"Important conversation notification already sent for {conversation.id}")
+        return
+
+    # Mark as sent before sending to prevent duplicates
+    redis_db.set_important_conversation_notification_sent(uid, conversation.id)
+
+    # Send the notification
+    print(
+        f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds/60:.1f} mins)"
+    )
+    send_important_conversation_message(uid, conversation.id)
 
 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):

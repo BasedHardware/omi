@@ -1,61 +1,184 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:collection/collection.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
-class FolderTabs extends StatelessWidget {
+class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
   final String? selectedFolderId;
   final Function(String?) onFolderSelected;
+  final bool showStarredOnly;
+  final VoidCallback onStarredToggle;
+  final bool showDailySummaries;
+  final VoidCallback onDailySummariesToggle;
+  final bool hasDailySummaries;
 
   const FolderTabs({
     super.key,
     required this.folders,
     required this.selectedFolderId,
     required this.onFolderSelected,
+    required this.showStarredOnly,
+    required this.onStarredToggle,
+    required this.showDailySummaries,
+    required this.onDailySummariesToggle,
+    required this.hasDailySummaries,
   });
 
   @override
+  State<FolderTabs> createState() => _FolderTabsState();
+}
+
+class _FolderTabsState extends State<FolderTabs> {
+  final ScrollController _scrollController = ScrollController();
+  String? _previousSelectedFolderId;
+  bool _previousShowStarredOnly = false;
+  bool _previousShowDailySummaries = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousSelectedFolderId = widget.selectedFolderId;
+    _previousShowStarredOnly = widget.showStarredOnly;
+    _previousShowDailySummaries = widget.showDailySummaries;
+  }
+
+  @override
+  void didUpdateWidget(FolderTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-scroll to top when selection changes
+    if (widget.selectedFolderId != _previousSelectedFolderId ||
+        widget.showStarredOnly != _previousShowStarredOnly ||
+        widget.showDailySummaries != _previousShowDailySummaries) {
+      _previousSelectedFolderId = widget.selectedFolderId;
+      _previousShowStarredOnly = widget.showStarredOnly;
+      _previousShowDailySummaries = widget.showDailySummaries;
+      _scrollToStart();
+    }
+  }
+
+  void _scrollToStart() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildStarredTab() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        label: context.l10n.starred,
+        icon: '⭐',
+        color: Colors.amber,
+        isSelected: widget.showStarredOnly,
+        skipFolderTracking: true,
+        onTap: () {
+          // Track starred filter toggle with the NEW state (opposite of current)
+          MixpanelManager().starredFilterToggled(
+            enabled: !widget.showStarredOnly,
+            selectedFolderId: widget.selectedFolderId,
+          );
+          widget.onStarredToggle();
+        },
+      ),
+    );
+  }
+
+  Widget _buildFolderTab(Folder folder) {
+    final isSelected = widget.selectedFolderId == folder.id;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        label: folder.name,
+        icon: folder.icon,
+        color: folder.colorValue,
+        count: folder.conversationCount,
+        isSelected: isSelected,
+        // If already selected, clicking clears the selection
+        onTap: () => widget.onFolderSelected(isSelected ? null : folder.id),
+        folder: folder,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Build ordered list of tabs: All, Recap (if available), Starred, folders
+    final List<Widget> tabs = [];
+
+    // "All" tab always first - clears all filters when clicked
+    tabs.add(_FolderTab(
+      label: context.l10n.all,
+      isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
+      onTap: () {
+        // Clear folder filter
+        widget.onFolderSelected(null);
+        // Clear starred filter if active
+        if (widget.showStarredOnly) {
+          widget.onStarredToggle();
+        }
+        // Clear daily summaries filter if active
+        if (widget.showDailySummaries) {
+          widget.onDailySummariesToggle();
+        }
+      },
+    ));
+    tabs.add(const SizedBox(width: 8));
+
+    // Starred tab
+    tabs.add(_buildStarredTab());
+
+    // If a folder is selected, show it first (after Starred)
+    final selectedFolder = widget.selectedFolderId != null
+        ? widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId)
+        : null;
+    if (selectedFolder != null) {
+      tabs.add(_buildFolderTab(selectedFolder));
+    }
+
+    // Add remaining folders (excluding selected one)
+    for (final folder in widget.folders) {
+      if (folder.id != widget.selectedFolderId) {
+        tabs.add(_buildFolderTab(folder));
+      }
+    }
+
+    // Extra padding at the end for scroll
+    tabs.add(const SizedBox(width: 8));
+
     return Container(
-      height: 44,
+      height: 36,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           // Scrollable folder tabs
           Expanded(
             child: ListView(
+              controller: _scrollController,
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.only(left: 16),
-              children: [
-                // "All" tab
-                _FolderTab(
-                  label: 'All',
-                  isSelected: selectedFolderId == null,
-                  onTap: () => onFolderSelected(null),
-                ),
-                const SizedBox(width: 8),
-                // Folder tabs
-                ...folders.map((folder) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: _FolderTab(
-                        label: folder.name,
-                        icon: folder.icon,
-                        color: folder.colorValue,
-                        count: folder.conversationCount,
-                        isSelected: selectedFolderId == folder.id,
-                        onTap: () => onFolderSelected(folder.id),
-                        folder: folder,
-                      ),
-                    )),
-                // Extra padding at the end for scroll
-                const SizedBox(width: 8),
-              ],
+              children: tabs,
             ),
           ),
           // Fixed add button
@@ -75,6 +198,7 @@ class _FolderTab extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Folder? folder;
+  final bool skipFolderTracking;
 
   const _FolderTab({
     required this.label,
@@ -84,6 +208,7 @@ class _FolderTab extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.folder,
+    this.skipFolderTracking = false,
   });
 
   void _showContextMenu(BuildContext context) {
@@ -109,64 +234,50 @@ class _FolderTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Use a visible color for "All" tab (white), otherwise use folder color
     final effectiveColor = color ?? Colors.white;
 
     return GestureDetector(
       onTap: () {
-        // Track folder selection
-        MixpanelManager().folderSelected(
-          folderId: folder?.id,
-          folderName: label,
-        );
+        // Track folder selection (skip for Starred tab which has its own tracking)
+        if (!skipFolderTracking) {
+          MixpanelManager().folderSelected(
+            folderId: folder?.id,
+            folderName: label,
+          );
+        }
         onTap();
       },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : theme.colorScheme.surface,
+          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? effectiveColor : Colors.grey.withValues(alpha: 0.3),
-            width: 1,
-          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Text(icon!, style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: FaIcon(
+                  folderIconToFa(icon),
+                  size: 12,
+                  color: isSelected ? effectiveColor : Colors.grey[400],
+                ),
+              ),
+              const SizedBox(width: 5),
             ],
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? effectiveColor : theme.textTheme.bodyMedium?.color,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                fontSize: 14,
+                color: isSelected ? effectiveColor : Colors.grey[400],
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 13,
               ),
             ),
-            if (count != null && count! > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isSelected ? effectiveColor.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  count! > 99 ? '99+' : count.toString(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isSelected ? effectiveColor : Colors.grey[600],
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -187,19 +298,16 @@ class _AddFolderButton extends StatelessWidget {
           await showCreateFolderBottomSheet(context);
         },
         child: Container(
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: Colors.grey.withValues(alpha: 0.15),
+            color: Colors.grey.withValues(alpha: 0.12),
             shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.grey.withValues(alpha: 0.3),
-            ),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.add,
-            size: 20,
-            color: Colors.grey,
+            size: 18,
+            color: Colors.grey[400],
           ),
         ),
       ),
@@ -251,7 +359,7 @@ class _FolderContextMenu extends StatelessWidget {
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
               scaffoldMessenger.showSnackBar(
-                const SnackBar(content: Text('Failed to delete folder')),
+                SnackBar(content: Text(context.l10n.failedToDeleteFolder)),
               );
             }
           });
@@ -289,7 +397,11 @@ class _FolderContextMenu extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(folder.icon, style: const TextStyle(fontSize: 20)),
+                  FaIcon(
+                    folderIconToFa(folder.icon),
+                    size: 18,
+                    color: folder.colorValue,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     folder.name,
@@ -307,7 +419,7 @@ class _FolderContextMenu extends StatelessWidget {
             // Edit option
             ListTile(
               leading: const Icon(Icons.edit_outlined, color: Colors.white),
-              title: const Text('Edit Folder', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.editFolder, style: const TextStyle(color: Colors.white)),
               onTap: () => _handleEdit(context),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -316,7 +428,7 @@ class _FolderContextMenu extends StatelessWidget {
             if (!folder.isSystem)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('Delete Folder', style: TextStyle(color: Colors.red)),
+                title: Text(context.l10n.deleteFolder, style: const TextStyle(color: Colors.red)),
                 onTap: () => _handleDelete(context),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -327,9 +439,9 @@ class _FolderContextMenu extends StatelessWidget {
               width: double.infinity,
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                child: Text(
+                  context.l10n.cancel,
+                  style: const TextStyle(color: Colors.grey, fontSize: 16),
                 ),
               ),
             ),
@@ -378,7 +490,11 @@ class _DeleteFolderSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: Text(folder.icon, style: const TextStyle(fontSize: 22)),
+                        child: FaIcon(
+                          folderIconToFa(folder.icon),
+                          size: 20,
+                          color: Colors.red.withValues(alpha: 0.8),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -387,7 +503,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Delete "${folder.name}"',
+                            context.l10n.deleteQuoted(folder.name),
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -396,7 +512,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Move ${folder.conversationCount} conversations to:',
+                            context.l10n.moveConversationsTo(folder.conversationCount),
                             style: const TextStyle(
                               fontSize: 13,
                               color: ResponsiveHelper.textTertiary,
@@ -425,8 +541,8 @@ class _DeleteFolderSheet extends StatelessWidget {
                     // No folder option
                     _MoveOption(
                       icon: '🚫',
-                      name: 'No folder',
-                      description: 'Remove from all folders',
+                      name: context.l10n.noFolder,
+                      description: context.l10n.removeFromAllFolders,
                       color: Colors.grey,
                       onTap: () => onDelete(null),
                     ),
@@ -494,7 +610,11 @@ class _MoveOption extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
-                    child: Text(icon, style: const TextStyle(fontSize: 20)),
+                    child: FaIcon(
+                      folderIconToFa(icon),
+                      size: 18,
+                      color: color,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -558,7 +678,14 @@ class FolderChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(folder.icon, style: const TextStyle(fontSize: 12)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: FaIcon(
+                folderIconToFa(folder.icon),
+                size: 10,
+                color: folder.colorValue,
+              ),
+            ),
             const SizedBox(width: 4),
             Text(
               folder.name,

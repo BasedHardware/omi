@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class AboutSdCardSync extends StatefulWidget {
   const AboutSdCardSync({super.key});
 
@@ -35,50 +37,50 @@ class _AboutSdCardSyncState extends State<AboutSdCardSync> {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               margin: const EdgeInsets.all(24),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Center(
                     child: Text(
-                      'How does it work?',
-                      style: TextStyle(
+                      context.l10n.howDoesItWork,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Text(
-                    'SD Card Sync will import your memories from the SD Card to the app',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                    context.l10n.sdCardSyncDescription,
+                    style: const TextStyle(color: Colors.grey, fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 24),
-                  Icon(Icons.sd_card, size: 40, color: Colors.grey),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 24),
+                  const Icon(Icons.sd_card, size: 40, color: Colors.grey),
+                  const SizedBox(height: 8),
                   Text(
-                    'Checks for audio files on the SD Card',
+                    context.l10n.checksForAudioFiles,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
-                  SizedBox(height: 18),
-                  Icon(Icons.upload_rounded, size: 40, color: Colors.grey),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 18),
+                  const Icon(Icons.upload_rounded, size: 40, color: Colors.grey),
+                  const SizedBox(height: 8),
                   Text(
-                    'Omi then syncs the audio files with the server',
+                    context.l10n.omiSyncsAudioFiles,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
-                  SizedBox(height: 18),
-                  Icon(Icons.wifi_protected_setup_sharp, size: 40, color: Colors.grey),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 18),
+                  const Icon(Icons.wifi_protected_setup_sharp, size: 40, color: Colors.grey),
+                  const SizedBox(height: 8),
                   Text(
-                    'The server processes the audio files and creates memories',
+                    context.l10n.serverProcessesAudio,
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 16),
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                 ],
               ),

@@ -74,6 +74,35 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
+def _build_webpush_config(tag: str, title: str = None, body: str = None, link: str = None) -> messaging.WebpushConfig:
+    """Build WebPush configuration for browser notifications.
+
+    Note: WebpushNotification must explicitly include title/body because
+    browsers use webpush.notification instead of the top-level notification
+    when the webpush block is present.
+
+    fcm_options.link must be an absolute HTTPS URL - relative paths will cause
+    FCM to reject the entire message batch with 'WebpushFCMOptions.link must be a HTTPS URL'.
+    """
+    config_kwargs = {
+        'headers': {
+            'Topic': tag,  # For deduplication
+            'Urgency': 'high',
+        },
+        'notification': messaging.WebpushNotification(
+            title=title,
+            body=body,
+            icon='/logo.png',
+        ),
+    }
+
+    # Only include fcm_options if link is a valid HTTPS URL
+    if link and link.startswith('https://'):
+        config_kwargs['fcm_options'] = messaging.WebpushFCMOptions(link=link)
+
+    return messaging.WebpushConfig(**config_kwargs)
+
+
 def _build_message(
     token: str,
     tag: str,
@@ -83,12 +112,19 @@ def _build_message(
     priority: str = 'normal',
 ) -> messaging.Message:
     """Build a complete FCM message with proper platform configs."""
+    # Extract title/body for webpush config (browsers need explicit values)
+    title = notification.title if notification else None
+    body = notification.body if notification else None
+    # Extract navigate_to for webpush click-through link
+    link = data.get('navigate_to') if data else None
+
     return messaging.Message(
         token=token,
         notification=notification,
         data=data,
         android=_build_android_config(tag, priority, is_data_only=(notification is None)),
         apns=_build_apns_config(tag, is_background),
+        webpush=_build_webpush_config(tag, title, body, link),
     )
 
 
@@ -329,6 +365,40 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
+def send_apple_reminders_sync_push(user_id: str, action_item_id: str, description: str, due_at=None) -> bool:
+    """
+    Sends a silent push notification to trigger Apple Reminders creation on device.
+    iOS will wake the app in background to create the reminder locally.
+
+    Args:
+        user_id: The user's Firebase UID
+        action_item_id: ID of the action item to sync
+        description: Task description
+        due_at: Optional due date (datetime object or ISO string)
+
+    Returns:
+        bool: True if notification was sent successfully
+    """
+    print(f'send_apple_reminders_sync_push to user {user_id}')
+
+    due_at_str = None
+    if due_at:
+        if hasattr(due_at, 'isoformat'):
+            due_at_str = due_at.isoformat()
+        else:
+            due_at_str = str(due_at)
+
+    data = {
+        'type': 'apple_reminders_sync',
+        'action_item_id': action_item_id,
+        'description': description,
+        'due_at': due_at_str or '',
+    }
+    tag = _generate_tag(f"{user_id}:apple_reminders_sync:{action_item_id}")
+    success_count = _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+    return success_count > 0
+
+
 def send_merge_completed_message(user_id: str, merged_conversation_id: str, removed_conversation_ids: list):
     """
     Sends a data-only FCM message when conversation merge completes.
@@ -342,36 +412,42 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
         merged_conversation_id: ID of the primary (merged) conversation
         removed_conversation_ids: List of secondary conversation IDs that were removed
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id} for merge notification")
-        return
-
-    # FCM data values must be strings
+    print(f'send_merge_completed_message to user {user_id}')
     data = {
         'type': 'merge_completed',
         'merged_conversation_id': merged_conversation_id,
         'removed_conversation_ids': ','.join(removed_conversation_ids),
     }
+    tag = _generate_tag(f"{user_id}:merge_completed:{merged_conversation_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-priority': '10',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
 
-        try:
-            response = messaging.send(message)
-            print(f'Merge completed message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+def send_important_conversation_message(user_id: str, conversation_id: str):
+    """
+    Sends a data-only FCM message when a long conversation (>30 min) completes.
+
+    The app receives this and:
+    - Shows a local notification: "You just had an important convo, click to share summary"
+    - On tap: navigates to conversation detail with share sheet auto-open
+
+    Args:
+        user_id: The user's Firebase UID
+        conversation_id: ID of the completed conversation
+    """
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id} for important conversation notification")
+        return
+
+    # FCM data values must be strings
+    data = {
+        'type': 'important_conversation',
+        'conversation_id': conversation_id,
+        'navigate_to': f'/conversation/{conversation_id}?share=1',
+    }
+
+    tag = _generate_tag(f'{user_id}:important_conversation:{conversation_id}')
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):

@@ -9,6 +9,17 @@
 
 import 'package:flutter/widgets.dart';
 
+class $AssetsCompetitorLogosGen {
+  const $AssetsCompetitorLogosGen();
+
+  /// File path: assets/competitor-logos/limitless-logo.jpg
+  AssetGenImage get limitlessLogo =>
+      const AssetGenImage('assets/competitor-logos/limitless-logo.jpg');
+
+  /// List of all assets
+  List<AssetGenImage> get values => [limitlessLogo];
+}
+
 class $AssetsDeviceAssetsGen {
   const $AssetsDeviceAssetsGen();
 
@@ -213,6 +224,9 @@ class $AssetsImagesGen {
   AssetGenImage get logoTransparentV2 =>
       const AssetGenImage('assets/images/logo_transparent_v2.png');
 
+  /// File path: assets/images/neo_one.webp
+  AssetGenImage get neoOne => const AssetGenImage('assets/images/neo_one.webp');
+
   /// File path: assets/images/new_background.png
   AssetGenImage get newBackground =>
       const AssetGenImage('assets/images/new_background.png');
@@ -371,6 +385,7 @@ class $AssetsImagesGen {
     linkedinLogo,
     logoTransparent,
     logoTransparentV2,
+    neoOne,
     newBackground,
     notionLogo,
     omiDevkitWithoutRope,
@@ -406,6 +421,10 @@ class $AssetsImagesGen {
 
 class $AssetsIntegrationAppLogosGen {
   const $AssetsIntegrationAppLogosGen();
+
+  /// File path: assets/integration_app_logos/apple-health-logo.png
+  AssetGenImage get appleHealthLogo =>
+      const AssetGenImage('assets/integration_app_logos/apple-health-logo.png');
 
   /// File path: assets/integration_app_logos/asana-logo.png
   AssetGenImage get asanaLogo =>
@@ -456,6 +475,7 @@ class $AssetsIntegrationAppLogosGen {
 
   /// List of all assets
   List<dynamic> get values => [
+    appleHealthLogo,
     asanaLogo,
     clickupLogo,
     githubLogo,
@@ -474,6 +494,8 @@ class $AssetsIntegrationAppLogosGen {
 class Assets {
   const Assets._();
 
+  static const $AssetsCompetitorLogosGen competitorLogos =
+      $AssetsCompetitorLogosGen();
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();

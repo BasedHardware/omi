@@ -1,10 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/widgets/dialog.dart';
+
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/dialog.dart';
 
 class PermissionsWidget extends StatefulWidget {
   final VoidCallback goNext;
@@ -45,9 +48,9 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                   const SizedBox(height: 32),
 
                   // Main title
-                  const Text(
-                    'Grant permissions',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.grantPermissions,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -66,8 +69,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       if (Platform.isAndroid)
                         _buildPermissionTile(
                           value: provider.hasBackgroundPermission,
-                          title: 'Background activity',
-                          subtitle: 'Let Omi run in the background for better stability',
+                          title: context.l10n.backgroundActivity,
+                          subtitle: context.l10n.backgroundActivityDesc,
                           onChanged: (s) async {
                             if (s != null) {
                               if (s) {
@@ -82,13 +85,17 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       // Location permission
                       _buildPermissionTile(
                         value: provider.hasLocationPermission,
-                        title: 'Location access',
-                        subtitle: 'Enable background location for the full experience',
+                        title: context.l10n.locationAccess,
+                        subtitle: context.l10n.locationAccessDesc,
                         onChanged: (s) async {
                           if (s != null) {
                             if (s) {
+                              // Auto-check the box immediately when popup is triggered
+                              provider.updateLocationPermission(true);
                               var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
                               if (!serviceStatus) {
+                                // Uncheck if service is disabled
+                                provider.updateLocationPermission(false);
                                 showDialog(
                                   context: context,
                                   builder: (ctx) {
@@ -96,49 +103,24 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                       context,
                                       () => Navigator.of(context).pop(),
                                       () => Navigator.of(context).pop(),
-                                      'Location Service Disabled',
-                                      'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it',
+                                      context.l10n.locationServiceDisabled,
+                                      context.l10n.locationServiceDisabledDesc,
                                       singleButton: true,
                                     );
                                   },
                                 );
                               } else {
-                                if (permissionStatus.isGranted) {
-                                  await provider.alwaysAllowLocation();
-                                  Permission.locationAlways.onDeniedCallback(() {
-                                    showDialog(
-                                      context: context,
-                                      builder: (ctx) {
-                                        return getDialog(
-                                          context,
-                                          () => Navigator.of(context).pop(),
-                                          () => Navigator.of(context).pop(),
-                                          'Background Location Access Denied',
-                                          'Please go to device settings and set location permission to "Always Allow"',
-                                          singleButton: true,
-                                          okButtonText: 'Continue',
-                                        );
-                                      },
-                                    );
-                                  });
-                                  Permission.locationAlways.onGrantedCallback(() {
-                                    provider.updateLocationPermission(true);
-                                  });
-                                } else {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) {
-                                      return getDialog(
-                                        context,
-                                        () => Navigator.of(context).pop(),
-                                        () => Navigator.of(context).pop(),
-                                        'Background Location Access Denied',
-                                        'Please go to device settings and set location permission to "Always Allow"',
-                                        singleButton: true,
-                                        okButtonText: 'Continue',
-                                      );
-                                    },
-                                  );
+                                // Update checkbox based on actual permission status
+                                bool wasGranted = permissionStatus.isGranted;
+                                provider.updateLocationPermission(wasGranted);
+
+                                // Request "Always" permission (iOS may show this later)
+                                // But keep checkbox checked if "When in use" was granted
+                                await provider.alwaysAllowLocation();
+
+                                // If "When in use" was granted, keep it checked even if "Always" was denied
+                                if (wasGranted) {
+                                  provider.updateLocationPermission(true);
                                 }
                               }
                             } else {
@@ -151,8 +133,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                       // Notification permission
                       _buildPermissionTile(
                         value: provider.hasNotificationPermission,
-                        title: 'Notifications',
-                        subtitle: 'Enable notifications to stay informed',
+                        title: context.l10n.notifications,
+                        subtitle: context.l10n.notificationsDesc,
                         onChanged: (s) async {
                           if (s != null) {
                             if (s) {
@@ -231,9 +213,9 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                               ),
                               elevation: 0,
                             ),
-                            child: const Text(
-                              'Continue',
-                              style: TextStyle(
+                            child: Text(
+                              context.l10n.continueButton,
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 fontFamily: 'Manrope',

@@ -1,57 +1,69 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/upgrade_alert.dart';
-import 'package:provider/provider.dart';
-import 'package:upgrader/upgrader.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-
-import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
-import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
-
+import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePageWrapper({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePageWrapper({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
@@ -59,6 +71,7 @@ class HomePageWrapper extends StatefulWidget {
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
+  String? _autoMessage;
 
   @override
   void initState() {
@@ -69,21 +82,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
+
+        // Schedule daily reflection notification if enabled
+        if (SharedPreferencesUtil().dailyReflectionEnabled) {
+          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+        }
       }
     });
     _navigateToRoute = widget.navigateToRoute;
+    _autoMessage = widget.autoMessage;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    return HomePage(navigateToRoute: _navigateToRoute, autoMessage: _autoMessage);
   }
 }
 
 class HomePage extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePage({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePage({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -102,6 +122,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
+
+  // Freemium switch handler for auto-switch dialogs
+  final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
+
+  CaptureProvider? _captureProvider;
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -137,6 +162,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _addGoal() {
+    // Navigate to conversations page
+    context.read<HomeProvider>().setIndex(0);
+    // Trigger goal creation
+    final conversationsState = _conversationsPageKey.currentState;
+    if (conversationsState != null) {
+      (conversationsState as dynamic).addGoal();
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -158,7 +193,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     } else {
       return;
     }
-    debugPrint(event);
+    Logger.debug(event);
     PlatformManager.instance.crashReporter.logInfo(event);
   }
 
@@ -186,11 +221,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey),
+      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       MemoriesPage(key: _memoriesPageKey),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
 
     // Navigate uri
     Uri? navigateToUri;
@@ -200,7 +236,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
       navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
-      debugPrint("initState ${navigateToUri?.pathSegments.join("...")}");
+      Logger.debug("initState ${navigateToUri?.pathSegments.join("...")}");
       var segments = navigateToUri?.pathSegments ?? [];
       if (segments.isNotEmpty) {
         pageAlias = segments[0];
@@ -210,7 +246,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       switch (pageAlias) {
+        case "action-items":
+          homePageIdx = 1;
+          break;
         case "memories":
+        case "facts":
           homePageIdx = 2;
           break;
         case "apps":
@@ -240,10 +280,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       // Navigate
+      if (!mounted) return;
       switch (pageAlias) {
         case "apps":
           if (detailPageId != null && detailPageId.isNotEmpty) {
-            var app = await context.read<AppProvider>().getAppFromId(detailPageId);
+            final appProvider = context.read<AppProvider>();
+            var app = await appProvider.getAppFromId(detailPageId);
             if (app != null && mounted) {
               Navigator.push(
                 context,
@@ -255,7 +297,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "chat":
-          print('inside chat alias $detailPageId');
+          Logger.debug('inside chat alias $detailPageId');
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
@@ -277,12 +319,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // If there's an auto-message (e.g., from daily reflection notification), send it
+          final autoMessageToSend = widget.autoMessage;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ChatPage(isPivotBottom: false),
+                  builder: (context) => ChatPage(
+                    isPivotBottom: false,
+                    autoMessage: autoMessageToSend,
+                  ),
                 ),
               );
             }
@@ -310,6 +357,54 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
           );
           break;
+        case "conversation":
+          // Handle conversation deep link: /conversation/{id}?share=1
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Check for share query param
+            final shouldOpenShare = navigateToUri?.queryParameters['share'] == '1';
+            final conversationId = detailPageId; // Capture non-null value
+
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+
+              // Fetch conversation from server
+              final conversation = await getConversationById(conversationId);
+              if (conversation != null && mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConversationDetailPage(
+                      conversation: conversation,
+                      openShareToContactsOnLoad: shouldOpenShare,
+                    ),
+                  ),
+                );
+              } else {
+                Logger.debug('Conversation not found: $conversationId');
+              }
+            });
+          }
+          break;
+        case "daily-summary":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Track notification opened
+            MixpanelManager().dailySummaryNotificationOpened(
+              summaryId: detailPageId,
+              date: '', // Date not available in navigate_to, will be fetched when detail page loads
+            );
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!),
+                  ),
+                );
+              }
+            });
+          }
+          break;
         case "wrapped":
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -322,15 +417,76 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           });
           break;
+        case "action-items":
+          // Tab index already set to 1 (ActionItemsPage) above
+          break;
         default:
       }
     });
 
     _listenToMessagesFromNotification();
+    _listenToFreemiumThreshold();
+    _checkForAnnouncements();
     super.initState();
 
     // After init
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+  }
+
+  void _checkForAnnouncements() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (!mounted) return;
+
+      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      await AnnouncementService().checkAndShowAnnouncements(
+        context,
+        announcementProvider,
+        connectedDevice: deviceProvider.connectedDevice,
+      );
+
+      // Register callback for device connection to check firmware announcements
+      deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+    });
+  }
+
+  void _onDeviceConnectedForAnnouncements(BtDevice device) async {
+    if (!mounted) return;
+
+    final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+    await AnnouncementService().showFirmwareUpdateAnnouncements(
+      context,
+      announcementProvider,
+      device.firmwareRevision,
+      device.modelNumber,
+    );
+  }
+
+  void _listenToFreemiumThreshold() {
+    // Listen to capture provider for freemium threshold events
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      _captureProvider!.addListener(_onCaptureProviderChanged);
+      // Connect freemium session reset callback
+      _captureProvider!.onFreemiumSessionReset = () {
+        _freemiumHandler.resetDialogFlag();
+      };
+    });
+  }
+
+  void _onCaptureProviderChanged() {
+    if (!mounted || _captureProvider == null) return;
+
+    _freemiumHandler.checkAndShowDialog(context, _captureProvider!).catchError((e) {
+      Logger.debug('[Freemium] Error checking dialog: $e');
+      return false;
+    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -416,16 +572,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    } else {
-                      // Force refresh when internet connection is restored
-                      await ctx.read<ConversationProvider>().forceRefreshConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
+                  if (!mounted) return;
+
+                  final convoProvider = ctx.read<ConversationProvider>();
+                  final messageProvider = ctx.read<MessageProvider>();
+
+                  if (convoProvider.conversations.isEmpty) {
+                    await convoProvider.getInitialConversations();
+                  } else {
+                    // Force refresh when internet connection is restored
+                    await convoProvider.forceRefreshConversations();
+                  }
+
+                  if (messageProvider.messages.isEmpty) {
+                    await messageProvider.refreshMessages();
                   }
                 });
               });
@@ -437,6 +597,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           builder: (context, homeProvider, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
+              resizeToAvoidBottomInset: false,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
                 length: 4,
@@ -459,236 +620,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ],
                       ),
-                      Consumer2<HomeProvider, DeviceProvider>(
-                        builder: (context, home, deviceProvider, child) {
+                      Consumer<HomeProvider>(
+                        builder: (context, home, child) {
                           if (home.isChatFieldFocused ||
                               home.isAppsSearchFieldFocused ||
                               home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
-                          } else {
-                            // Check if OMI device is connected
-                            bool isOmiDeviceConnected =
-                                deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                          }
 
-                            return Stack(
-                              children: [
-                                // Bottom Navigation Bar
-                                Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: Container(
-                                    width: double.infinity,
-                                    height: 100,
-                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        stops: [0.0, 0.30, 1.0],
-                                        colors: [
-                                          Colors.transparent,
-                                          Color.fromARGB(255, 15, 15, 15),
-                                          Color.fromARGB(255, 15, 15, 15),
+                          return Stack(
+                            children: [
+                              BottomNavBar(
+                                onTabTap: (index, isRepeat) {
+                                  if (isRepeat) {
+                                    _scrollToTop(index);
+                                  } else {
+                                    home.setIndex(index);
+                                  }
+                                },
+                              ),
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  right: 20,
+                                  bottom: 100,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.mediumImpact();
+                                      MixpanelManager().bottomNavigationTabClicked('Chat');
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const ChatPage(isPivotBottom: false),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(32),
+                                        color: Colors.deepPurple,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            FontAwesomeIcons.solidComment,
+                                            size: 22,
+                                            color: Colors.white,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            context.l10n.askOmi,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        // Home tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Home');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 0) {
-                                                _scrollToTop(0);
-                                                return;
-                                              }
-                                              home.setIndex(0);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.house,
-                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Action Items tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Action Items');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 1) {
-                                                _scrollToTop(1);
-                                                return;
-                                              }
-                                              home.setIndex(1);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.listCheck,
-                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Center space for record button - only when no OMI device is connected
-                                        if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Memories tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 2) {
-                                                _scrollToTop(2);
-                                                return;
-                                              }
-                                              home.setIndex(2);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.brain,
-                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Apps tab
-                                        Expanded(
-                                          child: InkWell(
-                                            onTap: () {
-                                              HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Apps');
-                                              primaryFocus?.unfocus();
-                                              if (home.selectedIndex == 3) {
-                                                _scrollToTop(3);
-                                                return;
-                                              }
-                                              home.setIndex(3);
-                                            },
-                                            child: SizedBox(
-                                              height: 90,
-                                              child: Center(
-                                                child: Icon(
-                                                  FontAwesomeIcons.puzzlePiece,
-                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                  size: 26,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ),
-                                // Central Record Button - Only show when no OMI device is connected
-                                if (!isOmiDeviceConnected)
-                                  Positioned(
-                                    left: MediaQuery.of(context).size.width / 2 - 40,
-                                    bottom: 40, // Position it to protrude above the taller navbar (90px height)
-                                    child: Consumer<CaptureProvider>(
-                                      builder: (context, captureProvider, child) {
-                                        bool isRecording = captureProvider.recordingState == RecordingState.record;
-                                        bool isInitializing =
-                                            captureProvider.recordingState == RecordingState.initialising;
-                                        return GestureDetector(
-                                          onTap: () async {
-                                            HapticFeedback.heavyImpact();
-                                            if (isInitializing) return;
-                                            await _handleRecordButtonPress(context, captureProvider);
-                                          },
-                                          child: Container(
-                                            width: 80,
-                                            height: 80,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isRecording ? Colors.red : Colors.deepPurple,
-                                              border: Border.all(
-                                                color: Colors.black,
-                                                width: 5,
-                                              ),
-                                            ),
-                                            child: isInitializing
-                                                ? const CircularProgressIndicator(
-                                                    color: Colors.white,
-                                                    strokeWidth: 2,
-                                                  )
-                                                : Icon(
-                                                    isRecording ? FontAwesomeIcons.stop : FontAwesomeIcons.microphone,
-                                                    color: Colors.white,
-                                                    size: 24,
-                                                  ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                // Floating Chat Button - Bottom Right (only on homepage)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 100, // Position above the bottom navigation bar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(32),
-                                          color: Colors.deepPurple,
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              FontAwesomeIcons.solidComment,
-                                              size: 22,
-                                              color: Colors.white,
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Ask Omi',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          }
+                            ],
+                          );
                         },
                       ),
                       // Merge action bar - floats above bottom nav when in selection mode
@@ -720,7 +715,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       MixpanelManager().phoneMicRecordingStopped();
     } else if (recordingState == RecordingState.initialising) {
       // Already initializing, do nothing
-      debugPrint('initialising, have to wait');
+      Logger.debug('initialising, have to wait');
     } else {
       // Start recording directly without dialog
       await captureProvider.streamRecording();
@@ -753,18 +748,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              // Sync icon for Limitless devices
-              Consumer2<DeviceProvider, SyncProvider>(
-                builder: (context, deviceProvider, syncProvider, child) {
+              // Sync icon - shows when there are pending files on device or a device is paired
+              // Only shown on home page (index 0)
+              Consumer3<HomeProvider, DeviceProvider, SyncProvider>(
+                builder: (context, homeProvider, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
-                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  // Only show orange indicator for files still on device (SD card or Limitless)
+                  final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  if (device != null && device.type == DeviceType.limitless) {
+                  // Show sync icon only on home page and if there's a paired device OR if there are pending files on device
+                  if (homeProvider.selectedIndex == 0 && (device != null || hasPendingOnDevice)) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        SyncBottomSheet.show(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SyncPage()),
+                        );
                       },
                       child: Container(
                         width: 36,
@@ -773,7 +774,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: BoxDecoration(
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -783,7 +784,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           size: 18,
                           color: isSyncing
                               ? Colors.deepPurpleAccent
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orangeAccent
                                   : Colors.white70,
                         ),
@@ -831,12 +832,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ),
                       if (shouldShowSearchButton) const SizedBox(width: 8),
-                      // Calendar button
+                      // Daily Recaps toggle button
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: convoProvider.selectedDate != null
+                          color: convoProvider.showDailySummaries
                               ? Colors.deepPurple.withValues(alpha: 0.5)
                               : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -844,20 +845,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            convoProvider.selectedDate != null
-                                ? FontAwesomeIcons.calendarDay
-                                : FontAwesomeIcons.calendarDays,
+                            FontAwesomeIcons.clockRotateLeft,
                             size: 16,
-                            color: Colors.white70,
+                            color: convoProvider.showDailySummaries ? Colors.white : Colors.white70,
                           ),
-                          onPressed: () async {
+                          onPressed: () {
                             HapticFeedback.mediumImpact();
-                            if (convoProvider.selectedDate != null) {
-                              await convoProvider.clearDateFilter();
-                              MixpanelManager().calendarFilterCleared();
-                            } else {
-                              // Open date picker
-                              DateTime selectedDate = DateTime.now();
+                            if (!convoProvider.showDailySummaries) {
+                              MixpanelManager().recapTabOpened();
+                            }
+                            convoProvider.toggleDailySummaries();
+                          },
+                        ),
+                      ),
+                      // Calendar button - only show when date filter is active
+                      if (convoProvider.selectedDate != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurple.withValues(alpha: 0.5),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              FontAwesomeIcons.calendarDay,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              // Open date picker to change date, cancel clears filter
+                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
                               await showCupertinoModalPopup<void>(
                                 context: context,
                                 builder: (BuildContext context) {
@@ -872,7 +893,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       top: false,
                                       child: Column(
                                         children: [
-                                          // Header with Cancel and Done buttons
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                                             decoration: const BoxDecoration(
@@ -889,10 +909,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               children: [
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
-                                                  onPressed: () => Navigator.of(context).pop(),
-                                                  child: const Text(
-                                                    'Cancel',
-                                                    style: TextStyle(
+                                                  onPressed: () async {
+                                                    // Get provider before pop to avoid using invalid context
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
+                                                    Navigator.of(context).pop();
+                                                    await provider.clearDateFilter();
+                                                    MixpanelManager().calendarFilterCleared();
+                                                  },
+                                                  child: Text(
+                                                    context.l10n.removeFilter,
+                                                    style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 16,
                                                     ),
@@ -902,17 +929,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () async {
+                                                    final provider =
+                                                        Provider.of<ConversationProvider>(context, listen: false);
                                                     Navigator.of(context).pop();
-                                                    if (context.mounted) {
-                                                      final provider =
-                                                          Provider.of<ConversationProvider>(context, listen: false);
-                                                      await provider.filterConversationsByDate(selectedDate);
-                                                      MixpanelManager().calendarFilterApplied(selectedDate);
-                                                    }
+                                                    await provider.filterConversationsByDate(selectedDate);
+                                                    MixpanelManager().calendarFilterApplied(selectedDate);
                                                   },
-                                                  child: const Text(
-                                                    'Done',
-                                                    style: TextStyle(
+                                                  child: Text(
+                                                    context.l10n.done,
+                                                    style: const TextStyle(
                                                       color: Colors.deepPurple,
                                                       fontSize: 16,
                                                       fontWeight: FontWeight.w600,
@@ -922,7 +947,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               ],
                                             ),
                                           ),
-                                          // Date picker
                                           Expanded(
                                             child: Material(
                                               color: ResponsiveHelper.backgroundSecondary,
@@ -934,8 +958,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 ),
                                                 value: [selectedDate],
                                                 onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty && dates[0] != null) {
-                                                    selectedDate = dates[0]!;
+                                                  if (dates.isNotEmpty) {
+                                                    selectedDate = dates[0];
                                                   }
                                                 },
                                               ),
@@ -947,31 +971,69 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   );
                                 },
                               );
-                            }
+                            },
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                    ],
+                  );
+                },
+              ),
+              // Action items page buttons - export and completed toggle
+              Consumer2<HomeProvider, ActionItemsProvider>(
+                builder: (context, homeProvider, actionItemsProvider, _) {
+                  if (homeProvider.selectedIndex != 1) {
+                    return const SizedBox.shrink();
+                  }
+                  final showCompleted = actionItemsProvider.showCompletedView;
+                  return Row(
+                    children: [
+                      // Export button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            FontAwesomeIcons.arrowUpFromBracket,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            MixpanelManager().exportTasksBannerClicked();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const TaskIntegrationsPage(),
+                              ),
+                            );
                           },
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Star filter button
+                      // Completed toggle
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: convoProvider.showStarredOnly
-                              ? Colors.amber.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
+                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                            FontAwesomeIcons.solidCircleCheck,
                             size: 16,
-                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
+                            color: showCompleted ? Colors.white : Colors.white70,
                           ),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            convoProvider.toggleStarredFilter();
+                            actionItemsProvider.toggleShowCompletedView();
                           },
                         ),
                       ),
@@ -1026,6 +1088,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
+    // Remove capture provider listener using stored reference
+    if (_captureProvider != null) {
+      _captureProvider!.removeListener(_onCaptureProviderChanged);
+      _captureProvider!.onFreemiumSessionReset = null;
+      _captureProvider = null;
+    }
+    // Remove device provider callback
+    try {
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      deviceProvider.onDeviceConnected = null;
+    } catch (_) {}
+    // Clean up freemium handler
+    _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();

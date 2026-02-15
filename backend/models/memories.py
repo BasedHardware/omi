@@ -24,6 +24,7 @@ class MemoryCategory(str, Enum):
     skills = "skills"
     learnings = "learnings"
     other = "other"
+    auto = "auto"
 
 
 # Only define boosts for the primary categories
@@ -41,6 +42,7 @@ CATEGORY_BOOSTS = {
     MemoryCategory.learnings.value: 1,
     MemoryCategory.habits.value: 0,
     MemoryCategory.other.value: 0,
+    MemoryCategory.auto.value: 0,
 }
 
 
@@ -67,6 +69,7 @@ class Memory(BaseModel):
             'learnings': 'system',
             'habits': 'system',
             'other': 'system',
+            'auto': 'system',
         }
 
         if isinstance(v, str):
@@ -119,6 +122,7 @@ class MemoryDB(Memory):
     app_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     is_locked: bool = False
+    kg_extracted: bool = False
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -147,7 +151,7 @@ class MemoryDB(Memory):
             conversation_id=conversation_id,
             manually_added=manually_added,
             user_review=True if manually_added else None,
-            reviewed=True if manually_added else False,
+            reviewed=True,
             visibility=memory.visibility,
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)

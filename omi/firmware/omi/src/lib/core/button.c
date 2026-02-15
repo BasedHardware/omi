@@ -18,6 +18,11 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
+#ifdef CONFIG_OMI_ENABLE_WIFI
+#include "wifi.h"
+#endif
+
+#include "imu.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -149,7 +154,7 @@ static inline void notify_long_tap()
 
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 1000  // 1000 ms for long press
+#define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -217,9 +222,8 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_INF("single tap detected\n");
         btn_last_event = event;
-        notify_tap();
 
-        turnoff_all();
+        notify_tap();
     }
 
     // Double tap
@@ -233,7 +237,7 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_INF("long press detected\n");
         btn_last_event = event;
-        notify_long_tap();
+        turnoff_all();
     }
 
     // Releases, one time event
@@ -413,15 +417,20 @@ void turnoff_all()
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
     }
-
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    wifi_turn_off();
+#endif
     rc = watchdog_deinit();
     if (rc < 0) {
         LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
         return;
     }
 
-    LOG_INF("Entering system off; press usr_btn to restart");
+    
+    /* Persist an IMU timestamp base so we can estimate time across system_off. */
+    lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);
+    LOG_INF("Entering system off; press usr_btn to restart");
 
     // Power off the system using sys_poweroff
     sys_poweroff();

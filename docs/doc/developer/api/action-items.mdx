@@ -1,0 +1,583 @@
+---
+title: "Action Items"
+description: "Create and retrieve action items (tasks/to-dos) via the Developer API"
+---
+
+## Endpoints
+
+<CardGroup cols={3}>
+  <Card title="GET" icon="download" color="#22c55e">
+    Retrieve action items
+  </Card>
+  <Card title="POST" icon="upload" color="#3b82f6">
+    Create action item
+  </Card>
+  <Card title="PATCH" icon="pen" color="#a855f7">
+    Update action item
+  </Card>
+  <Card title="DELETE" icon="trash" color="#ef4444">
+    Delete action item
+  </Card>
+  <Card title="POST Batch" icon="layer-group" color="#3b82f6">
+    Create up to 50
+  </Card>
+</CardGroup>
+
+---
+
+## Get Action Items
+
+<Card title="GET /v1/dev/user/action-items" icon="download" color="#22c55e" horizontal>
+  Retrieve your action items with optional filtering
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Query Parameters" icon="sliders" defaultOpen={true}>
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `limit` | integer | 100 | Maximum number of items to return |
+    | `offset` | integer | 0 | Number of items to skip |
+    | `completed` | boolean | - | Filter by completion status |
+    | `conversation_id` | string | - | Filter by conversation ID |
+    | `start_date` | datetime | - | Filter by creation start date (inclusive) |
+    | `end_date` | datetime | - | Filter by creation end date (inclusive) |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/action-items?completed=false&limit=50"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/action-items",
+        headers={"Authorization": f"Bearer {API_KEY}"},
+        params={"completed": False, "limit": 50}
+    )
+    action_items = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items?completed=false&limit=50",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const actionItems = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="Response Example" icon="code" defaultOpen={true}>
+    ```json
+    [
+      {
+        "id": "action_101",
+        "description": "Review budget proposal",
+        "completed": false,
+        "created_at": "2025-01-20T10:15:00Z",
+        "updated_at": "2025-01-20T10:15:00Z",
+        "due_at": null,
+        "completed_at": null,
+        "conversation_id": "conv_202"
+      },
+      {
+        "id": "action_102",
+        "description": "Call dentist for appointment",
+        "completed": true,
+        "created_at": "2025-01-19T14:00:00Z",
+        "updated_at": "2025-01-20T09:00:00Z",
+        "due_at": "2025-01-25T00:00:00Z",
+        "completed_at": "2025-01-20T09:00:00Z",
+        "conversation_id": null
+      }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Response Fields" icon="list">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Unique identifier |
+    | `description` | string | The action item text |
+    | `completed` | boolean | Whether the item is completed |
+    | `created_at` | datetime | When the item was created |
+    | `updated_at` | datetime | When the item was last updated |
+    | `due_at` | datetime | Due date (null if not set) |
+    | `completed_at` | datetime | When completed (null if not completed) |
+    | `conversation_id` | string | Associated conversation ID (null for standalone items) |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Create Action Item
+
+<Card title="POST /v1/dev/user/action-items" icon="upload" color="#3b82f6" horizontal>
+  Create a new action item (task/to-do)
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `description` | string | **Yes** | The action item description (1-500 characters) |
+    | `completed` | boolean | No | Whether completed (default: `false`) |
+    | `due_at` | datetime | No | Due date in ISO 8601 format with timezone |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.omi.me/v1/dev/user/action-items" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "description": "Review pull request #123",
+        "completed": false,
+        "due_at": "2025-12-08T15:00:00+00:00"
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/action-items",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "description": "Review pull request #123",
+            "completed": False,
+            "due_at": "2025-12-08T15:00:00+00:00"
+        }
+    )
+    action_item = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          description: "Review pull request #123",
+          completed: false,
+          due_at: "2025-12-08T15:00:00+00:00"
+        })
+      }
+    );
+    const actionItem = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "action_abc123",
+    "description": "Review pull request #123",
+    "completed": false,
+    "created_at": "2025-12-06T10:30:00Z",
+    "updated_at": "2025-12-06T10:30:00Z",
+    "due_at": "2025-12-08T15:00:00+00:00",
+    "completed_at": null,
+    "conversation_id": null
+  }
+  ```
+</Accordion>
+
+<Tip>
+Push notifications are automatically sent to the Omi app if a `due_at` date is provided.
+</Tip>
+
+---
+
+## Create Action Items (Batch)
+
+<Card title="POST /v1/dev/user/action-items/batch" icon="layer-group" color="#3b82f6" horizontal>
+  Create multiple action items in a single request (max 50)
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `action_items` | array | **Yes** | List of action item objects (max 50) |
+
+    Each action item object accepts the same fields as the single create endpoint.
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.omi.me/v1/dev/user/action-items/batch" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "action_items": [
+          {"description": "Review Q1 report", "due_at": "2025-12-10T17:00:00Z"},
+          {"description": "Schedule team meeting"}
+        ]
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/action-items/batch",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "action_items": [
+                {"description": "Review Q1 report", "due_at": "2025-12-10T17:00:00Z"},
+                {"description": "Schedule team meeting"}
+            ]
+        }
+    )
+    result = response.json()
+    print(f"Created {result['created_count']} action items")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items/batch",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          action_items: [
+            { description: "Review Q1 report", due_at: "2025-12-10T17:00:00Z" },
+            { description: "Schedule team meeting" }
+          ]
+        })
+      }
+    );
+    const result = await response.json();
+    console.log(`Created ${result.created_count} action items`);
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "action_items": [
+      { "id": "action_001", "description": "Review Q1 report", ... },
+      { "id": "action_002", "description": "Schedule team meeting", ... }
+    ],
+    "created_count": 2
+  }
+  ```
+</Accordion>
+
+---
+
+## Update Action Item
+
+<Card title="PATCH /v1/dev/user/action-items/{action_item_id}" icon="pen" color="#a855f7" horizontal>
+  Update an action item's description, completion status, or due date
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `action_item_id` | string | The ID of the action item to update |
+  </Accordion>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `description` | string | No | New description (1-500 characters) |
+    | `completed` | boolean | No | New completion status |
+    | `due_at` | datetime | No | New due date (ISO 8601 format) |
+
+    At least one field must be provided. Setting `completed: true` automatically sets `completed_at`.
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X PATCH "https://api.omi.me/v1/dev/user/action-items/action_abc123" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "completed": true
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    # Mark action item as completed
+    response = requests.patch(
+        "https://api.omi.me/v1/dev/user/action-items/action_abc123",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={"completed": True}
+    )
+    action_item = response.json()
+    print(f"Completed at: {action_item['completed_at']}")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    // Mark action item as completed
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items/action_abc123",
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ completed: true })
+      }
+    );
+    const actionItem = await response.json();
+    console.log(`Completed at: ${actionItem.completed_at}`);
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "action_abc123",
+    "description": "Review pull request #123",
+    "completed": true,
+    "created_at": "2025-12-06T10:30:00Z",
+    "updated_at": "2025-12-25T14:00:00Z",
+    "due_at": "2025-12-08T15:00:00+00:00",
+    "completed_at": "2025-12-25T14:00:00Z",
+    "conversation_id": null
+  }
+  ```
+</Accordion>
+
+<Tip>
+When updating `due_at`, a push notification is sent to the Omi app to remind the user.
+</Tip>
+
+---
+
+## Delete Action Item
+
+<Card title="DELETE /v1/dev/user/action-items/{action_item_id}" icon="trash" color="#ef4444" horizontal>
+  Delete an action item permanently
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `action_item_id` | string | The ID of the action item to delete |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X DELETE "https://api.omi.me/v1/dev/user/action-items/action_abc123" \
+      -H "Authorization: Bearer $API_KEY"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.delete(
+        "https://api.omi.me/v1/dev/user/action-items/action_abc123",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    result = response.json()
+    if result["success"]:
+        print("Action item deleted successfully")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items/action_abc123",
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY}` }
+      }
+    );
+    const result = await response.json();
+    if (result.success) {
+      console.log("Action item deleted successfully");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "success": true
+  }
+  ```
+</Accordion>
+
+<Warning>
+This action is permanent. Deleted action items cannot be recovered.
+</Warning>
+
+---
+
+## Use Case: Import Tasks
+
+Import tasks from an external task management system into Omi:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    API_KEY = "omi_dev_your_api_key"
+
+    # Your tasks from another app
+    external_tasks = [
+        {"title": "Complete project proposal", "due": "2025-12-15T10:00:00Z", "done": False},
+        {"title": "Send weekly report", "due": "2025-12-12T17:00:00Z", "done": False},
+        {"title": "Review team feedback", "due": None, "done": True}
+    ]
+
+    # Convert to Omi action items format
+    action_items = [
+        {
+            "description": task["title"],
+            "due_at": task["due"],
+            "completed": task["done"]
+        }
+        for task in external_tasks
+    ]
+
+    # Create batch
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/action-items/batch",
+        headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+        json={"action_items": action_items}
+    )
+
+    print(f"Imported {response.json()['created_count']} action items")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const API_KEY = process.env.OMI_API_KEY;
+
+    // Your tasks from another app
+    const externalTasks = [
+      { title: "Complete project proposal", due: "2025-12-15T10:00:00Z", done: false },
+      { title: "Send weekly report", due: "2025-12-12T17:00:00Z", done: false },
+      { title: "Review team feedback", due: null, done: true }
+    ];
+
+    // Convert to Omi action items format
+    const actionItems = externalTasks.map(task => ({
+      description: task.title,
+      due_at: task.due,
+      completed: task.done
+    }));
+
+    // Create batch
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items/batch",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action_items: actionItems })
+      }
+    );
+
+    const result = await response.json();
+    console.log(`Imported ${result.created_count} action items`);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Use Case: Get Pending Tasks
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    # Get all incomplete action items
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/action-items?completed=false"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    API_KEY = "omi_dev_your_api_key"
+
+    # Get pending tasks
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/action-items",
+        headers={"Authorization": f"Bearer {API_KEY}"},
+        params={"completed": False, "limit": 100}
+    )
+
+    pending_tasks = response.json()
+    print(f"You have {len(pending_tasks)} pending tasks")
+
+    for task in pending_tasks:
+        due = task.get("due_at", "No due date")
+        print(f"- {task['description']} (Due: {due})")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const API_KEY = process.env.OMI_API_KEY;
+
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/action-items?completed=false&limit=100",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+
+    const pendingTasks = await response.json();
+    console.log(`You have ${pendingTasks.length} pending tasks`);
+
+    pendingTasks.forEach(task => {
+      const due = task.due_at || "No due date";
+      console.log(`- ${task.description} (Due: ${due})`);
+    });
+    ```
+  </Tab>
+</Tabs>

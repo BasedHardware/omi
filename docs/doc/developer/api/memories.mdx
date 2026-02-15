@@ -1,0 +1,531 @@
+---
+title: "Memories"
+description: "Create and retrieve memories via the Developer API"
+---
+
+## Endpoints
+
+<CardGroup cols={3}>
+  <Card title="GET" icon="download" color="#22c55e">
+    Retrieve memories
+  </Card>
+  <Card title="POST" icon="upload" color="#3b82f6">
+    Create memory
+  </Card>
+  <Card title="PATCH" icon="pen" color="#a855f7">
+    Update memory
+  </Card>
+  <Card title="DELETE" icon="trash" color="#ef4444">
+    Delete memory
+  </Card>
+  <Card title="POST Batch" icon="layer-group" color="#3b82f6">
+    Create up to 25
+  </Card>
+</CardGroup>
+
+---
+
+## Get Memories
+
+<Card title="GET /v1/dev/user/memories" icon="download" color="#22c55e" horizontal>
+  Retrieve your memories with optional filtering
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Query Parameters" icon="sliders" defaultOpen={true}>
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `limit` | integer | 25 | Maximum number of memories to return |
+    | `offset` | integer | 0 | Number of memories to skip |
+    | `categories` | string | - | Comma-separated list (e.g., `"interesting,system"`) |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/memories?limit=50&categories=interesting"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/memories",
+        headers={"Authorization": f"Bearer {API_KEY}"},
+        params={"limit": 50, "categories": "interesting"}
+    )
+    memories = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories?limit=50&categories=interesting",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const memories = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="Response Example" icon="code" defaultOpen={true}>
+    ```json
+    [
+      {
+        "id": "mem_789ghi",
+        "content": "User is building an AI fitness app with personal trainer",
+        "category": "interesting",
+        "visibility": "private",
+        "tags": [],
+        "created_at": "2025-01-15T10:30:00Z",
+        "updated_at": "2025-01-15T10:30:00Z",
+        "manually_added": false,
+        "scoring": "01_999_1705315800",
+        "reviewed": false,
+        "user_review": null,
+        "edited": false
+      }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Response Fields" icon="list">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Unique identifier |
+    | `content` | string | The memory content |
+    | `category` | string | `interesting`, `system`, or `manual` |
+    | `visibility` | string | `public` or `private` |
+    | `tags` | array | List of tags |
+    | `created_at` | datetime | When created |
+    | `updated_at` | datetime | When last updated |
+    | `manually_added` | boolean | Added via API or app |
+    | `reviewed` | boolean | Has been reviewed |
+    | `edited` | boolean | Has been edited |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Create Memory
+
+<Card title="POST /v1/dev/user/memories" icon="upload" color="#3b82f6" horizontal>
+  Create a new memory
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `content` | string | **Yes** | The memory content (1-500 characters) |
+    | `category` | string | No | `interesting`, `system`, or `manual` (auto-categorizes if not provided) |
+    | `visibility` | string | No | `public` or `private` (default: `private`) |
+    | `tags` | array | No | List of tags |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.omi.me/v1/dev/user/memories" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "content": "User prefers dark mode in all applications",
+        "category": "system",
+        "tags": ["preferences", "ui"]
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/memories",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "content": "User prefers dark mode in all applications",
+            "category": "system",
+            "tags": ["preferences", "ui"]
+        }
+    )
+    memory = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          content: "User prefers dark mode in all applications",
+          category: "system",
+          tags: ["preferences", "ui"]
+        })
+      }
+    );
+    const memory = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "mem_xyz789",
+    "content": "User prefers dark mode in all applications",
+    "category": "system",
+    "visibility": "private",
+    "tags": ["preferences", "ui"],
+    "created_at": "2025-12-06T10:35:00Z",
+    "updated_at": "2025-12-06T10:35:00Z",
+    "manually_added": true,
+    "scoring": "01_999_1733482500"
+  }
+  ```
+</Accordion>
+
+---
+
+## Create Memories (Batch)
+
+<Card title="POST /v1/dev/user/memories/batch" icon="layer-group" color="#3b82f6" horizontal>
+  Create multiple memories in a single request (max 25)
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `memories` | array | **Yes** | List of memory objects (max 25) |
+
+    Each memory object accepts the same fields as the single create endpoint.
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.omi.me/v1/dev/user/memories/batch" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "memories": [
+          {"content": "User prefers async communication over meetings", "category": "system"},
+          {"content": "User speaks fluent Japanese and French", "category": "interesting"}
+        ]
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/memories/batch",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "memories": [
+                {"content": "User prefers async communication over meetings", "category": "system"},
+                {"content": "User speaks fluent Japanese and French", "category": "interesting"}
+            ]
+        }
+    )
+    result = response.json()
+    print(f"Created {result['created_count']} memories")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories/batch",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          memories: [
+            { content: "User prefers async communication over meetings", category: "system" },
+            { content: "User speaks fluent Japanese and French", category: "interesting" }
+          ]
+        })
+      }
+    );
+    const result = await response.json();
+    console.log(`Created ${result.created_count} memories`);
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "memories": [
+      { "id": "mem_001", "content": "User prefers async communication over meetings", "category": "system", ... },
+      { "id": "mem_002", "content": "User speaks fluent Japanese and French", "category": "interesting", ... }
+    ],
+    "created_count": 2
+  }
+  ```
+</Accordion>
+
+---
+
+## Update Memory
+
+<Card title="PATCH /v1/dev/user/memories/{memory_id}" icon="pen" color="#a855f7" horizontal>
+  Update a memory's content or visibility
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `memory_id` | string | The ID of the memory to update |
+  </Accordion>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `content` | string | No | New content (1-500 characters) |
+    | `visibility` | string | No | New visibility: `public` or `private` |
+
+    At least one field must be provided.
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X PATCH "https://api.omi.me/v1/dev/user/memories/mem_xyz789" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "content": "User strongly prefers dark mode in all applications",
+        "visibility": "private"
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.patch(
+        "https://api.omi.me/v1/dev/user/memories/mem_xyz789",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "content": "User strongly prefers dark mode in all applications",
+            "visibility": "private"
+        }
+    )
+    memory = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories/mem_xyz789",
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          content: "User strongly prefers dark mode in all applications",
+          visibility: "private"
+        })
+      }
+    );
+    const memory = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "mem_xyz789",
+    "content": "User strongly prefers dark mode in all applications",
+    "category": "system",
+    "visibility": "private",
+    "tags": ["preferences", "ui"],
+    "created_at": "2025-12-06T10:35:00Z",
+    "updated_at": "2025-12-25T14:00:00Z",
+    "manually_added": true,
+    "edited": true
+  }
+  ```
+</Accordion>
+
+---
+
+## Delete Memory
+
+<Card title="DELETE /v1/dev/user/memories/{memory_id}" icon="trash" color="#ef4444" horizontal>
+  Delete a memory permanently
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `memory_id` | string | The ID of the memory to delete |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X DELETE "https://api.omi.me/v1/dev/user/memories/mem_xyz789" \
+      -H "Authorization: Bearer $API_KEY"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.delete(
+        "https://api.omi.me/v1/dev/user/memories/mem_xyz789",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    result = response.json()
+    if result["success"]:
+        print("Memory deleted successfully")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories/mem_xyz789",
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY}` }
+      }
+    );
+    const result = await response.json();
+    if (result.success) {
+      console.log("Memory deleted successfully");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "success": true
+  }
+  ```
+</Accordion>
+
+<Warning>
+This action is permanent. Deleted memories cannot be recovered.
+</Warning>
+
+---
+
+## What Are Memories?
+
+<Info>
+**Memories are timeless facts about the user** — preferences, relationships, personal details, and notable insights. They are NOT for notes, tasks, or time-sensitive information.
+
+- **Good memories**: "User is vegetarian", "User's sister Sarah lives in Portland", "User prefers async communication"
+- **Bad memories**: "Meeting on March 15th", "Call dentist tomorrow" (these are action items or conversations)
+
+For notes, meeting summaries, or imported text content, use the [Conversations API](/doc/developer/api/conversations) instead — it automatically extracts memories and action items.
+</Info>
+
+---
+
+## Use Case: Store User Preferences
+
+Import known facts and preferences about the user:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    API_KEY = "omi_dev_your_api_key"
+
+    # Facts about the user from another system
+    user_facts = [
+        {"content": "User is vegetarian", "category": "system"},
+        {"content": "User's dog is named Luna", "category": "interesting"},
+        {"content": "User works at Acme Corp as lead engineer", "category": "system"},
+        {"content": "User ran a marathon in under 4 hours", "category": "interesting"}
+    ]
+
+    # Create batch
+    response = requests.post(
+        "https://api.omi.me/v1/dev/user/memories/batch",
+        headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+        json={"memories": user_facts}
+    )
+
+    print(f"Added {response.json()['created_count']} facts about the user")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const API_KEY = process.env.OMI_API_KEY;
+
+    // Facts about the user from another system
+    const userFacts = [
+      { content: "User is vegetarian", category: "system" },
+      { content: "User's dog is named Luna", category: "interesting" },
+      { content: "User works at Acme Corp as lead engineer", category: "system" },
+      { content: "User ran a marathon in under 4 hours", category: "interesting" }
+    ];
+
+    // Create batch
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/memories/batch",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ memories: userFacts })
+      }
+    );
+
+    const result = await response.json();
+    console.log(`Added ${result.created_count} facts about the user`);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Memory Categories Explained
+
+<CardGroup cols={2}>
+  <Card title="system" icon="gear" color="#3b82f6">
+    Useful context for the AI: preferences, work details, relationships, logistical info. Example: "User prefers dark mode"
+  </Card>
+  <Card title="interesting" icon="star" color="#f59e0b">
+    Shareable, notable facts — things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
+  </Card>
+</CardGroup>

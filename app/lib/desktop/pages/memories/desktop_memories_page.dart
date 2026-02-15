@@ -1,25 +1,25 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/desktop_memory_item.dart';
-import 'widgets/desktop_memory_dialog.dart';
-import 'widgets/desktop_memory_management_dialog.dart';
-import 'package:omi/ui/organisms/memory_review_sheet.dart';
-import 'package:omi/ui/atoms/omi_search_input.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/functions.dart';
+import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_graph.dart';
+import 'widgets/desktop_memory_item.dart';
+import 'widgets/desktop_memory_management_dialog.dart';
 
-enum FilterOption { interesting, system, manual, all }
+enum FilterOption { system, interesting, manual, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
   const DesktopMemoriesPage({super.key});
@@ -48,15 +48,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   bool _animationsInitialized = false;
 
   FilterOption _currentFilter = FilterOption.all;
+  bool _isGraphMode = false;
 
-  // Memory review panel state
-  final ValueNotifier<List<Memory>?> _reviewMemoriesNotifier = ValueNotifier<List<Memory>?>(null);
-
-  // Track unreviewed memories and notification state
-  List<Memory> _unreviewedMemories = [];
-  final ValueNotifier<bool> _showReviewIndicator = ValueNotifier<bool>(false);
   bool _isReloading = false;
+
   late FocusNode _focusNode;
+  final GlobalKey<DesktopMemoryGraphWidgetState> _graphKey = GlobalKey();
 
   @override
   void dispose() {
@@ -65,8 +62,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
-    _reviewMemoriesNotifier.dispose();
-    _showReviewIndicator.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -136,54 +131,54 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     });
   }
 
-  void _checkUnreviewedMemories() {
-    if (!mounted) return;
-    final provider = context.read<MemoriesProvider>();
-    _unreviewedMemories = provider.unreviewed;
-    _showReviewIndicator.value = _unreviewedMemories.isNotEmpty && _reviewMemoriesNotifier.value == null;
-  }
-
   Future<void> _handleRefresh() async {
     final provider = context.read<MemoriesProvider>();
     await provider.init();
 
-    _applyFilter(_currentFilter);
-
-    if (mounted) {
-      _checkUnreviewedMemories();
-    }
+    await _applyFilter(_currentFilter);
   }
 
-  void _applyFilter(FilterOption option) {
+  Future<void> _applyFilter(FilterOption option) async {
     setState(() {
       _currentFilter = option;
-
       switch (option) {
-        case FilterOption.interesting:
-          _filterByCategory(MemoryCategory.interesting);
-          MixpanelManager().memoriesFiltered('interesting');
-          break;
         case FilterOption.system:
-          _filterByCategory(MemoryCategory.system);
-          MixpanelManager().memoriesFiltered('system');
+          _selectedCategory = MemoryCategory.system;
+          break;
+        case FilterOption.interesting:
+          _selectedCategory = MemoryCategory.interesting;
           break;
         case FilterOption.manual:
-          _filterByCategory(MemoryCategory.manual);
-          MixpanelManager().memoriesFiltered('manual');
+          _selectedCategory = MemoryCategory.manual;
           break;
         case FilterOption.all:
-          _filterByCategory(null);
-          MixpanelManager().memoriesFiltered('all');
+          _selectedCategory = null;
           break;
       }
     });
-  }
 
-  void _filterByCategory(MemoryCategory? category) {
-    setState(() {
-      _selectedCategory = category;
-    });
-    context.read<MemoriesProvider>().setCategoryFilter(category);
+    final provider = context.read<MemoriesProvider>();
+    provider.clearCategoryFilter();
+
+    if (!mounted) return;
+
+    switch (option) {
+      case FilterOption.system:
+        provider.toggleCategoryFilter(MemoryCategory.system);
+        MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.interesting:
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
+        break;
+      case FilterOption.manual:
+        provider.toggleCategoryFilter(MemoryCategory.manual);
+        MixpanelManager().memoriesFiltered('manual');
+        break;
+      case FilterOption.all:
+        MixpanelManager().memoriesFiltered('all');
+        break;
+    }
   }
 
   Future<void> _handleReload() async {
@@ -264,8 +259,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 ),
                                 child: Column(
                                   children: [
-                                    _buildModernHeader(provider),
-                                    _buildReviewIndicator(),
+                                    if (!_isGraphMode) _buildModernHeader(provider),
                                     Expanded(
                                       child: _animationsInitialized
                                           ? FadeTransition(
@@ -285,51 +279,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                         ),
                       ),
 
-                      // Panel overlay
-                      ValueListenableBuilder<List<Memory>?>(
-                        valueListenable: _reviewMemoriesNotifier,
-                        builder: (context, reviewMemories, child) {
-                          if (reviewMemories == null) return const SizedBox.shrink();
-
-                          return Stack(
-                            children: [
-                              // Backdrop blur overlay
-                              Positioned.fill(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    _reviewMemoriesNotifier.value = null;
-                                  },
-                                  child: BackdropFilter(
-                                    filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: ResponsiveHelper.backgroundPrimary.withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // Memory review panel
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                bottom: 0,
-                                child: MemoryReviewSheet(
-                                  memories: reviewMemories,
-                                  provider: provider,
-                                  onClose: () {
-                                    _reviewMemoriesNotifier.value = null;
-                                    _checkUnreviewedMemories();
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-
                       // Loading overlay for CMD+R reload
                       if (_isReloading)
                         Container(
@@ -344,7 +293,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Loading memories...',
+                                  context.l10n.loadingMemories,
                                   style: ResponsiveHelper(context).bodyLarge.copyWith(
                                         color: ResponsiveHelper.textPrimary,
                                       ),
@@ -405,7 +354,7 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           Expanded(
             child: OmiSearchInput(
               controller: _searchController,
-              hint: 'Search memories...',
+              hint: context.l10n.searchMemories,
               onChanged: (value) {
                 provider.setSearchQuery(value);
                 if (value.isNotEmpty) {
@@ -421,6 +370,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
           ),
           const SizedBox(width: 12),
           _buildFilterDropdown(provider),
+          const SizedBox(width: 12),
+          OmiIconButton(
+            icon: FontAwesomeIcons.brain,
+            onPressed: _toggleGraphMode,
+            style: _isGraphMode ? OmiIconButtonStyle.filled : OmiIconButtonStyle.outline,
+          ),
           const SizedBox(width: 12),
           OmiIconButton(
             icon: Icons.add,
@@ -452,10 +407,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         ),
         offset: const Offset(0, 48),
         itemBuilder: (context) => [
-          _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.interesting, 'Interesting'),
-          _buildFilterItem(FilterOption.system, 'System'),
-          _buildFilterItem(FilterOption.manual, 'Manual'),
+          _buildFilterItem(FilterOption.all, context.l10n.allMemories),
+          _buildFilterItem(FilterOption.system, context.l10n.aboutYou),
+          _buildFilterItem(FilterOption.interesting, context.l10n.insights),
+          _buildFilterItem(FilterOption.manual, context.l10n.manual),
         ],
         onSelected: _applyFilter,
         child: Container(
@@ -516,18 +471,25 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
 
   String _getFilterText() {
     switch (_currentFilter) {
-      case FilterOption.interesting:
-        return 'Interesting';
       case FilterOption.system:
-        return 'System';
+        return context.l10n.aboutYou;
+      case FilterOption.interesting:
+        return context.l10n.insights;
       case FilterOption.manual:
-        return 'Manual';
+        return context.l10n.manual;
       case FilterOption.all:
-        return 'All';
+        return context.l10n.all;
     }
   }
 
   Widget _buildMemoriesContent(MemoriesProvider provider) {
+    if (_isGraphMode) {
+      return DesktopMemoryGraphWidget(
+        key: _graphKey,
+        onBack: _toggleGraphMode,
+      );
+    }
+
     if (provider.loading && provider.filteredMemories.isEmpty) {
       return _buildModernLoadingState();
     }
@@ -610,10 +572,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ),
             const SizedBox(height: 16),
-            const Text(
-              'Loading your memories...',
+            Text(
+              context.l10n.loadingYourMemories,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
@@ -631,11 +593,12 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       children: [
         OmiEmptyState(
           icon: FontAwesomeIcons.brain,
-          title:
-              provider.searchQuery.isEmpty && _selectedCategory == null ? '🧠 No memories yet' : '🔍 No memories found',
+          title: provider.searchQuery.isEmpty && _selectedCategory == null
+              ? context.l10n.noMemoriesYet
+              : context.l10n.noMemoriesFound,
           message: provider.searchQuery.isEmpty && _selectedCategory == null
-              ? 'Create your first memory to get started'
-              : 'Try adjusting your search or filter',
+              ? context.l10n.createYourFirstMemory
+              : context.l10n.tryAdjustingFilter,
           color: ResponsiveHelper.purplePrimary,
         ),
         if (provider.searchQuery.isEmpty && _selectedCategory == null) ...[
@@ -658,9 +621,9 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                     ),
                   ],
                 ),
-                child: const Text(
-                  'Add your first memory',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.addYourFirstMemory,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -744,161 +707,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     );
   }
 
-  void _showReviewSheet(BuildContext context, List<Memory> memories, MemoriesProvider existingProvider) {
-    if (memories.isEmpty || !mounted) return;
-    _reviewMemoriesNotifier.value = memories;
-    _showReviewIndicator.value = false; // Hide indicator when panel is open
-  }
-
-  Widget _buildReviewIndicator() {
-    return ValueListenableBuilder<bool>(
-      valueListenable: _showReviewIndicator,
-      builder: (context, showIndicator, child) {
-        if (!showIndicator || _unreviewedMemories.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Container(
-          margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-                    ResponsiveHelper.purplePrimary.withValues(alpha: 0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // Notification icon
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      FontAwesomeIcons.bell,
-                      color: ResponsiveHelper.purplePrimary,
-                      size: 16,
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Review your memories',
-                          style: TextStyle(
-                            color: ResponsiveHelper.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_unreviewedMemories.length} new ${_unreviewedMemories.length == 1 ? 'memory' : 'memories'} waiting for review. Review them to keep or discard.',
-                          style: const TextStyle(
-                            color: ResponsiveHelper.textSecondary,
-                            fontSize: 12,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Review button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            final provider = context.read<MemoriesProvider>();
-                            _showReviewSheet(context, _unreviewedMemories, provider);
-                          },
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: ResponsiveHelper.purplePrimary,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: const Text(
-                              'Review',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      // Dismiss button
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            _showReviewIndicator.value = false;
-                          },
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            child: const Icon(
-                              Icons.close,
-                              color: ResponsiveHelper.textTertiary,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _showManagementSheet(BuildContext context, MemoriesProvider provider) {
     showDialog(
       context: context,
@@ -906,5 +714,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         provider: provider,
       ),
     );
+  }
+
+  void _toggleGraphMode() {
+    setState(() {
+      _isGraphMode = !_isGraphMode;
+    });
   }
 }

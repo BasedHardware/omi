@@ -91,7 +91,7 @@ def get_memories(
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     print("get_memories", len(memories))
-    result = [memory for memory in memories if memory['user_review'] is not False]
+    result = [memory for memory in memories if memory.get('user_review') is not False]
     return result
 
 
@@ -166,6 +166,32 @@ def get_memory(uid: str, memory_id: str):
     return memory_data
 
 
+def get_memories_by_ids(uid: str, memory_ids: List[str]) -> List[dict]:
+    """
+    Batch fetch multiple memories by their IDs.
+    Uses Firestore's get_all for efficient batch retrieval.
+    """
+    if not memory_ids:
+        return []
+
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+
+    doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
+    docs = db.get_all(doc_refs)
+
+    memories = []
+    for doc in docs:
+        if doc.exists:
+            memory_data = doc.to_dict()
+            # Apply decryption if needed
+            memory_data = _prepare_memory_for_read(memory_data, uid)
+            if memory_data:
+                memories.append(memory_data)
+
+    return memories
+
+
 def review_memory(uid: str, memory_id: str, value: bool):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
@@ -173,11 +199,32 @@ def review_memory(uid: str, memory_id: str, value: bool):
     memory_ref.update({'reviewed': True, 'user_review': value})
 
 
+def set_memory_kg_extracted(uid: str, memory_id: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'kg_extracted': True})
+
+
 def change_memory_visibility(uid: str, memory_id: str, value: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'visibility': value})
+
+
+def update_memory_fields(uid: str, memory_id: str, data: dict):
+    """Updates specified fields for a memory and sets the updated_at timestamp."""
+    if not data:
+        return
+
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+
+    update_payload = data.copy()
+    update_payload['updated_at'] = datetime.now(timezone.utc)
+    memory_ref.update(update_payload)
 
 
 def edit_memory(uid: str, memory_id: str, value: str):
@@ -211,6 +258,16 @@ def delete_all_memories(uid: str):
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
+
+
+def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]:
+    """Get all memory IDs associated with a conversation."""
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    query = memories_ref.where(filter=FieldFilter('memory_id', '==', conversation_id))
+
+    memory_ids = [doc.id for doc in query.stream()]
+    return memory_ids
 
 
 def delete_memories_for_conversation(uid: str, memory_id: str):

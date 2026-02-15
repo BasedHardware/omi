@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/utils/logger.dart';
 
 class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _actionItems = [];
@@ -14,6 +17,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   bool _includeCompleted = true;
 
+  // UI filter: show completed tasks view
+  bool _showCompletedView = false;
+
   // Date range filter
   DateTime? _startDate;
   DateTime? _endDate;
@@ -22,6 +28,12 @@ class ActionItemsProvider extends ChangeNotifier {
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
   static const Duration _refreshCooldown = Duration(seconds: 30);
+
+  // Debounced persistence for sort order and indent level
+  final Map<String, int> _pendingSortUpdates = {};
+  final Map<String, int> _pendingIndentUpdates = {};
+  Timer? _sortDebounce;
+  Timer? _indentDebounce;
 
   // Multi-selection state
   bool _isSelectionMode = false;
@@ -33,6 +45,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
+  bool get showCompletedView => _showCompletedView;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
@@ -97,6 +110,27 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void _preload() async {
     await fetchActionItems();
+    _migrateCategoryOrderFromPrefs();
+  }
+
+  /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
+  Future<void> _migrateCategoryOrderFromPrefs() async {
+    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
+    if (savedOrder.isEmpty) return;
+
+    final Map<String, int> sortUpdates = {};
+    for (final entry in savedOrder.entries) {
+      final ids = entry.value;
+      for (int i = 0; i < ids.length; i++) {
+        sortUpdates[ids[i]] = (i + 1) * 1000;
+      }
+    }
+
+    if (sortUpdates.isNotEmpty) {
+      batchUpdateSortOrders(sortUpdates);
+      // Clear old prefs after migration
+      SharedPreferencesUtil().taskCategoryOrder = {};
+    }
   }
 
   void setLoading(bool value) {
@@ -128,7 +162,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _actionItems = response.actionItems;
       _hasMore = response.hasMore;
     } catch (e) {
-      debugPrint('Error fetching action items: $e');
+      Logger.debug('Error fetching action items: $e');
     } finally {
       if (showShimmer) {
         setLoading(false);
@@ -157,7 +191,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _actionItems.addAll(response.actionItems);
       _hasMore = response.hasMore;
     } catch (e) {
-      debugPrint('Error loading more action items: $e');
+      Logger.debug('Error loading more action items: $e');
     } finally {
       setFetching(false);
     }
@@ -182,7 +216,7 @@ class ActionItemsProvider extends ChangeNotifier {
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
-        debugPrint('Failed to update action item state on server');
+        Logger.debug('Failed to update action item state on server');
       } else {
         // Cancel notification if the action item is marked as completed
         if (newState == true) {
@@ -192,7 +226,7 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
-      debugPrint('Error updating action item state: $e');
+      Logger.debug('Error updating action item state: $e');
     }
   }
 
@@ -219,12 +253,12 @@ class ActionItemsProvider extends ChangeNotifier {
         // Revert on failure
         _findAndUpdateItemDescription(item.id, item.description);
         notifyListeners();
-        debugPrint('Failed to update action item description on server');
+        Logger.debug('Failed to update action item description on server');
       }
     } catch (e) {
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
-      debugPrint('Error updating action item description: $e');
+      Logger.debug('Error updating action item description: $e');
     }
   }
 
@@ -233,6 +267,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final updatedItem = await api.updateActionItem(
         item.id,
         dueAt: dueDate,
+        clearDueAt: dueDate == null, // Explicitly clear if null
       );
 
       if (updatedItem != null) {
@@ -243,10 +278,10 @@ class ActionItemsProvider extends ChangeNotifier {
           notifyListeners();
         }
       } else {
-        debugPrint('Failed to update action item due date on server');
+        Logger.debug('Failed to update action item due date on server');
       }
     } catch (e) {
-      debugPrint('Error updating action item due date: $e');
+      Logger.debug('Error updating action item due date: $e');
     }
   }
 
@@ -261,11 +296,11 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       } else {
-        debugPrint('Failed to delete action item on server');
+        Logger.debug('Failed to delete action item on server');
         return false;
       }
     } catch (e) {
-      debugPrint('Error deleting action item: $e');
+      Logger.debug('Error deleting action item: $e');
       return false;
     }
   }
@@ -307,15 +342,75 @@ class ActionItemsProvider extends ChangeNotifier {
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         notifyListeners();
-        debugPrint('Failed to create action item on server');
+        Logger.debug('Failed to create action item on server');
         return null;
       }
     } catch (e) {
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
       notifyListeners();
-      debugPrint('Error creating action item: $e');
+      Logger.debug('Error creating action item: $e');
       return null;
     }
+  }
+
+  // Sort order and indent level persistence
+
+  void _updateItemInPlace(String id, {int? sortOrder, int? indentLevel}) {
+    final index = _actionItems.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _actionItems[index] = _actionItems[index].copyWith(
+        sortOrder: sortOrder,
+        indentLevel: indentLevel,
+      );
+    }
+  }
+
+  void updateItemSortOrder(String id, int sortOrder) {
+    _updateItemInPlace(id, sortOrder: sortOrder);
+    _pendingSortUpdates[id] = sortOrder;
+    notifyListeners();
+    _sortDebounce?.cancel();
+    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+  }
+
+  void updateItemIndentLevel(String id, int indentLevel) {
+    _updateItemInPlace(id, indentLevel: indentLevel);
+    _pendingIndentUpdates[id] = indentLevel;
+    notifyListeners();
+    _indentDebounce?.cancel();
+    _indentDebounce = Timer(const Duration(milliseconds: 500), _flushIndentUpdates);
+  }
+
+  void batchUpdateSortOrders(Map<String, int> updates) {
+    for (final entry in updates.entries) {
+      _updateItemInPlace(entry.key, sortOrder: entry.value);
+      _pendingSortUpdates[entry.key] = entry.value;
+    }
+    notifyListeners();
+    _sortDebounce?.cancel();
+    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+  }
+
+  Future<void> _flushSortUpdates() async {
+    if (_pendingSortUpdates.isEmpty) return;
+    final updates = Map<String, int>.from(_pendingSortUpdates);
+    _pendingSortUpdates.clear();
+
+    final items = updates.entries
+        .map((e) => {'id': e.key, 'sort_order': e.value})
+        .toList();
+    await api.batchUpdateActionItems(items);
+  }
+
+  Future<void> _flushIndentUpdates() async {
+    if (_pendingIndentUpdates.isEmpty) return;
+    final updates = Map<String, int>.from(_pendingIndentUpdates);
+    _pendingIndentUpdates.clear();
+
+    final items = updates.entries
+        .map((e) => {'id': e.key, 'indent_level': e.value})
+        .toList();
+    await api.batchUpdateActionItems(items);
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
@@ -344,6 +439,11 @@ class ActionItemsProvider extends ChangeNotifier {
     // TODO: Add analytics for completed action items toggle
   }
 
+  void toggleShowCompletedView() {
+    _showCompletedView = !_showCompletedView;
+    notifyListeners();
+  }
+
   void setDateRangeFilter(DateTime? startDate, DateTime? endDate) {
     _startDate = startDate;
     _endDate = endDate;
@@ -359,7 +459,7 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> refreshActionItems() async {
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint('Skipping action items refresh - too soon since last refresh');
+      Logger.debug('Skipping action items refresh - too soon since last refresh');
       return;
     }
 
@@ -475,6 +575,10 @@ class ActionItemsProvider extends ChangeNotifier {
   @override
   void dispose() {
     _refreshDebounceTimer?.cancel();
+    _sortDebounce?.cancel();
+    _indentDebounce?.cancel();
+    _flushSortUpdates();
+    _flushIndentUpdates();
     super.dispose();
   }
 }

@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'package:omi/ui/organisms/desktop/action_item_desktop.dart';
+import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+
+enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class DesktopActionsPage extends StatefulWidget {
   const DesktopActionsPage({super.key});
@@ -28,22 +30,26 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   final ScrollController _scrollController = ScrollController();
 
   late AnimationController _fadeController;
-  late AnimationController _slideController;
   late AnimationController _pulseController;
-
   late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
 
   bool _animationsInitialized = false;
-
-  String? _errorMessage;
-  bool _hasNetworkError = false;
   bool _isReloading = false;
   late FocusNode _focusNode;
 
-  // Tab state: 0 = To Do, 1 = Done, 2 = Snoozed
-  int _selectedTabIndex = 0;
+
+  // Track the item being hovered over during drag
+  String? _hoveredItemId;
+  bool _hoverAbove = false; // true = insert above, false = insert below
+
+  // Track which category's first position drop zone is being hovered
+  TaskCategory? _hoveredFirstPositionCategory;
+
+  // Show completed tasks
+  bool _showCompleted = false;
+
+  bool _isDragging = false;
 
   void _requestFocusIfPossible() {
     if (mounted && _focusNode.canRequestFocus) {
@@ -56,7 +62,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _fadeController.dispose();
-    _slideController.dispose();
     _pulseController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -73,11 +78,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       vsync: this,
     );
 
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
@@ -86,11 +86,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOutCubic),
     );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
 
     _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -107,7 +102,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       }
 
       _fadeController.forward();
-      _slideController.forward();
 
       Future.delayed(const Duration(milliseconds: 100), () {
         _requestFocusIfPossible();
@@ -130,118 +124,295 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     }
   }
 
+  // Categorize items by deadline
+  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items) {
+    final now = DateTime.now();
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
+
+    // Filter out old tasks without a future due date (older than 7 days)
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+    final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
+      TaskCategory.today: [],
+      TaskCategory.tomorrow: [],
+      TaskCategory.noDeadline: [],
+      TaskCategory.later: [],
+    };
+
+    for (var item in items) {
+      // Skip completed items unless showing completed
+      if (item.completed && !_showCompleted) continue;
+      if (!item.completed && _showCompleted) continue;
+
+      // Skip old tasks without a future due date (only for non-completed)
+      if (!_showCompleted) {
+        if (item.dueAt != null) {
+          if (item.dueAt!.isBefore(sevenDaysAgo)) continue;
+        } else {
+          if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) continue;
+        }
+      }
+
+      if (item.dueAt == null) {
+        categorized[TaskCategory.noDeadline]!.add(item);
+      } else {
+        final dueDate = item.dueAt!;
+        if (dueDate.isBefore(startOfTomorrow)) {
+          categorized[TaskCategory.today]!.add(item);
+        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+          categorized[TaskCategory.tomorrow]!.add(item);
+        } else {
+          categorized[TaskCategory.later]!.add(item);
+        }
+      }
+    }
+
+    return categorized;
+  }
+
+  // Get ordered items for a category, respecting sort_order from model
+  List<ActionItemWithMetadata> _getOrderedItems(
+    TaskCategory category,
+    List<ActionItemWithMetadata> items,
+  ) {
+    final sorted = List<ActionItemWithMetadata>.from(items);
+    sorted.sort((a, b) {
+      // Items with sortOrder > 0 come first, sorted ascending
+      if (a.sortOrder > 0 && b.sortOrder > 0) {
+        return a.sortOrder.compareTo(b.sortOrder);
+      }
+      if (a.sortOrder > 0) return -1;
+      if (b.sortOrder > 0) return 1;
+      // Fallback: sort by dueAt then createdAt
+      final aDue = a.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDue = b.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dueCmp = aDue.compareTo(bDue);
+      if (dueCmp != 0) return dueCmp;
+      final aCreated = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bCreated = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aCreated.compareTo(bCreated);
+    });
+    return sorted;
+  }
+
+  // Reorder item within category
+  void _reorderItemInCategory(
+    ActionItemWithMetadata draggedItem,
+    String targetItemId,
+    bool insertAbove,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+
+    final targetIndex = order.indexOf(targetItemId);
+    if (targetIndex != -1) {
+      final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+      order.insert(insertIndex, draggedItem.id);
+    } else {
+      order.add(draggedItem.id);
+    }
+
+    // Assign sequential sort_order values
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
+    setState(() {
+      _hoveredItemId = null;
+      _hoveredFirstPositionCategory = null;
+      _isDragging = false;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  String _getCategoryTitle(BuildContext context, TaskCategory category) {
+    switch (category) {
+      case TaskCategory.today:
+        return context.l10n.tasksToday;
+      case TaskCategory.tomorrow:
+        return context.l10n.tasksTomorrow;
+      case TaskCategory.noDeadline:
+        return context.l10n.tasksNoDeadline;
+      case TaskCategory.later:
+        return context.l10n.tasksLater;
+    }
+  }
+
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
+    final now = DateTime.now();
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
+
+    if (item.dueAt == null) {
+      return TaskCategory.noDeadline;
+    }
+    final dueDate = item.dueAt!;
+    if (dueDate.isBefore(startOfTomorrow)) {
+      return TaskCategory.today;
+    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+      return TaskCategory.tomorrow;
+    } else {
+      return TaskCategory.later;
+    }
+  }
+
+  DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
+    final now = DateTime.now();
+    switch (category) {
+      case TaskCategory.today:
+        return DateTime(now.year, now.month, now.day, 23, 59);
+      case TaskCategory.tomorrow:
+        return DateTime(now.year, now.month, now.day + 1, 23, 59);
+      case TaskCategory.noDeadline:
+        return null;
+      case TaskCategory.later:
+        // Day after tomorrow
+        return DateTime(now.year, now.month, now.day + 2, 23, 59);
+    }
+  }
+
+  void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final newDueDate = _getDefaultDueDateForCategory(newCategory);
+    provider.updateActionItemDueDate(item, newDueDate);
+    // Clear drag state after category update
+    setState(() {
+      _isDragging = false;
+      _hoveredItemId = null;
+      _hoveredFirstPositionCategory = null;
+    });
+  }
+
+  int _getIndentLevel(ActionItemWithMetadata item) {
+    return item.indentLevel;
+  }
+
+  void _incrementIndent(String itemId) {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.firstWhere((i) => i.id == itemId, orElse: () => throw StateError('not found'));
+    final current = item.indentLevel;
+    if (current < 3) {
+      provider.updateItemIndentLevel(itemId, current + 1);
+    }
+    HapticFeedback.lightImpact();
+  }
+
+  void _decrementIndent(String itemId) {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.firstWhere((i) => i.id == itemId, orElse: () => throw StateError('not found'));
+    final current = item.indentLevel;
+    if (current > 0) {
+      provider.updateItemIndentLevel(itemId, current - 1);
+    }
+    HapticFeedback.lightImpact();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return VisibilityDetector(
-        key: const Key('desktop-actions-page'),
-        onVisibilityChanged: (visibilityInfo) {
-          if (visibilityInfo.visibleFraction > 0.1) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
-          }
+      key: const Key('desktop-actions-page'),
+      onVisibilityChanged: (visibilityInfo) {
+        if (visibilityInfo.visibleFraction > 0.1) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _requestFocusIfPossible());
+        }
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
         },
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.keyR, meta: true): _handleReload,
-          },
-          child: Focus(
-            focusNode: _focusNode,
-            autofocus: true,
-            child: GestureDetector(
-              onTap: () {
-                if (!_focusNode.hasFocus) {
-                  _focusNode.requestFocus();
-                }
-              },
-              child: Consumer<ActionItemsProvider>(
-                builder: (context, provider, _) {
-                  // Get categorized items based on new logic
-                  final todoItems = provider.todoItems;
-                  final doneItems = provider.doneItems;
-                  final snoozedItems = provider.snoozedItems;
-                  final allItems = provider.actionItems;
+        child: Focus(
+          focusNode: _focusNode,
+          autofocus: true,
+          child: GestureDetector(
+            onTap: () {
+              if (!_focusNode.hasFocus) {
+                _focusNode.requestFocus();
+              }
+            },
+            child: Consumer<ActionItemsProvider>(
+              builder: (context, provider, _) {
+                final allItems = provider.actionItems;
+                final categorizedItems = _categorizeItems(allItems);
 
-                  // Get current tab items
-                  final currentTabItems = _selectedTabIndex == 0
-                      ? todoItems
-                      : _selectedTabIndex == 1
-                          ? doneItems
-                          : snoozedItems;
-
-                  return Stack(
-                    children: [
+                return Stack(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            ResponsiveHelper.backgroundPrimary,
+                            ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Stack(
+                          children: [
+                            _buildAnimatedBackground(),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.02),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildHeader(),
+                                  Expanded(
+                                    child: _animationsInitialized
+                                        ? FadeTransition(
+                                            opacity: _fadeAnimation,
+                                            child: _buildContent(provider, allItems, categorizedItems),
+                                          )
+                                        : _buildContent(provider, allItems, categorizedItems),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_isReloading)
                       Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              ResponsiveHelper.backgroundPrimary,
-                              ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
-                            ],
-                          ),
+                          color: Colors.black54,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: Stack(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildAnimatedBackground(),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.02),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Column(
-                                  children: [
-                                    _buildHeader(todoItems, doneItems, snoozedItems),
-                                    Expanded(
-                                      child: _animationsInitialized
-                                          ? FadeTransition(
-                                              opacity: _fadeAnimation,
-                                              child: SlideTransition(
-                                                position: _slideAnimation,
-                                                child: _buildActionsContent(provider, allItems, currentTabItems),
-                                              ),
-                                            )
-                                          : _buildActionsContent(provider, allItems, currentTabItems),
+                              const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
+                              const SizedBox(height: 16),
+                              Text(
+                                context.l10n.loadingTasks,
+                                style: ResponsiveHelper(context).bodyLarge.copyWith(
+                                      color: ResponsiveHelper.textPrimary,
                                     ),
-                                  ],
-                                ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      if (_isReloading)
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Loading action items...',
-                                  style: ResponsiveHelper(context).bodyLarge.copyWith(
-                                        color: ResponsiveHelper.textPrimary,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
+                  ],
+                );
+              },
             ),
           ),
-        ));
+        ),
+      ),
+    );
   }
 
   Widget _buildAnimatedBackground() {
@@ -279,116 +450,81 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildHeader(List<ActionItemWithMetadata> todoItems, List<ActionItemWithMetadata> doneItems,
-      List<ActionItemWithMetadata> snoozedItems) {
+  Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
-      child: Column(
+      child: Row(
         children: [
-          // Title and create button row
-          Row(
-            children: [
-              // Title section
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          FontAwesomeIcons.listCheck,
-                          color: ResponsiveHelper.textSecondary,
-                          size: 18,
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Action Items',
-                          style: TextStyle(
-                            color: ResponsiveHelper.textPrimary,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                    const Icon(
+                      FontAwesomeIcons.listCheck,
+                      color: ResponsiveHelper.textSecondary,
+                      size: 18,
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(width: 12),
                     Text(
-                      'Tap to edit • Long press to select • Swipe for actions',
-                      style: TextStyle(
-                        color: ResponsiveHelper.textSecondary,
-                        fontSize: 12,
+                      context.l10n.tasks,
+                      style: const TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-              ),
-              // Create button
-              OmiButton(
-                label: 'Create',
-                onPressed: _showCreateActionItemDialog,
-                icon: FontAwesomeIcons.plus,
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-
-          // Segmented Control - Full width like mobile
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.all(2),
-            child: CupertinoSlidingSegmentedControl<int>(
-              groupValue: _selectedTabIndex,
-              onValueChanged: (int? value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedTabIndex = value;
-                  });
-                  HapticFeedback.selectionClick();
-
-                  // Track tab change
-                  final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Snoozed');
-                  MixpanelManager().actionItemTabChanged(tabName);
-                }
+          // Show completed toggle
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showCompleted = !_showCompleted;
+                });
+                HapticFeedback.lightImpact();
               },
-              backgroundColor: Colors.transparent,
-              thumbColor: ResponsiveHelper.backgroundSecondary,
-              padding: const EdgeInsets.all(0),
-              children: {
-                0: _buildTabLabel('To Do', todoItems.length),
-                1: _buildTabLabel('Done', doneItems.length),
-                2: _buildTabLabel('Snoozed', snoozedItems.length),
-              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: _showCompleted ? ResponsiveHelper.purplePrimary.withOpacity(0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _showCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                  color: _showCompleted ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
+                  size: 20,
+                ),
+              ),
             ),
+          ),
+          OmiButton(
+            label: context.l10n.create,
+            onPressed: () => _showCreateDialog(),
+            icon: FontAwesomeIcons.plus,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _showCreateActionItemDialog() async {
+  Future<void> _showCreateDialog({DateTime? defaultDueDate}) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => const DesktopActionItemFormDialog(),
+      builder: (context) => DesktopActionItemFormDialog(defaultDueDate: defaultDueDate),
     );
 
     if (result == true) {
-      // Refresh the action items list
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       provider.forceRefreshActionItems();
     }
-  }
-
-  void _retryLoadingActionItems() {
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    setState(() {
-      _hasNetworkError = false;
-      _errorMessage = null;
-    });
-    provider.fetchActionItems(showShimmer: true);
   }
 
   Future<void> _handleReload() async {
@@ -398,7 +534,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       _isReloading = true;
     });
 
-    // Scroll to top
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0,
@@ -417,127 +552,35 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     }
   }
 
-  Widget _buildTabLabel(String label, int count) {
-    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : 2);
-    final bool isSelected = _selectedTabIndex == tabIndex;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-            ),
-          ),
-          if (count > 0) ...[
-            const SizedBox(width: 4),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isSelected ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionsContent(
+  Widget _buildContent(
     ActionItemsProvider provider,
     List<ActionItemWithMetadata> allItems,
-    List<ActionItemWithMetadata> currentTabItems,
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
   ) {
-    if (_hasNetworkError && allItems.isEmpty) {
-      return _buildErrorState();
-    }
-
     if (provider.isLoading && allItems.isEmpty) {
-      return _buildModernLoadingState();
+      return _buildLoadingState();
     }
 
-    if (allItems.isEmpty) {
-      return _buildModernEmptyState();
+    if (allItems.isEmpty && !_showCompleted) {
+      return _buildEmptyState();
     }
+
+    final categoriesToShow = _isDragging
+        ? TaskCategory.values
+        : TaskCategory.values.where((c) => (categorizedItems[c] ?? []).isNotEmpty).toList();
 
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
-        // Info banner for snoozed tab
-        if (allItems.isNotEmpty && _selectedTabIndex == 2)
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        for (final category in categoriesToShow)
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20.0, 0, 20.0, 12.0),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: ResponsiveHelper.textTertiary.withOpacity(0.3),
-                    width: 1,
-                  ),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: ResponsiveHelper.textTertiary,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Old tasks are auto-snoozed after 3 days to keep your To Do list clean. You can still complete or delete them here.',
-                        style: TextStyle(
-                          color: ResponsiveHelper.textSecondary,
-                          fontSize: 12,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: _buildCategorySection(
+              category: category,
+              items: categorizedItems[category] ?? [],
+              provider: provider,
             ),
           ),
-
-        // Current Tab Items
-        if (allItems.isNotEmpty && currentTabItems.isNotEmpty)
-          _buildFlatView(currentTabItems, _selectedTabIndex == 1)
-        else if (allItems.isNotEmpty && currentTabItems.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Container(
-                height: 120,
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    _getEmptyTabMessage(),
-                    style: const TextStyle(
-                      color: ResponsiveHelper.textSecondary,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-        // Loading indicator for pagination
         if (provider.isFetching)
           SliverToBoxAdapter(
             child: Container(
@@ -549,60 +592,439 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             ),
           ),
-
-        if (_hasNetworkError && allItems.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Colors.orange.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    FontAwesomeIcons.triangleExclamation,
-                    color: Colors.orange[300],
-                    size: 16,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _errorMessage ?? 'Some features may not work properly',
-                      style: TextStyle(
-                        color: Colors.orange[300],
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _retryLoadingActionItems,
-                    child: Text(
-                      'Retry',
-                      style: TextStyle(
-                        color: Colors.orange[300],
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
         const SliverPadding(padding: EdgeInsets.only(bottom: 20)),
       ],
     );
   }
 
-  Widget _buildModernLoadingState() {
+  Widget _buildCategorySection({
+    required TaskCategory category,
+    required List<ActionItemWithMetadata> items,
+    required ActionItemsProvider provider,
+  }) {
+    final title = _getCategoryTitle(context, category);
+    final isEmpty = items.isEmpty;
+    final orderedItems = _getOrderedItems(category, items);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: DragTarget<ActionItemWithMetadata>(
+        onWillAcceptWithDetails: (details) => true,
+        onAcceptWithDetails: (details) {
+          if (_hoveredItemId == null && _hoveredFirstPositionCategory == null) {
+            _updateTaskCategory(details.data, category);
+          }
+        },
+        builder: (context, candidateData, rejectedData) {
+          final isHovering = candidateData.isNotEmpty;
+          final isEmptyDuringDrag = isEmpty && _isDragging;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: isHovering
+                  ? ResponsiveHelper.backgroundTertiary.withOpacity(0.5)
+                  : isEmptyDuringDrag
+                      ? ResponsiveHelper.backgroundSecondary.withOpacity(0.3)
+                      : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: isEmptyDuringDrag && !isHovering
+                  ? Border.all(
+                      color: ResponsiveHelper.textTertiary.withOpacity(0.3),
+                      width: 1,
+                      style: BorderStyle.solid,
+                    )
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isEmptyDuringDrag ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (items.isNotEmpty)
+                        Text(
+                          '${items.length}',
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textTertiary,
+                            fontSize: 14,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // First position drop zone (only show when there are items)
+                if (orderedItems.isNotEmpty)
+                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
+
+                // Task items with drag reordering
+                ...orderedItems.map((item) => _buildDraggableTaskItem(
+                      item: item,
+                      provider: provider,
+                      category: category,
+                      categoryItems: items,
+                    )),
+
+                // Spacing after section
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFirstPositionDropZone(
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+    bool isDragging,
+  ) {
+    final isHoveredFirst = _hoveredFirstPositionCategory == category;
+
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        // Don't accept if it's already the first item
+        if (categoryItems.isNotEmpty && details.data.id == categoryItems.first.id) {
+          return false;
+        }
+        return true;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
+        // Insert at first position
+        _reorderItemToFirst(draggedItem, category, categoryItems);
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        if (_hoveredFirstPositionCategory != category) {
+          setState(() {
+            _hoveredFirstPositionCategory = category;
+            _hoveredItemId = null;
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredFirstPositionCategory == category) {
+          setState(() {
+            _hoveredFirstPositionCategory = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final showIndicator = isHoveredFirst && candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: showIndicator ? 36 : (isDragging ? 20 : 4),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: showIndicator ? Colors.deepPurpleAccent.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: showIndicator ? Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5), width: 1.5) : null,
+          ),
+          child: showIndicator
+              ? Center(
+                  child: Text(
+                    'Drop here for first position',
+                    style: TextStyle(
+                      color: Colors.deepPurpleAccent.withOpacity(0.8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              : null,
+        );
+      },
+    );
+  }
+
+  void _reorderItemToFirst(
+    ActionItemWithMetadata draggedItem,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+    order.insert(0, draggedItem.id);
+
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
+    setState(() {
+      _hoveredItemId = null;
+      _hoveredFirstPositionCategory = null;
+      _isDragging = false;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  Widget _buildDraggableTaskItem({
+    required ActionItemWithMetadata item,
+    required ActionItemsProvider provider,
+    required TaskCategory category,
+    required List<ActionItemWithMetadata> categoryItems,
+  }) {
+    final isHovered = _hoveredItemId == item.id;
+
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        return details.data.id != item.id;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
+        _reorderItemInCategory(
+          draggedItem,
+          item.id,
+          _hoverAbove,
+          category,
+          categoryItems,
+        );
+
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        // Determine if we're in the top or bottom half
+        final RenderBox box = context.findRenderObject() as RenderBox;
+        final localPosition = box.globalToLocal(details.offset);
+        final isAbove = localPosition.dy < 20;
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+          setState(() {
+            _hoveredItemId = item.id;
+            _hoverAbove = isAbove;
+            _hoveredFirstPositionCategory = null; // Clear first position hover
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == item.id) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drop indicator above
+            if (isHovered && _hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            _buildTaskItem(item, provider),
+            // Drop indicator below
+            if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTaskItem(ActionItemWithMetadata item, ActionItemsProvider provider) {
+    final indentLevel = _getIndentLevel(item);
+    final indentWidth = indentLevel * 28.0;
+
+    return LongPressDraggable<ActionItemWithMetadata>(
+      data: item,
+      delay: const Duration(milliseconds: 150),
+      hapticFeedbackOnStart: true,
+      onDragStarted: () {
+        HapticFeedback.mediumImpact();
+        setState(() {
+          _isDragging = true;
+        });
+      },
+      onDragEnd: (details) {
+        setState(() {
+          _isDragging = false;
+          _hoveredItemId = null;
+          _hoveredFirstPositionCategory = null;
+        });
+      },
+      onDraggableCanceled: (_, __) {
+        setState(() {
+          _isDragging = false;
+          _hoveredItemId = null;
+          _hoveredFirstPositionCategory = null;
+        });
+      },
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundSecondary,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _buildCheckbox(item.completed),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  item.description,
+                  style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: _buildTaskItemContent(item, provider, indentWidth),
+      ),
+      child: _buildTaskItemContent(item, provider, indentWidth),
+    );
+  }
+
+  Widget _buildTaskItemContent(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    double indentWidth,
+  ) {
+    final indentLevel = _getIndentLevel(item);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null) {
+            if (details.primaryVelocity! > 200) {
+              _incrementIndent(item.id);
+            } else if (details.primaryVelocity! < -200) {
+              _decrementIndent(item.id);
+            }
+          }
+        },
+        child: InkWell(
+          onTap: () => _showEditDialog(item),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Indent line
+                if (indentLevel > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Container(
+                      width: 1.5,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: ResponsiveHelper.textTertiary,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                // Checkbox
+                GestureDetector(
+                  onTap: () async {
+                    await provider.updateActionItemState(item, !item.completed);
+                  },
+                  child: _buildCheckbox(item.completed),
+                ),
+                const SizedBox(width: 12),
+                // Task text
+                Expanded(
+                  child: Text(
+                    item.description,
+                    style: TextStyle(
+                      color: item.completed ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
+                      fontSize: 14,
+                      decoration: item.completed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckbox(bool isCompleted) {
+    return Container(
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isCompleted ? Colors.amber : ResponsiveHelper.textTertiary,
+          width: 2,
+        ),
+        color: isCompleted ? Colors.amber : Colors.transparent,
+      ),
+      child: isCompleted ? const Icon(Icons.check, size: 12, color: Colors.black) : null,
+    );
+  }
+
+  Future<void> _showEditDialog(ActionItemWithMetadata item) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => DesktopActionItemFormDialog(actionItem: item),
+    );
+
+    if (result == true) {
+      final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      provider.forceRefreshActionItems();
+    }
+  }
+
+  Widget _buildLoadingState() {
     return Center(
       child: Container(
         padding: const EdgeInsets.all(20),
@@ -613,58 +1035,19 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             color: Colors.white.withOpacity(0.1),
             width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _animationsInitialized
-                ? AnimatedBuilder(
-                    animation: _pulseController,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: 1.0 + (_pulseAnimation.value * 0.1),
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: ResponsiveHelper.purplePrimary,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
-                        ),
-                      );
-                    },
-                  )
-                : Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.purplePrimary,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      strokeWidth: 2,
-                    ),
-                  ),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
+            ),
             const SizedBox(height: 16),
-            const Text(
-              'Loading your action items...',
-              textAlign: TextAlign.center,
-              style: TextStyle(
+            Text(
+              context.l10n.loadingTasks,
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -673,99 +1056,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
     );
   }
 
-  Widget _buildModernEmptyState() {
-    Widget content = Container(
-      padding: const EdgeInsets.all(40),
-      margin: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
-          ),
-        ],
-      ),
-      child: _buildFirstTimeEmptyState(),
-    );
-
-    return Center(
-      child: _animationsInitialized
-          ? FadeTransition(
-              opacity: _fadeAnimation,
-              child: content,
-            )
-          : content,
-    );
-  }
-
-  Widget _buildFirstTimeEmptyState() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _animationsInitialized
-            ? AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 1.0 + (_pulseAnimation.value * 0.05),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        FontAwesomeIcons.circleCheck,
-                        size: 48,
-                        color: ResponsiveHelper.purplePrimary,
-                      ),
-                    ),
-                  );
-                },
-              )
-            : Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Icon(
-                  FontAwesomeIcons.circleCheck,
-                  size: 48,
-                  color: ResponsiveHelper.purplePrimary,
-                ),
-              ),
-        const SizedBox(height: 24),
-        const Text(
-          '✅ No Action Items',
-          style: TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Tasks and to-dos from your conversations will appear here once they are created.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildErrorState() {
+  Widget _buildEmptyState() {
     return Center(
       child: Container(
         padding: const EdgeInsets.all(40),
@@ -774,16 +1065,9 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
           color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.red.withOpacity(0.2),
+            color: Colors.white.withOpacity(0.1),
             width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 30,
-              offset: const Offset(0, 15),
-            ),
-          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -791,19 +1075,19 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Icon(
-                FontAwesomeIcons.triangleExclamation,
+                FontAwesomeIcons.circleCheck,
                 size: 48,
-                color: Colors.red,
+                color: ResponsiveHelper.purplePrimary,
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Unable to Load Action Items',
-              style: TextStyle(
+            Text(
+              context.l10n.noTasksYet,
+              style: const TextStyle(
                 color: ResponsiveHelper.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
@@ -811,7 +1095,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
             ),
             const SizedBox(height: 8),
             Text(
-              _errorMessage ?? 'Please check your internet connection and try again.',
+              context.l10n.tasksFromConversationsWillAppear,
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
@@ -819,82 +1103,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _retryLoadingActionItems,
-              icon: const Icon(
-                FontAwesomeIcons.arrowRotateRight,
-                size: 16,
-              ),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ResponsiveHelper.purplePrimary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  String _getEmptyTabMessage() {
-    switch (_selectedTabIndex) {
-      case 0: // To Do
-        return '🎉 All caught up!\nNo pending action items';
-      case 1: // Done
-        return 'No completed items yet';
-      case 2: // Snoozed
-        return '✅ No snoozed tasks\n\nOld tasks are auto-snoozed after 3 days to keep your To Do list clean';
-      default:
-        return 'No items';
-    }
-  }
-
-  Widget _buildFlatView(List<ActionItemWithMetadata> items, bool showCompleted) {
-    // For the new tab system, we don't need to filter by completion status
-    // since the provider already returns the correct items for each tab
-    final filteredItems = items;
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final item = filteredItems[index];
-
-          Widget itemWidget = DesktopActionItem(
-            actionItem: item,
-            isSnoozedTab: _selectedTabIndex == 2,
-          );
-
-          return AnimatedContainer(
-            duration: Duration(milliseconds: 300 + (index * 50)),
-            curve: Curves.easeOutCubic,
-            child: _animationsInitialized
-                ? FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: Offset(0, 0.1 + (index * 0.02)),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: _slideController,
-                        curve: Interval(
-                          (index * 0.1).clamp(0.0, 0.8),
-                          1.0,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      )),
-                      child: itemWidget,
-                    ),
-                  )
-                : itemWidget,
-          );
-        },
-        childCount: filteredItems.length,
       ),
     );
   }

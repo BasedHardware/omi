@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'package:skeletonizer/skeletonizer.dart';
-import '../models/payment_method_config.dart';
+
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/payments/models/payment_method_config.dart';
 
 class PaymentMethodCard extends StatelessWidget {
   final Widget icon;
@@ -136,9 +139,9 @@ class PaymentMethodCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      'Update',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    child: Text(
+                      context.l10n.update,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -157,14 +160,14 @@ class PaymentMethodCard extends StatelessWidget {
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'update',
-                        child: Text('Update'),
+                        child: Text(context.l10n.update),
                       ),
                       if (onSetActiveTap != null)
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'setActive',
-                          child: Text('Set Active'),
+                          child: Text(context.l10n.setActive),
                         ),
                     ],
                   ),
@@ -180,9 +183,9 @@ class PaymentMethodCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text(
-                      'Connect',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    child: Text(
+                      context.l10n.connect,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],

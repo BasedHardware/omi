@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
-import '../providers/add_app_provider.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 class PaymentDetailsWidget extends StatelessWidget {
   final TextEditingController appPricingController;
@@ -29,7 +30,7 @@ class PaymentDetailsWidget extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: Text(
-                  'App Cost',
+                  context.l10n.paymentAppCost,
                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                 ),
               ),
@@ -46,10 +47,10 @@ class PaymentDetailsWidget extends StatelessWidget {
                   validator: (value) {
                     if (value != null && value.isNotEmpty) {
                       if (double.tryParse(value) == null) {
-                        return 'Please enter a valid amount';
+                        return context.l10n.paymentEnterValidAmount;
                       }
                       if (double.parse(value) < 1) {
-                        return 'Please enter an amount greater than 0';
+                        return context.l10n.paymentEnterAmountGreaterThanZero;
                       }
                       return null;
                     } else {
@@ -82,7 +83,7 @@ class PaymentDetailsWidget extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: Text(
-                  'Payment Plan',
+                  context.l10n.paymentPlan,
                   style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                 ),
               ),
@@ -107,9 +108,9 @@ class PaymentDetailsWidget extends StatelessWidget {
                                 const SizedBox(
                                   height: 12,
                                 ),
-                                const Text(
-                                  'Payment Plan',
-                                  style: TextStyle(color: Colors.white, fontSize: 18),
+                                Text(
+                                  context.l10n.paymentPlan,
+                                  style: const TextStyle(color: Colors.white, fontSize: 18),
                                 ),
                                 const SizedBox(
                                   height: 18,
@@ -180,7 +181,8 @@ class PaymentDetailsWidget extends StatelessWidget {
                         width: 12,
                       ),
                       Text(
-                        (paymentPlan?.isNotEmpty == true ? paymentPlan : 'None Selected') ?? 'None Selected',
+                        (paymentPlan?.isNotEmpty == true ? paymentPlan : context.l10n.paymentNoneSelected) ??
+                            context.l10n.paymentNoneSelected,
                         style: TextStyle(
                             color: paymentPlan != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
                       ),

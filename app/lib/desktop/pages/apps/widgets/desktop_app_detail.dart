@@ -1,35 +1,40 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/pages/apps/app_home_web_page.dart';
-import 'package:collection/collection.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
+import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:skeletonizer/skeletonizer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:async';
-
-import '../../../../backend/schema/app.dart';
-import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
-
-import 'package:timeago/timeago.dart' as timeago;
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 
 class DesktopAppDetail extends StatefulWidget {
   final App app;
@@ -150,7 +155,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           timer.cancel();
           _paymentCheckTimer?.cancel();
         } else {
-          debugPrint('Payment not made yet');
+          Logger.debug('Payment not made yet');
         }
       }
     });
@@ -321,7 +326,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                       SizedBox(width: responsive.spacing(baseSpacing: 8)),
                       Text(
-                        '${(app.installs / 10).round() * 10}+ installs',
+                        '${(app.installs / 10).round() * 10}+ ${context.l10n.installsCount}',
                         style: responsive.bodyMedium.copyWith(
                           color: ResponsiveHelper.textTertiary,
                         ),
@@ -355,7 +360,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               if (!app.private)
                 _buildActionButton(
                   responsive,
-                  icon: Icons.share_rounded,
+                  icon: FontAwesomeIcons.share,
                   onTap: () => _handleShareTap(),
                 ),
 
@@ -448,10 +453,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
 
             // Conversation prompt
             if (app.conversationPrompt != null)
-              _buildPromptSection(responsive, 'Conversation Prompt', app.conversationPrompt!),
+              _buildPromptSection(responsive, context.l10n.conversationPrompt, app.conversationPrompt!),
 
             // Chat prompt
-            if (app.chatPrompt != null) _buildPromptSection(responsive, 'Chat Personality', app.chatPrompt!),
+            if (app.chatPrompt != null) _buildPromptSection(responsive, context.l10n.chatPersonality, app.chatPrompt!),
 
             // Reviews section
             _buildReviewsSection(responsive),
@@ -487,7 +492,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           onPressed: () => _toggleApp(app.id, false),
           icon: const Icon(Icons.delete_outline, size: 18),
           label: Text(
-            'Uninstall App',
+            context.l10n.uninstallApp,
             style: responsive.labelLarge.copyWith(
               fontWeight: FontWeight.w500,
             ),
@@ -529,7 +534,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           },
           icon: const Icon(Icons.payment, size: 18),
           label: Text(
-            'Subscribe',
+            context.l10n.subscribe,
             style: responsive.labelLarge.copyWith(
               fontWeight: FontWeight.w500,
             ),
@@ -563,9 +568,8 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               builder: (ctx) {
                 return StatefulBuilder(builder: (ctx, setState) {
                   return ConfirmationDialog(
-                    title: 'Data Access Notice',
-                    description:
-                        'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                    title: context.l10n.dataAccessNotice,
+                    description: context.l10n.dataAccessWarning,
                     onConfirm: () {
                       _toggleApp(app.id, true);
                       Navigator.pop(context);
@@ -583,7 +587,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         },
         icon: const Icon(Icons.download, size: 18),
         label: Text(
-          'Install App',
+          context.l10n.installApp,
           style: responsive.labelLarge.copyWith(
             fontWeight: FontWeight.w500,
           ),
@@ -616,7 +620,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.info_outline,
-        text: 'You are a beta tester for this app. It is not public yet. It will be public once approved.',
+        text: context.l10n.betaTesterNotice,
         color: ResponsiveHelper.infoColor,
       ));
     }
@@ -625,7 +629,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.info_outline,
-        text: 'Your app is under review and visible only to you. It will be public once approved.',
+        text: context.l10n.appUnderReviewOwner,
         color: ResponsiveHelper.infoColor,
       ));
     }
@@ -634,7 +638,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       notifications.add(_buildNotification(
         responsive,
         icon: Icons.error_outline,
-        text: 'Your app has been rejected. Please update the app details and resubmit for review.',
+        text: context.l10n.appRejectedNotice,
         color: ResponsiveHelper.errorColor,
       ));
     }
@@ -687,7 +691,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         Row(
           children: [
             Text(
-              'Setup Steps',
+              context.l10n.setupSteps,
               style: responsive.titleLarge.copyWith(
                 color: ResponsiveHelper.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -705,7 +709,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Completed',
+                  context.l10n.completed,
                   style: responsive.bodySmall.copyWith(
                     color: ResponsiveHelper.successColor,
                     fontWeight: FontWeight.w500,
@@ -777,14 +781,14 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
                   await routeToPage(
                     context,
-                    MarkdownViewer(title: 'Setup Instructions', markdown: instructionsMarkdown ?? ''),
+                    MarkdownViewer(title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
                   );
                 } else {
                   if (app.externalIntegration!.isInstructionsUrl == true) {
                     await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
                   } else {
                     var m = app.externalIntegration!.setupInstructionsFilePath;
-                    routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
+                    routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
                   }
                 }
               }
@@ -805,7 +809,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 children: [
                   Expanded(
                     child: Text(
-                      'Integration Instructions',
+                      context.l10n.integrationInstructions,
                       style: responsive.bodyLarge.copyWith(
                         color: ResponsiveHelper.textPrimary,
                         fontWeight: FontWeight.w500,
@@ -832,7 +836,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Preview',
+          context.l10n.preview,
           style: responsive.titleLarge.copyWith(
             color: ResponsiveHelper.textPrimary,
             fontWeight: FontWeight.w600,
@@ -877,7 +881,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                     ),
                   ),
-                  placeholder: (context, url) => Shimmer.fromColors(
+                  placeholder: (context, url) => ShimmerWithTimeout(
                     baseColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                     highlightColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.1),
                     child: Container(
@@ -918,7 +922,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                 routeToPage(
                   context,
                   MarkdownViewer(
-                    title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                    title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                     markdown: app.description.decodeString,
                   ),
                 );
@@ -942,7 +946,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   Row(
                     children: [
                       Text(
-                        'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
+                        app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
                         style: responsive.titleMedium.copyWith(
                           color: ResponsiveHelper.textPrimary,
                           fontWeight: FontWeight.w600,
@@ -986,7 +990,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  capability.title,
+                                  capability.getLocalizedTitle(context),
                                   style: responsive.bodySmall.copyWith(
                                     color: ResponsiveHelper.purplePrimary,
                                     fontWeight: FontWeight.w500,
@@ -1108,7 +1112,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                   Row(
                     children: [
                       Text(
-                        'Ratings & Reviews',
+                        context.l10n.ratingsAndReviews,
                         style: responsive.titleMedium.copyWith(
                           color: ResponsiveHelper.textPrimary,
                           fontWeight: FontWeight.w600,
@@ -1156,7 +1160,9 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                           ),
                           SizedBox(height: responsive.spacing(baseSpacing: 4)),
                           Text(
-                            app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings",
+                            app.ratingCount <= 0
+                                ? context.l10n.noRatings
+                                : context.l10n.ratingsCount('${app.ratingCount}'),
                             style: responsive.bodySmall.copyWith(
                               color: ResponsiveHelper.textTertiary,
                             ),
@@ -1321,8 +1327,8 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               context,
               () => Navigator.pop(context),
               () => Navigator.pop(context),
-              'Error activating the app',
-              'If this is an integration app, make sure the setup is completed.',
+              context.l10n.errorActivatingApp,
+              context.l10n.integrationSetupRequired,
               singleButton: true,
             ),
           );

@@ -1,7 +1,10 @@
 import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class MergeConfirmationDialog extends StatelessWidget {
   final int count;
@@ -23,13 +26,12 @@ class MergeConfirmationDialog extends StatelessWidget {
 
     if (Platform.isIOS) {
       return CupertinoAlertDialog(
-        title: const Text('Merge Conversations'),
+        title: Text(context.l10n.mergeConversations),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'This will combine $count conversations into one. '
-              'All content will be merged and regenerated.',
+              context.l10n.mergeConversationsMessage(count),
             ),
             if (hasWarning) ...[
               const SizedBox(height: 12),
@@ -46,12 +48,12 @@ class MergeConfirmationDialog extends StatelessWidget {
         actions: [
           CupertinoDialogAction(
             onPressed: onCancel,
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           CupertinoDialogAction(
             onPressed: onConfirm,
             isDefaultAction: true,
-            child: const Text('Merge'),
+            child: Text(context.l10n.merge),
           ),
         ],
       );
@@ -62,9 +64,9 @@ class MergeConfirmationDialog extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
       ),
-      title: const Text(
-        'Merge Conversations',
-        style: TextStyle(
+      title: Text(
+        context.l10n.mergeConversations,
+        style: const TextStyle(
           color: Colors.white,
           fontSize: 17,
           fontWeight: FontWeight.w600,
@@ -75,8 +77,7 @@ class MergeConfirmationDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'This will combine $count conversations into one. '
-            'All content will be merged and regenerated.',
+            context.l10n.mergeConversationsMessage(count),
             style: const TextStyle(
               color: Color(0xFF8E8E93),
               fontSize: 15,
@@ -116,9 +117,9 @@ class MergeConfirmationDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: onCancel,
-          child: const Text(
-            'Cancel',
-            style: TextStyle(
+          child: Text(
+            context.l10n.cancel,
+            style: const TextStyle(
               color: Color(0xFF8E8E93),
               fontSize: 17,
             ),
@@ -126,9 +127,9 @@ class MergeConfirmationDialog extends StatelessWidget {
         ),
         TextButton(
           onPressed: onConfirm,
-          child: const Text(
-            'Merge',
-            style: TextStyle(
+          child: Text(
+            context.l10n.merge,
+            style: const TextStyle(
               color: Color(0xFF7C3AED),
               fontSize: 17,
               fontWeight: FontWeight.w600,
@@ -140,7 +141,8 @@ class MergeConfirmationDialog extends StatelessWidget {
   }
 
   /// Check for large time gaps between consecutive conversations
-  static String? _checkForLargeGaps(List<ServerConversation> conversations) {
+  /// Returns a list of gap durations (e.g., ["1.5h", "2.0h"]) or null if no large gaps
+  static List<String>? _checkForLargeGaps(List<ServerConversation> conversations) {
     if (conversations.length < 2) return null;
 
     // Sort by start time
@@ -159,11 +161,15 @@ class MergeConfirmationDialog extends StatelessWidget {
     }
 
     if (gaps.isEmpty) return null;
+    return gaps;
+  }
 
+  /// Format the gap warning message using localization
+  static String _formatGapWarning(BuildContext context, List<String> gaps) {
     if (gaps.length == 1) {
-      return 'Large time gap detected (${gaps.first})';
+      return context.l10n.largeTimeGapDetected(gaps.first);
     }
-    return 'Large time gaps detected (${gaps.join(", ")})';
+    return context.l10n.largeTimeGapsDetected(gaps.join(", "));
   }
 
   static Future<bool> show(
@@ -172,8 +178,9 @@ class MergeConfirmationDialog extends StatelessWidget {
   ) async {
     if (selectedConversations.length < 2) return false;
 
-    // Check for large gaps
-    final warning = _checkForLargeGaps(selectedConversations);
+    // Check for large gaps and format warning message if any
+    final gaps = _checkForLargeGaps(selectedConversations);
+    final warning = gaps != null ? _formatGapWarning(context, gaps) : null;
 
     final result = await showDialog<bool>(
       context: context,

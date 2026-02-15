@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 class DeleteConfirmation {
   static Future<bool> show(BuildContext context, {String? title, String? content}) async {
-    title ??= 'Delete memory?';
-    content ??= 'This action cannot be undone.';
+    title ??= context.l10n.deleteMemory;
+    content ??= context.l10n.thisActionCannotBeUndone;
 
     if (Platform.isIOS) {
       return await showCupertinoDialog<bool>(
@@ -19,14 +21,14 @@ class DeleteConfirmation {
                   isDefaultAction: true,
                   onPressed: () => Navigator.pop(context, false),
                   child: Text(
-                    'Cancel',
+                    context.l10n.cancel,
                     style: TextStyle(color: Colors.grey.shade400),
                   ),
                 ),
                 CupertinoDialogAction(
                   isDestructiveAction: true,
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Delete'),
+                  child: Text(context.l10n.delete),
                 ),
               ],
             ),
@@ -50,15 +52,15 @@ class DeleteConfirmation {
                 TextButton(
                   onPressed: () => Navigator.pop(context, false),
                   child: Text(
-                    'Cancel',
+                    context.l10n.cancel,
                     style: TextStyle(color: Colors.grey.shade400),
                   ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, true),
-                  child: const Text(
-                    'Delete',
-                    style: TextStyle(color: Colors.red),
+                  child: Text(
+                    context.l10n.delete,
+                    style: const TextStyle(color: Colors.red),
                   ),
                 ),
               ],

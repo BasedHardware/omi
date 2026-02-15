@@ -17,7 +17,6 @@ from models.conversation import (
 )
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
-
 # =============================================
 #            FOLDER ASSIGNMENT
 # =============================================
@@ -65,7 +64,6 @@ def build_folders_context(folders: List[dict]) -> str:
 
 
 def assign_conversation_to_folder(
-    transcript: str,
     title: str,
     overview: str,
     category: str,
@@ -75,7 +73,6 @@ def assign_conversation_to_folder(
     Use AI to assign a conversation to the most appropriate folder.
 
     Args:
-        transcript: The conversation transcript
         title: The conversation title
         overview: The conversation overview/summary
         category: The conversation category
@@ -99,39 +96,26 @@ def assign_conversation_to_folder(
 Title: {title}
 Category: {category}
 Overview: {overview}
-
-Transcript excerpt (first 500 chars):
-{transcript[:500] if transcript else 'No transcript'}
 """.strip()
 
-    prompt_text = '''You are an expert at organizing conversations into folders.
+    prompt_text = '''You are a folder assignment system. Match the conversation to the folder that best represents its overall theme.
 
-The user has organized their folders with descriptions that explain what belongs in each:
-
+FOLDERS:
 {folders_context}
-
-Based on the **primary topic and intent** of the conversation below, choose the folder whose description best matches.
 
 CONVERSATION:
 {conversation_context}
 
-DECISION PROCESS:
-1. What is the main subject being discussed?
-2. Which folder description aligns best with this subject?
-3. If multiple folders could apply, choose based on the **primary purpose** of the conversation
-4. If no folder clearly matches (confidence < 0.5), use the DEFAULT folder
-
-Example reasoning:
-- A conversation about "meeting with trainer to plan an AI fitness app" could match both Health and Technology
-- Since the primary purpose is building an app, Technology is the better match
+INSTRUCTIONS:
+- Match based on the dominant theme of the conversation (what it's fundamentally about)
+- The folder should feel like a natural home for this conversation
+- Only assign to a non-default folder if the theme clearly matches
+- When in doubt, use the DEFAULT folder
 
 Provide:
-- folder_id: The ID of the best matching folder (from the list above)
-- confidence: A score from 0.0 to 1.0 indicating match strength
-  * 0.8-1.0: Clear match - conversation clearly fits the folder description
-  * 0.5-0.8: Reasonable match - conversation relates to the folder description
-  * Below 0.5: Weak match - use the DEFAULT folder instead
-- reasoning: Brief explanation of your choice
+- folder_id: The best matching folder ID from the list above
+- confidence: Match strength (0.0-1.0). Use 0.9+ only for clear thematic matches, below 0.7 means use DEFAULT
+- reasoning: One sentence explaining the match
 
 {format_instructions}'''
 
@@ -154,7 +138,7 @@ Provide:
             return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
 
         # If confidence is too low, use default folder
-        if response.confidence < 0.5 and default_folder_id:
+        if response.confidence < 0.7 and default_folder_id:
             return (
                 default_folder_id,
                 response.confidence,
@@ -202,18 +186,23 @@ def should_discard_conversation(transcript: str, photos: List[ConversationPhoto]
         [
             '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
 
-Task: Decide if the content should be saved as a memory.
+Task: Decide if the content should be saved as conversation summary.
 
 KEEP (output: discard = False) if the content contains any of the following:
 • A task, request, or action item.
 • A decision, commitment, or plan.
 • A question that requires follow-up.
 • Personal facts, preferences, or details likely useful later (e.g., remembering a person, place, or object).
-• An important event, social interaction, or significant moment.
-• An insight, summary, or key takeaway.
+• An important event, social interaction, or significant moment with meaningful context or consequences.
+• An insight, summary, or key takeaway that provides value.
 • A visually significant scene (e.g., a whiteboard with notes, a document, a memorable view, a person's face).
 
-If none of these are present, DISCARD (output: discard = True). For example, discard blurry photos, uninteresting scenery with no context, or trivial conversation snippets.
+DISCARD (output: discard = True) if the content is:
+• Trivial conversation snippets (e.g., brief apologies, casual remarks, single-sentence comments without context).
+• Very brief interactions (5-10 seconds) that lack actionable content or meaningful context.
+• Casual acknowledgments, greetings, or passing comments that don't contain useful information.
+• Blurry photos, uninteresting scenery with no context, or content that doesn't meet the KEEP criteria above.
+• Feels like asking Siri or other AI assistant something in 1-2 sentences or using voice to type something in a chat for 5-10 seconds.
 
 Return exactly one line:
 discard = <True|False>
@@ -241,6 +230,57 @@ Content:
         return False
 
 
+# =============================================
+#       SHARED CONVERSATION CONTEXT BUILDER
+# =============================================
+
+
+def _build_conversation_context(
+    transcript: str,
+    photos: Optional[List[ConversationPhoto]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+) -> str:
+    """Build the conversation context string shared across LLM prompts.
+
+    Produces a deterministic string from transcript, photos, and calendar context.
+    Used as the second system message (after static instructions) so that the static
+    instruction prefix enables cross-conversation OpenAI prompt caching.
+
+    Returns:
+        Formatted context string, or empty string if no content provided.
+    """
+    context_parts = []
+
+    if calendar_meeting_context:
+        participants_str = ", ".join(
+            [
+                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
+                for p in calendar_meeting_context.participants
+            ]
+        )
+        calendar_context_str = f"""
+CALENDAR MEETING CONTEXT:
+- Meeting Title: {calendar_meeting_context.title}
+- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
+- Duration: {calendar_meeting_context.duration_minutes} minutes
+- Platform: {calendar_meeting_context.platform or 'Not specified'}
+- Participants: {participants_str or 'None listed'}
+{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
+{f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
+""".strip()
+        context_parts.append(calendar_context_str)
+
+    if transcript and transcript.strip():
+        context_parts.append(f"Transcript: ```{transcript.strip()}```")
+
+    if photos:
+        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        if photo_descriptions != 'None':
+            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+
+    return "\n\n".join(context_parts)
+
+
 def extract_action_items(
     transcript: str,
     started_at: datetime,
@@ -264,39 +304,9 @@ def extract_action_items(
     Returns:
         List of extracted ActionItem objects
     """
-    context_parts = []
-    if transcript and transcript.strip():
-        context_parts.append(f"Transcript: ```{transcript.strip()}```")
-
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
-
-    # Add calendar meeting context if available
-    calendar_context_str = ""
-    if calendar_meeting_context:
-        participants_str = ", ".join(
-            [
-                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
-                for p in calendar_meeting_context.participants
-            ]
-        )
-        calendar_context_str = f"""
-CALENDAR MEETING CONTEXT:
-- Meeting Title: {calendar_meeting_context.title}
-- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
-- Duration: {calendar_meeting_context.duration_minutes} minutes
-- Platform: {calendar_meeting_context.platform or 'Not specified'}
-- Participants: {participants_str or 'None listed'}
-{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
-"""
-        context_parts.insert(0, calendar_context_str.strip())
-
-    if not context_parts:
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    if not conversation_context:
         return []
-
-    full_context = "\n\n".join(context_parts)
 
     existing_items_context = ""
     if existing_action_items:
@@ -312,9 +322,30 @@ CALENDAR MEETING CONTEXT:
             items_list
         )
 
-    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
+    # First system message: task-specific instructions (static prefix enables cross-conversation caching)
+    # NOTE: {language_code} is in the context message, not here, to keep this prefix fully static across all languages.
+    instructions_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
 
-    The content language is {language_code}. Use the same language {language_code} for your response.
+    EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
+
+    When the primary user OR someone speaking to them uses these patterns, ALWAYS extract the task:
+    - "Remind me to X" / "Remember to X" → EXTRACT "X"
+    - "Don't forget to X" / "Don't let me forget X" → EXTRACT "X"
+    - "Add task X" / "Create task X" / "Make a task for X" → EXTRACT "X"
+    - "Note to self: X" / "Mental note: X" → EXTRACT "X"
+    - "Task: X" / "Todo: X" / "To do: X" → EXTRACT "X"
+    - "I need to remember to X" → EXTRACT "X"
+    - "Put X on my list" / "Add X to my tasks" → EXTRACT "X"
+    - "Set a reminder for X" / "Can you remind me X" → EXTRACT "X"
+    - "You need to X" / "You should X" / "Make sure you X" (said TO the user) → EXTRACT "X"
+
+    These explicit requests bypass importance/timing filters. If someone explicitly asks for a reminder or task, extract it.
+
+    Examples:
+    - User says "Remind me to buy milk" → Extract "Buy milk"
+    - Someone tells user "Don't forget to call your mom" → Extract "Call mom"
+    - User says "Add task pick up dry cleaning" → Extract "Pick up dry cleaning"
+    - User says "Note to self, check tire pressure" → Extract "Check tire pressure"
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
@@ -323,10 +354,10 @@ CALENDAR MEETING CONTEXT:
     - Use participant names in ALL action items (e.g., "Follow up with Sarah" NOT "Follow up with Speaker 0")
     - Reference the meeting title/context when relevant to the action item
     - Consider the scheduled meeting time and duration when extracting due dates
-    - If you cannot confidently match a speaker to a name, use the action description without speaker references{existing_items_context}
+    - If you cannot confidently match a speaker to a name, use the action description without speaker references
 
     CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
-    • DO NOT extract action items that are >95% similar to existing ones listed above
+    • DO NOT extract action items that are >95% similar to existing ones in the content
     • Check both the description AND the due date/timeframe
     • Consider semantic similarity, not just exact word matches
     • Examples of what counts as DUPLICATES (DO NOT extract):
@@ -342,13 +373,15 @@ CALENDAR MEETING CONTEXT:
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
-    2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Filter aggressively - is the user ALREADY doing this? If yes, SKIP IT
-    4. FOURTH: Ask - "Is this truly important enough to remind a busy person?" If no, SKIP IT
-    5. FIFTH: Extract ONLY action items that passed steps 3 & 4, using specific names/details
-    6. SIXTH: Extract timing information separately and put it in the due_at field
-    7. SEVENTH: Clean the description - remove ALL time references and vague words
-    8. EIGHTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+    2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
+    3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
+       - Is the user ALREADY doing this? SKIP IT
+       - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
+       - Would missing this have real consequences? If not obvious, SKIP IT
+       - Better to extract 0 implicit tasks than flood the user with noise
+    4. FOURTH: Extract timing information separately and put it in the due_at field
+    5. FIFTH: Clean the description - remove ALL time references and vague words
+    6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
 
     CRITICAL CONTEXT:
     • These action items are primarily for the PRIMARY USER who is having/recording this conversation
@@ -359,11 +392,11 @@ CALENDAR MEETING CONTEXT:
       - It's super crucial for the primary user to track it
       - The primary user needs to follow up on it
 
-    QUALITY OVER QUANTITY:
-    • Better to have 0 action items than to flood the user with unnecessary ones
-    • Only extract action items that are truly important and need tracking
-    • When in doubt, DON'T extract - be conservative and selective
-    • Think: "Would a busy person want to be reminded of this?"
+    BALANCE QUALITY AND USER INTENT:
+    • For EXPLICIT requests (remind me, add task, don't forget, etc.) - ALWAYS extract
+    • For IMPLICIT tasks inferred from conversation - be very selective, better to extract 0 than flood the user
+    • Think: "Did the user ask for this reminder, or am I guessing they need it?"
+    • If the user explicitly asked for a task/reminder, respect their request even if it seems trivial
 
     STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
 
@@ -382,25 +415,27 @@ CALENDAR MEETING CONTEXT:
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
 
-    3. **Timing Signal**: The task includes a timing cue:
+    3. **Timing Signal** (NOT required for explicit task requests):
        - Explicit dates or times
        - Relative timing ("tomorrow", "next week", "by Friday", "this month")
        - Urgency markers ("urgent", "ASAP", "high priority")
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
-    4. **Real Importance**: The task has genuine consequences if missed:
+    4. **Real Importance** (NOT required for explicit task requests):
        - Financial impact (bills, payments, purchases, invoices)
        - Health/safety concerns (appointments, medications, safety checks)
        - Hard deadlines (submissions, filings, registrations)
        - Explicit stress if missed (stated by speakers)
        - Critical dependencies (primary user blocked without it)
        - Commitments to other people (meetings, deliverables, promises)
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
     5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
        - "I want to X" → EXTRACT (user stated intention, needs reminder)
        - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
        - "Today I will X" → EXTRACT (daily goal, needs tracking)
        - "This week/month I want to X" → EXTRACT (time-bound goal)
-       
+
        Only skip if user is ACTIVELY doing something RIGHT NOW:
        - "I am currently in the middle of X" → Skip (actively doing it this moment)
        - "Right now I'm doing X" → Skip (immediate present action)
@@ -505,21 +540,20 @@ CALENDAR MEETING CONTEXT:
     Reference time: {started_at}
     User timezone: {tz}
 
-    Content:
-    {full_context}
-
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | action_items_parser
+    # Second system message: conversation context + existing items (dynamic, per-conversation)
+    context_message = 'The content language is {language_code}. Use the same language {language_code} for your response.\n\nContent:\n{conversation_context}{existing_items_context}'
+    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-extract-actions") | action_items_parser
 
     try:
         response = chain.invoke(
             {
-                'full_context': full_context,
+                'conversation_context': conversation_context,
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
                 'started_at': started_at.isoformat(),
@@ -547,45 +581,14 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
     calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> Structured:
-    context_parts = []
-    if transcript and transcript.strip():
-        context_parts.append(f"Transcript: ```{transcript.strip()}```")
-
-    if photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
-
-    # Add calendar meeting context if available
-    calendar_context_str = ""
-    if calendar_meeting_context:
-        participants_str = ", ".join(
-            [
-                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
-                for p in calendar_meeting_context.participants
-            ]
-        )
-        calendar_context_str = f"""
-CALENDAR MEETING CONTEXT:
-- Meeting Title: {calendar_meeting_context.title}
-- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
-- Duration: {calendar_meeting_context.duration_minutes} minutes
-- Platform: {calendar_meeting_context.platform or 'Not specified'}
-- Participants: {participants_str or 'None listed'}
-{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
-{f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
-"""
-        context_parts.insert(0, calendar_context_str.strip())
-
-    if not context_parts:
+    conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
+    if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
-    full_context = "\n\n".join(context_parts)
-
-    prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
+    # First system message: task-specific instructions (static prefix enables cross-conversation caching)
+    instructions_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. Use the same language {language_code} for your response.
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
@@ -609,37 +612,35 @@ CALENDAR MEETING CONTEXT:
     • **User involvement**: The user is expected to attend, participate, or take action
     • **Specific timing**: Has concrete date/time, not vague references like "sometime" or "soon"
     • **Important/actionable**: Missing it would have real consequences or impact
-    
+
     INCLUDE these event types:
     • Meetings & appointments (business meetings, doctor visits, interviews)
     • Hard deadlines (project due dates, payment deadlines, submission dates)
     • Personal commitments (family events, social gatherings user committed to)
     • Travel & transportation (flights, trains, scheduled pickups)
     • Recurring obligations (classes, regular meetings, scheduled calls)
-    
+
     EXCLUDE these:
     • Casual mentions ("we should meet sometime", "maybe next week")
     • Historical references (past events being discussed)
     • Other people's events (events user isn't involved in)
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
-    
+
     For date context, this content was captured on {started_at}. {tz} is the user's timezone; convert all event times to UTC and respond in UTC.
-
-
-    Content:
-    {full_context}
 
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
+    # Second system message: conversation context (dynamic, per-conversation)
+    context_message = 'Content:\n{conversation_context}'
+    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
 
     response = chain.invoke(
         {
-            'full_context': full_context,
+            'conversation_context': conversation_context,
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'started_at': started_at.isoformat(),
@@ -652,12 +653,6 @@ CALENDAR MEETING CONTEXT:
             event.duration = 180
         event.created = False
 
-    # Extract action items separately
-    action_items = extract_action_items(
-        transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context
-    )
-    response.action_items = action_items
-
     return response
 
 
@@ -668,7 +663,6 @@ def get_reprocess_transcript_structure(
     tz: str,
     title: str,
     photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -723,7 +717,7 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_medium_experiment | parser  # parser is imported from .clients
+    chain = prompt | llm_medium_experiment.bind(prompt_cache_key="omi-transcript-structure") | parser
 
     response = chain.invoke(
         {
@@ -740,10 +734,6 @@ def get_reprocess_transcript_structure(
         if event.duration > 180:
             event.duration = 180
         event.created = False
-
-    # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
-    response.action_items = action_items
 
     return response
 
@@ -775,7 +765,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = llm_medium_experiment.invoke(prompt)
+    response = llm_medium_experiment.invoke(prompt, prompt_cache_key="omi-app-result")
     content = response.content.replace('```json', '').replace('```', '')
     return content
 
@@ -959,5 +949,5 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     The conversation is:
     {conversation_text}
     """
-    response = llm_medium_experiment.invoke(full_prompt)
+    response = llm_medium_experiment.invoke(full_prompt, prompt_cache_key="omi-daily-summary")
     return response.content

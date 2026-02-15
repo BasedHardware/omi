@@ -16,7 +16,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define DISK_DRIVE_NAME "SD"        // Disk drive name
 #define DISK_MOUNT_PT "/SD:"        // Mount point path
-#define SD_REQ_QUEUE_MSGS  100      // Number of messages in the SD request queue
+#define SD_REQ_QUEUE_MSGS  25       // Number of messages in the SD request queue
 #define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
 #define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
 #define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
@@ -62,13 +62,26 @@ static int sd_enable_power(bool enable)
 {
     int ret;
     gpio_pin_configure_dt(&sd_en, GPIO_OUTPUT);
+    const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
     if (enable) {
         ret = gpio_pin_set_dt(&sd_en, 1);
-        pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+
+        if (device_is_ready(spi_dev)) {
+            /* Resume SPI and SD devices */
+            pm_device_action_run(spi_dev, PM_DEVICE_ACTION_RESUME);
+            pm_device_action_run(sd_dev, PM_DEVICE_ACTION_RESUME);
+        }
         sd_enabled = true;
     } else {
-        ret = pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
-        // gpio_pin_set_dt(&sd_en, 0);
+        if (device_is_ready(spi_dev)) {
+            /* Suspend SPI and SD devices to save power */
+            pm_device_action_run(sd_dev, PM_DEVICE_ACTION_SUSPEND);
+            pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
+        }
+
+        /* Zephyr didn't handle CS pin in suspend, we handle it manually */
+        gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
+        ret = gpio_pin_set_dt(&sd_en, 0);
         sd_enabled = false;
     }
     return ret;

@@ -1,25 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/toggle_section_widget.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class DesktopDeveloperSettingsPage extends StatefulWidget {
   const DesktopDeveloperSettingsPage({super.key});
@@ -91,7 +96,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
         ),
         const SizedBox(width: 16),
         Text(
-          'Developer Settings',
+          context.l10n.developerSettings,
           style: responsive.headlineLarge.copyWith(
             fontWeight: FontWeight.w400,
           ),
@@ -150,7 +155,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    'Debug logs',
+                                                    context.l10n.debugLogs,
                                                     style: responsive.titleMedium.copyWith(
                                                       color: ResponsiveHelper.textPrimary,
                                                       fontWeight: FontWeight.w600,
@@ -158,7 +163,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   ),
                                                   SizedBox(height: responsive.spacing(baseSpacing: 4)),
                                                   Text(
-                                                    'Helps diagnose issues. Auto-deletes after 3 days.',
+                                                    context.l10n.helpsDiagnoseIssuesAutoDeletes,
                                                     style: responsive.bodyMedium.copyWith(
                                                       color: ResponsiveHelper.textSecondary,
                                                     ),
@@ -204,7 +209,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                     color: ResponsiveHelper.textPrimary,
                                                   ),
                                                   label: Text(
-                                                    'Share Logs',
+                                                    context.l10n.shareLogs,
                                                     style: responsive.bodyMedium.copyWith(
                                                       color: ResponsiveHelper.textPrimary,
                                                       fontWeight: FontWeight.w500,
@@ -213,14 +218,14 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   onPressed: () async {
                                                     final files = await DebugLogManager.listLogFiles();
                                                     if (files.isEmpty) {
-                                                      AppSnackbar.showSnackbarError('No log files found.');
+                                                      AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
                                                       return;
                                                     }
                                                     if (files.length == 1) {
                                                       final result = await Share.shareXFiles([XFile(files.first.path)],
                                                           text: 'Omi debug log');
                                                       if (result.status == ShareResultStatus.success) {
-                                                        debugPrint('Log shared');
+                                                        Logger.debug('Log shared');
                                                       }
                                                       return;
                                                     }
@@ -267,7 +272,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                       final result = await Share.shareXFiles([XFile(selected.path)],
                                                           text: 'Omi debug log');
                                                       if (result.status == ShareResultStatus.success) {
-                                                        debugPrint('Log shared');
+                                                        Logger.debug('Log shared');
                                                       }
                                                     }
                                                   },
@@ -280,10 +285,10 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   borderRadius: BorderRadius.circular(12),
                                                 ),
                                                 child: IconButton(
-                                                  tooltip: 'Clear logs',
+                                                  tooltip: context.l10n.clearLogs,
                                                   onPressed: () async {
                                                     await DebugLogManager.clear();
-                                                    AppSnackbar.showSnackbar('Debug logs cleared');
+                                                    AppSnackbar.showSnackbar(context.l10n.debugLogsCleared);
                                                   },
                                                   icon: const Icon(
                                                     Icons.delete_outline,
@@ -312,14 +317,14 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                       child: ListTile(
                                         contentPadding: EdgeInsets.zero,
                                         title: Text(
-                                          'Export Conversations',
+                                          context.l10n.exportConversations,
                                           style: responsive.titleMedium.copyWith(
                                             color: ResponsiveHelper.textPrimary,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                         subtitle: Text(
-                                          'Export all your conversations to a JSON file.',
+                                          context.l10n.exportAllConversationsToJson,
                                           style: responsive.bodyMedium.copyWith(
                                             color: ResponsiveHelper.textSecondary,
                                           ),
@@ -345,7 +350,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 ScaffoldMessenger.of(context).showSnackBar(
                                                   SnackBar(
                                                     content: Text(
-                                                      'Conversations Export Started. This may take a few seconds, please wait.',
+                                                      context.l10n.conversationsExportStarted,
                                                       style: responsive.bodyMedium.copyWith(
                                                         color: ResponsiveHelper.textPrimary,
                                                       ),
@@ -364,7 +369,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 final result = await Share.shareXFiles([XFile(file.path)],
                                                     text: 'Exported Conversations from Omi');
                                                 if (result.status == ShareResultStatus.success) {
-                                                  debugPrint('Thank you for sharing the picture!');
+                                                  Logger.debug('Thank you for sharing the picture!');
                                                 }
                                                 MixpanelManager().exportMemories();
                                                 setState(() => provider.loadingExportMemories = false);
@@ -389,7 +394,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
                                               Text(
-                                                'MCP',
+                                                context.l10n.mcp,
                                                 style: responsive.titleLarge.copyWith(
                                                   color: ResponsiveHelper.textPrimary,
                                                   fontWeight: FontWeight.w600,
@@ -403,7 +408,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 child: Padding(
                                                   padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
                                                   child: Text(
-                                                    'Docs',
+                                                    context.l10n.docs,
                                                     style: responsive.bodyMedium.copyWith(
                                                       color: ResponsiveHelper.purplePrimary,
                                                       decoration: TextDecoration.underline,
@@ -416,7 +421,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           ),
                                           SizedBox(height: responsive.spacing(baseSpacing: 10)),
                                           Text(
-                                            'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.',
+                                            context.l10n.mcpDescription,
                                             style: responsive.bodyMedium.copyWith(
                                               color: ResponsiveHelper.textSecondary,
                                             ),
@@ -426,7 +431,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
                                               Text(
-                                                'API Keys',
+                                                context.l10n.apiKeys,
                                                 style: responsive.titleMedium.copyWith(
                                                   color: ResponsiveHelper.textPrimary,
                                                   fontWeight: FontWeight.w500,
@@ -443,7 +448,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   size: 18,
                                                 ),
                                                 label: Text(
-                                                  'Create Key',
+                                                  context.l10n.createKey,
                                                   style: responsive.bodyMedium.copyWith(
                                                     color: ResponsiveHelper.textPrimary,
                                                   ),
@@ -471,7 +476,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                               if (provider.error != null) {
                                                 return Center(
                                                   child: Text(
-                                                    'Error: ${provider.error}',
+                                                    context.l10n.errorLabel(provider.error!),
                                                     style: responsive.bodyMedium.copyWith(
                                                       color: ResponsiveHelper.textPrimary,
                                                     ),
@@ -483,7 +488,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   child: Padding(
                                                     padding: EdgeInsets.all(responsive.spacing(baseSpacing: 16)),
                                                     child: Text(
-                                                      'No API keys found. Create one to get started.',
+                                                      context.l10n.noApiKeysFound,
                                                       style: responsive.bodyMedium.copyWith(
                                                         color: ResponsiveHelper.textSecondary,
                                                       ),
@@ -515,7 +520,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Advanced Settings',
+                                            context.l10n.advancedSettings,
                                             style: responsive.titleLarge.copyWith(
                                               color: ResponsiveHelper.textPrimary,
                                               fontWeight: FontWeight.w600,
@@ -525,7 +530,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           Row(
                                             children: [
                                               Text(
-                                                'Webhooks',
+                                                context.l10n.webhooks,
                                                 style: responsive.titleMedium.copyWith(
                                                   color: ResponsiveHelper.textPrimary,
                                                   fontWeight: FontWeight.w500,
@@ -541,7 +546,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 child: Padding(
                                                   padding: EdgeInsets.all(responsive.spacing(baseSpacing: 8)),
                                                   child: Text(
-                                                    'Docs',
+                                                    context.l10n.docs,
                                                     style: responsive.bodyMedium.copyWith(
                                                       color: ResponsiveHelper.purplePrimary,
                                                       decoration: TextDecoration.underline,
@@ -557,8 +562,8 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           ),
                                           ToggleSectionWidget(
                                             isSectionEnabled: provider.conversationEventsToggled,
-                                            sectionTitle: 'Conversation Events',
-                                            sectionDescription: 'Triggers when a new conversation is created.',
+                                            sectionTitle: context.l10n.conversationEvents,
+                                            sectionDescription: context.l10n.triggersWhenNewConversationCreated,
                                             options: [
                                               TextField(
                                                 controller: provider.webhookOnConversationCreated,
@@ -566,7 +571,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 autocorrect: false,
                                                 enabled: true,
                                                 enableSuggestions: false,
-                                                decoration: _getTextFieldDecoration('Endpoint URL'),
+                                                decoration: _getTextFieldDecoration(context.l10n.endpointUrl),
                                                 style: const TextStyle(color: Colors.white),
                                               ),
                                               const SizedBox(height: 16),
@@ -575,8 +580,8 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           ),
                                           ToggleSectionWidget(
                                               isSectionEnabled: provider.transcriptsToggled,
-                                              sectionTitle: 'Real-time Transcript',
-                                              sectionDescription: 'Triggers when a new transcript is received.',
+                                              sectionTitle: context.l10n.realtimeTranscript,
+                                              sectionDescription: context.l10n.triggersWhenNewTranscriptReceived,
                                               options: [
                                                 TextField(
                                                   controller: provider.webhookOnTranscriptReceived,
@@ -584,7 +589,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   autocorrect: false,
                                                   enabled: true,
                                                   enableSuggestions: false,
-                                                  decoration: _getTextFieldDecoration('Endpoint URL'),
+                                                  decoration: _getTextFieldDecoration(context.l10n.endpointUrl),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
                                                 const SizedBox(height: 16),
@@ -592,8 +597,8 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                               onSectionEnabledChanged: provider.onTranscriptsToggled),
                                           ToggleSectionWidget(
                                               isSectionEnabled: provider.audioBytesToggled,
-                                              sectionTitle: 'Realtime Audio Bytes',
-                                              sectionDescription: 'Triggers when audio bytes are received.',
+                                              sectionTitle: context.l10n.realtimeAudioBytes,
+                                              sectionDescription: context.l10n.triggersWhenAudioBytesReceived,
                                               options: [
                                                 TextField(
                                                   controller: provider.webhookAudioBytes,
@@ -601,7 +606,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   autocorrect: false,
                                                   enabled: true,
                                                   enableSuggestions: false,
-                                                  decoration: _getTextFieldDecoration('Endpoint URL'),
+                                                  decoration: _getTextFieldDecoration(context.l10n.endpointUrl),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
                                                 TextField(
@@ -611,7 +616,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                   enabled: true,
                                                   enableSuggestions: false,
                                                   keyboardType: TextInputType.number,
-                                                  decoration: _getTextFieldDecoration('Every x seconds'),
+                                                  decoration: _getTextFieldDecoration(context.l10n.everyXSeconds),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
                                                 const SizedBox(height: 16),
@@ -619,8 +624,8 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                               onSectionEnabledChanged: provider.onAudioBytesToggled),
                                           ToggleSectionWidget(
                                             isSectionEnabled: provider.daySummaryToggled,
-                                            sectionTitle: 'Day Summary',
-                                            sectionDescription: 'Triggers when day summary is generated.',
+                                            sectionTitle: context.l10n.daySummary,
+                                            sectionDescription: context.l10n.triggersWhenDaySummaryGenerated,
                                             options: [
                                               TextField(
                                                 controller: provider.webhookDaySummary,
@@ -628,7 +633,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 autocorrect: false,
                                                 enabled: true,
                                                 enableSuggestions: false,
-                                                decoration: _getTextFieldDecoration('Endpoint URL'),
+                                                decoration: _getTextFieldDecoration(context.l10n.endpointUrl),
                                                 style: const TextStyle(color: Colors.white),
                                               ),
                                               const SizedBox(height: 16),
@@ -653,7 +658,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Experimental',
+                                            context.l10n.experimental,
                                             style: responsive.titleLarge.copyWith(
                                               color: ResponsiveHelper.textPrimary,
                                               fontWeight: FontWeight.w600,
@@ -661,7 +666,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           ),
                                           SizedBox(height: responsive.spacing(baseSpacing: 8)),
                                           Text(
-                                            'Try the latest experimental features from Omi Team.',
+                                            context.l10n.tryLatestExperimentalFeatures,
                                             style: responsive.bodyMedium.copyWith(
                                               color: ResponsiveHelper.textSecondary,
                                             ),
@@ -670,13 +675,13 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           CheckboxListTile(
                                             contentPadding: EdgeInsets.zero,
                                             title: Text(
-                                              'Transcription service diagnostic status',
+                                              context.l10n.transcriptionServiceDiagnosticStatus,
                                               style: responsive.bodyLarge.copyWith(
                                                 color: ResponsiveHelper.textPrimary,
                                               ),
                                             ),
                                             subtitle: Text(
-                                              'Enable detailed diagnostic messages from the transcription service',
+                                              context.l10n.enableDetailedDiagnosticMessages,
                                               style: responsive.bodySmall.copyWith(
                                                 color: ResponsiveHelper.textSecondary,
                                               ),
@@ -689,13 +694,13 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           CheckboxListTile(
                                             contentPadding: EdgeInsets.zero,
                                             title: Text(
-                                              'Auto-create and tag new speakers',
+                                              context.l10n.autoCreateAndTagNewSpeakers,
                                               style: responsive.bodyLarge.copyWith(
                                                 color: ResponsiveHelper.textPrimary,
                                               ),
                                             ),
                                             subtitle: Text(
-                                              'Automatically create a new person when a name is detected in the transcript.',
+                                              context.l10n.automaticallyCreateNewPerson,
                                               style: responsive.bodySmall.copyWith(
                                                 color: ResponsiveHelper.textSecondary,
                                               ),
@@ -722,7 +727,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Pilot Features',
+                                            context.l10n.pilotFeatures,
                                             style: responsive.titleLarge.copyWith(
                                               color: ResponsiveHelper.textPrimary,
                                               fontWeight: FontWeight.w600,
@@ -730,7 +735,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           ),
                                           SizedBox(height: responsive.spacing(baseSpacing: 8)),
                                           Text(
-                                            'These features are tests and no support is guaranteed.',
+                                            context.l10n.pilotFeaturesDescription,
                                             style: responsive.bodyMedium.copyWith(
                                               color: ResponsiveHelper.textSecondary,
                                             ),
@@ -739,7 +744,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           CheckboxListTile(
                                             contentPadding: EdgeInsets.zero,
                                             title: Text(
-                                              'Suggest follow up question',
+                                              context.l10n.suggestFollowUpQuestion,
                                               style: responsive.bodyLarge.copyWith(
                                                 color: ResponsiveHelper.textPrimary,
                                               ),
@@ -771,7 +776,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                           minimumSize: const Size(double.infinity, 50),
                                         ),
                                         child: Text(
-                                          'Save Settings',
+                                          context.l10n.saveSettings,
                                           style: responsive.bodyLarge.copyWith(
                                             color: ResponsiveHelper.textPrimary,
                                             fontWeight: FontWeight.w600,
@@ -796,7 +801,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                   const CircularProgressIndicator(color: ResponsiveHelper.purplePrimary),
                                   SizedBox(height: responsive.spacing(baseSpacing: 16)),
                                   Text(
-                                    'Syncing Developer Settings...',
+                                    context.l10n.syncingDeveloperSettings,
                                     style: responsive.bodyLarge.copyWith(
                                       color: ResponsiveHelper.textPrimary,
                                     ),

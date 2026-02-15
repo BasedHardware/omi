@@ -1,0 +1,45 @@
+---
+description: "Flutter localization - all user-facing strings must use l10n"
+globs:
+  - "app/**/*.dart"
+alwaysApply: false
+references:
+  - app/README.md
+---
+
+# Flutter Localization
+
+All user-facing strings must use localization. Use `context.l10n.keyName` instead of hardcoded strings.
+
+## Rules
+
+1. Never use hardcoded strings for user-facing text
+2. Add new keys to ARB files using `jq` (never read full ARB files - they're large)
+3. After modifying ARB files in `app/lib/l10n/`, regenerate localizations:
+   ```bash
+   cd app && flutter gen-l10n
+   ```
+
+## Examples
+
+```dart
+// Bad
+Text('Hello World')
+
+// Good
+Text(context.l10n.helloWorld)
+```
+
+## Related Cursor Resources
+
+### Rules
+- `.cursor/rules/flutter-architecture.mdc` - App structure and patterns
+
+### Skills
+- `.cursor/skills/omi-flutter-patterns/` - Flutter patterns including localization
+
+### Subagents
+- `.cursor/agents/flutter-developer/` - Flutter development specialist
+
+### Commands
+- `/flutter-setup` - Setup localization

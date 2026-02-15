@@ -19,9 +19,10 @@
         ]
       },
       {
-        "group": "Developer",
+        "group": "Core Development",
         "pages": [
           "doc/developer/AppSetup",
+          "doc/developer/Cursor",
           {
             "group": "Backend",
             "pages": [
@@ -49,14 +50,7 @@
           },
           "doc/developer/Protocol",
           "doc/developer/Contribution",
-          {
-            "group": "APIs & Integrations",
-            "pages": [
-              "doc/developer/api",
-              "doc/developer/MCP",
-              "doc/integrations"
-            ]
-          },
+          "doc/integrations",
           {
             "group": "Audio & Testing",
             "pages": [
@@ -65,6 +59,22 @@
               "doc/developer/DevKit2Testing"
             ]
           }
+        ]
+      },
+      {
+        "group": "Developer API",
+        "pages": [
+          "doc/developer/api/overview",
+          "doc/developer/api/memories",
+          "doc/developer/api/action-items",
+          "doc/developer/api/conversations",
+          "doc/developer/api/keys"
+        ]
+      },
+      {
+        "group": "MCP Integration",
+        "pages": [
+          "doc/developer/MCP"
         ]
       },
       {
@@ -95,7 +105,15 @@
           "doc/hardware/OmiConsumer",
           "doc/hardware/DevKit2",
           "doc/hardware/DevKit1",
-          "doc/hardware/omiGlass"
+          "doc/hardware/PaintingOMI"
+        ]
+      },
+      {
+        "group": "OmiGlass",
+        "pages": [
+          "doc/hardware/omiGlass",
+          "doc/hardware/omiglass/flash-firmware",
+          "doc/hardware/omiglass/monitoring"
         ]
       },
       {

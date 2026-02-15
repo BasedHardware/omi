@@ -1,11 +1,12 @@
 import uuid
 import re
 import base64
+import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -28,13 +29,16 @@ from utils.apps import get_available_app_by_id
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
+    resolve_voice_message_language,
     transcribe_voice_message_segment,
 )
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
@@ -101,6 +105,9 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
 
+    # Check for goal progress (background)
+    threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
+
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
 
@@ -111,6 +118,10 @@ def send_message(
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
+        chart_data = callback_data.get('chart_data')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -137,6 +148,10 @@ def send_message(
             app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
+            chart_data=chart_data,
+            langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
+            prompt_name=prompt_name,  # LangSmith prompt name for versioning
+            prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -151,22 +166,35 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        # Using the new agentic system via graph routing
-        async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
-        ):
-            if chunk:
-                msg = chunk.replace("\n", "__CRLF__")
-                yield f'{msg}\n\n'
-            else:
-                response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+        # Set usage context for streaming (can't use 'with' across yields)
+        usage_token = set_usage_context(uid, Features.CHAT)
+        try:
+            # Using the new agentic system via graph routing
+            async for chunk in execute_graph_chat_stream(
+                uid,
+                messages,
+                app,
+                cited=True,
+                callback_data=callback_data,
+                chat_session=chat_session,
+                context=data.context,
+            ):
+                if chunk:
+                    msg = chunk.replace("\n", "__CRLF__")
+                    yield f'{msg}\n\n'
+                else:
+                    response = callback_data.get('answer')
+                    if response:
+                        ai_message, ask_for_nps = process_message(response, callback_data)
+                        ai_message_dict = ai_message.dict()
+                        response_message = ResponseMessage(**ai_message_dict)
+                        response_message.ask_for_nps = ask_for_nps
+                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                            'utf-8'
+                        )
+                        yield f"done: {encoded_response}\n\n"
+        finally:
+            reset_usage_context(usage_token)
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -279,6 +307,14 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
+
+    # Debug: Check for messages with ratings
+    rated_messages = [m for m in messages if m.get('rating') is not None]
+    if rated_messages:
+        print(f'📊 Messages with ratings: {len(rated_messages)}')
+        for m in rated_messages[:5]:  # Show first 5
+            print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
+
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages
@@ -286,7 +322,9 @@ def get_messages(
 
 @router.post("/v2/voice-messages")
 async def create_voice_message_stream(
-    files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = Form(None),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -297,16 +335,22 @@ async def create_voice_message_stream(
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
+    resolved_language = resolve_voice_message_language(uid, language)
+
     # process
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
+        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid, language=resolved_language):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post("/v2/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def transcribe_voice_message(
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = Form(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     # Check if files are empty
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail='No files provided')
@@ -334,23 +378,66 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
         if converted_wav_paths:
             wav_paths.extend(converted_wav_paths)
 
-    # Process all WAV files
+    # Process all WAV files and collect transcripts
+    transcripts = []
+    detected_languages = []
+    resolved_language = resolve_voice_message_language(uid, language)
+    is_multi = resolved_language == 'multi'
     for wav_path in wav_paths:
-        transcript = transcribe_voice_message_segment(wav_path)
+        try:
+            transcript, detected_language = transcribe_voice_message_segment(wav_path, uid, language=resolved_language)
+            if transcript:
+                transcripts.append(transcript)
+            if is_multi and detected_language:
+                detected_languages.append(detected_language)
+        except Exception as e:
+            print(f"Error transcribing {wav_path}: {e}")
+            # Cleanup all remaining temp files before raising
+            for p in wav_paths:
+                if p.startswith(f"/tmp/{uid}_"):
+                    try:
+                        Path(p).unlink()
+                    except:
+                        pass
+            raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
+        finally:
+            # Clean up current temporary WAV file
+            if wav_path.startswith(f"/tmp/{uid}_"):
+                try:
+                    Path(wav_path).unlink()
+                except:
+                    pass
 
-        # Clean up temporary WAV files created directly
-        if wav_path.startswith(f"/tmp/{uid}_"):
-            try:
-                Path(wav_path).unlink()
-            except:
-                pass
+    if is_multi:
+        unique_languages = {lang for lang in detected_languages if lang}
+        detected_language = None
+        if len(unique_languages) == 1:
+            detected_language = unique_languages.pop()
+        elif len(unique_languages) > 1:
+            detected_language = "multi"
+    else:
+        detected_language = None
 
-        # If we got a transcript, return it
-        if transcript:
-            return {"transcript": transcript}
+    # Combine all transcripts
+    if transcripts:
+        response = {"transcript": " ".join(transcripts)}
+        if detected_language:
+            response["language"] = detected_language
+        transcripts.clear()
+        detected_languages.clear()
+        wav_paths.clear()
+        other_file_paths.clear()
+        return response
 
     # If we got here, no transcript was produced
-    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
+    response = {"transcript": ""}
+    if detected_language:
+        response["language"] = detected_language
+    transcripts.clear()
+    detected_languages.clear()
+    wav_paths.clear()
+    other_file_paths.clear()
+    return response
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
@@ -498,54 +585,6 @@ def clear_chat_messages(
         chat_db.delete_chat_session(uid, chat_session_id)
 
     return initial_message_util(uid, compat_app_id)
-
-
-@router.post("/v1/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
-    # Check if files are empty
-    if not files or len(files) == 0:
-        raise HTTPException(status_code=400, detail='No files provided')
-
-    wav_paths = []
-    other_file_paths = []
-
-    # Process all files in a single loop
-    for file in files:
-        if file.filename.lower().endswith('.wav'):
-            # For WAV files, save directly to a temporary path
-            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-            wav_paths.append(temp_path)
-        else:
-            # For other files, collect paths for later conversion
-            path = retrieve_file_paths([file], uid)
-            if path:
-                other_file_paths.extend(path)
-
-    # Convert other files to WAV if needed
-    if other_file_paths:
-        converted_wav_paths = decode_files_to_wav(other_file_paths)
-        if converted_wav_paths:
-            wav_paths.extend(converted_wav_paths)
-
-    # Process all WAV files
-    for wav_path in wav_paths:
-        transcript = transcribe_voice_message_segment(wav_path)
-
-        # Clean up temporary WAV files created directly
-        if wav_path.startswith(f"/tmp/{uid}_"):
-            try:
-                Path(wav_path).unlink()
-            except:
-                pass
-
-        # If we got a transcript, return it
-        if transcript:
-            return {"transcript": transcript}
-
-    # If we got here, no transcript was produced
-    raise HTTPException(status_code=400, detail='Failed to transcribe audio')
 
 
 @router.post('/v1/initial-message', tags=['chat'], response_model=Message)

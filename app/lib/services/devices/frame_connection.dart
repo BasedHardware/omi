@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/logger.dart';
 
 const String _photoHeader =
     "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCExsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAARCAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA=";
@@ -46,7 +48,7 @@ class FrameDeviceConnection extends DeviceConnection {
       _firmwareRevision = 'Frame';
       _batteryLevel = await performRetrieveBatteryLevel();
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error getting device info: $e');
+      Logger.debug('FrameDeviceConnection: Error getting device info: $e');
     }
   }
 
@@ -62,9 +64,9 @@ class FrameDeviceConnection extends DeviceConnection {
     try {
       // Frame camera control via transport
       await transport.writeCharacteristic('frame-camera-service', 'frame-camera-control', [0x01]); // START
-      debugPrint('Frame camera started');
+      Logger.debug('Frame camera started');
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error starting camera: $e');
+      Logger.debug('FrameDeviceConnection: Error starting camera: $e');
     }
   }
 
@@ -72,9 +74,9 @@ class FrameDeviceConnection extends DeviceConnection {
   Future<void> performCameraStopPhotoController() async {
     try {
       await transport.writeCharacteristic('frame-camera-service', 'frame-camera-control', [0x00]); // STOP
-      debugPrint('Frame camera stopped');
+      Logger.debug('Frame camera stopped');
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error stopping camera: $e');
+      Logger.debug('FrameDeviceConnection: Error stopping camera: $e');
     }
   }
 
@@ -96,7 +98,7 @@ class FrameDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream('frame-audio-service', 'frame-audio-characteristic');
 
-      debugPrint('Subscribed to audioBytes stream from Frame Device');
+      Logger.debug('Subscribed to audioBytes stream from Frame Device');
       final subscription = stream.listen((value) {
         if (value.isNotEmpty) onAudioBytesReceived(value);
       });
@@ -105,7 +107,7 @@ class FrameDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error setting up audio listener: $e');
+      Logger.debug('FrameDeviceConnection: Error setting up audio listener: $e');
       return null;
     }
   }
@@ -128,7 +130,7 @@ class FrameDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error setting up battery listener: $e');
+      Logger.debug('FrameDeviceConnection: Error setting up battery listener: $e');
       return null;
     }
   }
@@ -180,7 +182,7 @@ class FrameDeviceConnection extends DeviceConnection {
 
       return subscription;
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error setting up image listener: $e');
+      Logger.debug('FrameDeviceConnection: Error setting up image listener: $e');
       return null;
     }
   }
@@ -227,7 +229,7 @@ class FrameDeviceConnection extends DeviceConnection {
       }
       return _batteryLevel ?? -1;
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error reading battery level: $e');
+      Logger.debug('FrameDeviceConnection: Error reading battery level: $e');
       return -1;
     }
   }
@@ -255,7 +257,7 @@ class FrameDeviceConnection extends DeviceConnection {
           deviceInfo['firmwareRevision'] = String.fromCharCodes(firmwareValue);
         }
       } catch (e) {
-        debugPrint('FrameDeviceConnection: Error reading firmware revision: $e');
+        Logger.debug('FrameDeviceConnection: Error reading firmware revision: $e');
       }
 
       // Read battery level to confirm device is responsive
@@ -265,10 +267,10 @@ class FrameDeviceConnection extends DeviceConnection {
           deviceInfo['batteryLevel'] = batteryValue[0].toString();
         }
       } catch (e) {
-        debugPrint('FrameDeviceConnection: Error reading battery level: $e');
+        Logger.debug('FrameDeviceConnection: Error reading battery level: $e');
       }
     } catch (e) {
-      debugPrint('FrameDeviceConnection: Error getting device info: $e');
+      Logger.debug('FrameDeviceConnection: Error getting device info: $e');
     }
 
     // Set Frame-specific defaults

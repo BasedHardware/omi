@@ -1,13 +1,17 @@
+import logging
 import threading
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ValidationError
 
 import database.memories as memories_db
+from database.vector_db import upsert_memory_vector, delete_memory_vector
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
-from utils.llm.memories import identify_category_for_memory
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,14 +29,12 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
-    # Only categorize if the category is not already set to 'manual'
-    # Manual memories are user-created and should keep their manual category
-    if memory.category != MemoryCategory.manual:
-        # Only use the two primary categories for auto-categorization
-        categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
-        memory.category = identify_category_for_memory(memory.content, categories)
+    memory.category = MemoryCategory.manual
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
+
+    upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+
     if memory.visibility == 'public':
         threading.Thread(target=update_personas_async, args=(uid,)).start()
     return memory_db
@@ -45,17 +47,28 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
     if offset == 0:
         limit = 5000
     memories = memories_db.get_memories(uid, limit, offset)
+
+    valid_memories = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(MemoryDB.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
+    delete_memory_vector(uid, memory_id)
     return {'status': 'ok'}
 
 

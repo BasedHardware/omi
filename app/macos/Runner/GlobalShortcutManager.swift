@@ -149,6 +149,8 @@ class GlobalShortcutManager {
     // UserDefaults keys
     private static let askAIKeyCodeKey = "askAIKeyCode"
     private static let askAIModifiersKey = "askAIModifiers"
+    private static let toggleControlBarKeyCodeKey = "toggleControlBarKeyCode"
+    private static let toggleControlBarModifiersKey = "toggleControlBarModifiers"
     
     private init() {
         // Install the event handler when the manager is initialized.
@@ -164,8 +166,9 @@ class GlobalShortcutManager {
         // Unregister any existing shortcuts before registering new ones.
         unregisterShortcuts()
         
-        // Register toggle button shortcut (global) - Cmd+\
-        registerHotKey(keyCode: 42, modifiers: cmdKey, id: .toggleButton) // kVK_Backslash
+        // Register toggle button shortcut (global)
+        let (toggleKeyCode, toggleModifiers) = getToggleControlBarShortcut()
+        registerHotKey(keyCode: toggleKeyCode, modifiers: Int(toggleModifiers), id: .toggleButton)
         
         // Note: Ask AI shortcut is now handled by the menu bar item (app-scoped)
         // This allows other apps to use the same shortcut when Omi is not active
@@ -259,6 +262,49 @@ class GlobalShortcutManager {
     func resetAskAIShortcut() {
         UserDefaults.standard.removeObject(forKey: GlobalShortcutManager.askAIKeyCodeKey)
         UserDefaults.standard.removeObject(forKey: GlobalShortcutManager.askAIModifiersKey)
+        registerShortcuts()
+        
+        // Notify observers that shortcut changed
+        NotificationCenter.default.post(name: GlobalShortcutManager.shortcutDidChangeNotification, object: nil)
+    }
+    
+    // MARK: - Toggle Control Bar Shortcut
+    
+    /// Get the current Toggle Control Bar shortcut
+    func getToggleControlBarShortcut() -> (keyCode: Int, modifiers: UInt32) {
+        let keyCode = UserDefaults.standard.integer(forKey: GlobalShortcutManager.toggleControlBarKeyCodeKey)
+        let modifiers = UserDefaults.standard.integer(forKey: GlobalShortcutManager.toggleControlBarModifiersKey)
+        
+        // Return defaults if not set (Cmd+\)
+        if keyCode == 0 {
+            return (42, UInt32(cmdKey)) // kVK_Backslash = 42
+        }
+        
+        return (keyCode, UInt32(modifiers))
+    }
+    
+    /// Get the formatted display string for Toggle Control Bar shortcut
+    func getToggleControlBarShortcutString() -> String {
+        let (keyCode, modifiers) = getToggleControlBarShortcut()
+        return ShortcutFormatter.format(keyCode: keyCode, modifiers: modifiers)
+    }
+    
+    /// Update the Toggle Control Bar shortcut
+    func setToggleControlBarShortcut(keyCode: Int, modifiers: UInt32) {
+        UserDefaults.standard.set(keyCode, forKey: GlobalShortcutManager.toggleControlBarKeyCodeKey)
+        UserDefaults.standard.set(Int(modifiers), forKey: GlobalShortcutManager.toggleControlBarModifiersKey)
+        
+        // Re-register shortcuts with new values
+        registerShortcuts()
+        
+        // Notify observers that shortcut changed
+        NotificationCenter.default.post(name: GlobalShortcutManager.shortcutDidChangeNotification, object: nil)
+    }
+    
+    /// Reset Toggle Control Bar shortcut to default
+    func resetToggleControlBarShortcut() {
+        UserDefaults.standard.removeObject(forKey: GlobalShortcutManager.toggleControlBarKeyCodeKey)
+        UserDefaults.standard.removeObject(forKey: GlobalShortcutManager.toggleControlBarModifiersKey)
         registerShortcuts()
         
         // Notify observers that shortcut changed

@@ -35,11 +35,18 @@ from routers import (
     updates,
     calendar_meetings,
     imports,
+    knowledge_graph,
     wrapped,
     folders,
+    goals,
+    announcements,
 )
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.observability import log_langsmith_status
+
+# Log LangSmith tracing status at startup
+log_langsmith_status()
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -87,6 +94,10 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(knowledge_graph.router)
+app.include_router(goals.router)
+app.include_router(announcements.router)
+
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
@@ -96,6 +107,7 @@ methods_timeout = {
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+
 
 modal_app = App(
     name='backend',

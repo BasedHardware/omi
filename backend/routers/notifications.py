@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from typing import Tuple, Optional
 
 from database.redis_db import get_enabled_apps, r as redis_client
+from database.chat import add_integration_chat_message
 from utils.apps import get_available_app_by_id, verify_api_key
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
@@ -13,7 +14,6 @@ from models.other import SaveFcmTokenRequest
 from utils.notifications import send_notification
 from utils.other import endpoints as auth
 from models.app import App
-
 
 # logger = logging.getLogger('uvicorn.error')
 # logger.setLevel(logging.DEBUG)
@@ -65,13 +65,13 @@ def save_token(
 ):
     platform = x_app_platform or 'unknown'
     device_hash = x_device_id_hash or 'default'
-    
+
     # Create key: ios_abc123, android_xyz456, macos_def789
     device_key = f"{platform}_{device_hash}"
-    
+
     token_data = data.dict()
     token_data['device_key'] = device_key
-    
+
     notification_db.save_token(uid, token_data)
     return {'status': 'Ok'}
 
@@ -139,9 +139,14 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    send_app_notification(uid, app.name, app.id, data['message'])
-    return JSONResponse(
-        status_code=200, 
-        headers=headers, 
-        content={'status': 'Ok'}
-    )
+    # Determine target from manifest (defaults to 'app' if not configured)
+    target = 'app'
+    if app.external_integration and app.external_integration.chat_messages_enabled:
+        target = app.external_integration.chat_messages_target
+        chat_app_id = None if target == 'main' else app.id
+        add_integration_chat_message(data['message'], chat_app_id, uid)
+
+    # Always send push notification
+    send_app_notification(uid, app.name, app.id, data['message'], target=target)
+
+    return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'delete_confirmation.dart';
 
 class MemoryDialog extends StatefulWidget {
@@ -46,9 +48,9 @@ class _MemoryDialogState extends State<MemoryDialog> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1F1F25),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         child: Column(
@@ -74,7 +76,13 @@ class _MemoryDialogState extends State<MemoryDialog> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        isEditing ? widget.memory!.category.toString().split('.').last : 'New Memory',
+                        isEditing
+                            ? (widget.memory!.category == MemoryCategory.manual
+                                ? context.l10n.filterManual
+                                : widget.memory!.category == MemoryCategory.interesting
+                                    ? context.l10n.filterInteresting
+                                    : context.l10n.filterSystem)
+                            : context.l10n.newMemory,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -112,7 +120,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                     height: 1.4,
                   ),
                   decoration: InputDecoration(
-                    hintText: isEditing ? null : 'I like to eat ice cream...',
+                    hintText: isEditing ? null : context.l10n.memoryContentHint,
                     hintStyle: const TextStyle(color: Colors.grey),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -123,9 +131,9 @@ class _MemoryDialogState extends State<MemoryDialog> {
             ),
             const SizedBox(height: 24),
             if (_saveFailed) ...[
-              const Text(
-                'Failed to save. Please check your connection.',
-                style: TextStyle(
+              Text(
+                context.l10n.failedToSaveMemory,
+                style: const TextStyle(
                   color: Colors.redAccent,
                   fontSize: 13,
                 ),
@@ -157,7 +165,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                         ),
                       )
                     : Text(
-                        _saveFailed ? 'Retry' : 'Save Memory',
+                        _saveFailed ? context.l10n.retry : context.l10n.saveMemory,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -200,7 +208,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
       }
     } catch (e) {
       success = false;
-      debugPrint('Error saving memory: $e');
+      Logger.debug('Error saving memory: $e');
     }
 
     if (!mounted) return;

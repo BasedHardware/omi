@@ -1,9 +1,10 @@
 import threading
 import uuid
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 import hashlib
 import os
 
+import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -13,6 +14,8 @@ from database import (
     chat as chat_db,
     user_usage as user_usage_db,
     notifications as notification_db,
+    daily_summaries as daily_summaries_db,
+    llm_usage as llm_usage_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -37,7 +40,7 @@ from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
@@ -50,11 +53,14 @@ from utils.subscription import (
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from models.notification_message import NotificationMessage
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
-    get_user_person_speech_samples,
+    get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
+    delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
 
@@ -201,6 +207,33 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 
 
 # *************************************************
+# ************* ONBOARDING STATE ******************
+# *************************************************
+
+
+@router.get('/v1/users/onboarding', tags=['v1'])
+def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's onboarding state (completed status, acquisition source, etc.)."""
+    state = get_user_onboarding_state(uid)
+    return {
+        'completed': state.get('completed', False),
+        'acquisition_source': state.get('acquisition_source', ''),
+    }
+
+
+@router.patch('/v1/users/onboarding', tags=['v1'])
+def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """Update the user's onboarding state."""
+    current_state = get_user_onboarding_state(uid)
+    if 'completed' in data:
+        current_state['completed'] = data['completed']
+    if 'acquisition_source' in data:
+        current_state['acquisition_source'] = data['acquisition_source']
+    set_user_onboarding_state(uid, current_state)
+    return {'status': 'ok'}
+
+
+# *************************************************
 # ************* PRIVATE CLOUD SYNC ****************
 # *************************************************
 
@@ -223,14 +256,25 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 
 # TODO: consider adding person photo.
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
-def create_new_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
-    data = {
+def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
+    """Create a new person or return existing one with same name (idempotent by name).
+
+    This enables backward compatibility: old apps can call this API and get the
+    same person that backend already created, preventing duplicates.
+    """
+    # Check if person with same name already exists
+    existing_person = get_person_by_name(uid, data.name)
+    if existing_person:
+        return existing_person
+
+    # Create new person
+    person_data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    result = create_person(uid, data)
+    result = create_person(uid, person_data)
     return result
 
 
@@ -242,7 +286,9 @@ def get_single_person(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     if include_speech_samples:
-        person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+        # Convert stored GCS paths to signed URLs
+        stored_paths = person.get('speech_samples', [])
+        person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return person
 
 
@@ -251,13 +297,10 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-
-        def single(person):
-            person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
-
-        threads = [threading.Thread(target=single, args=(person,)) for person in people]
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        # Convert GCS paths to signed URLs for each person
+        for i, person in enumerate(people):
+            stored_paths = person.get('speech_samples', [])
+            people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -275,6 +318,37 @@ def update_person_name(
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+def delete_person_speech_sample_endpoint(
+    person_id: str,
+    sample_index: int,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Delete a specific speech sample for a person by index."""
+    person = get_person(uid, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    speech_samples = person.get('speech_samples', [])
+    if sample_index < 0 or sample_index >= len(speech_samples):
+        raise HTTPException(status_code=404, detail="Sample not found")
+
+    path_to_delete = speech_samples[sample_index]
+
+    # Extract filename from path for GCS deletion
+    filename = path_to_delete.split('/')[-1]
+
+    # Delete from GCS
+    delete_user_person_speech_sample(uid, person_id, filename)
+
+    # Remove from Firestore
+    from database.users import remove_person_speech_sample
+
+    remove_person_speech_sample(uid, person_id, path_to_delete)
+
     return {'status': 'ok'}
 
 
@@ -326,9 +400,59 @@ def get_memory_summary_rating(
 def set_chat_message_analytics(
     message_id: str,
     value: int,
+    reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    set_chat_message_rating_score(uid, message_id, value)
+    """
+    Submit feedback rating for a chat message.
+
+    Args:
+        message_id: ID of the message being rated
+        value: Rating value (1 = thumbs up, -1 = thumbs down, 0 = neutral/removed)
+        reason: Optional reason for thumbs down. Valid values:
+            - 'too_verbose': Response was too long or wordy
+            - 'incorrect_or_hallucination': Response contained incorrect information
+            - 'not_helpful_or_irrelevant': Response didn't address the question
+            - 'didnt_follow_instructions': Response didn't follow user instructions
+            - 'other': Other reason
+    """
+    # Always store feedback in Firestore analytics collection
+    set_chat_message_rating_score(uid, message_id, value, reason)
+
+    # Also update the rating directly on the message document for persistence
+    rating_value = None if value == 0 else value
+    chat_db.update_message_rating(uid, message_id, rating_value)
+
+    # Try to submit feedback to LangSmith if the message has a run_id
+    try:
+        from utils.observability import submit_langsmith_feedback
+
+        # Look up the message to get langsmith_run_id
+        message_result = chat_db.get_message(uid, message_id)
+        if message_result:
+            message, _ = message_result
+            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+            if not langsmith_run_id and isinstance(message, dict):
+                langsmith_run_id = message.get('langsmith_run_id')
+
+            if langsmith_run_id:
+                # Map value to score: 1 (thumbs up) -> 1.0, -1 (thumbs down) -> 0.0
+                score = 1.0 if value == 1 else (0.0 if value == -1 else 0.5)
+
+                # Build comment from reason if provided
+                comment = reason if reason else None
+
+                # Submit feedback to LangSmith (non-blocking, errors are logged)
+                submit_langsmith_feedback(
+                    run_id=langsmith_run_id,
+                    score=score,
+                    key="chat_message_rating",
+                    comment=comment,
+                )
+    except Exception as e:
+        # Don't fail the request if LangSmith feedback fails
+        print(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
+
     return {'status': 'ok'}
 
 
@@ -703,3 +827,306 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
     )
+
+
+# **************************************
+# ****** Daily Summary Settings ********
+# **************************************
+
+
+class DailySummarySettingsResponse(BaseModel):
+    enabled: bool
+    hour: int  # Local hour (0-23) in user's timezone
+
+
+class DailySummarySettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+
+
+@router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
+def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's daily summary notification settings.
+
+    Returns:
+        - enabled: Whether daily summary notifications are enabled (default: True)
+        - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+    """
+    enabled = notification_db.get_daily_summary_enabled(uid)
+    local_hour = notification_db.get_daily_summary_hour_local(uid)
+
+    # Default to 22 (10 PM) local time if not set
+    if local_hour is None:
+        local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
+
+    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+
+
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'])
+def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Update user's daily summary notification settings.
+
+    Parameters:
+        - enabled: Enable/disable daily summary notifications
+        - hour: Preferred hour in local timezone (0-23).
+                Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+
+    Note: Hour is stored as local time. The system determines when to send
+    based on the user's timezone and will send the summary at the correct local time
+    """
+    if data.enabled is not None:
+        notification_db.set_daily_summary_enabled(uid, data.enabled)
+
+    if data.hour is not None:
+        if not (0 <= data.hour <= 23):
+            raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
+
+        try:
+            notification_db.set_daily_summary_hour_local(uid, data.hour)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}
+
+
+class TestDailySummaryRequest(BaseModel):
+    date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
+
+
+@router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
+def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Test endpoint to manually trigger daily summary for the authenticated user.
+    This bypasses the time check and sends a summary immediately.
+    Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
+    """
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    tokens = notification_db.get_all_tokens(uid)
+
+    if not tokens:
+        raise HTTPException(status_code=400, detail='No notification tokens found for user')
+
+    # Parse date or use today
+    target_date = None
+    if request and request.date:
+        try:
+            target_date = datetime.strptime(request.date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid date format. Use YYYY-MM-DD')
+
+    # Calculate date boundaries
+    if time_zone_name:
+        try:
+            user_tz = pytz.timezone(time_zone_name)
+            if target_date:
+                # Use the specified date
+                date_str = target_date.strftime('%Y-%m-%d')
+                start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
+                end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
+            else:
+                # Use past 24 hours
+                now_in_user_tz = datetime.now(user_tz)
+                end_date_utc = now_in_user_tz.astimezone(pytz.utc)
+                start_date_utc = (now_in_user_tz - timedelta(hours=24)).astimezone(pytz.utc)
+
+                # Determine display date based on current hour
+                if now_in_user_tz.hour < 12:
+                    display_date = now_in_user_tz.date() - timedelta(days=1)
+                else:
+                    display_date = now_in_user_tz.date()
+                date_str = display_date.strftime('%Y-%m-%d')
+                # Skip the conversion below since we already have UTC times
+                start_of_day = None
+                end_of_day = None
+
+            if start_of_day and end_of_day:
+                start_date_utc = start_of_day.astimezone(pytz.utc)
+                end_date_utc = end_of_day.astimezone(pytz.utc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        now_utc = datetime.now(pytz.utc)
+        if target_date:
+            date_str = target_date.strftime('%Y-%m-%d')
+            start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
+            end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
+        else:
+            # Use past 24 hours
+            end_date_utc = now_utc
+            start_date_utc = now_utc - timedelta(hours=24)
+
+            # Determine display date based on current hour
+            if now_utc.hour < 12:
+                display_date = now_utc.date() - timedelta(days=1)
+            else:
+                display_date = now_utc.date()
+            date_str = display_date.strftime('%Y-%m-%d')
+
+    # Get conversations for the date
+    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+
+    if not conversations_data or len(conversations_data) == 0:
+        raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
+
+    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+
+    # Generate summary (pass date range for fetching actual action items)
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+
+    # Store in database
+    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+
+    # Send notification
+    daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
+    summary_body = summary_data.get('overview', 'Tap to see your daily summary')
+    if len(summary_body) > 150:
+        summary_body = summary_body[:147] + "..."
+
+    ai_message = NotificationMessage(
+        text=summary_body,
+        from_integration='false',
+        type='day_summary',
+        notification_type='daily_summary',
+        navigate_to=f"/daily-summary/{summary_id}",
+    )
+
+    send_notification(
+        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+    )
+
+    return {
+        'status': 'ok',
+        'message': f'Daily summary generated for {date_str}',
+        'summary_id': summary_id,
+        'conversations_count': len(conversations),
+    }
+
+
+# Daily Summaries API
+
+
+@router.get('/v1/users/daily-summaries', tags=['v1'])
+def get_daily_summaries(
+    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Get list of daily summaries for the authenticated user.
+    Returns summaries in reverse chronological order.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
+    return {'summaries': summaries}
+
+
+@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get a single daily summary by ID.
+    """
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+    return summary
+
+
+@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Delete a daily summary by ID.
+    """
+    # Verify it exists first
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    daily_summaries_db.delete_daily_summary(uid, summary_id)
+    return {'status': 'ok'}
+
+
+# ***********************************
+# *** Mentor Notification Settings ***
+# ***********************************
+
+
+class MentorNotificationSettingsResponse(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+class MentorNotificationSettingsUpdate(BaseModel):
+    frequency: int  # 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+
+@router.get('/v1/users/mentor-notification-settings', tags=['v1'], response_model=MentorNotificationSettingsResponse)
+def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's mentor notification frequency preference.
+
+    Returns:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    frequency = notification_db.get_mentor_notification_frequency(uid)
+    return MentorNotificationSettingsResponse(frequency=frequency)
+
+
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+def update_mentor_notification_settings(
+    data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's mentor notification frequency preference.
+
+    Parameters:
+        - frequency: Notification frequency (0-5)
+          - 0 = disabled
+          - 1 = ultra selective (least frequent)
+          - 3 = balanced (default)
+          - 5 = very proactive (most frequent)
+    """
+    try:
+        notification_db.set_mentor_notification_frequency(uid, data.frequency)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}
+
+
+# LLM Usage Tracking Endpoints
+
+
+@router.get('/v1/users/me/llm-usage', tags=['users'])
+def get_llm_usage(
+    days: int = Query(default=30, ge=1, le=365),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get LLM token usage summary for the current user.
+
+    Returns usage breakdown by feature for the specified time period.
+    """
+    summary = llm_usage_db.get_usage_summary(uid, days=days)
+    top_features = llm_usage_db.get_top_features(uid, days=days, limit=5)
+
+    return {
+        'summary': summary,
+        'top_features': top_features,
+        'period_days': days,
+    }
+
+
+@router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
+def get_llm_top_features(
+    days: int = Query(default=30, ge=1, le=365),
+    limit: int = Query(default=3, ge=1, le=10),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get top features by LLM token usage for the current user.
+
+    Returns the top N features sorted by total token consumption.
+    """
+    return llm_usage_db.get_top_features(uid, days=days, limit=limit)

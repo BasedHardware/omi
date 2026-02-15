@@ -1,0 +1,123 @@
+// Firebase Messaging Service Worker
+// Handles background push notifications when the browser tab is closed or in background
+// NOTE: This file is auto-generated from firebase-messaging-sw.js.template
+// Do not edit firebase-messaging-sw.js directly - edit the template instead
+
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+
+// Initialize Firebase in the service worker
+// Config is injected at build time from environment variables
+firebase.initializeApp({
+  apiKey: '__FIREBASE_API_KEY__',
+  authDomain: '__FIREBASE_AUTH_DOMAIN__',
+  projectId: '__FIREBASE_PROJECT_ID__',
+  storageBucket: '__FIREBASE_STORAGE_BUCKET__',
+  messagingSenderId: '__FIREBASE_MESSAGING_SENDER_ID__',
+  appId: '__FIREBASE_APP_ID__',
+});
+
+const messaging = firebase.messaging();
+
+// Log all push events for debugging
+self.addEventListener('push', (event) => {
+  console.log('[firebase-messaging-sw.js] Push event received:', event);
+  if (event.data) {
+    console.log('[firebase-messaging-sw.js] Push data:', event.data.json());
+  }
+});
+
+// Handle background messages
+messaging.onBackgroundMessage((payload) => {
+  console.log('[firebase-messaging-sw.js] Received background message:', payload);
+
+  const notificationTitle = payload.notification?.title || payload.data?.title || 'Omi';
+  const notificationOptions = {
+    body: payload.notification?.body || payload.data?.body || '',
+    icon: payload.notification?.icon || '/logo.png',
+    badge: '/logo.png',
+    tag: payload.data?.notification_id || Date.now().toString(),
+    data: payload.data || {},
+    // Keep notification visible for action items
+    requireInteraction: payload.data?.notification_type === 'action_item_reminder',
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// Handle notification clicks for deep linking
+self.addEventListener('notificationclick', (event) => {
+  console.log('[firebase-messaging-sw.js] Notification clicked:', event.notification);
+
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const navigateTo = data.navigate_to;
+
+  // Determine target URL based on notification data
+  let targetUrl = self.location.origin;
+
+  if (navigateTo) {
+    // Handle different notification types and their routes
+    const pathParts = navigateTo.split('/');
+
+    if (navigateTo.startsWith('/tasks')) {
+      // Action item notifications
+      const taskId = pathParts.length > 2 ? pathParts.pop() : null;
+      targetUrl = `${self.location.origin}/tasks${taskId ? `?highlight=${taskId}` : ''}`;
+    } else if (navigateTo.startsWith('/daily-summary')) {
+      // Daily summary notifications (backend sends /daily-summary/{id})
+      const recapId = pathParts.length > 2 ? pathParts.pop() : null;
+      targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
+    } else if (navigateTo.startsWith('/recaps')) {
+      // Daily summary notifications (alternative path)
+      const recapId = pathParts.length > 2 ? pathParts.pop() : null;
+      targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
+    } else if (navigateTo.startsWith('/conversations')) {
+      // Merge completed notifications
+      targetUrl = `${self.location.origin}${navigateTo}`;
+    } else if (navigateTo.startsWith('/apps')) {
+      // Plugin notifications (apps page)
+      const appId = pathParts.length > 2 ? pathParts.pop() : null;
+      targetUrl = `${self.location.origin}/apps${appId ? `?id=${appId}` : ''}`;
+    } else if (navigateTo.startsWith('/chat/')) {
+      // Plugin chat notifications - pass app_id for capability-aware routing
+      // MainLayout will check if app has 'chat' capability:
+      // - If yes: open chat panel with that app
+      // - If no: open notification center (notification-only apps like Bitcoin)
+      const appId = pathParts.pop();
+      targetUrl = `${self.location.origin}/?chatApp=${appId}`;
+    } else {
+      // Default: use the navigate_to path directly
+      targetUrl = `${self.location.origin}${navigateTo}`;
+    }
+  }
+
+  // Focus existing window or open new one
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to find an existing window with the app
+      for (const client of clientList) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          // Navigate the existing window to the target URL
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      // No existing window found, open a new one
+      return clients.openWindow(targetUrl);
+    })
+  );
+});
+
+// Handle service worker installation
+self.addEventListener('install', (event) => {
+  console.log('[firebase-messaging-sw.js] Service worker installed');
+  self.skipWaiting();
+});
+
+// Handle service worker activation
+self.addEventListener('activate', (event) => {
+  console.log('[firebase-messaging-sw.js] Service worker activated');
+  event.waitUntil(clients.claim());
+});

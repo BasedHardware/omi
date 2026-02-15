@@ -13,7 +13,6 @@ from utils.other.endpoints import timeit
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
-
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -82,6 +81,28 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         memories_id=[conversation_id] if conversation_id else [],
     )
     add_message(uid, ai_message.dict())
+    return ai_message
+
+
+def add_integration_chat_message(text: str, app_id: Optional[str], uid: str) -> Message:
+    """Add a chat message from an external integration (e.g. notification API),
+    linking it to the user's existing chat session so it appears in the chat feed."""
+    chat_session = get_chat_session(uid, app_id=app_id)
+    chat_session_id = chat_session['id'] if chat_session else None
+
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        from_external_integration=True,
+        type='text',
+        chat_session_id=chat_session_id,
+    )
+    add_message(uid, ai_message.dict())
+    if chat_session_id:
+        add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
 
 
@@ -242,6 +263,31 @@ def report_message(uid: str, msg_doc_id: str):
     except Exception as e:
         print("Update failed:", e)
         return {"message": f"Update failed: {e}"}
+
+
+def update_message_rating(uid: str, message_id: str, rating: int | None):
+    """
+    Update the rating on a message document.
+
+    Args:
+        uid: User ID
+        message_id: Message ID (not doc ID)
+        rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
+    """
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
+    message_doc = next(message_ref, None)
+    if not message_doc:
+        print(f"⚠️ Message {message_id} not found for user {uid}")
+        return False
+
+    try:
+        user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
+        print(f"✅ Updated message {message_id} rating to {rating}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to update message rating: {e}")
+        return False
 
 
 def batch_delete_messages(

@@ -29,6 +29,7 @@
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
+#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -38,6 +39,7 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
+static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
@@ -190,6 +192,74 @@ static struct bt_gatt_attr features_service_attr[] = {
 };
 
 static struct bt_gatt_service features_service = BT_GATT_SERVICE(features_service_attr);
+
+// --- Time Sync Service ---
+// Service UUID: 19B10030-E8F2-537E-4F6C-D104768A1214
+// Characteristics:
+//   - Time Write (19B10031): Write 4 bytes (uint32_t epoch_s) to sync time
+//   - Time Read  (19B10032): Read 4 bytes (uint32_t epoch_s) current device time
+static struct bt_uuid_128 time_sync_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10030, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 time_sync_write_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10031, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 time_sync_read_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10032, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t time_sync_write_handler(struct bt_conn *conn,
+                                       const struct bt_gatt_attr *attr,
+                                       const void *buf,
+                                       uint16_t len,
+                                       uint16_t offset,
+                                       uint8_t flags)
+{
+    if (len != sizeof(uint32_t)) {
+        LOG_WRN("Invalid length for time sync write: %u (expected %u)", len, sizeof(uint32_t));
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint32_t epoch_s;
+    memcpy(&epoch_s, buf, sizeof(epoch_s));
+
+    LOG_INF("Time sync received: %u seconds", epoch_s);
+
+    int err = rtc_set_utc_time((uint64_t)epoch_s);
+    if (err) {
+        LOG_ERR("Failed to set RTC time: %d", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    LOG_INF("Time synchronized successfully");
+    return len;
+}
+
+static ssize_t time_sync_read_handler(struct bt_conn *conn,
+                                      const struct bt_gatt_attr *attr,
+                                      void *buf,
+                                      uint16_t len,
+                                      uint16_t offset)
+{
+    uint32_t epoch_s = get_utc_time();
+    LOG_INF("Time sync read: %u seconds", epoch_s);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &epoch_s, sizeof(epoch_s));
+}
+
+static struct bt_gatt_attr time_sync_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&time_sync_service_uuid),
+    BT_GATT_CHARACTERISTIC(&time_sync_write_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           time_sync_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&time_sync_read_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           time_sync_read_handler,
+                           NULL,
+                           NULL),
+};
+
+static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -356,6 +426,9 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #endif
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
+#endif
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    features |= OMI_FEATURE_WIFI;
 #endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
@@ -651,10 +724,6 @@ static uint8_t pusher_temp_data[MAX_POSSIBLE_MTU];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
@@ -714,38 +783,11 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-// bool write_to_storage(void)
-// {
-//     if (!read_from_tx_queue())
-//     {
-//         return false;
-//     }
 
-//     uint8_t *buffer = tx_buffer+2;
-//     const uint32_t packet_size = tx_buffer_size;
-//     //load into write at 400 bytes at a time. is faster
-//     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
-//     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
-
-//     buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
-//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) {
-//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-//     write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
-
-//     buffer_offset = 0;
-//     }
-
-//     return true;
-// }
-// for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void)
-{ // max possible packing
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
+{
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
@@ -823,59 +865,44 @@ void pusher(void)
 {
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
-        //
-        // Load current connection
-        //
-        struct bt_conn *conn = current_connection;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) {
-            k_msleep(100);
-            connection_was_true = true;
-        } else if (!conn) {
-            connection_was_true = false;
+        // Check if there is a new buffer
+        if (!read_from_tx_queue()) {
+            k_sleep(K_MSEC(10));
+            continue;
         }
 
+        // Check BT connection and subscription
+        struct bt_conn *conn = current_connection;
+        bool is_subscribed = false;
         if (conn) {
             conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE) {
-            valid = false;
-        } else if (!conn) {
-            valid = false;
-        } else {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            if (current_mtu >= MINIMAL_PACKET_SIZE) {
+                is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+            }
         }
 
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        if (!valid && !storage_is_on) {
-            bool result = false;
-            if (get_file_size() < MAX_STORAGE_BYTES) {
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-            }
-            if (result) {
-                heartbeat_count++;
-                if (heartbeat_count == 255) {
-                    heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
-                }
-            } else {
-            }
-        }
-#endif
-        if (valid) {
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
-            }
-        }
-        if (conn) {
+        if (conn && is_subscribed) {
+            // Push to GATT if connected and subscribed
+            push_to_gatt(conn);
             bt_conn_unref(conn);
+        } else if (!conn) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            // No BT connection, write to storage
+            if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                storage_full_warned = false;
+                write_to_storage();
+            } else {
+                if (!storage_full_warned) {
+                    LOG_WRN("Storage full, stopping offline storage");
+                    storage_full_warned = true;
+                }
+            }
+#endif
+        } else {
+            // Connected but not subscribed, just sleep (buffer will be retried)
+            if (conn) bt_conn_unref(conn);
+            k_sleep(K_MSEC(10));
         }
-
-        k_yield();
     }
 }
 
@@ -993,6 +1020,7 @@ int transport_start()
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
+    bt_gatt_service_register(&time_sync_service);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio

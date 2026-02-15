@@ -4,16 +4,19 @@ import UserNotifications
 import app_links
 import WatchConnectivity
 import AVFoundation
-
+import Speech
+import EventKit
 
 extension FlutterError: Error {}
-
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var methodChannel: FlutterMethodChannel?
   private var appleRemindersChannel: FlutterMethodChannel?
+  private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
+  private let appleHealthService = AppleHealthService()
+  private static let iso8601DateFormatter = ISO8601DateFormatter()
 
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -62,6 +65,22 @@ extension FlutterError: Error {}
       self?.handleAppleRemindersCall(call, result: result)
     }
 
+    // Create Apple Health method channel
+    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
+    appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.handleAppleHealthCall(call, result: result)
+    }
+
+    // Create Speech Recognition method channel
+    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller!.binaryMessenger)
+    let speechHandler = SpeechRecognitionHandler()
+    speechChannel.setMethodCallHandler { (call, result) in
+        speechHandler.handle(call, result: result)
+    }
+
+    // Create WiFi Network plugin for device AP connection
+    _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
@@ -95,7 +114,98 @@ extension FlutterError: Error {}
   private func handleAppleRemindersCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     appleRemindersService.handleMethodCall(call, result: result)
   }
-    
+
+  private func handleAppleHealthCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    appleHealthService.handleMethodCall(call, result: result)
+  }
+
+  // MARK: - Silent Push for Apple Reminders Auto-Sync
+
+  private let syncEventStore = EKEventStore()
+
+  override func application(
+      _ application: UIApplication,
+      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+      print("AppDelegate: Received remote notification: \(userInfo)")
+
+      // Check if it's Apple Reminders sync
+      if let type = userInfo["type"] as? String, type == "apple_reminders_sync" {
+          handleAppleRemindersSync(userInfo: userInfo, completionHandler: completionHandler)
+          return
+      }
+
+      // Also check nested under "data" key (some FCM configurations)
+      if let data = userInfo["data"] as? [String: Any],
+         let type = data["type"] as? String,
+         type == "apple_reminders_sync" {
+          handleAppleRemindersSync(userInfo: data, completionHandler: completionHandler)
+          return
+      }
+
+      super.application(application, didReceiveRemoteNotification: userInfo, fetchCompletionHandler: completionHandler)
+  }
+
+  private func handleAppleRemindersSync(
+      userInfo: [AnyHashable: Any],
+      completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+      guard let actionItemId = userInfo["action_item_id"] as? String,
+            let description = userInfo["description"] as? String else {
+          completionHandler(.failed)
+          return
+      }
+
+      // Check permission - handle iOS 17+ new authorization states
+      let status = EKEventStore.authorizationStatus(for: .reminder)
+
+      // iOS 17+ uses .fullAccess and .writeOnly, older iOS uses .authorized
+      var hasAccess = false
+      if #available(iOS 17.0, *) {
+          hasAccess = status == .fullAccess || status == .writeOnly
+      } else {
+          hasAccess = status == .authorized
+      }
+
+      guard hasAccess else {
+          completionHandler(.failed)
+          return
+      }
+
+      // Parse due date
+      let dueDate: Date? = {
+          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
+              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
+          }
+          return nil
+      }()
+
+      // Create reminder
+      let reminder = EKReminder(eventStore: syncEventStore)
+      reminder.title = description
+      reminder.notes = "From Omi"
+      reminder.calendar = syncEventStore.defaultCalendarForNewReminders()
+
+      if let due = dueDate {
+          reminder.dueDateComponents = Calendar.current.dateComponents(
+              [.year, .month, .day, .hour, .minute], from: due
+          )
+      }
+
+      do {
+          try syncEventStore.save(reminder, commit: true)
+
+          // Notify Flutter to mark as exported via API
+          DispatchQueue.main.async {
+              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+          }
+
+          completionHandler(.newData)
+      } catch {
+          completionHandler(.failed)
+      }
+  }
 
   override func applicationWillTerminate(_ application: UIApplication) {
     // If title and body are nil, then we don't need to show notification.
@@ -373,6 +483,70 @@ extension AppDelegate: WCSessionDelegate {
                 }
             default:
                 print("Unknown background method: \(method)")
+            }
+        }
+    }
+}
+
+class SpeechRecognitionHandler: NSObject {
+    
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if call.method == "transcribe" {
+            guard let args = call.arguments as? [String: Any],
+                  let path = args["filePath"] as? String else {
+                result(FlutterError(code: "INVALID_ARGS", message: "Missing arguments", details: nil))
+                return
+            }
+            
+            let language = args["language"] as? String ?? "en-US"
+            transcribe(filePath: path, language: language, result: result)
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+    
+    private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
+        // Request authorization first
+        SFSpeechRecognizer.requestAuthorization { authStatus in
+            if authStatus != .authorized {
+                result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
+                return
+            }
+            
+            let fileUrl = URL(fileURLWithPath: filePath)
+            let localeIdentifier = language.isEmpty ? "en-US" : language
+            let locale = Locale(identifier: localeIdentifier)
+            
+            guard let recognizer = SFSpeechRecognizer(locale: locale) else {
+                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer not available for locale \(localeIdentifier)", details: nil))
+                return
+            }
+            
+            if !recognizer.isAvailable {
+                result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer service is currently unavailable", details: nil))
+                return
+            }
+            
+            let request = SFSpeechURLRecognitionRequest(url: fileUrl)
+            request.shouldReportPartialResults = false
+            request.requiresOnDeviceRecognition = true // Force on-device
+            
+            let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
+                if let error = error {
+                    // Check if it's just "No speech identified" which might happen with silence
+                    let nsError = error as NSError
+                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110 {
+                         result("") // Treat as empty
+                    } else {
+                         result(FlutterError(code: "RECOGNITION_ERROR", message: error.localizedDescription, details: nil))
+                    }
+                    return
+                }
+                
+                if let recognitionResult = recognitionResult, recognitionResult.isFinal {
+                    let text = recognitionResult.bestTranscription.formattedString
+                    result(text)
+                }
             }
         }
     }

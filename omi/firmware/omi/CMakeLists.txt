@@ -15,6 +15,8 @@ file(GLOB app_sources
     src/settings.c
     src/feedback.c
     src/wdog_facade.c
+    src/rtc.c
+    src/imu.c
 )
 file(GLOB core_sources
     src/lib/core/config.h
@@ -26,6 +28,10 @@ file(GLOB core_sources
 
 if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
     list(APPEND core_sources src/lib/core/storage.c)
+endif()
+
+if(CONFIG_OMI_ENABLE_WIFI)
+    list(APPEND core_sources src/wifi.c)
 endif()
 
 target_sources(app PRIVATE ${core_sources} ${app_sources})

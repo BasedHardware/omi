@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
 import 'package:http/http.dart' as http;
-import 'package:omi/services/sockets/pure_polling.dart';
-import 'package:omi/services/custom_stt_log_service.dart';
+
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/pure_polling.dart';
+import 'package:omi/utils/logger.dart';
 
 enum SttRequestBodyType {
   multipartForm,
@@ -267,7 +270,7 @@ class SchemaBasedSttProvider implements ISttProvider {
           .timeout(const Duration(seconds: 30));
 
       if (initResponse.statusCode != 200) {
-        debugPrint('[SchemaSTT] Upload init error: ${initResponse.statusCode} - ${initResponse.body}');
+        Logger.debug('[SchemaSTT] Upload init error: ${initResponse.statusCode} - ${initResponse.body}');
         return null;
       }
 
@@ -276,7 +279,7 @@ class SchemaBasedSttProvider implements ISttProvider {
       final fileUrl = JsonPathNavigator.getString(initData, fileUploadConfig!.fileUrlPath);
 
       if (uploadUrl == null || fileUrl == null) {
-        debugPrint('[SchemaSTT] Failed to parse upload URLs');
+        Logger.debug('[SchemaSTT] Failed to parse upload URLs');
         return null;
       }
 
@@ -289,13 +292,13 @@ class SchemaBasedSttProvider implements ISttProvider {
       final uploadResponse = await uploadRequest.timeout(const Duration(seconds: 60));
 
       if (uploadResponse.statusCode != 200 && uploadResponse.statusCode != 201) {
-        debugPrint('[SchemaSTT] Upload error: ${uploadResponse.statusCode}');
+        Logger.debug('[SchemaSTT] Upload error: ${uploadResponse.statusCode}');
         return null;
       }
 
       return fileUrl;
     } catch (e) {
-      debugPrint('[SchemaSTT] Upload exception: $e');
+      Logger.debug('[SchemaSTT] Upload exception: $e');
       return null;
     }
   }

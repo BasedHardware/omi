@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/services/bridges/apple_watch_bridge.dart';
-
+import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 class WatchTransport extends DeviceTransport {
@@ -47,25 +48,25 @@ class WatchTransport extends DeviceTransport {
               try {
                 controller.add(bytes);
               } catch (e) {
-                debugPrint('Watch Transport: Error forwarding audio to controller: $e');
+                Logger.debug('Watch Transport: Error forwarding audio to controller: $e');
               }
             }
           }
         },
         onRecordingStartedCb: () {
-          debugPrint('Watch Transport: Recording started');
+          Logger.debug('Watch Transport: Recording started');
         },
         onRecordingStoppedCb: () {
-          debugPrint('Watch Transport: Recording stopped');
+          Logger.debug('Watch Transport: Recording stopped');
         },
         onRecordingErrorCb: (String error) {
-          debugPrint('Watch Transport: Recording error: $error');
+          Logger.debug('Watch Transport: Recording error: $error');
         },
         onMicPermissionCb: (bool granted) {
-          debugPrint('Watch Transport: Mic permission: $granted');
+          Logger.debug('Watch Transport: Mic permission: $granted');
         },
         onMainAppMicPermissionCb: (bool granted) {
-          debugPrint('Watch Transport: Main app mic permission: $granted');
+          Logger.debug('Watch Transport: Main app mic permission: $granted');
         },
         onBatteryUpdateCb: (double batteryLevel, int batteryState) {
           _batteryControllers.removeWhere((controller) => controller.isClosed);
@@ -76,7 +77,7 @@ class WatchTransport extends DeviceTransport {
               try {
                 controller.add([batteryLevelInt]);
               } catch (e) {
-                debugPrint('Watch Transport: Error forwarding battery to controller: $e');
+                Logger.debug('Watch Transport: Error forwarding battery to controller: $e');
               }
             }
           }
@@ -211,14 +212,14 @@ class WatchTransport extends DeviceTransport {
     }
 
     _hostAPI.requestWatchBatteryUpdate().catchError((e) {
-      debugPrint('Watch Transport: Error requesting initial battery update: $e');
+      Logger.debug('Watch Transport: Error requesting initial battery update: $e');
     });
 
     _periodicTimers[key] = Timer.periodic(const Duration(seconds: 300), (timer) async {
       try {
         await _hostAPI.requestWatchBatteryUpdate();
       } catch (e) {
-        debugPrint('Watch Transport: Battery update request error: $e');
+        Logger.debug('Watch Transport: Battery update request error: $e');
       }
     });
   }
@@ -230,7 +231,7 @@ class WatchTransport extends DeviceTransport {
         final level = await _hostAPI.getWatchBatteryLevel();
         return [level.round()];
       } catch (e) {
-        debugPrint('Watch Transport: Error reading battery level: $e');
+        Logger.debug('Watch Transport: Error reading battery level: $e');
         return [-1];
       }
     } else if (serviceUuid == 'watch-device-info-service') {
@@ -245,7 +246,7 @@ class WatchTransport extends DeviceTransport {
             return firmware.codeUnits;
           }
         } catch (e) {
-          debugPrint('Watch Transport: Error reading device info: $e');
+          Logger.debug('Watch Transport: Error reading device info: $e');
         }
       }
     }
@@ -260,7 +261,7 @@ class WatchTransport extends DeviceTransport {
     try {
       await _hostAPI.startRecording();
     } catch (e) {
-      debugPrint('Watch Transport: Error starting recording: $e');
+      Logger.debug('Watch Transport: Error starting recording: $e');
       rethrow;
     }
   }
@@ -269,7 +270,7 @@ class WatchTransport extends DeviceTransport {
     try {
       await _hostAPI.stopRecording();
     } catch (e) {
-      debugPrint('Watch Transport: Error stopping recording: $e');
+      Logger.debug('Watch Transport: Error stopping recording: $e');
       rethrow;
     }
   }
@@ -280,7 +281,7 @@ class WatchTransport extends DeviceTransport {
       res['firmwareRevision'] = res['systemVersion'] ?? 'Unknown';
       return res;
     } catch (e) {
-      debugPrint('Watch Transport: Error getting watch info: $e');
+      Logger.debug('Watch Transport: Error getting watch info: $e');
       return {};
     }
   }
@@ -289,7 +290,7 @@ class WatchTransport extends DeviceTransport {
     try {
       return await _hostAPI.checkMainAppMicrophonePermission();
     } catch (e) {
-      debugPrint('Watch Transport: Error checking mic permission: $e');
+      Logger.debug('Watch Transport: Error checking mic permission: $e');
       return false;
     }
   }
@@ -298,7 +299,7 @@ class WatchTransport extends DeviceTransport {
     try {
       await _hostAPI.requestMainAppMicrophonePermission();
     } catch (e) {
-      debugPrint('Watch Transport: Error requesting mic permission: $e');
+      Logger.debug('Watch Transport: Error requesting mic permission: $e');
       rethrow;
     }
   }

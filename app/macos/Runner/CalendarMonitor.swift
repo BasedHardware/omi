@@ -34,6 +34,7 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     
     // Settings
     private var showEventsWithNoParticipants: Bool = false
+    private var showMeetingsInMenuBar: Bool = true
 
     // Flutter stream
     private var eventSink: FlutterEventSink?
@@ -139,8 +140,23 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         scheduledNubTimers.removeAll()
     }
     
-    func updateSettings(showEventsWithNoParticipants: Bool) {
-        self.showEventsWithNoParticipants = showEventsWithNoParticipants
+    func updateSettings(showEventsWithNoParticipants: Bool? = nil, showMeetingsInMenuBar: Bool? = nil) {
+        if let showEventsWithNoParticipants = showEventsWithNoParticipants {
+            
+            self.showEventsWithNoParticipants = showEventsWithNoParticipants
+        }
+        if let showMeetingsInMenuBar = showMeetingsInMenuBar {
+            self.showMeetingsInMenuBar = showMeetingsInMenuBar
+
+            if !showMeetingsInMenuBar {
+                for (_, timer) in scheduledNubTimers {
+                    timer.invalidate()
+                }
+                scheduledNubTimers.removeAll()
+
+                MenuBarManager.shared.resetToDefaultView()
+            }
+        }
         // Rescan immediately to apply new filter
         if isMonitoring {
             scanForUpcomingMeetings()
@@ -156,6 +172,11 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     private func scanForUpcomingMeetings() {
         let now = Date()
         let lookAheadUntil = now.addingTimeInterval(CalendarMonitor.LOOKAHEAD_WINDOW)
+
+        if !showMeetingsInMenuBar {
+            MenuBarManager.shared.resetToDefaultView()
+            return
+        }
 
         // Query events
         let predicate = eventStore.predicateForEvents(
@@ -216,21 +237,28 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
         }
 
         upcomingMeetings = newUpcomingMeetings
-        
-        // Update menu bar with closest FUTURE meeting
-        let futureMeetings = upcomingMeetings.values.filter { $0.startDate > now }
 
-        if let closestMeeting = futureMeetings.min(by: { $0.startDate < $1.startDate }) {
-            let minutesUntil = Int(closestMeeting.startDate.timeIntervalSinceNow / 60)
-            if minutesUntil >= 0 {  // Extra safety check
-                MenuBarManager.shared.updateWithMeeting(title: closestMeeting.title, startDate: closestMeeting.startDate)
+        if showMeetingsInMenuBar {
+            let futureMeetings = upcomingMeetings.values.filter { $0.startDate > now }
+
+            if let closestMeeting = futureMeetings.min(by: { $0.startDate < $1.startDate }) {
+                let minutesUntil = Int(closestMeeting.startDate.timeIntervalSinceNow / 60)
+                if minutesUntil >= 0 {
+                    MenuBarManager.shared.updateWithMeeting(title: closestMeeting.title, startDate: closestMeeting.startDate)
+                } else {
+                    MenuBarManager.shared.resetToDefaultView()
+                }
             } else {
+                // No upcoming meetings, reset to default
                 MenuBarManager.shared.resetToDefaultView()
             }
-        } else {
-            // No upcoming meetings, reset to default
-            MenuBarManager.shared.resetToDefaultView()
         }
+
+        // Notify Flutter about meetings list update
+        sendEventToFlutter([
+            "type": "meetingsUpdated",
+            "count": upcomingMeetings.count
+        ])
 
         // Clean up old snoozes
         cleanupExpiredSnoozes()
@@ -239,8 +267,6 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     // MARK: - Meeting Detection Logic
 
     func isMeetingEvent(_ event: EKEvent) -> Bool {
-        let title = event.title ?? "Untitled"
-
         // 1. Must not be all-day
         if event.isAllDay {
             return false
@@ -316,7 +342,7 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
     private func shouldShowNub(for event: EKEvent) -> Bool {
         let now = Date()
-        guard let startTime = event.startDate, let endTime = event.endDate else { return false }
+        guard let startTime = event.startDate, let _ = event.endDate else { return false }
 
         let timeUntilStart = startTime.timeIntervalSince(now)
 

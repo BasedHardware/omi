@@ -1,17 +1,24 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:opus_dart/opus_dart.dart';
+import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
+import 'package:provider/provider.dart';
+import 'package:talker_flutter/talker_flutter.dart';
+import 'package:window_manager/window_manager.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
@@ -21,51 +28,54 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_dev.dart' as dev;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
+import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/providers/calendar_provider.dart';
-import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:opus_dart/opus_dart.dart';
-import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
-import 'package:provider/provider.dart';
-import 'package:talker_flutter/talker_flutter.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -102,6 +112,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey,
       isAppInForeground: false,
     );
+  } else if (messageType == 'important_conversation') {
+    await ImportantConversationNotificationHandler.handleImportantConversation(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
   }
 }
 
@@ -124,15 +140,14 @@ Future _init() async {
   await ServiceManager.init();
 
   // Firebase
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
+  if (Firebase.apps.isEmpty) {
+    final options = (PlatformService.isWindows || F.env == Environment.prod)
+        ? prod.DefaultFirebaseOptions.currentPlatform
+        : dev.DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp(options: options);
   } else {
-    if (F.env == Environment.prod) {
-      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
-    } else {
-      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
-    }
+    // Firebase may already be initialized by native SDK (macOS)
+    debugPrint('Firebase already initialized.');
   }
 
   await PlatformManager.initializeServices();
@@ -145,8 +160,20 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
+  // DEBUG: Log Firebase Auth state before getIdToken
+  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  if (isAuth) PlatformManager.instance.mixpanel.identify();
+  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  if (isAuth) {
+    PlatformManager.instance.mixpanel.identify();
+    // Restore onboarding state from server if not already set locally
+    // This handles the case where cached credentials are used on startup
+    if (!SharedPreferencesUtil().onboardingCompleted) {
+      print('DEBUG main: Restoring onboarding state from server...');
+      await AuthService.instance.restoreOnboardingState();
+      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+    }
+  }
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -189,8 +216,8 @@ void main() {
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
         WindowOptions windowOptions = const WindowOptions(
-          size: Size(1440, 900),
-          minimumSize: Size(1000, 650),
+          size: Size(1300, 800),
+          minimumSize: Size(1100, 700),
           center: true,
           title: "Omi",
           titleBarStyle: TitleBarStyle.hidden,
@@ -259,12 +286,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         await captureProvider.streamSystemAudioRecording();
       }
     } catch (e) {
-      debugPrint('[AutoRecord] Error: $e');
+      Logger.debug('[AutoRecord] Error: $e');
     }
   }
 
   void _deinit() {
-    debugPrint("App > _deinit");
+    Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
   }
@@ -327,7 +354,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
                 (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
           ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
@@ -348,11 +375,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
+          ChangeNotifierProvider(create: (context) => GoalsProvider()..init()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
           ChangeNotifierProvider(create: (context) => IntegrationProvider()),
           ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
           ChangeNotifierProvider(create: (context) => FolderProvider()),
+          ChangeNotifierProvider(create: (context) => LocaleProvider()),
+          ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -360,12 +391,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
               navigatorKey: MyApp.navigatorKey,
+              locale: context.watch<LocaleProvider>().locale,
               localizationsDelegates: const [
+                AppLocalizations.delegate,
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              supportedLocales: const [Locale('en')],
+              supportedLocales: AppLocalizations.supportedLocales,
               theme: ThemeData(
                   useMaterial3: false,
                   colorScheme: const ColorScheme.dark(
@@ -436,10 +469,10 @@ class CustomErrorWidget extends StatelessWidget {
               size: 50.0,
             ),
             const SizedBox(height: 10.0),
-            const Text(
-              'Something went wrong! Please try again later.',
+            Text(
+              context.l10n.somethingWentWrong,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10.0),
             Container(
@@ -464,18 +497,18 @@ class CustomErrorWidget extends StatelessWidget {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: errorMessage));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Error message copied to clipboard'),
+                    SnackBar(
+                      content: Text(context.l10n.errorCopied),
                     ),
                   );
                 },
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text('Copy error message'),
-                    SizedBox(width: 10),
-                    Icon(Icons.copy_rounded),
+                    Text(context.l10n.copyErrorMessage),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.copy_rounded),
                   ],
                 ),
               ),

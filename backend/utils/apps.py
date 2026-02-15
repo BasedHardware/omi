@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
+from database.cache import get_memory_cache, get_pubsub_manager
+from database.redis_db import delete_generic_cache
 from database.apps import (
     get_private_apps_db,
     get_public_unapproved_apps_db,
@@ -136,55 +138,88 @@ def compute_app_score(app: App) -> float:
     return round(score, 4)
 
 
+def invalidate_popular_apps_cache():
+    """Invalidate the popular apps cache across all backend instances."""
+    memory_cache = get_memory_cache()
+    pubsub_manager = get_pubsub_manager()
+
+    cache_key = 'get_popular_apps_data'
+
+    # Clear local memory cache
+    memory_cache.delete(cache_key)
+
+    # Clear Redis cache
+    delete_generic_cache(cache_key)
+
+    # Notify all other instances
+    pubsub_manager.publish_invalidation([cache_key])
+
+
 def get_popular_apps() -> List[App]:
-    popular_apps = []
-    if cached_apps := get_generic_cache('get_popular_apps_data'):
-        print('get_popular_apps from cache')
-        popular_apps = cached_apps
-    else:
-        print('get_popular_apps from db')
-        popular_apps = get_popular_apps_db()
-        set_generic_cache('get_popular_apps_data', popular_apps, 60 * 30)  # 30 minutes cached
+    cache_key = 'get_popular_apps_data'
+    memory_cache = get_memory_cache()
 
-    app_ids = [app['id'] for app in popular_apps]
-    apps_install = get_apps_installs_count(app_ids)
-    apps_reviews = get_apps_reviews(app_ids)
+    def fetch_and_process():
+        """Fetch from Redis/DB and process apps (called only once with singleflight)."""
+        # Check Redis cache
+        if cached_apps := get_generic_cache(cache_key):
+            print('get_popular_apps from Redis cache')
+            popular_apps = cached_apps
+        else:
+            # Database query
+            print('get_popular_apps from db')
+            popular_apps = get_popular_apps_db()
+            # Reduce cache size by excluding large fields
+            reduced_apps = [App.reduce_dict(app) for app in popular_apps]
+            set_generic_cache(cache_key, reduced_apps, 60 * 30)  # 30 minutes cached
+            popular_apps = reduced_apps
 
-    apps = []
-    for app in popular_apps:
-        app_dict = app
-        app_dict['installs'] = apps_install.get(app['id'], 0)
-        reviews = apps_reviews.get(app['id'], {})
-        sorted_reviews = reviews.values()
-        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-        app_dict['rating_avg'] = rating_avg
-        app_dict['rating_count'] = len(sorted_reviews)
-        apps.append(App(**app_dict))
-    apps = sorted(apps, key=lambda x: x.installs, reverse=True)
-    return apps
+        # Process apps (add installs, reviews, ratings)
+        app_ids = [app['id'] for app in popular_apps]
+        apps_install = get_apps_installs_count(app_ids)
+        apps_reviews = get_apps_reviews(app_ids)
+
+        apps = []
+        for app in popular_apps:
+            app_dict = app
+            app_dict['installs'] = apps_install.get(app['id'], 0)
+            reviews = apps_reviews.get(app['id'], {})
+            sorted_reviews = reviews.values()
+            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+            app_dict['rating_avg'] = rating_avg
+            app_dict['rating_count'] = len(sorted_reviews)
+            apps.append(App(**app_dict))
+        apps = sorted(apps, key=lambda x: x.installs, reverse=True)
+        return apps
+
+    # Singleflight: only ONE request fetches, others wait
+    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
-    private_data = []
-    public_approved_data = []
-    public_unapproved_data = []
-    tester_apps = []
-    all_apps = []
+    cache_key = 'get_public_approved_apps_data'
+    memory_cache = get_memory_cache()
+
     tester = is_tester(uid)
-    if cachedApps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_plugins_data from cache')
-        public_approved_data = cachedApps
-        public_unapproved_data = get_public_unapproved_apps(uid)
-        private_data = get_private_apps(uid)
-        pass
-    else:
-        print('get_public_approved_plugins_data from db')
-        private_data = get_private_apps(uid)
-        public_approved_data = get_public_approved_apps_db()
-        public_unapproved_data = get_public_unapproved_apps(uid)
-        set_generic_cache('get_public_approved_apps_data', public_approved_data, 60 * 10)  # 10 minutes cached
-    if tester:
-        tester_apps = get_apps_for_tester_db(uid)
+
+    def fetch_public_approved():
+        """Fetch from Redis or DB (called only once with singleflight)."""
+        if data := get_generic_cache(cache_key):
+            print('get_public_approved_apps_data from Redis cache')
+            return data
+        print('get_public_approved_apps_data from db')
+        data = get_public_approved_apps_db()
+        # Reduce cache size by excluding large fields
+        reduced_data = [App.reduce_dict(app) for app in data]
+        set_generic_cache(cache_key, reduced_data, 60 * 10)  # 10 minutes cached
+        return reduced_data
+
+    # Singleflight: only ONE request fetches, others wait
+    public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
+
+    private_data = get_private_apps(uid)
+    public_unapproved_data = get_public_unapproved_apps(uid)
+    tester_apps = get_apps_for_tester_db(uid) if tester else []
     user_enabled = set(get_enabled_apps(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
@@ -216,13 +251,13 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         print('get_app_cache_by_id from cache')
-        if cached_app['private'] and cached_app['uid'] != uid:
+        if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid and not is_tester(uid):
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     set_app_cache_by_id(app_id, app)
     return app
@@ -232,7 +267,7 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
@@ -264,35 +299,77 @@ def get_private_apps(uid: str) -> List:
     return data
 
 
+def invalidate_approved_apps_cache():
+    """
+    Invalidate the approved apps cache across all backend instances.
+
+    This function:
+    1. Invalidates memory cache on local instance
+    2. Invalidates Redis cache
+    3. Publishes invalidation message to all other instances via pub/sub
+    """
+    # Get cache instances
+    memory_cache = get_memory_cache()
+    pubsub_manager = get_pubsub_manager()
+
+    # Invalidate both cache key variants (with and without reviews)
+    cache_keys = ['get_public_approved_apps_data:reviews=0', 'get_public_approved_apps_data:reviews=1']
+
+    # Clear local memory cache
+    for key in cache_keys:
+        memory_cache.delete(key)
+
+    # Clear Redis cache
+    delete_generic_cache('get_public_approved_apps_data')
+
+    # Notify all other instances to clear their memory cache
+    pubsub_manager.publish_invalidation(cache_keys)
+
+
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
-    all_apps = []
-    if cached_apps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_apps_data from cache')
-        all_apps = cached_apps
-        pass
-    else:
-        all_apps = get_public_approved_apps_db()
-        set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
+    # Use separate cache keys for with/without reviews
+    cache_key = f'get_public_approved_apps_data:reviews={int(include_reviews)}'
+    redis_cache_key = 'get_public_approved_apps_data'
+    memory_cache = get_memory_cache()
 
-    app_ids = [app['id'] for app in all_apps]
-    apps_installs = get_apps_installs_count(app_ids)
-    apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
+    def fetch_and_process():
+        """Fetch from Redis/DB and process apps (called only once with singleflight)."""
+        # Check Redis cache
+        if cached_apps := get_generic_cache(redis_cache_key):
+            print('get_public_approved_apps_data from Redis cache')
+            all_apps = cached_apps
+        else:
+            # Database query
+            print('get_public_approved_apps_data from db')
+            all_apps = get_public_approved_apps_db()
+            # Reduce cache size by excluding large fields
+            reduced_apps = [App.reduce_dict(app) for app in all_apps]
+            set_generic_cache(redis_cache_key, reduced_apps, 60 * 10)  # 10 minutes cached
+            all_apps = reduced_apps
 
-    apps = []
-    for app in all_apps:
-        app_dict = app
-        app_dict['installs'] = apps_installs.get(app['id'], 0)
+        # Process apps (add installs, reviews, etc.)
+        app_ids = [app['id'] for app in all_apps]
+        apps_installs = get_apps_installs_count(app_ids)
+        apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
+
+        apps = []
+        for app in all_apps:
+            app_dict = app
+            app_dict['installs'] = apps_installs.get(app['id'], 0)
+            if include_reviews:
+                reviews = apps_reviews.get(app['id'], {})
+                sorted_reviews = reviews.values()
+                rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+                app_dict['reviews'] = []
+                app_dict['rating_avg'] = rating_avg
+                app_dict['rating_count'] = len(sorted_reviews)
+            apps.append(App(**app_dict))
         if include_reviews:
-            reviews = apps_reviews.get(app['id'], {})
-            sorted_reviews = reviews.values()
-            rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-            app_dict['reviews'] = []
-            app_dict['rating_avg'] = rating_avg
-            app_dict['rating_count'] = len(sorted_reviews)
-        apps.append(App(**app_dict))
-    if include_reviews:
-        apps = sorted(apps, key=weighted_rating, reverse=True)
-    return apps
+            apps = sorted(apps, key=weighted_rating, reverse=True)
+        return apps
+
+    # Singleflight: only ONE request fetches, others wait
+    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
 
 
 def set_app_review(app_id: str, uid: str, review: dict):
@@ -867,6 +944,7 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Chat Assistants', 'id': 'chat'},
         {'title': 'Summary Apps', 'id': 'memories'},
         {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
+        {'title': 'Tasks', 'id': 'tasks'},
     ]
 
 
@@ -1057,7 +1135,7 @@ def build_capability_groups_response(
                     'id': capability_id,
                     'title': id_to_title.get(capability_id, capability_id.title().replace('_', ' ')),
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
                 'pagination': build_pagination_metadata(total, offset, limit, capability_id),
             }
         )
@@ -1177,7 +1255,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
                     'id': category_id,
                     'title': title,
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in apps],
+                'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps],
                 'count': len(apps),
             }
         )
@@ -1190,7 +1268,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> Dict[str, Any] | None:
     """
     Fetch chat tools definitions from an app's manifest endpoint.
 
@@ -1202,7 +1280,7 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
         timeout: Request timeout in seconds
 
     Returns:
-        List of chat tool definitions, or None if fetch fails
+        Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
 
     Example manifest response:
     {
@@ -1222,7 +1300,10 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
                 "auth_required": true,
                 "status_message": "Adding to playlist..."
             }
-        ]
+        ],
+        "proactive_messages": {
+            "enabled": true
+        }
     }
     """
     import requests
@@ -1263,8 +1344,21 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
             else:
                 print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
 
-        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
-        return validated_tools if validated_tools else None
+        # Parse chat_messages configuration
+        chat_messages = data.get('chat_messages', {})
+        chat_messages_config = {}
+        if isinstance(chat_messages, dict) and chat_messages.get('enabled', False):
+            chat_messages_config = {
+                'enabled': True,
+                'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
+                'notify': chat_messages.get('notify', True),  # send push notification, default True
+            }
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})")
+        return {
+            'tools': validated_tools if validated_tools else None,
+            'chat_messages': chat_messages_config if chat_messages_config else None,
+        }
 
     except requests.Timeout:
         print(f"⚠️ Manifest fetch timed out: {manifest_url}")
@@ -1333,3 +1427,8 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
             }
 
     return validated
+
+
+def app_can_read_tasks(app: dict) -> bool:
+    """Check if an app can read tasks."""
+    return app_has_action(app, 'read_tasks')

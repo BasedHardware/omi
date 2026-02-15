@@ -16,6 +16,7 @@ from database.redis_db import (
 from models.conversation import Conversation
 from models.users import WebhookType
 import database.notifications as notification_db
+import database.users as users_db
 from utils.notifications import send_notification
 
 
@@ -31,6 +32,30 @@ def _json_serialize_datetime(obj: Any) -> Any:
         return obj
 
 
+def _add_speaker_names_to_payload(uid, payload: dict):
+    """Add speaker_name to transcript segments in webhook payload."""
+    segments = payload.get('transcript_segments', [])
+    if not segments:
+        return
+
+    user_profile = users_db.get_user_profile(uid)
+    user_name = user_profile.get('name') or 'User'
+
+    person_ids = [seg.get('person_id') for seg in segments if seg.get('person_id')]
+    people_map = {}
+    if person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
+        people_map = {p['id']: p['name'] for p in people_data}
+
+    for seg in segments:
+        if seg.get('is_user'):
+            seg['speaker_name'] = user_name
+        elif seg.get('person_id') and seg['person_id'] in people_map:
+            seg['speaker_name'] = people_map[seg['person_id']]
+        else:
+            seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
+
+
 def conversation_created_webhook(uid, memory: Conversation):
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
 
@@ -41,6 +66,7 @@ def conversation_created_webhook(uid, memory: Conversation):
         webhook_url += f'?uid={uid}'
         try:
             payload = memory.as_dict_cleaned_dates()
+            _add_speaker_names_to_payload(uid, payload)
             payload = _json_serialize_datetime(payload)
             response = requests.post(
                 webhook_url,

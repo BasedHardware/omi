@@ -63,14 +63,14 @@ def set_data_protection_level(data_arg_name: str):
             if not level:
                 try:
                     user_profile = users_db.get_user_profile(uid)
-                    level = user_profile.get('data_protection_level', 'standard') if user_profile else 'standard'
+                    level = user_profile.get('data_protection_level', 'enhanced') if user_profile else 'enhanced'
                     redis_db.set_user_data_protection_level(uid, level)
                 except Exception as e:
                     print(f"Failed to get user profile for {uid}: {e}")
-                    level = 'standard'
+                    level = 'enhanced'
 
             if not level:
-                level = 'standard'
+                level = 'enhanced'
 
             if isinstance(data, dict):
                 if data.get('data_protection_level') is None:

@@ -3,6 +3,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -11,13 +15,12 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -79,9 +82,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               // Show feedback that this conversation cannot be merged
               HapticFeedback.lightImpact();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('This conversation cannot be merged (locked or already merging)'),
-                  duration: Duration(seconds: 2),
+                SnackBar(
+                  content: Text(context.l10n.conversationCannotBeMerged),
+                  duration: const Duration(seconds: 2),
                 ),
               );
               return;
@@ -191,9 +194,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               context,
                               () => Navigator.of(context).pop(false),
                               () => Navigator.of(context).pop(true),
-                              'Delete Conversation?',
-                              'Are you sure you want to delete this conversation? This action cannot be undone.',
-                              okButtonText: 'Confirm',
+                              context.l10n.deleteConversationTitle,
+                              context.l10n.deleteConversationMessage,
+                              okButtonText: context.l10n.confirm,
                             ),
                           );
                         } else {
@@ -202,10 +205,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 context,
                                 () => Navigator.pop(context),
                                 () => Navigator.pop(context),
-                                'Unable to Delete Conversation',
-                                'Please check your internet connection and try again.',
+                                context.l10n.unableToDeleteConversation,
+                                context.l10n.pleaseCheckInternetConnectionAndTryAgain,
                                 singleButton: true,
-                                okButtonText: 'OK'),
+                                okButtonText: context.l10n.ok),
                             context: context,
                           );
                         }
@@ -286,7 +289,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             ? widget.conversation.getTranscript(maxCount: 100)
                             : widget.conversation.structured.title.decodeString,
                         style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
@@ -294,7 +297,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       isNew
                           ? Row(
                               children: [
-                                const ConversationNewStatusIndicator(text: "New 🚀"),
+                                ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
                                 const Spacer(),
                                 if (widget.conversation.starred)
                                   const Padding(
@@ -313,17 +316,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   dateTimeFormat(
                                     'h:mm a',
                                     widget.conversation.startedAt ?? widget.conversation.createdAt,
+                                    locale: Localizations.localeOf(context).languageCode,
                                   ),
                                   style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                   maxLines: 1,
                                 ),
-                                if (_getConversationDuration().isNotEmpty) ...[
+                                if (_getConversationDuration(context).isNotEmpty) ...[
                                   const Text(
                                     ' • ',
                                     style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                   ),
                                   Text(
-                                    _getConversationDuration(),
+                                    _getConversationDuration(context),
                                     style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                                     maxLines: 1,
                                   ),
@@ -381,7 +385,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    "${widget.conversation.photos.length} photos",
+                    context.l10n.conversationPhotosCount(widget.conversation.photos.length),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
                   )
                 ]),
@@ -420,9 +424,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
               color: Colors.black.withValues(alpha: 0.01),
               borderRadius: const BorderRadius.all(Radius.circular(8)),
             ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
+            child: Text(
+              context.l10n.upgradeToUnlimited,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -482,7 +486,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           FittedBox(
             fit: BoxFit.scaleDown,
             child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
+                ? ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -490,11 +494,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         dateTimeFormat(
                           'h:mm a',
                           widget.conversation.startedAt ?? widget.conversation.createdAt,
+                          locale: Localizations.localeOf(context).languageCode,
                         ),
                         style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                         maxLines: 1,
                       ),
-                      if (_getConversationDuration().isNotEmpty)
+                      if (_getConversationDuration(context).isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(left: 8.0),
                           child: Container(
@@ -504,7 +509,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              _getConversationDuration(),
+                              _getConversationDuration(context),
                               style: const TextStyle(color: Colors.white, fontSize: 11),
                               maxLines: 1,
                             ),
@@ -527,11 +532,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  String _getConversationDuration() {
+  String _getConversationDuration(BuildContext context) {
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds);
+    return secondsToCompactDuration(durationSeconds, context);
   }
 }
 
@@ -608,18 +613,18 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _opacityAnim,
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          const Icon(
             Icons.merge_rounded,
             color: Colors.white,
             size: 18,
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Text(
-            'Merging...',
-            style: TextStyle(
+            context.l10n.mergingStatus,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w600,

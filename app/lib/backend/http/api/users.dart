@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   var response = await makeApiCall(
@@ -94,7 +96,7 @@ Future<bool> deleteAccount() async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteAccount response: ${response.body}');
+  Logger.debug('deleteAccount response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -106,7 +108,7 @@ Future<bool> setRecordingPermission(bool value) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('storeRecordingPermission response: ${response.body}');
+  Logger.debug('storeRecordingPermission response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -118,7 +120,7 @@ Future<bool?> getStoreRecordingPermission() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getStoreRecordingPermission response: ${response.body}');
+  Logger.debug('getStoreRecordingPermission response: ${response.body}');
   if (response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     return jsonResponse['store_recording_permission'] as bool?;
@@ -134,7 +136,7 @@ Future<bool> deletePermissionAndRecordings() async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deletePermissionAndRecordings response: ${response.body}');
+  Logger.debug('deletePermissionAndRecordings response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -148,7 +150,7 @@ Future<bool> setPrivateCloudSyncEnabled(bool value) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setPrivateCloudSyncEnabled response: ${response.body}');
+  Logger.debug('setPrivateCloudSyncEnabled response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -160,7 +162,7 @@ Future<bool> getPrivateCloudSyncEnabled() async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getPrivateCloudSyncEnabled response: ${response.body}');
+  Logger.debug('getPrivateCloudSyncEnabled response: ${response.body}');
   if (response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     return jsonResponse['private_cloud_sync_enabled'] as bool? ?? false;
@@ -176,7 +178,7 @@ Future<Person?> createPerson(String name) async {
     body: jsonEncode({'name': name}),
   );
   if (response == null) return null;
-  debugPrint('createPerson response: ${response.body}');
+  Logger.debug('createPerson response: ${response.body}');
   if (response.statusCode == 200) {
     return Person.fromJson(jsonDecode(response.body));
   }
@@ -191,7 +193,7 @@ Future<Person?> getSinglePerson(String personId, {bool includeSpeechSamples = fa
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getSinglePerson response: ${response.body}');
+  Logger.debug('getSinglePerson response: ${response.body}');
   if (response.statusCode == 200) {
     return Person.fromJson(jsonDecode(response.body));
   }
@@ -227,7 +229,7 @@ Future<bool> updatePersonName(String personId, String newName) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('updatePersonName response: ${response.body}');
+  Logger.debug('updatePersonName response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -239,8 +241,20 @@ Future<bool> deletePerson(String personId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deletePerson response: ${response.body}');
+  Logger.debug('deletePerson response: ${response.body}');
   return response.statusCode == 204;
+}
+
+Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId/speech-samples/$sampleIndex',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  Logger.debug('deletePersonSpeechSample response: ${response.body}');
+  return response.statusCode == 200;
 }
 
 Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
@@ -251,7 +265,7 @@ Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
     body: '',
   );
   if (response == null) return '';
-  debugPrint('getFollowUpQuestion response: ${response.body}');
+  Logger.debug('getFollowUpQuestion response: ${response.body}');
   if (response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     return jsonResponse['result'] as String? ?? '';
@@ -269,19 +283,27 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setConversationSummaryRating response: ${response.body}');
+  Logger.debug('setConversationSummaryRating response: ${response.body}');
   return response.statusCode == 200;
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value) async {
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  // Build URL with required params
+  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
+
+  // Add reason param if provided (for thumbs down feedback)
+  if (reason != null && reason.isNotEmpty) {
+    url += '&reason=$reason';
+  }
+
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value',
+    url: url,
     headers: {},
     method: 'POST',
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setMessageResponseRating response: ${response.body}');
+  Logger.debug('setMessageResponseRating response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -293,7 +315,7 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('getHasConversationSummaryRating response: ${response.body}');
+  Logger.debug('getHasConversationSummaryRating response: ${response.body}');
 
   try {
     var jsonResponse = jsonDecode(response.body);
@@ -312,7 +334,7 @@ Future<String?> getUserPrimaryLanguage() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getUserPrimaryLanguage response: ${response.body}');
+  Logger.debug('getUserPrimaryLanguage response: ${response.body}');
 
   try {
     var jsonResponse = jsonDecode(response.body);
@@ -322,7 +344,7 @@ Future<String?> getUserPrimaryLanguage() async {
     }
     return jsonResponse['language'] as String?;
   } catch (e) {
-    debugPrint('Error parsing getUserPrimaryLanguage response: $e');
+    Logger.debug('Error parsing getUserPrimaryLanguage response: $e');
     return null;
   }
 }
@@ -335,7 +357,7 @@ Future<bool> setUserPrimaryLanguage(String languageCode) async {
     body: jsonEncode({'language': languageCode}),
   );
   if (response == null) return false;
-  debugPrint('setUserPrimaryLanguage response: ${response.body}');
+  Logger.debug('setUserPrimaryLanguage response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -347,7 +369,7 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setPreferredSummarizationAppServer response: ${response.body}');
+  Logger.debug('setPreferredSummarizationAppServer response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -359,7 +381,7 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getUserUsage response: ${response.body}');
+  Logger.debug('getUserUsage response: ${response.body}');
   if (response.statusCode == 200) {
     return UserUsageResponse.fromJson(jsonDecode(response.body));
   }
@@ -374,7 +396,7 @@ Future<Map<String, dynamic>> getTrainingDataOptIn() async {
     body: '',
   );
   if (response == null) return {'opted_in': false, 'status': null};
-  debugPrint('getTrainingDataOptIn response: ${response.body}');
+  Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body);
   }
@@ -389,7 +411,7 @@ Future<bool> setTrainingDataOptIn() async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('setTrainingDataOptIn response: ${response.body}');
+  Logger.debug('setTrainingDataOptIn response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -403,7 +425,7 @@ Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getTranscriptionPreferences response: ${response.body}');
+  Logger.debug('getTranscriptionPreferences response: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body);
   }
@@ -429,7 +451,7 @@ Future<bool> setTranscriptionPreferences({
     body: jsonEncode(body),
   );
   if (response == null) return false;
-  debugPrint('setTranscriptionPreferences response: ${response.body}');
+  Logger.debug('setTranscriptionPreferences response: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -441,9 +463,209 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getUserSubscription response: ${response.body}');
+  Logger.debug('getUserSubscription response: ${response.body}');
   if (response.statusCode == 200) {
     return UserSubscriptionResponse.fromJson(jsonDecode(response.body));
   }
   return null;
+}
+
+// Daily Summary Settings
+
+class DailySummarySettings {
+  final bool enabled;
+  final int hour; // Local hour (0-23)
+
+  DailySummarySettings({required this.enabled, required this.hour});
+
+  factory DailySummarySettings.fromJson(Map<String, dynamic> json) {
+    return DailySummarySettings(
+      enabled: json['enabled'] ?? true,
+      hour: json['hour'] ?? 22, // Default to 10 PM
+    );
+  }
+}
+
+Future<DailySummarySettings?> getDailySummarySettings() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  Logger.debug('getDailySummarySettings response: ${response.body}');
+  if (response.statusCode == 200) {
+    return DailySummarySettings.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
+  Map<String, dynamic> body = {};
+  if (enabled != null) {
+    body['enabled'] = enabled;
+  }
+  if (hour != null) {
+    body['hour'] = hour;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  Logger.debug('setDailySummarySettings response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+// Daily Summaries API
+
+Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return [];
+
+  try {
+    final data = jsonDecode(response.body);
+    final summaries = (data['summaries'] as List<dynamic>?)?.map((e) => DailySummary.fromJson(e)).toList() ?? [];
+    return summaries;
+  } catch (e) {
+    Logger.debug('Error parsing daily summaries: $e');
+    return [];
+  }
+}
+
+Future<DailySummary?> getDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final data = jsonDecode(response.body);
+    return DailySummary.fromJson(data);
+  } catch (e) {
+    Logger.debug('Error parsing daily summary: $e');
+    return null;
+  }
+}
+
+Future<bool> deleteDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  return response?.statusCode == 200;
+}
+
+/// Generate a daily summary for a specific date (or today if not specified)
+/// Returns the summary_id on success, null on failure
+Future<String?> generateDailySummary({String? date}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
+    headers: {},
+    method: 'POST',
+    body: date != null ? jsonEncode({'date': date}) : '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final data = jsonDecode(response.body);
+    return data['summary_id'] as String?;
+  } catch (e) {
+    Logger.debug('Error parsing generate summary response: $e');
+    return null;
+  }
+}
+
+// Onboarding State
+
+Future<Map<String, dynamic>?> getUserOnboardingState() async {
+  print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
+Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource}) async {
+  Map<String, dynamic> body = {};
+  if (completed != null) {
+    body['completed'] = completed;
+  }
+  if (acquisitionSource != null) {
+    body['acquisition_source'] = acquisitionSource;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  Logger.debug('updateUserOnboardingState response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+// Mentor Notification Settings
+
+class MentorNotificationSettings {
+  final int frequency; // 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+  MentorNotificationSettings({required this.frequency});
+
+  factory MentorNotificationSettings.fromJson(Map<String, dynamic> json) {
+    return MentorNotificationSettings(
+      frequency: json['frequency'] ?? 0, // Default to 0 (disabled)
+    );
+  }
+}
+
+Future<MentorNotificationSettings?> getMentorNotificationSettings() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/mentor-notification-settings',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  Logger.debug('getMentorNotificationSettings response: ${response?.body}');
+  if (response != null && response.statusCode == 200) {
+    return MentorNotificationSettings.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<bool> setMentorNotificationSettings(int frequency) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/mentor-notification-settings',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'frequency': frequency}),
+  );
+  if (response == null) return false;
+
+  Logger.debug('setMentorNotificationSettings response: ${response.body}');
+  return response.statusCode == 200;
 }

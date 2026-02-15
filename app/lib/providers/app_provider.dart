@@ -1,13 +1,17 @@
 import 'dart:async';
+
 import 'package:collection/collection.dart';
-import 'package:flutter/widgets.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/utils/alerts/app_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 
 class AppProvider extends BaseProvider {
   List<App> apps = [];
@@ -58,16 +62,16 @@ class AppProvider extends BaseProvider {
   }
 
   Future<App?> getAppDetails(String id) async {
-    var app = await getAppDetailsServer(id);
-    if (app != null) {
+    var appData = await getAppDetailsServer(id);
+    if (appData != null) {
+      var freshApp = App.fromJson(appData);
       var oldApp = apps.where((element) => element.id == id).firstOrNull;
-      if (oldApp == null) {
-        return null;
+      if (oldApp != null) {
+        var idx = apps.indexOf(oldApp);
+        apps[idx] = freshApp;
+        notifyListeners();
       }
-      var idx = apps.indexOf(oldApp);
-      apps[idx] = App.fromJson(app);
-      notifyListeners();
-      return apps[idx];
+      return freshApp;
     }
     return null;
   }
@@ -395,7 +399,7 @@ class AppProvider extends BaseProvider {
         notifyListeners(); // This should notify as it affects UI state
       }
     } else {
-      debugPrint("Error: Attempted to set loading state for invalid index $index");
+      Logger.debug("Error: Attempted to set loading state for invalid index $index");
     }
   }
 
@@ -415,8 +419,14 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -426,13 +436,20 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
       await Future.delayed(const Duration(milliseconds: 50));
       filterApps();
+      updatePrefApps();
     } catch (e) {
-      debugPrint('Error loading apps: $e');
+      Logger.debug('Error loading apps: $e');
       // Fallback to cached data
       setAppsFromCache();
     } finally {
@@ -447,7 +464,7 @@ class AppProvider extends BaseProvider {
       setIsLoading(true);
       popularApps = await retrievePopularApps();
     } catch (e) {
-      debugPrint('Error loading popular apps: $e');
+      Logger.debug('Error loading popular apps: $e');
       // Fallback to cached data or empty list
       popularApps = [];
     } finally {
@@ -520,13 +537,17 @@ class AppProvider extends BaseProvider {
         }
         filteredApps.removeWhere((app) => app.id == appId);
         updatePrefApps();
-        AppSnackbar.showSnackbarSuccess('App deleted successfully 🗑️');
+        final context = MyApp.navigatorKey.currentState?.context;
+        AppSnackbar.showSnackbarSuccess(
+            context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully');
         notifyListeners();
       } else {
         print("Warning: Tried to delete app $appId but it wasn't found in the 'apps' list.");
       }
     } else {
-      AppSnackbar.showSnackbarError('Failed to delete app. Please try again later.');
+      final context = MyApp.navigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarError(
+          context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.');
     }
   }
 
@@ -541,7 +562,10 @@ class AppProvider extends BaseProvider {
       if (filteredIdx != -1) {
         filteredApps[filteredIdx] = apps[appIndex];
       }
-      AppSnackbar.showSnackbarSuccess('App visibility changed successfully. It may take a few minutes to reflect.');
+      final context = MyApp.navigatorKey.currentState?.context;
+      AppSnackbar.showSnackbarSuccess(context != null
+          ? context.l10n.appVisibilityChangedSuccessfully
+          : 'App visibility changed successfully. It may take a few minutes to reflect.');
       notifyListeners();
     }
     // Refresh apps after a delay to get server-confirmed state
@@ -565,9 +589,15 @@ class AppProvider extends BaseProvider {
 
   Future<void> refreshAppsAfterChange() async {
     try {
-      debugPrint('Refreshing apps after installation/change...');
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      Logger.debug('Refreshing apps after installation/change...');
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -577,6 +607,12 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too
@@ -587,7 +623,7 @@ class AppProvider extends BaseProvider {
       updatePrefApps();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error refreshing apps after change: $e');
+      Logger.debug('Error refreshing apps after change: $e');
     }
   }
 
@@ -619,7 +655,7 @@ class AppProvider extends BaseProvider {
       try {
         SharedPreferencesUtil().appsList = apps;
       } catch (e) {
-        debugPrint('Error updating preferences: $e');
+        Logger.debug('Error updating preferences: $e');
       }
     });
   }
@@ -739,18 +775,22 @@ class AppProvider extends BaseProvider {
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
-      debugPrint("Warning: Invalid index $idx provided to toggleApp.");
+      Logger.debug("Warning: Invalid index $idx provided to toggleApp.");
     }
 
     var prefs = SharedPreferencesUtil();
     bool success = false;
     String? errorMessage;
 
+    final context = MyApp.navigatorKey.currentState?.context;
+
     try {
       if (isEnabled) {
         success = await enableAppServer(appId);
         if (!success) {
-          errorMessage = 'Error activating the app. If this is an integration app, make sure the setup is completed.';
+          errorMessage = context != null
+              ? context.l10n.errorActivatingAppIntegration
+              : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
           MixpanelManager().appEnabled(appId);
         }
@@ -762,12 +802,13 @@ class AppProvider extends BaseProvider {
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage = 'An error occurred while updating the app status.';
+      errorMessage =
+          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {
       AppDialog.show(
-        title: 'Error',
+        title: context != null ? context.l10n.error : 'Error',
         content: errorMessage,
         singleButton: true,
       );
@@ -793,7 +834,7 @@ class AppProvider extends BaseProvider {
         // Debounced preferences update to prevent database locks
         updatePrefApps();
       } else {
-        debugPrint("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
+        Logger.debug("Error: Toggled app $appId not found in local 'apps' list after successful toggle.");
       }
     }
 
