@@ -181,7 +181,7 @@ description: "Create and retrieve conversations via the Developer API"
     | `id` | string | Segment identifier (optional) |
     | `text` | string | The transcribed text |
     | `speaker_id` | integer | Numeric speaker identifier (optional) |
-    | `speaker_name` | string | Human-readable speaker name (optional, added in [80ee0103](https://github.com/BasedHardware/omi/commit/80ee0103)) |
+    | `speaker_name` | string | Human-readable speaker name. Resolved from user profiles or the People database. Falls back to a generic name like "Speaker 1" if unidentified. (optional) |
     | `start` | float | Start timestamp in seconds |
     | `end` | float | End timestamp in seconds |
   </Accordion>
