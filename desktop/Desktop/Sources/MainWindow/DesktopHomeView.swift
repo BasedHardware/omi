@@ -256,43 +256,16 @@ struct DesktopHomeView: View {
                     .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
 
                 // Page content - switch recreates views on tab change
-                Group {
-                    switch selectedIndex {
-                    case 0:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 1:
-                        // Conversations moved into Dashboard — redirect
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 2:
-                        ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
-                    case 3:
-                        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-                    case 4:
-                        TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
-                    case 5:
-                        FocusPage()
-                    case 6:
-                        AdvicePage()
-                    case 7:
-                        RewindPage(appState: appState)
-                    case 8:
-                        AppsPage(appProvider: viewModelContainer.appProvider)
-                    case 9:
-                        SettingsPage(
-                            appState: appState,
-                            selectedSection: $selectedSettingsSection,
-                            selectedAdvancedSubsection: $selectedAdvancedSubsection
-                        )
-                    case 10:
-                        PermissionsPage(appState: appState)
-                    case 11:
-                        DeviceSettingsPage()
-                    case 12:
-                        HelpPage()
-                    default:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    }
-                }
+                // Extracted into a separate struct so that pages like TasksPage
+                // are not re-rendered when AppState publishes unrelated changes.
+                PageContentView(
+                    selectedIndex: selectedIndex,
+                    appState: appState,
+                    viewModelContainer: viewModelContainer,
+                    selectedSettingsSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    selectedTabIndex: $selectedIndex
+                )
                 .id(selectedIndex)
                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                 .animation(.easeInOut(duration: 0.2), value: selectedIndex)
@@ -343,6 +316,57 @@ struct DesktopHomeView: View {
         }
         .onAppear {
             updateStoreActivity(for: selectedIndex)
+        }
+    }
+}
+
+/// Isolated page content switch — does NOT observe AppState or ViewModelContainer
+/// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
+/// AppState properties (conversations, permissions, etc.) change.
+private struct PageContentView: View {
+    let selectedIndex: Int
+    let appState: AppState
+    let viewModelContainer: ViewModelContainer
+    @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
+    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var selectedTabIndex: Int
+
+    var body: some View {
+        Group {
+            switch selectedIndex {
+            case 0:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 1:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 2:
+                ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
+            case 3:
+                MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+            case 4:
+                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
+            case 5:
+                FocusPage()
+            case 6:
+                AdvicePage()
+            case 7:
+                RewindPage(appState: appState)
+            case 8:
+                AppsPage(appProvider: viewModelContainer.appProvider)
+            case 9:
+                SettingsPage(
+                    appState: appState,
+                    selectedSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                )
+            case 10:
+                PermissionsPage(appState: appState)
+            case 11:
+                DeviceSettingsPage()
+            case 12:
+                HelpPage()
+            default:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            }
         }
     }
 }
