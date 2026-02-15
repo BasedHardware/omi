@@ -218,9 +218,11 @@ actor RewindDatabase {
 
         try migrate(queue)
 
-        // Only run expensive integrity check after unclean shutdown (saves ~1.7s on normal launch)
+        // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
+        // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
+        // (N only limits error reporting), so on large databases (e.g. 4+ GB) it can take 60-90s.
         if previousCrashed {
-            log("RewindDatabase: Running integrity check after unclean shutdown...")
+            log("RewindDatabase: Running lightweight integrity check after unclean shutdown...")
             try verifyDatabaseIntegrity(queue)
         } else {
             // Still log journal mode on clean startup (cheap PRAGMA, no full check)

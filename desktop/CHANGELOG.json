@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.8.3",
+      "date": "2026-02-14",
+      "changes": [
+        "Notifications for promoted tasks so you know when AI discovers new action items",
+        "Fixed tooltip crash in sidebar",
+        "Faster, safer downloads served from Google Cloud Storage"
+      ]
+    },
+    {
       "version": "0.8.2",
       "date": "2026-02-14",
       "changes": [
