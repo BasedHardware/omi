@@ -438,7 +438,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   Row(
                     children: [
                       Text(
-                        widget.app.author,
+                        widget.app.official ? context.l10n.officialTeamName : widget.app.author,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
