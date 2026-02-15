@@ -435,11 +435,28 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 class FloatingControlBarManager {
     static let shared = FloatingControlBarManager()
 
+    private static let kAskOmiEnabled = "askOmiBarEnabled"
+
     private var window: FloatingControlBarWindow?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
     private var chatCancellable: AnyCancellable?
     private var chatProvider: ChatProvider?
+
+    /// Whether the user has enabled the Ask Omi bar (persisted across launches).
+    /// Defaults to true for new users.
+    var isEnabled: Bool {
+        get {
+            // Default to true if never set
+            if UserDefaults.standard.object(forKey: Self.kAskOmiEnabled) == nil {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: Self.kAskOmiEnabled)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.kAskOmiEnabled)
+        }
+    }
 
     private init() {}
 
@@ -516,9 +533,10 @@ class FloatingControlBarManager {
         window?.isVisible ?? false
     }
 
-    /// Show the floating bar.
+    /// Show the floating bar and persist the preference.
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
+        isEnabled = true
         window?.makeKeyAndOrderFront(nil)
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
@@ -530,8 +548,9 @@ class FloatingControlBarManager {
         }
     }
 
-    /// Hide the floating bar.
+    /// Hide the floating bar and persist the preference.
     func hide() {
+        isEnabled = false
         window?.orderOut(nil)
     }
 

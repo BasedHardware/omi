@@ -723,7 +723,6 @@ class TasksViewModel: ObservableObject {
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.recomputeAllCaches()
-                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
 

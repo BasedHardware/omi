@@ -95,9 +95,11 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
                             }
 
-                            // Set up and show floating control bar
+                            // Set up floating control bar (only show if user hasn't disabled it)
                             FloatingControlBarManager.shared.setup(appState: appState)
-                            FloatingControlBarManager.shared.show()
+                            if FloatingControlBarManager.shared.isEnabled {
+                                FloatingControlBarManager.shared.show()
+                            }
 
                             // Set up push-to-talk voice input
                             if let barState = FloatingControlBarManager.shared.barState {

@@ -635,6 +635,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.menuBarOpened()
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Keep app running in menu bar when all windows are closed
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Remove window observers
         for observer in windowObservers {
