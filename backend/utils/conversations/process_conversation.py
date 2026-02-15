@@ -5,6 +5,7 @@ import threading
 import uuid
 import logging
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -71,6 +72,10 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
 from utils.other.storage import precache_conversation_audio
+
+# Bounded thread pool for post-conversation background work.
+# Prevents thread explosion under sustained load (was spawning 7+ raw threads per conversation).
+_conversation_bg_executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="conv-bg")
 
 
 def _get_structured(
@@ -541,7 +546,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        threading.Thread(target=_run_auto_sync, daemon=True).start()
+        _conversation_bg_executor.submit(_run_auto_sync)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -682,21 +687,12 @@ def process_conversation(
         _trigger_apps(
             uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
         )
-        (
-            threading.Thread(
-                target=save_structured_vector,
-                args=(
-                    uid,
-                    conversation,
-                ),
-            ).start()
-            if not is_reprocess
-            else None
-        )
-        threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
-        threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
-        threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
-        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
+        if not is_reprocess:
+            _conversation_bg_executor.submit(save_structured_vector, uid, conversation)
+        _conversation_bg_executor.submit(_extract_memories, uid, conversation)
+        _conversation_bg_executor.submit(_extract_trends, uid, conversation)
+        _conversation_bg_executor.submit(_save_action_items, uid, conversation)
+        _conversation_bg_executor.submit(_update_goal_progress, uid, conversation)
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -720,15 +716,8 @@ def process_conversation(
         folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
-        threading.Thread(
-            target=conversation_created_webhook,
-            args=(
-                uid,
-                conversation,
-            ),
-        ).start()
-        # Update persona prompts with new conversation
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
+        _conversation_bg_executor.submit(conversation_created_webhook, uid, conversation)
+        _conversation_bg_executor.submit(update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
