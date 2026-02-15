@@ -15068,6 +15068,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'YouTube'**
   String get youtube;
+
+  /// No description provided for @officialTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Nooto Team'**
+  String get officialTeamName;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

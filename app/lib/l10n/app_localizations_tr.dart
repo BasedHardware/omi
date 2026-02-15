@@ -8079,4 +8079,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get youtube => 'YouTube';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }
