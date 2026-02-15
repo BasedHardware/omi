@@ -136,25 +136,33 @@ final class WALService: ObservableObject {
         }
     }
 
-    /// Save WALs to disk with backup
+    /// Save WALs to disk with backup (file I/O runs on background thread)
     func saveWals() {
         guard let file = walMetadataFile, let backup = walBackupFile else { return }
 
         do {
-            // Create backup first
-            if fileManager.fileExists(atPath: file.path) {
-                try? fileManager.removeItem(at: backup)
-                try fileManager.copyItem(at: file, to: backup)
-            }
-
-            // Save current state
+            // Encode on main thread (accesses @Published wals)
             let metadata = WALMetadata(wals: wals)
             let data = try JSONEncoder().encode(metadata)
-            try data.write(to: file, options: .atomic)
+
+            // Write to disk on background thread to avoid blocking UI
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    // Create backup first
+                    if FileManager.default.fileExists(atPath: file.path) {
+                        try? FileManager.default.removeItem(at: backup)
+                        try FileManager.default.copyItem(at: file, to: backup)
+                    }
+
+                    try data.write(to: file, options: .atomic)
+                } catch {
+                    log("WALService: Failed to save WALs: \(error.localizedDescription)")
+                }
+            }
 
             logger.debug("Saved \(self.wals.count) WALs to disk")
         } catch {
-            logger.error("Failed to save WALs: \(error.localizedDescription)")
+            logger.error("Failed to encode WALs: \(error.localizedDescription)")
         }
     }
 
@@ -292,6 +300,7 @@ final class WALService: ObservableObject {
 
         let fileName = wal.generateFileName()
         let fileUrl = walDir.appendingPathComponent(fileName)
+        let walId = wal.id
 
         // Build file data: [uint32 length][frame data][uint32 length][frame data]...
         var fileData = Data()
@@ -301,17 +310,24 @@ final class WALService: ObservableObject {
             fileData.append(frame)
         }
 
-        do {
-            try fileData.write(to: fileUrl, options: .atomic)
-            logger.debug("Wrote \(frames.count) frames to \(fileName)")
+        let frameCount = frames.count
 
-            // Update WAL
-            if let index = wals.firstIndex(where: { $0.id == wal.id }) {
-                wals[index].storage = .disk
-                wals[index].filePath = fileName
+        // Write to disk on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            do {
+                try fileData.write(to: fileUrl, options: .atomic)
+                log("WALService: Wrote \(frameCount) frames to \(fileName)")
+
+                // Update WAL state back on main thread
+                DispatchQueue.main.async {
+                    if let index = self?.wals.firstIndex(where: { $0.id == walId }) {
+                        self?.wals[index].storage = .disk
+                        self?.wals[index].filePath = fileName
+                    }
+                }
+            } catch {
+                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
             }
-        } catch {
-            logger.error("Failed to write frames to disk: \(error.localizedDescription)")
         }
     }
 

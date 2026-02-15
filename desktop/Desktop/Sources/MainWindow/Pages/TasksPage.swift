@@ -172,9 +172,7 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
         case .last7Days:
             let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
             if let dueAt = task.dueAt {
-                // Show if due date is recent OR if created recently
-                // (AI-extracted tasks often get old due dates from conversation context)
-                return dueAt >= sevenDaysAgo || task.createdAt >= sevenDaysAgo
+                return dueAt >= sevenDaysAgo
             } else {
                 return task.createdAt >= sevenDaysAgo
             }
@@ -219,7 +217,7 @@ enum TaskFilterTag: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .last7Days:
             if let dueAt = task.dueAt {
-                return dueAt >= context.sevenDaysAgo || task.createdAt >= context.sevenDaysAgo
+                return dueAt >= context.sevenDaysAgo
             } else {
                 return task.createdAt >= context.sevenDaysAgo
             }
