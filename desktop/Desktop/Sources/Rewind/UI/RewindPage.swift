@@ -486,42 +486,8 @@ struct RewindPage: View {
             .buttonStyle(.plain)
             .help("Screen Settings")
 
-            // Screen recording start/stop
-            if isMonitoring {
-                Button {
-                    toggleMonitoring(enabled: false)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 12)
-                        Text("Stop Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    toggleMonitoring(enabled: true)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
+            // Screen recording toggle
+            rewindToggle
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -1383,108 +1349,73 @@ struct RewindPage: View {
 
             Spacer()
 
-            // Right: Split finish/stop button or start button
+            // Right: Finish Conversation button (when recording) + audio toggle
             if appState.isTranscribing {
-                HStack(spacing: 0) {
-                    // Main action button
-                    Button(action: {
-                        if isFinishMode {
-                            handleFinish(appState: appState)
-                        } else {
-                            appState.stopTranscription()
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            if isFinishing {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 12, height: 12)
-                            } else if showSavedSuccess {
-                                Image(systemName: "checkmark")
-                                    .scaledFont(size: 12, weight: .bold)
-                            } else if showDiscarded {
-                                Image(systemName: "xmark")
-                                    .scaledFont(size: 12, weight: .bold)
-                            } else if showError {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .scaledFont(size: 12)
-                            } else {
-                                Image(systemName: "stop.circle.fill")
-                                    .scaledFont(size: 12)
-                            }
-                            Text(finishButtonText)
-                                .scaledFont(size: 13, weight: .medium)
-                        }
-                        .foregroundColor(finishButtonForeground)
-                        .padding(.leading, 14)
-                        .padding(.trailing, 8)
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
-
-                    // Divider line
-                    Rectangle()
-                        .fill(Color.black.opacity(0.15))
-                        .frame(width: 1, height: 20)
-
-                    // Dropdown chevron
-                    Menu {
-                        Button(action: { buttonMode = "finish" }) {
-                            HStack {
-                                Text("Finish Conversation")
-                                if buttonMode == "finish" {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                        Button(action: { buttonMode = "stop" }) {
-                            HStack {
-                                Text("Stop Recording")
-                                if buttonMode == "stop" {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .scaledFont(size: 9, weight: .bold)
-                            .foregroundColor(finishButtonForeground)
-                            .padding(.leading, 8)
-                            .padding(.trailing, 10)
-                            .padding(.vertical, 6)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-                .background(
-                    Capsule()
-                        .fill(finishButtonBackground)
-                )
-                .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                .help("Finish Conversation: saves current conversation and starts a new one.\nStop Recording: stops the microphone completely.")
-            } else if !appState.isSavingConversation {
                 Button(action: {
-                    appState.startTranscription()
+                    handleFinish(appState: appState)
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
+                        if isFinishing {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else if showSavedSuccess {
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showDiscarded {
+                            Image(systemName: "xmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showError {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .scaledFont(size: 12)
+                        }
+                        Text(finishButtonText)
                             .scaledFont(size: 13, weight: .medium)
                     }
-                    .foregroundColor(.black)
+                    .foregroundColor(finishButtonForeground)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(finishButtonBackground))
                     .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+                .help("Saves current conversation and starts a new one")
+            }
+
+            // Audio on/off toggle
+            if !appState.isSavingConversation {
+                audioToggle(appState: appState)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Audio Toggle
+
+    private func audioToggle(appState: AppState) -> some View {
+        ZStack {
+            Capsule()
+                .fill(appState.isTranscribing ? OmiColors.purplePrimary : Color.red)
+                .frame(width: 36, height: 20)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: 16, height: 16)
+                .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+                .offset(x: appState.isTranscribing ? 8 : -8)
+                .animation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
+        }
+        .onTapGesture {
+            if appState.isTranscribing {
+                appState.stopTranscription()
+            } else {
+                appState.startTranscription()
+            }
+        }
+        .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
     }
 
     // MARK: - Finish Conversation
