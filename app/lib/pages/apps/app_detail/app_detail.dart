@@ -801,7 +801,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               );
                             } else {
                               await Share.share(
-                                'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
+                                'Check out this Persona on Omi AI: ${app.name} by ${app.official ? context.l10n.officialTeamName : app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
@@ -898,7 +898,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        app.author.decodeString,
+                                        app.official ? context.l10n.officialTeamName : app.author.decodeString,
                                         style: const TextStyle(color: Colors.grey, fontSize: 16),
                                         overflow: TextOverflow.ellipsis,
                                       ),
