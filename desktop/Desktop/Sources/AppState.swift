@@ -5,7 +5,9 @@ import AVFoundation
 @preconcurrency import ObjectiveC
 
 /// Speaker segment for diarized transcription
-struct SpeakerSegment {
+struct SpeakerSegment: Identifiable {
+    /// Stable identity derived from speaker + start time (unique per segment)
+    var id: String { "\(speaker)-\(start)" }
     var speaker: Int
     var text: String
     var start: Double

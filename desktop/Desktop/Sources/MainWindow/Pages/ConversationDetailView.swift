@@ -556,7 +556,7 @@ struct ConversationDetailView: View {
 
     private var transcriptBubblesView: some View {
         let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
-        return VStack(spacing: 12) {
+        return LazyVStack(spacing: 12) {
             ForEach(displayConversation.transcriptSegments) { segment in
                 SpeakerBubbleView(
                     segment: segment,

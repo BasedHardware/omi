@@ -84,6 +84,7 @@ final class ScreenCaptureService: Sendable {
     /// Force re-register this app with Launch Services to ensure it's the authoritative version
     /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
     /// about which app to grant permissions to.
+    /// Runs the process on a background thread to avoid blocking the main thread.
     static func ensureLaunchServicesRegistration() {
         guard let bundlePath = Bundle.main.bundlePath as String? else {
             log("Launch Services: Failed to get bundle path")
@@ -94,20 +95,22 @@ final class ScreenCaptureService: Sendable {
 
         let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: lsregisterPath)
-        // -f = force registration even if already registered
-        // This makes this specific app bundle authoritative
-        process.arguments = ["-f", bundlePath]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: lsregisterPath)
+            // -f = force registration even if already registered
+            // This makes this specific app bundle authoritative
+            process.arguments = ["-f", bundlePath]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-            log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
-        } catch {
-            logError("Launch Services: Failed to register", error: error)
+            do {
+                try process.run()
+                process.waitUntilExit()
+                log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
+            } catch {
+                logError("Launch Services: Failed to register", error: error)
+            }
         }
     }
 

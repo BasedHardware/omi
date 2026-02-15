@@ -1921,7 +1921,6 @@ struct TasksPage: View {
     }
 
     var body: some View {
-        let _ = log("RENDER: TasksPage.body evaluated")
         let isChatVisible = showChatPanel && chatProvider != nil
 
         HStack(spacing: 0) {
@@ -3235,7 +3234,6 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        let _ = log("RENDER: TaskRow body for \(task.id.prefix(8))")
         swipeableContent
             .background(
                 RoundedRectangle(cornerRadius: 8)
