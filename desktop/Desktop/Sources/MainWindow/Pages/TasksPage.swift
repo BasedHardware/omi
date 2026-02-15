@@ -1482,6 +1482,7 @@ class TasksViewModel: ObservableObject {
 
     /// Recompute display-related caches when filters or sort change
     private func recomputeDisplayCaches() {
+        log("RENDER: recomputeDisplayCaches called")
         // Determine the source of tasks based on current state
         let sourceTasks: [TaskActionItem]
 
@@ -3235,6 +3236,7 @@ struct TaskRow: View {
     }
 
     var body: some View {
+        let _ = log("RENDER: TaskRow body for \(task.id.prefix(8))")
         swipeableContent
             .background(
                 RoundedRectangle(cornerRadius: 8)
