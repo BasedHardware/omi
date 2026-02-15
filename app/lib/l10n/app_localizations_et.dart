@@ -8175,4 +8175,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Sisestage WiFi parool';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

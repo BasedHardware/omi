@@ -8175,4 +8175,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Syötä WiFi-salasana';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

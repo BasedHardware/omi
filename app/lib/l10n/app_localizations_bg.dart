@@ -8211,4 +8211,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Въведете парола за WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

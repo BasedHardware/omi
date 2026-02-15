@@ -2726,5 +2726,6 @@
   "wifiConfigurationSubtitle": "Adja meg WiFi hitelesítő adatait, hogy az eszköz letölthesse a firmware-t.",
   "networkNameSsid": "Hálózat neve (SSID)",
   "enterWifiNetworkName": "Adja meg a WiFi hálózat nevét",
-  "enterWifiPassword": "Adja meg a WiFi jelszót"
+  "enterWifiPassword": "Adja meg a WiFi jelszót",
+  "appIconLabel": "App Icon"
 }

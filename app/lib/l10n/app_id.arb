@@ -2672,5 +2672,6 @@
   "wifiConfigurationSubtitle": "Masukkan kredensial WiFi Anda agar perangkat dapat mengunduh firmware.",
   "networkNameSsid": "Nama Jaringan (SSID)",
   "enterWifiNetworkName": "Masukkan nama jaringan WiFi",
-  "enterWifiPassword": "Masukkan kata sandi WiFi"
+  "enterWifiPassword": "Masukkan kata sandi WiFi",
+  "appIconLabel": "App Icon"
 }

@@ -8217,4 +8217,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Introduceți parola WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

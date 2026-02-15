@@ -2631,5 +2631,6 @@
   "wifiConfigurationSubtitle": "デバイスがファームウェアをダウンロードできるようにWiFi資格情報を入力してください。",
   "networkNameSsid": "ネットワーク名（SSID）",
   "enterWifiNetworkName": "WiFiネットワーク名を入力",
-  "enterWifiPassword": "WiFiパスワードを入力"
+  "enterWifiPassword": "WiFiパスワードを入力",
+  "appIconLabel": "App Icon"
 }

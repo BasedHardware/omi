@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Skriv inn WiFi-legitimasjonen din slik at enheten kan laste ned fastvaren.",
   "networkNameSsid": "Nettverksnavn (SSID)",
   "enterWifiNetworkName": "Skriv inn WiFi-nettverksnavn",
-  "enterWifiPassword": "Skriv inn WiFi-passord"
+  "enterWifiPassword": "Skriv inn WiFi-passord",
+  "appIconLabel": "App Icon"
 }

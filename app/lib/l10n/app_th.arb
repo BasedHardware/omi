@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "ป้อนข้อมูล WiFi เพื่อให้อุปกรณ์ดาวน์โหลดเฟิร์มแวร์ได้",
   "networkNameSsid": "ชื่อเครือข่าย (SSID)",
   "enterWifiNetworkName": "ป้อนชื่อเครือข่าย WiFi",
-  "enterWifiPassword": "ป้อนรหัสผ่าน WiFi"
+  "enterWifiPassword": "ป้อนรหัสผ่าน WiFi",
+  "appIconLabel": "App Icon"
 }

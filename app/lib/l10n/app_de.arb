@@ -2598,5 +2598,6 @@
   "wifiConfigurationSubtitle": "Geben Sie Ihre WLAN-Zugangsdaten ein, damit das Gerät die Firmware herunterladen kann.",
   "networkNameSsid": "Netzwerkname (SSID)",
   "enterWifiNetworkName": "WLAN-Netzwerknamen eingeben",
-  "enterWifiPassword": "WLAN-Passwort eingeben"
+  "enterWifiPassword": "WLAN-Passwort eingeben",
+  "appIconLabel": "App Icon"
 }

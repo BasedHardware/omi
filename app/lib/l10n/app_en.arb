@@ -9976,5 +9976,6 @@
   "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
   "networkNameSsid": "Network Name (SSID)",
   "enterWifiNetworkName": "Enter WiFi network name",
-  "enterWifiPassword": "Enter WiFi password"
+  "enterWifiPassword": "Enter WiFi password",
+  "appIconLabel": "App Icon"
 }

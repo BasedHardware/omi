@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.",
   "networkNameSsid": "Nätverksnamn (SSID)",
   "enterWifiNetworkName": "Ange WiFi-nätverksnamn",
-  "enterWifiPassword": "Ange WiFi-lösenord"
+  "enterWifiPassword": "Ange WiFi-lösenord",
+  "appIconLabel": "App Icon"
 }

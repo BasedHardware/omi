@@ -8173,4 +8173,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Zadejte heslo WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

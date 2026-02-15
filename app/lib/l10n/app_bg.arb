@@ -2599,5 +2599,6 @@
   "wifiConfigurationSubtitle": "Въведете данните за WiFi, за да може устройството да изтегли фърмуера.",
   "networkNameSsid": "Име на мрежата (SSID)",
   "enterWifiNetworkName": "Въведете името на WiFi мрежата",
-  "enterWifiPassword": "Въведете парола за WiFi"
+  "enterWifiPassword": "Въведете парола за WiFi",
+  "appIconLabel": "App Icon"
 }

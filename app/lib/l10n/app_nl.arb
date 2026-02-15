@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Voer uw WiFi-gegevens in zodat het apparaat de firmware kan downloaden.",
   "networkNameSsid": "Netwerknaam (SSID)",
   "enterWifiNetworkName": "Voer de WiFi-netwerknaam in",
-  "enterWifiPassword": "Voer het WiFi-wachtwoord in"
+  "enterWifiPassword": "Voer het WiFi-wachtwoord in",
+  "appIconLabel": "App Icon"
 }

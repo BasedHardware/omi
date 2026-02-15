@@ -2639,5 +2639,6 @@
   "wifiConfigurationSubtitle": "Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.",
   "networkNameSsid": "Netværksnavn (SSID)",
   "enterWifiNetworkName": "Indtast WiFi-netværksnavn",
-  "enterWifiPassword": "Indtast WiFi-adgangskode"
+  "enterWifiPassword": "Indtast WiFi-adgangskode",
+  "appIconLabel": "App Icon"
 }

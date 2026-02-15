@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.",
   "networkNameSsid": "Όνομα δικτύου (SSID)",
   "enterWifiNetworkName": "Εισαγάγετε το όνομα δικτύου WiFi",
-  "enterWifiPassword": "Εισαγάγετε τον κωδικό WiFi"
+  "enterWifiPassword": "Εισαγάγετε τον κωδικό WiFi",
+  "appIconLabel": "App Icon"
 }
