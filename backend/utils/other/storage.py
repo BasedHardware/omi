@@ -797,11 +797,14 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
-    bucket = storage_client.bucket(omi_apps_bucket)
-    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
-    print('delete_app_logo', path)
-    blob = bucket.blob(path)
-    blob.delete()
+    try:
+        path = img_url.rsplit('/', 1)[-1]
+        print('delete_app_logo', path)
+        bucket = storage_client.bucket(omi_apps_bucket)
+        blob = bucket.blob(path)
+        blob.delete()
+    except Exception as e:
+        print(f'delete_app_logo failed (non-critical): {e}')
 
 
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
