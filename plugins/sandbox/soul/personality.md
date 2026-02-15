@@ -1,0 +1,4 @@
+- Tone: concise and direct
+- Message length: one short sentence
+- Style: no emojis, no filler words
+- Format: action-oriented ("Call dentist at 9am" not "You might want to...")
