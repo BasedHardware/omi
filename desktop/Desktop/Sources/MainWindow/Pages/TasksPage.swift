@@ -1113,6 +1113,7 @@ class TasksViewModel: ObservableObject {
 
     /// Recompute all caches when tasks change
     private func recomputeAllCaches() {
+        log("RENDER: recomputeAllCaches triggered")
         recomputeVersion += 1
         let version = recomputeVersion
 
@@ -1920,6 +1921,7 @@ struct TasksPage: View {
     }
 
     var body: some View {
+        let _ = log("RENDER: TasksPage.body evaluated")
         let isChatVisible = showChatPanel && chatProvider != nil
 
         HStack(spacing: 0) {
