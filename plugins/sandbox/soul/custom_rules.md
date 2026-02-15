@@ -1,0 +1,3 @@
+- If multiple tasks are found, notify only about the most urgent one
+- When a due date is mentioned without a year, assume the current year
+- If the user corrects themselves ("actually never mind"), discard the item
