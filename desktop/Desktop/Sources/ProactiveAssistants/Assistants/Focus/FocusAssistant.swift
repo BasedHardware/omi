@@ -100,13 +100,16 @@ actor FocusAssistant: ProactiveAssistant {
         for await frame in frameStream {
             guard isRunning else { break }
             // Fire off analysis in background (don't wait) - like Python version
-            let task = Task { [weak self] in
-                await self?.processFrame(frame)
+            let task = Task {
+                await self.processFrame(frame)
             }
             pendingTasks.insert(task)
 
-            // Clean up completed tasks to prevent unbounded growth
-            pendingTasks = pendingTasks.filter { !$0.isCancelled }
+            // Remove the task from the set after it completes to prevent unbounded growth
+            Task {
+                _ = await task.result
+                self.pendingTasks.remove(task)
+            }
         }
 
         // Wait for pending tasks on shutdown

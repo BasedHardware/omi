@@ -32,6 +32,12 @@ class LiveNotesMonitor: ObservableObject {
     /// Minimum words before triggering AI generation
     private let wordThreshold = 50
 
+    /// Max words to keep in buffer (older words are trimmed)
+    private let maxWordBufferSize = 500
+
+    /// Max existing notes to keep for context (oldest trimmed)
+    private let maxExistingNotesContext = 20
+
     /// Existing notes for context (to avoid repetition)
     private var existingNotesContext: [String] = []
 
@@ -131,6 +137,10 @@ class LiveNotesMonitor: ObservableObject {
                     await MainActor.run {
                         self.notes.append(note)
                         self.existingNotesContext.append(text)
+                        // Trim context to prevent unbounded growth
+                        if self.existingNotesContext.count > self.maxExistingNotesContext {
+                            self.existingNotesContext.removeFirst(self.existingNotesContext.count - self.maxExistingNotesContext)
+                        }
                     }
                 }
             } catch {
@@ -208,6 +218,11 @@ class LiveNotesMonitor: ObservableObject {
 
         wordBuffer.append(contentsOf: newWords)
 
+        // Trim word buffer to prevent unbounded growth (keep most recent words)
+        if wordBuffer.count > maxWordBufferSize {
+            wordBuffer.removeFirst(wordBuffer.count - maxWordBufferSize)
+        }
+
         // Check if we have enough words to generate a note
         let wordsSinceLastNote = wordBuffer.count - (lastProcessedSegmentOrder >= 0 ? lastProcessedSegmentOrder : 0)
         if wordsSinceLastNote >= wordThreshold && !isGenerating {
@@ -273,6 +288,10 @@ class LiveNotesMonitor: ObservableObject {
                     await MainActor.run {
                         self.notes.append(note)
                         self.existingNotesContext.append(noteText)
+                        // Trim context to prevent unbounded growth (keep most recent notes)
+                        if self.existingNotesContext.count > self.maxExistingNotesContext {
+                            self.existingNotesContext.removeFirst(self.existingNotesContext.count - self.maxExistingNotesContext)
+                        }
                         self.lastProcessedSegmentOrder = self.wordBuffer.count
                         self.isGenerating = false
                     }

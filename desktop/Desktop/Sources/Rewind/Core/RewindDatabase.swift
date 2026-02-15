@@ -220,17 +220,23 @@ actor RewindDatabase {
             do {
                 queue = try DatabaseQueue(path: dbPath, configuration: config)
             } catch let retryError {
-                // If still failing, check for database corruption (SQLite error 11)
+                // If still failing, check for database corruption:
+                //   - SQLITE_CORRUPT (error 11): malformed database
+                //   - SQLITE_IOERR (error 10) with extended code 6922 (SQLITE_IOERR_CORRUPTFS):
+                //     filesystem reports file corruption, commonly caused by migrating WAL files
                 let isCorrupted: Bool
                 if let dbError = retryError as? DatabaseError {
-                    isCorrupted = dbError.resultCode == .SQLITE_CORRUPT
+                    let isCorruptError = dbError.resultCode == .SQLITE_CORRUPT
                         || dbError.resultCode.primaryResultCode == .SQLITE_CORRUPT
+                    let isCorruptFS = dbError.resultCode.primaryResultCode == .SQLITE_IOERR
+                        && dbError.extendedResultCode.rawValue == 6922 // SQLITE_IOERR_CORRUPTFS
+                    isCorrupted = isCorruptError || isCorruptFS
                 } else {
                     isCorrupted = "\(retryError)".contains("malformed")
                 }
 
                 if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
-                    log("RewindDatabase: Database is corrupted, attempting recovery...")
+                    log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
                     try await handleCorruptedDatabase(at: dbPath, in: omiDir)
                     // Retry with recovered or fresh database
                     queue = try DatabaseQueue(path: dbPath, configuration: config)
@@ -304,11 +310,25 @@ actor RewindDatabase {
 
         log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
-        // Items to migrate: omi.db (+ WAL/SHM), Screenshots/, Videos/, .omi_running, backups/
+        // Items to migrate: omi.db, Screenshots/, Videos/, backups/
+        // IMPORTANT: Do NOT move omi.db-wal, omi.db-shm, or .omi_running:
+        //   - WAL/SHM files are path-bound. Moving them to a new directory makes them
+        //     invalid, causing SQLITE_IOERR_CORRUPTFS (error 6922) on the next open.
+        //     SQLite will cleanly recover without stale WAL files.
+        //   - .omi_running would falsely trigger unclean-shutdown recovery at the
+        //     destination, running an expensive integrity check on the migrated DB.
         let itemsToMove = [
-            "omi.db", "omi.db-wal", "omi.db-shm",
-            ".omi_running", "Screenshots", "Videos", "backups",
+            "omi.db", "Screenshots", "Videos", "backups",
         ]
+
+        // Delete WAL/SHM and running flag at source — do NOT migrate them
+        for staleFile in ["omi.db-wal", "omi.db-shm", ".omi_running"] {
+            let path = sourceDir.appendingPathComponent(staleFile)
+            if fileManager.fileExists(atPath: path.path) {
+                try? fileManager.removeItem(at: path)
+                log("RewindDatabase: Deleted \(staleFile) from source (not migrating)")
+            }
+        }
 
         for name in itemsToMove {
             let source = sourceDir.appendingPathComponent(name)
