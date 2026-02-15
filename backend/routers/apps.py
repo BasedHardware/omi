@@ -46,6 +46,7 @@ from database.apps import (
     list_api_keys_db,
     delete_api_key_db,
     set_app_popular_db,
+    set_app_official_db,
     search_apps_db,
 )
 from database.auth import get_user_from_uid
@@ -715,6 +716,24 @@ def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)
     username = handle.replace(' ', '')
     username = increment_username(username)
     return {'username': username}
+
+
+@router.post('/v1/apps/{app_id}/official', tags=['v1'])
+def set_app_official(app_id: str, secret_key: str = Header(None, alias='x-admin-key')):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    set_app_official_db(app_id, True)
+    delete_app_cache_by_id(app_id)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/apps/{app_id}/official', tags=['v1'])
+def remove_app_official(app_id: str, secret_key: str = Header(None, alias='x-admin-key')):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    set_app_official_db(app_id, False)
+    delete_app_cache_by_id(app_id)
+    return {'status': 'ok'}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
