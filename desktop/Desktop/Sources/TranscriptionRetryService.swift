@@ -9,6 +9,8 @@ class TranscriptionRetryService {
     private var isProcessing = false
     private let retryInterval: TimeInterval = 60  // Check every 60 seconds
     private let maxRetries = 5
+    private var consecutiveDBFailures = 0
+    private let maxConsecutiveDBFailures = 3
 
     private init() {}
 
@@ -114,6 +116,8 @@ class TranscriptionRetryService {
         do {
             // Get pending sessions
             let pendingSessions = try await TranscriptionStorage.shared.getPendingUploadSessions()
+            consecutiveDBFailures = 0 // DB query succeeded, reset counter
+
             for session in pendingSessions {
                 await uploadSession(session)
             }
@@ -127,7 +131,13 @@ class TranscriptionRetryService {
             }
 
         } catch {
-            logError("TranscriptionRetryService: Queue processing failed", error: error)
+            consecutiveDBFailures += 1
+            if consecutiveDBFailures >= maxConsecutiveDBFailures {
+                log("TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, stopping timer to avoid error flood")
+                stop()
+            } else {
+                logError("TranscriptionRetryService: Queue processing failed (\(consecutiveDBFailures)/\(maxConsecutiveDBFailures))", error: error)
+            }
         }
     }
 

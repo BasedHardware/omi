@@ -321,4 +321,12 @@ class LiveNotesMonitor: ObservableObject {
     func getNotesForCurrentSession() -> [LiveNote] {
         return notes
     }
+
+    // MARK: - Diagnostics
+
+    /// Word buffer size (for memory diagnostics)
+    var wordBufferCount: Int { wordBuffer.count }
+
+    /// Existing notes context size (for memory diagnostics)
+    var existingNotesContextCount: Int { existingNotesContext.count }
 }

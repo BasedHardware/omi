@@ -222,14 +222,12 @@ actor RewindDatabase {
             } catch let retryError {
                 // If still failing, check for database corruption:
                 //   - SQLITE_CORRUPT (error 11): malformed database
-                //   - SQLITE_IOERR (error 10) with extended code 6922 (SQLITE_IOERR_CORRUPTFS):
-                //     filesystem reports file corruption, commonly caused by migrating WAL files
+                //   - SQLITE_IOERR_CORRUPTFS (extended code 6922): filesystem reports file
+                //     corruption, commonly caused by migrating WAL files to a new path
                 let isCorrupted: Bool
                 if let dbError = retryError as? DatabaseError {
                     let isCorruptError = dbError.resultCode == .SQLITE_CORRUPT
-                        || dbError.resultCode.primaryResultCode == .SQLITE_CORRUPT
-                    let isCorruptFS = dbError.resultCode.primaryResultCode == .SQLITE_IOERR
-                        && dbError.extendedResultCode.rawValue == 6922 // SQLITE_IOERR_CORRUPTFS
+                    let isCorruptFS = dbError.extendedResultCode.rawValue == 6922 // SQLITE_IOERR_CORRUPTFS
                     isCorrupted = isCorruptError || isCorruptFS
                 } else {
                     isCorrupted = "\(retryError)".contains("malformed")
@@ -321,12 +319,17 @@ actor RewindDatabase {
             "omi.db", "Screenshots", "Videos", "backups",
         ]
 
-        // Delete WAL/SHM and running flag at source — do NOT migrate them
+        // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
+        // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
+        // also cause SQLITE_IOERR_CORRUPTFS when SQLite opens the migrated DB.
         for staleFile in ["omi.db-wal", "omi.db-shm", ".omi_running"] {
-            let path = sourceDir.appendingPathComponent(staleFile)
-            if fileManager.fileExists(atPath: path.path) {
-                try? fileManager.removeItem(at: path)
-                log("RewindDatabase: Deleted \(staleFile) from source (not migrating)")
+            for dir in [sourceDir, userDir] {
+                let path = dir.appendingPathComponent(staleFile)
+                if fileManager.fileExists(atPath: path.path) {
+                    try? fileManager.removeItem(at: path)
+                    let label = dir == sourceDir ? "source" : "dest"
+                    log("RewindDatabase: Deleted \(staleFile) from \(label) (not migrating)")
+                }
             }
         }
 

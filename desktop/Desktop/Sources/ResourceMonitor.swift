@@ -124,6 +124,56 @@ class ResourceMonitor {
         if memorySamples.count % 5 == 0 {
             log("ResourceMonitor: \(snapshot.summary)")
         }
+
+        // Log per-component memory diagnostics every 10th sample (~5 min)
+        if memorySamples.count % 10 == 0 {
+            await logComponentDiagnostics(snapshot: snapshot)
+        }
+    }
+
+    /// Collect and log per-component memory diagnostics to help identify leak sources
+    private func logComponentDiagnostics(snapshot: ResourceSnapshot) async {
+        var components: [String: Any] = [:]
+
+        // LiveNotesMonitor buffers (MainActor — direct access)
+        let liveNotes = LiveNotesMonitor.shared
+        components["liveNotes_wordBuffer"] = liveNotes.wordBufferCount
+        components["liveNotes_notesContext"] = liveNotes.existingNotesContextCount
+        components["liveNotes_notesCount"] = liveNotes.notes.count
+
+        // VideoChunkEncoder buffer (actor — await)
+        let bufferStatus = await VideoChunkEncoder.shared.getBufferStatus()
+        components["videoEncoder_frameCount"] = bufferStatus.frameCount
+        if let age = bufferStatus.oldestFrameAge {
+            components["videoEncoder_oldestFrameAgeSec"] = Int(age)
+        }
+
+        // FocusAssistant pending tasks (actor — await, optional since it may not be initialized)
+        if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
+            components["focus_pendingTasks"] = await focusAssistant.pendingTasksCount
+            components["focus_historyCount"] = await focusAssistant.analysisHistoryCount
+        }
+
+        // Thread count is already in snapshot
+        components["threadCount"] = snapshot.threadCount
+
+        let componentSummary = components.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: ", ")
+        log("ResourceMonitor: COMPONENTS: \(componentSummary)")
+
+        // Add to Sentry context for crash diagnostics
+        if !isDevBuild {
+            SentrySDK.configureScope { scope in
+                scope.setContext(value: components, key: "memory_components")
+            }
+
+            // Add breadcrumb when memory is elevated
+            if snapshot.memoryFootprintMB >= memoryWarningThreshold {
+                let breadcrumb = Breadcrumb(level: .warning, category: "memory_diagnostics")
+                breadcrumb.message = "Component diagnostics at \(snapshot.memoryFootprintMB)MB"
+                breadcrumb.data = components
+                SentrySDK.addBreadcrumb(breadcrumb)
+            }
+        }
     }
 
     private func updateSentryContext(_ snapshot: ResourceSnapshot) {

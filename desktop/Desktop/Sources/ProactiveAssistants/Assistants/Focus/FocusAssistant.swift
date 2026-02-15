@@ -283,6 +283,14 @@ actor FocusAssistant: ProactiveAssistant {
         }
     }
 
+    // MARK: - Diagnostics
+
+    /// Number of pending analysis tasks (for memory diagnostics)
+    var pendingTasksCount: Int { pendingTasks.count }
+
+    /// Number of analysis history entries retained
+    var analysisHistoryCount: Int { analysisHistory.count }
+
     // MARK: - Legacy API (for backward compatibility)
 
     nonisolated func submitFrame(jpegData: Data, appName: String) {
