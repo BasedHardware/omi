@@ -202,9 +202,24 @@ class TasksStore: ObservableObject {
             // Merge without triggering @Published unless something actually changed
             let merged = mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
             if merged != incompleteTasks {
+                // Log what actually changed
+                let currentIds = Set(incompleteTasks.map { $0.id })
+                let mergedIds = Set(merged.map { $0.id })
+                let removed = currentIds.subtracting(mergedIds)
+                let added = mergedIds.subtracting(currentIds)
+                let updated = merged.filter { m in
+                    if let c = incompleteTasks.first(where: { $0.id == m.id }), c != m { return true }
+                    return false
+                }
+                log("RENDER: Auto-refresh diff: \(incompleteTasks.count)->\(merged.count) items, removed=\(removed.count), added=\(added.count), updated=\(updated.count) properties changed")
+                if !removed.isEmpty { log("RENDER: Removed IDs: \(removed.prefix(5).joined(separator: ", "))") }
+                if !updated.isEmpty { log("RENDER: Updated IDs: \(updated.prefix(3).map { $0.id.prefix(8) }.joined(separator: ", "))") }
+
                 incompleteTasks = merged
                 incompleteOffset = merged.count
                 log("TasksStore: Auto-refresh updated incomplete tasks (\(merged.count) items)")
+            } else {
+                log("RENDER: Auto-refresh: no changes detected, skipping update")
             }
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
