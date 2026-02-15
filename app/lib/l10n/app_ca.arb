@@ -2599,5 +2599,6 @@
   "wifiConfigurationSubtitle": "Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.",
   "networkNameSsid": "Nom de la xarxa (SSID)",
   "enterWifiNetworkName": "Introduïu el nom de la xarxa WiFi",
-  "enterWifiPassword": "Introduïu la contrasenya WiFi"
+  "enterWifiPassword": "Introduïu la contrasenya WiFi",
+  "appIconLabel": "App Icon"
 }

@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Syötä WiFi-tunnuksesi, jotta laite voi ladata laiteohjelmiston.",
   "networkNameSsid": "Verkon nimi (SSID)",
   "enterWifiNetworkName": "Syötä WiFi-verkon nimi",
-  "enterWifiPassword": "Syötä WiFi-salasana"
+  "enterWifiPassword": "Syötä WiFi-salasana",
+  "appIconLabel": "App Icon"
 }

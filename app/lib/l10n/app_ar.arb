@@ -2597,5 +2597,6 @@
   "wifiConfigurationSubtitle": "أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.",
   "networkNameSsid": "اسم الشبكة (SSID)",
   "enterWifiNetworkName": "أدخل اسم شبكة الواي فاي",
-  "enterWifiPassword": "أدخل كلمة مرور الواي فاي"
+  "enterWifiPassword": "أدخل كلمة مرور الواي فاي",
+  "appIconLabel": "App Icon"
 }

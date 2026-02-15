@@ -2599,5 +2599,6 @@
   "wifiConfigurationSubtitle": "Zadejte přihlašovací údaje WiFi, aby zařízení mohlo stáhnout firmware.",
   "networkNameSsid": "Název sítě (SSID)",
   "enterWifiNetworkName": "Zadejte název WiFi sítě",
-  "enterWifiPassword": "Zadejte heslo WiFi"
+  "enterWifiPassword": "Zadejte heslo WiFi",
+  "appIconLabel": "App Icon"
 }

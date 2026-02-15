@@ -2665,5 +2665,6 @@
   "wifiConfigurationSubtitle": "Wprowadź dane WiFi, aby urządzenie mogło pobrać oprogramowanie.",
   "networkNameSsid": "Nazwa sieci (SSID)",
   "enterWifiNetworkName": "Wprowadź nazwę sieci WiFi",
-  "enterWifiPassword": "Wprowadź hasło WiFi"
+  "enterWifiPassword": "Wprowadź hasło WiFi",
+  "appIconLabel": "App Icon"
 }

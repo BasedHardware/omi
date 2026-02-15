@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Masukkan kelayakan WiFi anda untuk membenarkan peranti memuat turun perisian tegar.",
   "networkNameSsid": "Nama Rangkaian (SSID)",
   "enterWifiNetworkName": "Masukkan nama rangkaian WiFi",
-  "enterWifiPassword": "Masukkan kata laluan WiFi"
+  "enterWifiPassword": "Masukkan kata laluan WiFi",
+  "appIconLabel": "App Icon"
 }

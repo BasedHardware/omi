@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.",
   "networkNameSsid": "Tīkla nosaukums (SSID)",
   "enterWifiNetworkName": "Ievadiet WiFi tīkla nosaukumu",
-  "enterWifiPassword": "Ievadiet WiFi paroli"
+  "enterWifiPassword": "Ievadiet WiFi paroli",
+  "appIconLabel": "App Icon"
 }

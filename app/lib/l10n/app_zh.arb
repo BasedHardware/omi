@@ -2652,5 +2652,6 @@
   "wifiConfigurationSubtitle": "输入您的WiFi凭据以允许设备下载固件。",
   "networkNameSsid": "网络名称 (SSID)",
   "enterWifiNetworkName": "输入WiFi网络名称",
-  "enterWifiPassword": "输入WiFi密码"
+  "enterWifiPassword": "输入WiFi密码",
+  "appIconLabel": "App Icon"
 }

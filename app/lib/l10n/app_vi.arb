@@ -2635,5 +2635,6 @@
   "wifiConfigurationSubtitle": "Nhập thông tin WiFi để thiết bị có thể tải xuống firmware.",
   "networkNameSsid": "Tên mạng (SSID)",
   "enterWifiNetworkName": "Nhập tên mạng WiFi",
-  "enterWifiPassword": "Nhập mật khẩu WiFi"
+  "enterWifiPassword": "Nhập mật khẩu WiFi",
+  "appIconLabel": "App Icon"
 }

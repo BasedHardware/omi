@@ -2665,5 +2665,6 @@
   "wifiConfigurationSubtitle": "Введите данные WiFi, чтобы устройство могло загрузить прошивку.",
   "networkNameSsid": "Имя сети (SSID)",
   "enterWifiNetworkName": "Введите имя сети WiFi",
-  "enterWifiPassword": "Введите пароль WiFi"
+  "enterWifiPassword": "Введите пароль WiFi",
+  "appIconLabel": "App Icon"
 }

@@ -2635,5 +2635,6 @@
   "wifiConfigurationSubtitle": "Zadajte prihlasovacie údaje WiFi, aby zariadenie mohlo stiahnuť firmvér.",
   "networkNameSsid": "Názov siete (SSID)",
   "enterWifiNetworkName": "Zadajte názov WiFi siete",
-  "enterWifiPassword": "Zadajte heslo WiFi"
+  "enterWifiPassword": "Zadajte heslo WiFi",
+  "appIconLabel": "App Icon"
 }

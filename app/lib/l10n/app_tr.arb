@@ -2665,5 +2665,6 @@
   "wifiConfigurationSubtitle": "Cihazın donanım yazılımını indirebilmesi için WiFi kimlik bilgilerinizi girin.",
   "networkNameSsid": "Ağ Adı (SSID)",
   "enterWifiNetworkName": "WiFi ağ adını girin",
-  "enterWifiPassword": "WiFi şifresini girin"
+  "enterWifiPassword": "WiFi şifresini girin",
+  "appIconLabel": "App Icon"
 }

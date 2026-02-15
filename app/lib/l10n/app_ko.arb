@@ -2630,5 +2630,6 @@
   "wifiConfigurationSubtitle": "기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.",
   "networkNameSsid": "네트워크 이름 (SSID)",
   "enterWifiNetworkName": "WiFi 네트워크 이름을 입력하세요",
-  "enterWifiPassword": "WiFi 비밀번호를 입력하세요"
+  "enterWifiPassword": "WiFi 비밀번호를 입력하세요",
+  "appIconLabel": "App Icon"
 }
