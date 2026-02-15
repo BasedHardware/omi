@@ -36,8 +36,9 @@ RUN pip install --no-cache-dir --timeout=600 torch==2.4.0 || \
 RUN pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0 || \
     pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0
 
-# Install remaining requirements
-RUN pip install --no-cache-dir --upgrade --timeout=600 --retries 5 -r /tmp/requirements.txt
+# Install remaining requirements (exclude lc3py - it's built from source above)
+RUN grep -v lc3py /tmp/requirements.txt > /tmp/requirements_filtered.txt && \
+    pip install --no-cache-dir --upgrade --timeout=600 --retries 5 -r /tmp/requirements_filtered.txt
 
 FROM python:3.11-slim
 
@@ -47,16 +48,17 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
 
+# Copy venv first so lc3py installs into it
+COPY --from=builder /opt/venv /opt/venv
+
 # Copy compiled liblc3 library and wheel from builder
 COPY --from=builder /usr/local/lib/liblc3.so* /usr/local/lib/
 COPY --from=builder /tmp/wheels /tmp/wheels
 
-# Install liblc3 Python package and set library path
+# Install liblc3 Python package into the venv
 RUN ldconfig && \
     pip install --no-cache-dir /tmp/wheels/*.whl && \
     rm -rf /tmp/wheels
-
-COPY --from=builder /opt/venv /opt/venv
 COPY . .
 
 # Copy and set permissions for entrypoint script
