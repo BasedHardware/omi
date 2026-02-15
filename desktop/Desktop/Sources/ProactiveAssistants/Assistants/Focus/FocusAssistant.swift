@@ -100,8 +100,8 @@ actor FocusAssistant: ProactiveAssistant {
         for await frame in frameStream {
             guard isRunning else { break }
             // Fire off analysis in background (don't wait) - like Python version
-            let task = Task {
-                await self.processFrame(frame)
+            let task = Task { [weak self] () -> Void in
+                await self?.processFrame(frame)
             }
             pendingTasks.insert(task)
 
