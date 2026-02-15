@@ -139,3 +139,42 @@ class TestWebhookSendCondition:
     def test_positive_delay_over_threshold(self):
         """delay=5 at 8kHz: need >80000 bytes. Over threshold sends."""
         assert webhook_send_condition(5, 80001, 8000) is True
+
+
+class TestDelayZeroFullCycle:
+    """Test that delay=0 results in immediate flush — no sustained buffer growth."""
+
+    def test_delay_zero_immediate_flush_cycle(self):
+        """delay=0: buffer extends momentarily then send condition triggers immediately,
+        so the caller flushes. Net effect: no sustained growth."""
+        audiobuffer = bytearray()
+        sample_rate = 8000
+
+        # Simulate 10 audio chunks arriving
+        for _ in range(10):
+            # Step 1: guard extends buffer
+            _, audiobuffer = audiobuffer_guard(b'\x00' * 160, False, 0, bytearray(), audiobuffer)
+            # Step 2: send condition triggers immediately (threshold=0)
+            if webhook_send_condition(0, len(audiobuffer), sample_rate):
+                # Step 3: caller flushes buffer (copies and clears)
+                _ = audiobuffer.copy()
+                audiobuffer = bytearray()
+
+        # After 10 cycles, buffer is empty — no sustained growth
+        assert len(audiobuffer) == 0
+
+    def test_positive_delay_accumulates_before_flush(self):
+        """delay=5: buffer grows until threshold, then flushes. Contrast with delay=0."""
+        audiobuffer = bytearray()
+        sample_rate = 8000
+        threshold = sample_rate * 5 * 2  # 80000 bytes
+        max_seen = 0
+
+        for _ in range(600):  # 600 * 160 = 96000 bytes total
+            _, audiobuffer = audiobuffer_guard(b'\x00' * 160, False, 5, bytearray(), audiobuffer)
+            max_seen = max(max_seen, len(audiobuffer))
+            if webhook_send_condition(5, len(audiobuffer), sample_rate):
+                audiobuffer = bytearray()
+
+        # Buffer accumulated to >80000 before flushing
+        assert max_seen > threshold
