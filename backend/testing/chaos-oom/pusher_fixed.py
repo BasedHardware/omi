@@ -1,6 +1,20 @@
+"""
+Fixed pusher.py — from PR #4784 branch fix/pusher-memory-leak-bg-tasks.
+
+Two fixes:
+1. spawn() function with bg_tasks: Set[asyncio.Task] + cleanup in finally
+2. deque(maxlen=N) for 3 non-critical queues — private_cloud_queue stays unbounded (data safety)
+
+Improvements:
+#2: bg_task_metrics in spawn() — tracks created/done/cancelled/in_flight/max_in_flight
+#3: _bounded_append() with queue drop counters
+#4: debug_metrics with queue_max_len tracking
+"""
+
 import struct
 import asyncio
 import json
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -52,13 +66,52 @@ TRANSCRIPT_QUEUE_WARN_SIZE = 50
 # Constants for audio bytes queue
 AUDIO_BYTES_QUEUE_WARN_SIZE = 20
 
+# Improvement #3 + #4: Global debug metrics — exposed via /debug/memory as pusher_debug
+debug_metrics = {
+    'queue_drops': {
+        'speaker_sample': 0,
+        'transcript': 0,
+        'audio_bytes': 0,
+    },
+    'queue_max_len': {
+        'speaker_sample': 0,
+        'transcript': 0,
+        'audio_bytes': 0,
+        'private_cloud': 0,
+    },
+    'bg_task_metrics': {
+        'created': 0,
+        'done': 0,
+        'cancelled': 0,
+        'in_flight': 0,
+        'max_in_flight': 0,
+    },
+}
+
+
+def _bounded_append(q, name, item):
+    """Append to a bounded deque, tracking drops and max length."""
+    was_full = len(q) == q.maxlen
+    q.append(item)  # deque silently drops oldest if full
+    if was_full:
+        debug_metrics['queue_drops'][name] += 1
+    current = len(q)
+    if current > debug_metrics['queue_max_len'][name]:
+        debug_metrics['queue_max_len'][name] = current
+
+
+def _track_queue_len(queue, name):
+    """Track max length for unbounded queues (private_cloud)."""
+    current = len(queue)
+    if current > debug_metrics['queue_max_len'][name]:
+        debug_metrics['queue_max_len'][name] = current
+
 
 async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
     """Process a conversation and send result back to _listen via websocket."""
     try:
         conversation_data = conversations_db.get_conversation(uid, conversation_id)
         if not conversation_data:
-            # Send error response
             response = {"conversation_id": conversation_id, "error": "conversation_not_found"}
             data = bytearray()
             data.extend(struct.pack("I", 201))
@@ -73,13 +126,11 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             conversation.status = ConversationStatus.processing
 
         try:
-            # Geolocation
             geolocation = get_cached_user_geolocation(uid)
             if geolocation:
                 geolocation = Geolocation(**geolocation)
                 conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-            # Run blocking operations in thread pool to avoid blocking event loop
             conversation = await asyncio.to_thread(process_conversation, uid, language, conversation)
             messages = await asyncio.to_thread(trigger_external_integrations, uid, conversation)
         except Exception as e:
@@ -88,7 +139,6 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
             conversation.discarded = True
             messages = []
 
-        # Send success response back (minimal - transcribe will fetch from DB)
         response = {"conversation_id": conversation_id, "success": True}
         data = bytearray()
         data.extend(struct.pack("I", 201))
@@ -124,24 +174,33 @@ async def _websocket_util_trigger(
     websocket_active = True
     websocket_close_code = 1000
 
-    # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
     audio_bytes_trigger_delay_seconds = 4
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
     private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
 
-    # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
+    # FIX 1: Track background tasks to cancel on cleanup
     bg_tasks: Set[asyncio.Task] = set()
+    btm = debug_metrics['bg_task_metrics']  # shorthand
 
     def spawn(coro) -> asyncio.Task:
         """Create a tracked background task that will be cancelled on cleanup."""
+        # Improvement #2: bg_task_metrics in spawn
+        btm['created'] += 1
+        btm['in_flight'] += 1
+        if btm['in_flight'] > btm['max_in_flight']:
+            btm['max_in_flight'] = btm['in_flight']
+
         task = asyncio.create_task(coro)
         bg_tasks.add(task)
 
         def on_done(t):
             bg_tasks.discard(t)
+            btm['in_flight'] -= 1
             if t.cancelled():
+                btm['cancelled'] += 1
                 return
+            btm['done'] += 1
             exc = t.exception()
             if exc:
                 print(f"Unhandled exception in background task: {exc}", uid)
@@ -149,7 +208,7 @@ async def _websocket_util_trigger(
         task.add_done_callback(on_done)
         return task
 
-    # Bounded queues — prevent unbounded memory growth during backpressure
+    # FIX 2: Bounded queues — deque(maxlen=N) prevents unbounded memory growth
     speaker_sample_queue: deque = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
     transcript_queue: deque = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
     audio_bytes_queue: deque = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
@@ -157,10 +216,9 @@ async def _websocket_util_trigger(
     # private_cloud_queue stays unbounded — it carries irreplaceable user audio.
     # Silent drops (via deque maxlen) would cause permanent data loss.
     private_cloud_queue: List[dict] = []
-    audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
+    audio_bytes_event = asyncio.Event()
 
     async def process_private_cloud_queue():
-        """Background task that processes private cloud sync uploads with retry logic."""
         nonlocal websocket_active
 
         while websocket_active or len(private_cloud_queue) > 0:
@@ -169,11 +227,10 @@ async def _websocket_util_trigger(
             if not private_cloud_queue:
                 continue
 
-            # Process all pending chunks
             chunks_to_process = private_cloud_queue.copy()
             private_cloud_queue.clear()
 
-            successful_conversation_ids = set()  # Track conversations with successful uploads
+            successful_conversation_ids = set()
 
             for chunk_info in chunks_to_process:
                 chunk_data = chunk_info['data']
@@ -186,7 +243,6 @@ async def _websocket_util_trigger(
                     successful_conversation_ids.add(conv_id)
                 except Exception as e:
                     if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
-                        # Re-queue with incremented retry count
                         chunk_info['retries'] = retries + 1
                         private_cloud_queue.append(chunk_info)
                         print(f"Private cloud upload failed (retry {retries + 1}): {e}", uid, conv_id)
@@ -197,7 +253,6 @@ async def _websocket_util_trigger(
                             conv_id,
                         )
 
-            # Update audio_files for conversations with successful uploads
             for conv_id in successful_conversation_ids:
                 try:
                     audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
@@ -212,7 +267,6 @@ async def _websocket_util_trigger(
                     print(f"Error updating audio files: {e}", uid, conv_id)
 
     async def process_speaker_sample_queue():
-        """Background task that processes speaker sample extraction requests."""
         nonlocal websocket_active
 
         while websocket_active or len(speaker_sample_queue) > 0:
@@ -223,7 +277,6 @@ async def _websocket_util_trigger(
 
             current_time = time.time()
 
-            # Separate ready and pending requests
             ready_requests = []
             pending_requests = []
 
@@ -233,11 +286,9 @@ async def _websocket_util_trigger(
                 else:
                     pending_requests.append(request)
 
-            # Keep pending requests in queue (rebuild deque with pending only)
             speaker_sample_queue.clear()
             speaker_sample_queue.extend(pending_requests)
 
-            # Process ready requests (fire and forget)
             for request in ready_requests:
                 person_id = request['person_id']
                 conv_id = request['conversation_id']
@@ -255,7 +306,6 @@ async def _websocket_util_trigger(
                     print(f"Error extracting speaker samples: {e}", uid, conv_id)
 
     async def process_transcript_queue():
-        """Batched consumer for transcript events (realtime integrations + webhooks)."""
         nonlocal websocket_active
 
         while websocket_active or len(transcript_queue) > 0:
@@ -264,7 +314,6 @@ async def _websocket_util_trigger(
             if not transcript_queue:
                 continue
 
-            # Process batch
             batch = list(transcript_queue)
             transcript_queue.clear()
 
@@ -278,22 +327,19 @@ async def _websocket_util_trigger(
                     print(f"Error processing transcript batch: {e}", uid)
 
     async def process_audio_bytes_queue():
-        """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
         nonlocal websocket_active
 
         while websocket_active or len(audio_bytes_queue) > 0:
-            # Wait for signal or check periodically for shutdown
             try:
                 await asyncio.wait_for(audio_bytes_event.wait(), timeout=1.0)
             except asyncio.TimeoutError:
-                continue  # Check websocket_active and queue on timeout
+                continue
 
             audio_bytes_event.clear()
 
             if not audio_bytes_queue:
                 continue
 
-            # Process all queued items
             batch = list(audio_bytes_queue)
             audio_bytes_queue.clear()
 
@@ -324,77 +370,62 @@ async def _websocket_util_trigger(
                 data = await websocket.receive_bytes()
                 header_type = struct.unpack('<I', data[:4])[0]
 
-                # Conversation ID
                 if header_type == 103:
                     current_conversation_id = bytes(data[4:]).decode("utf-8")
-                    print(f"Pusher received conversation_id: {current_conversation_id}", uid)
                     continue
 
-                # Transcript - queue for batched processing
                 if header_type == 102:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
-                    # Update conversation_id from transcript if provided
                     if memory_id:
                         current_conversation_id = memory_id
-                    if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
-                        print(f"Warning: transcript_queue size {len(transcript_queue)}", uid)
-                    # Use memory_id if available, otherwise use current_conversation_id for conversations
                     conversation_or_memory_id = memory_id or current_conversation_id
-                    transcript_queue.append({'segments': segments, 'memory_id': conversation_or_memory_id})
+                    _bounded_append(
+                        transcript_queue, 'transcript', {'segments': segments, 'memory_id': conversation_or_memory_id}
+                    )
                     continue
 
-                # Process conversation request
+                # FIX 1: spawn() instead of safe_create_task() — tracked and cancelled on cleanup
                 if header_type == 104:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     conversation_id = res.get('conversation_id')
                     language = res.get('language', 'en')
                     if conversation_id:
-                        print(f"Pusher received process_conversation request: {conversation_id}", uid)
                         spawn(_process_conversation_task(uid, conversation_id, language, websocket))
                     continue
 
-                # Speaker sample extraction request - queue for background processing
                 if header_type == 105:
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     person_id = res.get('person_id')
                     conv_id = res.get('conversation_id')
                     segment_ids = res.get('segment_ids', [])
                     if person_id and conv_id and segment_ids:
-                        if len(speaker_sample_queue) >= SPEAKER_SAMPLE_QUEUE_WARN_SIZE:
-                            print(f"Warning: speaker_sample_queue size {len(speaker_sample_queue)}", uid)
-                        print(f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments", uid)
-                        speaker_sample_queue.append(
+                        _bounded_append(
+                            speaker_sample_queue,
+                            'speaker_sample',
                             {
                                 'person_id': person_id,
                                 'conversation_id': conv_id,
                                 'segment_ids': segment_ids,
                                 'queued_at': time.time(),
-                            }
+                            },
                         )
                     continue
 
-                # Audio bytes
                 if header_type == 101:
-                    # Parse: header(4) | timestamp(8 bytes double) | audio_data
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
                     audiobuffer.extend(audio_data)
                     trigger_audiobuffer.extend(audio_data)
 
-                    # Private cloud sync - queue chunks for background processing
                     if private_cloud_sync_enabled and current_conversation_id:
                         if private_cloud_chunk_start_time is None:
-                            # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
 
                         private_cloud_sync_buffer.extend(audio_data)
-                        # Queue chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
-                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_WARN_SIZE:
-                                print(f"Warning: private_cloud_queue size {len(private_cloud_queue)}", uid)
                             private_cloud_queue.append(
                                 {
                                     'data': bytes(private_cloud_sync_buffer),
@@ -403,39 +434,39 @@ async def _websocket_util_trigger(
                                     'retries': 0,
                                 }
                             )
+                            _track_queue_len(private_cloud_queue, 'private_cloud')
                             private_cloud_sync_buffer = bytearray()
                             private_cloud_chunk_start_time = None
 
-                    # Queue audio bytes triggers for batched processing
                     if (
                         has_audio_apps_enabled
                         and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
                     ):
-                        if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
-                            print(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)}", uid)
-                        audio_bytes_queue.append(
+                        _bounded_append(
+                            audio_bytes_queue,
+                            'audio_bytes',
                             {
                                 'type': 'app',
                                 'sample_rate': sample_rate,
                                 'data': trigger_audiobuffer.copy(),
-                            }
+                            },
                         )
-                        audio_bytes_event.set()  # Wake consumer immediately
+                        audio_bytes_event.set()
                         trigger_audiobuffer = bytearray()
                     if (
                         audio_bytes_webhook_delay_seconds
                         and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
                     ):
-                        if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
-                            print(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)}", uid)
-                        audio_bytes_queue.append(
+                        _bounded_append(
+                            audio_bytes_queue,
+                            'audio_bytes',
                             {
                                 'type': 'webhook',
                                 'sample_rate': sample_rate,
                                 'data': audiobuffer.copy(),
-                            }
+                            },
                         )
-                        audio_bytes_event.set()  # Wake consumer immediately
+                        audio_bytes_event.set()
                         audiobuffer = bytearray()
                     continue
 
@@ -445,7 +476,6 @@ async def _websocket_util_trigger(
             print(f'Could not process audio: error {e}')
             websocket_close_code = 1011
         finally:
-            # Flush any remaining private cloud sync buffer before shutdown
             if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
                 private_cloud_queue.append(
                     {
@@ -455,7 +485,6 @@ async def _websocket_util_trigger(
                         'retries': 0,
                     }
                 )
-                print(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes", uid)
             websocket_active = False
 
     try:
@@ -477,7 +506,7 @@ async def _websocket_util_trigger(
     finally:
         websocket_active = False
 
-        # Cancel all tracked background tasks to prevent memory leaks
+        # FIX 1: Cancel all tracked background tasks to prevent memory leaks
         tasks_to_cancel = list(bg_tasks)
         for task in tasks_to_cancel:
             task.cancel()
