@@ -79,6 +79,103 @@ message_buffer = MessageBuffer()
 # Minimum segments needed before analysis (real-time processing)
 MIN_SEGMENTS_FOR_ANALYSIS = 3
 
+# Minimum confidence to trigger a proactive notification
+PROACTIVE_CONFIDENCE_THRESHOLD = 0.7
+
+# Proactive trigger definitions (OpenAI function-calling format)
+PROACTIVE_TRIGGERS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_argument_perspective",
+            "description": (
+                "User is in a disagreement with someone. Offer an honest outside perspective "
+                "on who might be right and why, based on what you know about the user."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "other_person": {
+                        "type": "string",
+                        "description": "Who the user is disagreeing with",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "rationale": {
+                        "type": "string",
+                        "description": "Why this notification is warranted",
+                    },
+                },
+                "required": ["notification_text", "confidence", "rationale"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_goal_misalignment",
+            "description": (
+                "User is discussing plans that contradict their stored goals. "
+                "Alert them to the conflict so they can course-correct."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "goal_name": {
+                        "type": "string",
+                        "description": "Which goal is conflicted",
+                    },
+                    "conflict_description": {
+                        "type": "string",
+                        "description": "How the plan conflicts with the goal",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "goal_name", "conflict_description", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_emotional_support",
+            "description": (
+                "User is expressing complaints or negative emotions. "
+                "Suggest a concrete, actionable step they can take right now."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_text": {
+                        "type": "string",
+                        "description": "Push notification message (<300 chars, direct, empathetic)",
+                    },
+                    "detected_emotion": {
+                        "type": "string",
+                        "description": "Primary emotion detected (e.g. frustration, loneliness, anxiety)",
+                    },
+                    "suggested_action": {
+                        "type": "string",
+                        "description": "Concrete actionable suggestion",
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["notification_text", "detected_emotion", "confidence"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
 
 def extract_topics(discussion_text: str) -> List[str]:
     """Extract topics from the discussion using LLM."""
@@ -217,6 +314,8 @@ Remember: First evaluate silently, then either respond with empty string OR give
         "prompt": adjusted_prompt,
         "params": ["user_name", "user_facts", "user_context", "user_chat"],
         "context": {"filters": {"people": [], "entities": [], "topics": topics}},
+        "triggers": PROACTIVE_TRIGGERS,
+        "messages": messages,
     }
 
 
@@ -279,11 +378,12 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Dic
         # Sort messages by timestamp
         sorted_messages = sorted(buffer_data['messages'], key=lambda x: x['timestamp'])
 
-        # Create notification with formatted discussion
-        notification_data = create_notification_data(sorted_messages, frequency)
-
         buffer_data['last_analysis_time'] = current_time
         buffer_data['messages'] = []  # Clear buffer after analysis
+
+        # Create notification data with prompt, tools, and conversation messages.
+        # Tool calling is handled downstream by _process_proactive_notification.
+        notification_data = create_notification_data(sorted_messages, frequency)
 
         logger.info(f"Mentor notification ready for user {uid} (frequency: {frequency})")
         return notification_data

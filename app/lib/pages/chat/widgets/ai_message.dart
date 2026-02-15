@@ -1262,7 +1262,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           const SizedBox(width: 20),
           // Share button
           _buildActionButton(
-            icon: FontAwesomeIcons.shareNodes,
+            icon: FontAwesomeIcons.share,
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);

@@ -7980,13 +7980,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nová úloha';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Zobraziť všetko';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Pridať úlohu';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8055,4 +8055,116 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nie je možné prehrať zvuk. Súbor môže byť poškodený alebo chýba.';
+
+  @override
+  String get connectionGuide => 'Sprievodca pripojením';
+
+  @override
+  String get iveDoneThis => 'Urobil som to';
+
+  @override
+  String get pairNewDevice => 'Spárovať nové zariadenie';
+
+  @override
+  String get dontSeeYourDevice => 'Nevidíte svoje zariadenie?';
+
+  @override
+  String get reportAnIssue => 'Nahlásiť problém';
+
+  @override
+  String get pairingTitleOmi => 'Zapnite Omi';
+
+  @override
+  String get pairingDescOmi => 'Stlačte a podržte zariadenie, kým nezavibruje, pre zapnutie.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Prepnite Omi DevKit do režimu párovania';
+
+  @override
+  String get pairingDescOmiDevkit => 'Stlačte tlačidlo raz pre zapnutie. LED bude blikať fialovo v režime párovania.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Zapnite Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Stlačte a podržte bočné tlačidlo na 3 sekundy pre zapnutie.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Prepnite Plaud Note do režimu párovania';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Stlačte a podržte bočné tlačidlo na 2 sekundy. Červená LED začne blikať, keď bude pripravené na párovanie.';
+
+  @override
+  String get pairingTitleBee => 'Prepnite Bee do režimu párovania';
+
+  @override
+  String get pairingDescBee => 'Stlačte tlačidlo 5-krát za sebou. Svetlo začne blikať modro a zeleno.';
+
+  @override
+  String get pairingTitleLimitless => 'Prepnite Limitless do režimu párovania';
+
+  @override
+  String get pairingDescLimitless =>
+      'Keď svieti akékoľvek svetlo, stlačte raz a potom stlačte a podržte, kým zariadenie neukáže ružové svetlo, potom uvoľnite.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Prepnite Friend Pendant do režimu párovania';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Stlačte tlačidlo na prívesek pre zapnutie. Automaticky prejde do režimu párovania.';
+
+  @override
+  String get pairingTitleFieldy => 'Prepnite Fieldy do režimu párovania';
+
+  @override
+  String get pairingDescFieldy => 'Stlačte a podržte zariadenie, kým sa neobjaví svetlo, pre zapnutie.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Pripojte Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Nainštalujte a otvorte aplikáciu Omi na Apple Watch, potom klepnite na Pripojiť v aplikácii.';
+
+  @override
+  String get pairingTitleNeoOne => 'Prepnite Neo One do režimu párovania';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Stlačte a podržte tlačidlo napájania, kým LED nezačne blikať. Zariadenie bude viditeľné.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Čo je nové vo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridať do zoznamu úloh?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodarilo sa vytvoriť odkaz na zdieľanie';
+
+  @override
+  String get deleteGoal => 'Vymazať cieľ';
+
+  @override
+  String get deviceUpToDate => 'Vaše zariadenie je aktuálne';
+
+  @override
+  String get wifiConfiguration => 'Konfigurácia WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadajte prihlasovacie údaje WiFi, aby zariadenie mohlo stiahnuť firmvér.';
+
+  @override
+  String get networkNameSsid => 'Názov siete (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadajte názov WiFi siete';
+
+  @override
+  String get enterWifiPassword => 'Zadajte heslo WiFi';
 }

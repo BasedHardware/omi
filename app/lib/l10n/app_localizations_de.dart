@@ -8056,13 +8056,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get couldNotOpenUrl => 'Die URL konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Neue Aufgabe';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Alle anzeigen';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Aufgabe hinzufügen';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8132,4 +8132,118 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get audioPlaybackFailed =>
       'Audio kann nicht abgespielt werden. Die Datei ist möglicherweise beschädigt oder fehlt.';
+
+  @override
+  String get connectionGuide => 'Verbindungsanleitung';
+
+  @override
+  String get iveDoneThis => 'Erledigt';
+
+  @override
+  String get pairNewDevice => 'Neues Gerät koppeln';
+
+  @override
+  String get dontSeeYourDevice => 'Gerät nicht sichtbar?';
+
+  @override
+  String get reportAnIssue => 'Problem melden';
+
+  @override
+  String get pairingTitleOmi => 'Omi einschalten';
+
+  @override
+  String get pairingDescOmi => 'Halten Sie das Gerät gedrückt, bis es vibriert, um es einzuschalten.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Drücken Sie die Taste einmal zum Einschalten. Die LED blinkt lila im Kopplungsmodus.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass einschalten';
+
+  @override
+  String get pairingDescOmiGlass => 'Halten Sie die Seitentaste 3 Sekunden gedrückt, um einzuschalten.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Halten Sie die Seitentaste 2 Sekunden gedrückt. Die rote LED blinkt, wenn das Gerät kopplungsbereit ist.';
+
+  @override
+  String get pairingTitleBee => 'Bee in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescBee => 'Drücken Sie die Taste 5 Mal hintereinander. Das Licht blinkt dann blau und grün.';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescLimitless =>
+      'Wenn ein Licht sichtbar ist, drücken Sie einmal und halten Sie dann gedrückt, bis das Gerät ein rosa Licht zeigt, dann loslassen.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Drücken Sie den Knopf am Anhänger, um ihn einzuschalten. Er wechselt automatisch in den Kopplungsmodus.';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescFieldy => 'Halten Sie das Gerät gedrückt, bis das Licht erscheint, um es einzuschalten.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch verbinden';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installieren und öffnen Sie die Omi-App auf Ihrer Apple Watch und tippen Sie dann auf Verbinden in der App.';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One in den Kopplungsmodus versetzen';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Halten Sie die Ein-/Aus-Taste gedrückt, bis die LED blinkt. Das Gerät wird erkennbar sein.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Neuigkeiten in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Zur Aufgabenliste hinzufügen?';
+
+  @override
+  String get failedToCreateShareLink => 'Freigabelink konnte nicht erstellt werden';
+
+  @override
+  String get deleteGoal => 'Ziel löschen';
+
+  @override
+  String get deviceUpToDate => 'Ihr Gerät ist auf dem neuesten Stand';
+
+  @override
+  String get wifiConfiguration => 'WLAN-Konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Geben Sie Ihre WLAN-Zugangsdaten ein, damit das Gerät die Firmware herunterladen kann.';
+
+  @override
+  String get networkNameSsid => 'Netzwerkname (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WLAN-Netzwerknamen eingeben';
+
+  @override
+  String get enterWifiPassword => 'WLAN-Passwort eingeben';
 }

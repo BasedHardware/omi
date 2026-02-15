@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipBob for Omi</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --shipbob-blue: #0066ff;
+            --shipbob-blue-hover: #0052cc;
+            --shipbob-navy: #1a1f36;
+            --shipbob-dark: #1c1c1c;
+            --shipbob-darker: #141414;
+            --shipbob-gray: #2a2a2a;
+            --shipbob-light-gray: #a3a3a3;
+            --shipbob-white: #ffffff;
+            --omi-accent: #6366f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(145deg, var(--shipbob-darker) 0%, #0a1525 50%, var(--shipbob-dark) 100%);
+            min-height: 100vh;
+            color: var(--shipbob-white);
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-top: 20px;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .shipbob-logo {
+            width: 56px;
+            height: 56px;
+            background: var(--shipbob-blue);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--shipbob-white);
+        }
+
+        .plus-icon {
+            font-size: 28px;
+            color: var(--shipbob-light-gray);
+            font-weight: 300;
+        }
+
+        .omi-logo {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--omi-accent) 0%, #8b5cf6 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: -1px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, var(--shipbob-white), var(--shipbob-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--shipbob-light-gray);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--shipbob-gray);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .error-banner {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-icon {
+            font-size: 20px;
+        }
+
+        .success-banner {
+            background: linear-gradient(135deg, var(--shipbob-blue) 0%, #0052cc 100%);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .success-icon {
+            font-size: 20px;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .profile-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--shipbob-blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            overflow: hidden;
+        }
+
+        .profile-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .profile-info p {
+            color: var(--shipbob-light-gray);
+            font-size: 14px;
+        }
+
+        .connected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 102, 255, 0.15);
+            color: var(--shipbob-blue);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .btn-shipbob {
+            background: var(--shipbob-blue);
+            color: var(--shipbob-white);
+        }
+
+        .btn-shipbob:hover {
+            background: var(--shipbob-blue-hover);
+            transform: scale(1.02);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: var(--shipbob-white);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--shipbob-white);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid #ff4444;
+            color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .btn-small {
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--shipbob-light-gray);
+            margin-bottom: 16px;
+        }
+
+        .features-list {
+            list-style: none;
+        }
+
+        .features-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .features-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .feature-text h4 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .feature-text p {
+            font-size: 13px;
+            color: var(--shipbob-light-gray);
+            line-height: 1.4;
+        }
+
+        .commands-section {
+            margin-top: 24px;
+        }
+
+        .command-example {
+            background: var(--shipbob-darker);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            color: var(--shipbob-blue);
+        }
+
+        .channel-select {
+            margin-top: 16px;
+        }
+
+        .channel-select select {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: var(--shipbob-darker);
+            color: var(--shipbob-white);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .channel-select select:focus {
+            outline: none;
+            border-color: var(--shipbob-blue);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer p {
+            color: var(--shipbob-light-gray);
+            font-size: 13px;
+        }
+
+        .footer a {
+            color: var(--shipbob-blue);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <div class="shipbob-logo">SB</div>
+                <span class="plus-icon">+</span>
+                <div class="omi-logo">omi</div>
+            </div>
+            <h1>ShipBob for Omi</h1>
+            <p class="subtitle">Manage inventory and fulfillment with voice commands</p>
+        </div>
+
+        {% if error %}
+        <div class="error-banner">
+            <span class="error-icon">&#9888;</span>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        {% if authenticated %}
+        <div class="success-banner">
+            <span class="success-icon">&#10003;</span>
+            <span>Connected to ShipBob</span>
+        </div>
+
+        <div class="card">
+            <div class="profile-section">
+                <div class="profile-avatar">
+                    &#128230;
+                </div>
+                <div class="profile-info">
+                    <h3>ShipBob Account</h3>
+                    <p>
+                        {% if selected_channel %}
+                        Channel: {{ selected_channel.name }}
+                        {% else %}
+                        Connected
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+
+            {% if channels and channels|length > 1 %}
+            <div class="channel-select">
+                <p class="section-title">Select Channel</p>
+                <select id="channel-select" onchange="updateChannel(this.value)">
+                    {% for channel in channels %}
+                    <option value="{{ channel.id }}" {% if selected_channel and selected_channel.id == channel.id %}selected{% endif %}>
+                        {{ channel.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="commands-section">
+                <p class="section-title">Example Commands</p>
+                <div class="command-example">"Check inventory for Blue T-Shirt"</div>
+                <div class="command-example">"Create a WRO for 100 units of Widget Pro"</div>
+                <div class="command-example">"Show me my recent orders"</div>
+                <div class="command-example">"List all fulfillment centers"</div>
+            </div>
+        </div>
+
+        <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small" style="margin-top: 16px;">
+            Disconnect ShipBob
+        </a>
+
+        <script>
+            function updateChannel(channelId) {
+                fetch('/select-channel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        uid: '{{ uid }}',
+                        channel_id: channelId
+                    })
+                }).then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    }
+                });
+            }
+        </script>
+
+        {% else %}
+
+        <div class="card">
+            <p class="section-title">Features</p>
+            <ul class="features-list">
+                <li>
+                    <span class="feature-icon">&#128230;</span>
+                    <div class="feature-text">
+                        <h4>Inventory Management</h4>
+                        <p>Check stock levels and inventory quantities with voice commands</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">&#128666;</span>
+                    <div class="feature-text">
+                        <h4>Create WROs</h4>
+                        <p>Create Warehouse Receiving Orders to send inventory to ShipBob</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">&#128722;</span>
+                    <div class="feature-text">
+                        <h4>Order Tracking</h4>
+                        <p>View recent orders and fulfillment status</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">&#127968;</span>
+                    <div class="feature-text">
+                        <h4>Fulfillment Centers</h4>
+                        <p>See available warehouse locations and their details</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        {% if uid %}
+        <a href="/auth/shipbob?uid={{ uid }}" class="btn btn-shipbob">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            Connect with ShipBob
+        </a>
+        {% endif %}
+
+        {% endif %}
+
+        <div class="footer">
+            <p>Made with &#10084; for Omi</p>
+            <p style="margin-top: 8px;">
+                <a href="https://www.shipbob.com" target="_blank">ShipBob</a> &#183;
+                <a href="https://developer.shipbob.com" target="_blank">API Docs</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

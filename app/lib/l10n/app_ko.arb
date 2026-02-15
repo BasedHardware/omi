@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "오디오 파일을 재생할 수 없습니다",
-  "audioPlaybackFailed": "오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다."
+  "audioPlaybackFailed": "오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.",
+  "pairingTitleOmi": "Omi 전원 켜기",
+  "pairingDescOmi": "기기가 진동할 때까지 길게 눌러 전원을 켜세요.",
+  "pairingTitleOmiDevkit": "Omi DevKit를 페어링 모드로 전환",
+  "pairingDescOmiDevkit": "버튼을 한 번 눌러 전원을 켜세요. 페어링 모드에서 LED가 보라색으로 깜빡입니다.",
+  "pairingTitlePlaudNote": "Plaud Note를 페어링 모드로 전환",
+  "pairingDescPlaudNote": "측면 버튼을 2초간 길게 누르세요. 페어링 준비가 되면 빨간 LED가 깜빡입니다.",
+  "pairingTitleBee": "Bee를 페어링 모드로 전환",
+  "pairingDescBee": "버튼을 연속으로 5번 누르세요. 표시등이 파란색과 녹색으로 깜빡이기 시작합니다.",
+  "pairingTitleLimitless": "Limitless를 페어링 모드로 전환",
+  "pairingDescLimitless": "표시등이 켜져 있을 때 한 번 누른 다음 기기가 분홍색 빛을 보일 때까지 길게 누른 후 놓으세요.",
+  "pairingTitleFriendPendant": "Friend Pendant를 페어링 모드로 전환",
+  "pairingDescFriendPendant": "펜던트의 버튼을 눌러 전원을 켜세요. 자동으로 페어링 모드로 전환됩니다.",
+  "pairingTitleFieldy": "Fieldy를 페어링 모드로 전환",
+  "pairingDescFieldy": "표시등이 나타날 때까지 기기를 길게 눌러 전원을 켜세요.",
+  "pairingTitleAppleWatch": "Apple Watch 연결",
+  "pairingDescAppleWatch": "Apple Watch에 Omi 앱을 설치하고 열어서 앱에서 연결을 탭하세요.",
+  "pairingTitleNeoOne": "Neo One를 페어링 모드로 전환",
+  "pairingDescNeoOne": "전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.",
+  "connectionGuide": "연결 가이드",
+  "iveDoneThis": "완료했습니다",
+  "pairNewDevice": "새 기기 페어링",
+  "dontSeeYourDevice": "기기가 보이지 않나요?",
+  "reportAnIssue": "문제 신고",
+  "pairingTitleOmiGlass": "Omi Glass 전원 켜기",
+  "pairingDescOmiGlass": "측면 버튼을 3초간 길게 눌러 전원을 켜세요.",
+  "addTask": "작업 추가",
+  "newTask": "새 작업",
+  "viewAll": "모두 보기",
+  "whatsNewInVersion": "{version}의 새로운 기능",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "작업 목록에 추가하시겠습니까?",
+  "failedToCreateShareLink": "공유 링크 생성에 실패했습니다",
+  "deleteGoal": "목표 삭제",
+  "deviceUpToDate": "기기가 최신 상태입니다",
+  "wifiConfiguration": "WiFi 설정",
+  "wifiConfigurationSubtitle": "기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.",
+  "networkNameSsid": "네트워크 이름 (SSID)",
+  "enterWifiNetworkName": "WiFi 네트워크 이름을 입력하세요",
+  "enterWifiPassword": "WiFi 비밀번호를 입력하세요"
 }

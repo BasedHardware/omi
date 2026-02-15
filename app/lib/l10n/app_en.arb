@@ -9873,5 +9873,108 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing."
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
+  "connectionGuide": "Connection Guide",
+  "iveDoneThis": "I've done this",
+  "pairNewDevice": "Pair new device",
+  "dontSeeYourDevice": "Don't see your device?",
+  "reportAnIssue": "Report an issue",
+  "pairingTitleOmi": "Turn On Omi",
+  "@pairingTitleOmi": {
+    "description": "Pairing title for Omi device"
+  },
+  "pairingDescOmi": "Press and hold the device until it vibrates to turn it on.",
+  "@pairingDescOmi": {
+    "description": "Pairing description for Omi device"
+  },
+  "pairingTitleOmiDevkit": "Put Omi DevKit in Pairing Mode",
+  "@pairingTitleOmiDevkit": {
+    "description": "Pairing title for Omi DevKit"
+  },
+  "pairingDescOmiDevkit": "Press the button once to turn on. The LED will blink purple when in pairing mode.",
+  "@pairingDescOmiDevkit": {
+    "description": "Pairing description for Omi DevKit"
+  },
+  "pairingTitleOmiGlass": "Turn On Omi Glass",
+  "@pairingTitleOmiGlass": {
+    "description": "Pairing title for Omi Glass"
+  },
+  "pairingDescOmiGlass": "Power on by pressing the side button for 3 seconds.",
+  "@pairingDescOmiGlass": {
+    "description": "Pairing description for Omi Glass"
+  },
+  "pairingTitlePlaudNote": "Put Plaud Note in Pairing Mode",
+  "@pairingTitlePlaudNote": {
+    "description": "Pairing title for Plaud Note"
+  },
+  "pairingDescPlaudNote": "Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.",
+  "@pairingDescPlaudNote": {
+    "description": "Pairing description for Plaud Note"
+  },
+  "pairingTitleBee": "Put Bee in Pairing Mode",
+  "@pairingTitleBee": {
+    "description": "Pairing title for Bee device"
+  },
+  "pairingDescBee": "Press the button 5 times continuously. The light will start blinking blue and green.",
+  "@pairingDescBee": {
+    "description": "Pairing description for Bee device"
+  },
+  "pairingTitleLimitless": "Put Limitless in Pairing Mode",
+  "@pairingTitleLimitless": {
+    "description": "Pairing title for Limitless device"
+  },
+  "pairingDescLimitless": "When any light is visible, press once and then press and hold until the device shows a pink light, then release.",
+  "@pairingDescLimitless": {
+    "description": "Pairing description for Limitless device"
+  },
+  "pairingTitleFriendPendant": "Put Friend Pendant in Pairing Mode",
+  "@pairingTitleFriendPendant": {
+    "description": "Pairing title for Friend Pendant"
+  },
+  "pairingDescFriendPendant": "Press the button on the pendant to turn it on. It will enter pairing mode automatically.",
+  "@pairingDescFriendPendant": {
+    "description": "Pairing description for Friend Pendant"
+  },
+  "pairingTitleFieldy": "Put Fieldy in Pairing Mode",
+  "@pairingTitleFieldy": {
+    "description": "Pairing title for Fieldy device"
+  },
+  "pairingDescFieldy": "Press and hold the device until the light appears to turn it on.",
+  "@pairingDescFieldy": {
+    "description": "Pairing description for Fieldy device"
+  },
+  "pairingTitleAppleWatch": "Connect Apple Watch",
+  "@pairingTitleAppleWatch": {
+    "description": "Pairing title for Apple Watch"
+  },
+  "pairingDescAppleWatch": "Install and open the Omi app on your Apple Watch, then tap Connect in the app.",
+  "@pairingDescAppleWatch": {
+    "description": "Pairing description for Apple Watch"
+  },
+  "pairingTitleNeoOne": "Put Neo One in Pairing Mode",
+  "@pairingTitleNeoOne": {
+    "description": "Pairing title for Neo One device"
+  },
+  "pairingDescNeoOne": "Press and hold the power button until the LED blinks. The device will be discoverable.",
+  "@pairingDescNeoOne": {
+    "description": "Pairing description for Neo One device"
+  },
+  "whatsNewInVersion": "What's New in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Add to your task list?",
+  "failedToCreateShareLink": "Failed to create share link",
+  "deleteGoal": "Delete Goal",
+  "deviceUpToDate": "Your device is up to date",
+  "wifiConfiguration": "WiFi Configuration",
+  "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
+  "networkNameSsid": "Network Name (SSID)",
+  "enterWifiNetworkName": "Enter WiFi network name",
+  "enterWifiPassword": "Enter WiFi password"
 }

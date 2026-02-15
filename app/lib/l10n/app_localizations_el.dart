@@ -8047,13 +8047,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Νέα εργασία';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Προβολή όλων';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Προσθήκη εργασίας';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8123,4 +8123,120 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get audioPlaybackFailed =>
       'Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει.';
+
+  @override
+  String get connectionGuide => 'Οδηγός σύνδεσης';
+
+  @override
+  String get iveDoneThis => 'Το έκανα';
+
+  @override
+  String get pairNewDevice => 'Σύζευξη νέας συσκευής';
+
+  @override
+  String get dontSeeYourDevice => 'Δεν βλέπετε τη συσκευή σας;';
+
+  @override
+  String get reportAnIssue => 'Αναφορά προβλήματος';
+
+  @override
+  String get pairingTitleOmi => 'Ενεργοποιήστε το Omi';
+
+  @override
+  String get pairingDescOmi => 'Πατήστε παρατεταμένα τη συσκευή μέχρι να δονηθεί για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Θέστε το Omi DevKit σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Πατήστε το κουμπί μία φορά για ενεργοποίηση. Το LED θα αναβοσβήνει μωβ στη λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ενεργοποιήστε το Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 3 δευτερόλεπτα για ενεργοποίηση.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Θέστε το Plaud Note σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 2 δευτερόλεπτα. Το κόκκινο LED θα αναβοσβήνει όταν είναι έτοιμο για σύζευξη.';
+
+  @override
+  String get pairingTitleBee => 'Θέστε το Bee σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescBee =>
+      'Πατήστε το κουμπί 5 φορές συνεχόμενα. Το φως θα αρχίσει να αναβοσβήνει μπλε και πράσινο.';
+
+  @override
+  String get pairingTitleLimitless => 'Θέστε το Limitless σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescLimitless =>
+      'Όταν είναι ορατό οποιοδήποτε φως, πατήστε μία φορά και μετά πατήστε παρατεταμένα μέχρι η συσκευή να δείξει ροζ φως, μετά αφήστε.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Θέστε το Friend Pendant σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Πατήστε το κουμπί στο μενταγιόν για να το ενεργοποιήσετε. Θα εισέλθει αυτόματα σε λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleFieldy => 'Θέστε το Fieldy σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFieldy =>
+      'Πατήστε παρατεταμένα τη συσκευή μέχρι να εμφανιστεί το φως για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Συνδέστε το Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Εγκαταστήστε και ανοίξτε την εφαρμογή Omi στο Apple Watch σας, μετά πατήστε Σύνδεση στην εφαρμογή.';
+
+  @override
+  String get pairingTitleNeoOne => 'Θέστε το Neo One σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Πατήστε παρατεταμένα το κουμπί τροφοδοσίας μέχρι να αναβοσβήσει το LED. Η συσκευή θα είναι ανιχνεύσιμη.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Τι νέο υπάρχει στο $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Προσθήκη στη λίστα εργασιών σας;';
+
+  @override
+  String get failedToCreateShareLink => 'Αποτυχία δημιουργίας συνδέσμου κοινοποίησης';
+
+  @override
+  String get deleteGoal => 'Διαγραφή στόχου';
+
+  @override
+  String get deviceUpToDate => 'Η συσκευή σας είναι ενημερωμένη';
+
+  @override
+  String get wifiConfiguration => 'Ρύθμιση WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.';
+
+  @override
+  String get networkNameSsid => 'Όνομα δικτύου (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Εισαγάγετε το όνομα δικτύου WiFi';
+
+  @override
+  String get enterWifiPassword => 'Εισαγάγετε τον κωδικό WiFi';
 }

@@ -2585,5 +2585,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "音声ファイルは再生できません",
-  "audioPlaybackFailed": "音声を再生できません。ファイルが破損しているか見つかりません。"
+  "audioPlaybackFailed": "音声を再生できません。ファイルが破損しているか見つかりません。",
+  "pairingTitleOmi": "Omiの電源を入れる",
+  "pairingDescOmi": "デバイスが振動するまで長押しして電源を入れてください。",
+  "pairingTitleOmiDevkit": "Omi DevKitをペアリングモードにする",
+  "pairingDescOmiDevkit": "ボタンを1回押して電源を入れてください。ペアリングモードではLEDが紫色に点滅します。",
+  "pairingTitlePlaudNote": "Plaud Noteをペアリングモードにする",
+  "pairingDescPlaudNote": "サイドボタンを2秒間長押ししてください。ペアリング準備ができると赤いLEDが点滅します。",
+  "pairingTitleBee": "Beeをペアリングモードにする",
+  "pairingDescBee": "ボタンを5回連続で押してください。ライトが青と緑に点滅し始めます。",
+  "pairingTitleLimitless": "Limitlessをペアリングモードにする",
+  "pairingDescLimitless": "ライトが点灯している時に1回押し、デバイスがピンク色に光るまで長押しして離してください。",
+  "pairingTitleFriendPendant": "Friend Pendantをペアリングモードにする",
+  "pairingDescFriendPendant": "ペンダントのボタンを押して電源を入れてください。自動的にペアリングモードになります。",
+  "pairingTitleFieldy": "Fieldyをペアリングモードにする",
+  "pairingDescFieldy": "ライトが表示されるまでデバイスを長押しして電源を入れてください。",
+  "pairingTitleAppleWatch": "Apple Watchを接続",
+  "pairingDescAppleWatch": "Apple WatchにOmiアプリをインストールして開き、アプリ内の接続をタップしてください。",
+  "pairingTitleNeoOne": "Neo Oneをペアリングモードにする",
+  "pairingDescNeoOne": "電源ボタンをLEDが点滅するまで長押ししてください。デバイスが検出可能になります。",
+  "connectionGuide": "接続ガイド",
+  "iveDoneThis": "完了しました",
+  "pairNewDevice": "新しいデバイスをペアリング",
+  "dontSeeYourDevice": "デバイスが見つかりませんか？",
+  "reportAnIssue": "問題を報告",
+  "pairingTitleOmiGlass": "Omi Glassの電源を入れる",
+  "pairingDescOmiGlass": "サイドボタンを3秒間長押しして電源を入れてください。",
+  "addTask": "タスクを追加",
+  "newTask": "新しいタスク",
+  "viewAll": "すべて表示",
+  "whatsNewInVersion": "{version} の新機能",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "タスクリストに追加しますか？",
+  "failedToCreateShareLink": "共有リンクの作成に失敗しました",
+  "deleteGoal": "目標を削除",
+  "deviceUpToDate": "デバイスは最新です",
+  "wifiConfiguration": "WiFi設定",
+  "wifiConfigurationSubtitle": "デバイスがファームウェアをダウンロードできるようにWiFi資格情報を入力してください。",
+  "networkNameSsid": "ネットワーク名（SSID）",
+  "enterWifiNetworkName": "WiFiネットワーク名を入力",
+  "enterWifiPassword": "WiFiパスワードを入力"
 }

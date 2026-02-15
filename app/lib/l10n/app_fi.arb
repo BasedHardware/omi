@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Äänitiedosto ei ole saatavilla toistettavaksi",
-  "audioPlaybackFailed": "Ääntä ei voi toistaa. Tiedosto saattaa olla vioittunut tai puuttua."
+  "audioPlaybackFailed": "Ääntä ei voi toistaa. Tiedosto saattaa olla vioittunut tai puuttua.",
+  "pairingTitleOmi": "Käynnistä Omi",
+  "pairingDescOmi": "Pidä laitetta painettuna, kunnes se värisee, käynnistääksesi sen.",
+  "pairingTitleOmiDevkit": "Aseta Omi DevKit pariliitostilaan",
+  "pairingDescOmiDevkit": "Paina painiketta kerran käynnistääksesi. LED vilkkuu violettina pariliitostilassa.",
+  "pairingTitlePlaudNote": "Aseta Plaud Note pariliitostilaan",
+  "pairingDescPlaudNote": "Pidä sivupainiketta painettuna 2 sekuntia. Punainen LED vilkkuu, kun se on valmis pariliitokseen.",
+  "pairingTitleBee": "Aseta Bee pariliitostilaan",
+  "pairingDescBee": "Paina painiketta 5 kertaa peräkkäin. Valo alkaa vilkkua sinisenä ja vihreänä.",
+  "pairingTitleLimitless": "Aseta Limitless pariliitostilaan",
+  "pairingDescLimitless": "Kun mikä tahansa valo on näkyvissä, paina kerran ja paina sitten pitkään, kunnes laite näyttää vaaleanpunaista valoa, vapauta sitten.",
+  "pairingTitleFriendPendant": "Aseta Friend Pendant pariliitostilaan",
+  "pairingDescFriendPendant": "Paina riipuksen painiketta käynnistääksesi sen. Se siirtyy automaattisesti pariliitostilaan.",
+  "pairingTitleFieldy": "Aseta Fieldy pariliitostilaan",
+  "pairingDescFieldy": "Pidä laitetta painettuna, kunnes valo syttyy, käynnistääksesi sen.",
+  "pairingTitleAppleWatch": "Yhdistä Apple Watch",
+  "pairingDescAppleWatch": "Asenna ja avaa Omi-sovellus Apple Watchissasi, napauta sitten Yhdistä sovelluksessa.",
+  "pairingTitleNeoOne": "Aseta Neo One pariliitostilaan",
+  "pairingDescNeoOne": "Pidä virtapainiketta painettuna, kunnes LED vilkkuu. Laite on löydettävissä.",
+  "connectionGuide": "Yhteysopas",
+  "iveDoneThis": "Olen tehnyt tämän",
+  "pairNewDevice": "Yhdistä uusi laite",
+  "dontSeeYourDevice": "Etkö näe laitettasi?",
+  "reportAnIssue": "Ilmoita ongelmasta",
+  "pairingTitleOmiGlass": "Käynnistä Omi Glass",
+  "pairingDescOmiGlass": "Pidä sivupainiketta painettuna 3 sekuntia käynnistääksesi.",
+  "addTask": "Lisää tehtävä",
+  "newTask": "Uusi tehtävä",
+  "viewAll": "Näytä kaikki",
+  "whatsNewInVersion": "Uutta versiossa {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Lisätäänkö tehtävälistallesi?",
+  "failedToCreateShareLink": "Jakolinkin luominen epäonnistui",
+  "deleteGoal": "Poista tavoite",
+  "deviceUpToDate": "Laitteesi on ajan tasalla",
+  "wifiConfiguration": "WiFi-asetukset",
+  "wifiConfigurationSubtitle": "Syötä WiFi-tunnuksesi, jotta laite voi ladata laiteohjelmiston.",
+  "networkNameSsid": "Verkon nimi (SSID)",
+  "enterWifiNetworkName": "Syötä WiFi-verkon nimi",
+  "enterWifiPassword": "Syötä WiFi-salasana"
 }

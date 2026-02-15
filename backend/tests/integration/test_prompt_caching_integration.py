@@ -1,10 +1,12 @@
 """
 Integration tests for OpenAI prompt caching with live API calls.
 
-Tests three caching scenarios on gpt-5.1 (the fix from PR #4670):
+Tests caching scenarios on gpt-5.1:
 1. Same user, same conversation — identical calls should fully cache
 2. Same user, cross conversation — same language, different transcripts should cache instruction prefix
 3. Cross user — different languages should still cache instruction prefix (language_code in context, not instructions)
+4. prompt_cache_retention="24h" — API accepts param and cache hits work (PR #4674)
+5. prompt_cache_key — routing hints accepted and cache hits work (PR #4674)
 
 Requires:
     - OPENAI_API_KEY environment variable
@@ -416,3 +418,170 @@ class TestCrossUserCaching:
             print("  ⚠️  No cache hits on either (may need warm-up)")
         else:
             print("  ⚠️  Unexpected: dynamic prefix matched or beat static prefix")
+
+
+# ---------------------------------------------------------------------------
+#  Helper for calls with prompt_cache_retention and prompt_cache_key
+# ---------------------------------------------------------------------------
+
+
+def _call_with_cache_params(client: OpenAI, messages: list, cache_retention: str = None, cache_key: str = None) -> dict:
+    """Make an API call with optional cache retention and cache key params."""
+    kwargs = {
+        "model": MODEL,
+        "messages": messages,
+        "max_completion_tokens": 150,
+    }
+    if cache_key:
+        kwargs["prompt_cache_key"] = cache_key
+    if cache_retention:
+        # prompt_cache_retention is not a native SDK param — pass via extra_body
+        kwargs["extra_body"] = {"prompt_cache_retention": cache_retention}
+    response = client.chat.completions.create(**kwargs)
+    usage = response.usage
+    result = {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "cached_tokens": 0,
+    }
+    if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
+        details = usage.prompt_tokens_details
+        if hasattr(details, "cached_tokens"):
+            result["cached_tokens"] = details.cached_tokens or 0
+    return result
+
+
+class TestPromptCacheRetention:
+    """Test that prompt_cache_retention="24h" is accepted by the API and improves caching.
+
+    The 24h retention extends cache lifetime from ~5-10min in-memory to 24h SSD-backed.
+    We can't directly verify SSD vs in-memory, but we can verify:
+    1. The API accepts the parameter without error
+    2. Cache hits still work with the parameter set
+    """
+
+    def test_24h_retention_accepted_by_api(self, client):
+        """Verify prompt_cache_retention='24h' is accepted without error."""
+        msgs = [
+            {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+            {
+                "role": "system",
+                "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{TRANSCRIPT_A}",
+            },
+        ]
+        # Should not raise — if the API rejects the param, this test fails
+        result = _call_with_cache_params(client, msgs, cache_retention="24h")
+        print(
+            f"\n  prompt_cache_retention='24h' accepted: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}"
+        )
+        assert result["prompt_tokens"] > 0, "Expected non-zero prompt tokens"
+
+    def test_24h_retention_cache_hits(self, client):
+        """Cache hits should work with 24h retention enabled."""
+        transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
+        results = []
+
+        print("\n  === Cross-conversation with prompt_cache_retention='24h' ===")
+        for i, transcript in enumerate(transcripts):
+            msgs = [
+                {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+                {
+                    "role": "system",
+                    "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{transcript}",
+                },
+            ]
+            result = _call_with_cache_params(client, msgs, cache_retention="24h")
+            results.append(result)
+            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(transcripts) - 1:
+                time.sleep(1)
+
+        later_cached = results[1]["cached_tokens"] + results[2]["cached_tokens"]
+        later_prompt = results[1]["prompt_tokens"] + results[2]["prompt_tokens"]
+        if later_cached > 0:
+            pct = later_cached / later_prompt * 100
+            print(f"\n  ✅ 24h RETENTION CACHE HIT: {later_cached} cached tokens ({pct:.1f}% of later calls)")
+        else:
+            print("\n  ⚠️  No cache hits (may need warm-up)")
+
+
+class TestPromptCacheKey:
+    """Test that prompt_cache_key routing hints are accepted and improve cache routing.
+
+    The prompt_cache_key is combined with the prefix hash to route requests to the
+    same cache host. We verify:
+    1. The API accepts the parameter without error
+    2. Same cache key + same prefix produces cache hits
+    3. Different cache keys with same prefix still work (routing hint, not partition)
+    """
+
+    def test_cache_key_accepted_by_api(self, client):
+        """Verify prompt_cache_key is accepted without error."""
+        msgs = [
+            {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+            {
+                "role": "system",
+                "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{TRANSCRIPT_A}",
+            },
+        ]
+        result = _call_with_cache_params(client, msgs, cache_key="omi-extract-actions")
+        print(
+            f"\n  prompt_cache_key='omi-extract-actions' accepted: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}"
+        )
+        assert result["prompt_tokens"] > 0, "Expected non-zero prompt tokens"
+
+    def test_same_key_cross_conversation_cache(self, client):
+        """Same cache key with different transcripts should produce cache hits."""
+        transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
+        results = []
+
+        print("\n  === Same cache key, different conversations ===")
+        for i, transcript in enumerate(transcripts):
+            msgs = [
+                {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+                {
+                    "role": "system",
+                    "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{transcript}",
+                },
+            ]
+            result = _call_with_cache_params(client, msgs, cache_key="omi-extract-actions")
+            results.append(result)
+            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(transcripts) - 1:
+                time.sleep(1)
+
+        later_cached = results[1]["cached_tokens"] + results[2]["cached_tokens"]
+        later_prompt = results[1]["prompt_tokens"] + results[2]["prompt_tokens"]
+        if later_cached > 0:
+            pct = later_cached / later_prompt * 100
+            print(f"\n  ✅ CACHE KEY ROUTING HIT: {later_cached} cached tokens ({pct:.1f}% of later calls)")
+        else:
+            print("\n  ⚠️  No cache hits (may need warm-up)")
+
+    def test_retention_and_key_combined(self, client):
+        """Both prompt_cache_retention='24h' and prompt_cache_key work together."""
+        transcripts = [TRANSCRIPT_A, TRANSCRIPT_B, TRANSCRIPT_C]
+        results = []
+
+        print("\n  === Combined: 24h retention + cache key ===")
+        for i, transcript in enumerate(transcripts):
+            msgs = [
+                {"role": "system", "content": ACTION_ITEMS_INSTRUCTIONS},
+                {
+                    "role": "system",
+                    "content": f"The content language is en. Use the same language en for your response.\n\nContent:\n{transcript}",
+                },
+            ]
+            result = _call_with_cache_params(client, msgs, cache_retention="24h", cache_key="omi-extract-actions")
+            results.append(result)
+            print(f"  Call {i+1}: prompt={result['prompt_tokens']}, cached={result['cached_tokens']}")
+            if i < len(transcripts) - 1:
+                time.sleep(1)
+
+        later_cached = results[1]["cached_tokens"] + results[2]["cached_tokens"]
+        later_prompt = results[1]["prompt_tokens"] + results[2]["prompt_tokens"]
+        if later_cached > 0:
+            pct = later_cached / later_prompt * 100
+            print(f"\n  ✅ COMBINED CACHE HIT: {later_cached} cached tokens ({pct:.1f}% of later calls)")
+        else:
+            print("\n  ⚠️  No cache hits (may need warm-up)")

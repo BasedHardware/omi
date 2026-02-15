@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "ไฟล์เสียงไม่พร้อมสำหรับการเล่น",
-  "audioPlaybackFailed": "ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป"
+  "audioPlaybackFailed": "ไม่สามารถเล่นเสียงได้ ไฟล์อาจเสียหายหรือหายไป",
+  "pairingTitleOmi": "เปิด Omi",
+  "pairingDescOmi": "กดค้างที่อุปกรณ์จนกว่าจะสั่นเพื่อเปิดเครื่อง",
+  "pairingTitleOmiDevkit": "ตั้งค่า Omi DevKit ในโหมดจับคู่",
+  "pairingDescOmiDevkit": "กดปุ่มหนึ่งครั้งเพื่อเปิด ไฟ LED จะกะพริบสีม่วงเมื่ออยู่ในโหมดจับคู่",
+  "pairingTitlePlaudNote": "ตั้งค่า Plaud Note ในโหมดจับคู่",
+  "pairingDescPlaudNote": "กดปุ่มด้านข้างค้างไว้ 2 วินาที ไฟ LED สีแดงจะกะพริบเมื่อพร้อมจับคู่",
+  "pairingTitleBee": "ตั้งค่า Bee ในโหมดจับคู่",
+  "pairingDescBee": "กดปุ่ม 5 ครั้งติดต่อกัน ไฟจะเริ่มกะพริบเป็นสีน้ำเงินและเขียว",
+  "pairingTitleLimitless": "ตั้งค่า Limitless ในโหมดจับคู่",
+  "pairingDescLimitless": "เมื่อมีไฟสว่าง กดหนึ่งครั้งแล้วกดค้างจนกว่าอุปกรณ์จะแสดงไฟสีชมพู จากนั้นปล่อย",
+  "pairingTitleFriendPendant": "ตั้งค่า Friend Pendant ในโหมดจับคู่",
+  "pairingDescFriendPendant": "กดปุ่มบนจี้เพื่อเปิด อุปกรณ์จะเข้าสู่โหมดจับคู่โดยอัตโนมัติ",
+  "pairingTitleFieldy": "ตั้งค่า Fieldy ในโหมดจับคู่",
+  "pairingDescFieldy": "กดค้างที่อุปกรณ์จนกว่าไฟจะปรากฏเพื่อเปิดเครื่อง",
+  "pairingTitleAppleWatch": "เชื่อมต่อ Apple Watch",
+  "pairingDescAppleWatch": "ติดตั้งและเปิดแอป Omi บน Apple Watch ของคุณ จากนั้นแตะเชื่อมต่อในแอป",
+  "pairingTitleNeoOne": "ตั้งค่า Neo One ในโหมดจับคู่",
+  "pairingDescNeoOne": "กดปุ่มเปิด/ปิดค้างจนกว่า LED จะกะพริบ อุปกรณ์จะสามารถค้นหาได้",
+  "connectionGuide": "คู่มือการเชื่อมต่อ",
+  "iveDoneThis": "ฉันทำแล้ว",
+  "pairNewDevice": "จับคู่อุปกรณ์ใหม่",
+  "dontSeeYourDevice": "ไม่เห็นอุปกรณ์ของคุณ?",
+  "reportAnIssue": "รายงานปัญหา",
+  "pairingTitleOmiGlass": "เปิด Omi Glass",
+  "pairingDescOmiGlass": "กดปุ่มด้านข้างค้างไว้ 3 วินาทีเพื่อเปิดเครื่อง",
+  "addTask": "เพิ่มงาน",
+  "newTask": "งานใหม่",
+  "viewAll": "ดูทั้งหมด",
+  "whatsNewInVersion": "มีอะไรใหม่ใน {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "เพิ่มในรายการงานของคุณ?",
+  "failedToCreateShareLink": "ไม่สามารถสร้างลิงก์แชร์ได้",
+  "deleteGoal": "ลบเป้าหมาย",
+  "deviceUpToDate": "อุปกรณ์ของคุณเป็นเวอร์ชันล่าสุดแล้ว",
+  "wifiConfiguration": "การตั้งค่า WiFi",
+  "wifiConfigurationSubtitle": "ป้อนข้อมูล WiFi เพื่อให้อุปกรณ์ดาวน์โหลดเฟิร์มแวร์ได้",
+  "networkNameSsid": "ชื่อเครือข่าย (SSID)",
+  "enterWifiNetworkName": "ป้อนชื่อเครือข่าย WiFi",
+  "enterWifiPassword": "ป้อนรหัสผ่าน WiFi"
 }

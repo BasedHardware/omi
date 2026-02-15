@@ -2552,5 +2552,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Audiodatei ist nicht zur Wiedergabe verfügbar",
-  "audioPlaybackFailed": "Audio kann nicht abgespielt werden. Die Datei ist möglicherweise beschädigt oder fehlt."
+  "audioPlaybackFailed": "Audio kann nicht abgespielt werden. Die Datei ist möglicherweise beschädigt oder fehlt.",
+  "pairingTitleOmi": "Omi einschalten",
+  "pairingDescOmi": "Halten Sie das Gerät gedrückt, bis es vibriert, um es einzuschalten.",
+  "pairingTitleOmiDevkit": "Omi DevKit in den Kopplungsmodus versetzen",
+  "pairingDescOmiDevkit": "Drücken Sie die Taste einmal zum Einschalten. Die LED blinkt lila im Kopplungsmodus.",
+  "pairingTitlePlaudNote": "Plaud Note in den Kopplungsmodus versetzen",
+  "pairingDescPlaudNote": "Halten Sie die Seitentaste 2 Sekunden gedrückt. Die rote LED blinkt, wenn das Gerät kopplungsbereit ist.",
+  "pairingTitleBee": "Bee in den Kopplungsmodus versetzen",
+  "pairingDescBee": "Drücken Sie die Taste 5 Mal hintereinander. Das Licht blinkt dann blau und grün.",
+  "pairingTitleLimitless": "Limitless in den Kopplungsmodus versetzen",
+  "pairingDescLimitless": "Wenn ein Licht sichtbar ist, drücken Sie einmal und halten Sie dann gedrückt, bis das Gerät ein rosa Licht zeigt, dann loslassen.",
+  "pairingTitleFriendPendant": "Friend Pendant in den Kopplungsmodus versetzen",
+  "pairingDescFriendPendant": "Drücken Sie den Knopf am Anhänger, um ihn einzuschalten. Er wechselt automatisch in den Kopplungsmodus.",
+  "pairingTitleFieldy": "Fieldy in den Kopplungsmodus versetzen",
+  "pairingDescFieldy": "Halten Sie das Gerät gedrückt, bis das Licht erscheint, um es einzuschalten.",
+  "pairingTitleAppleWatch": "Apple Watch verbinden",
+  "pairingDescAppleWatch": "Installieren und öffnen Sie die Omi-App auf Ihrer Apple Watch und tippen Sie dann auf Verbinden in der App.",
+  "pairingTitleNeoOne": "Neo One in den Kopplungsmodus versetzen",
+  "pairingDescNeoOne": "Halten Sie die Ein-/Aus-Taste gedrückt, bis die LED blinkt. Das Gerät wird erkennbar sein.",
+  "connectionGuide": "Verbindungsanleitung",
+  "iveDoneThis": "Erledigt",
+  "pairNewDevice": "Neues Gerät koppeln",
+  "dontSeeYourDevice": "Gerät nicht sichtbar?",
+  "reportAnIssue": "Problem melden",
+  "pairingTitleOmiGlass": "Omi Glass einschalten",
+  "pairingDescOmiGlass": "Halten Sie die Seitentaste 3 Sekunden gedrückt, um einzuschalten.",
+  "addTask": "Aufgabe hinzufügen",
+  "newTask": "Neue Aufgabe",
+  "viewAll": "Alle anzeigen",
+  "whatsNewInVersion": "Neuigkeiten in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Zur Aufgabenliste hinzufügen?",
+  "failedToCreateShareLink": "Freigabelink konnte nicht erstellt werden",
+  "deleteGoal": "Ziel löschen",
+  "deviceUpToDate": "Ihr Gerät ist auf dem neuesten Stand",
+  "wifiConfiguration": "WLAN-Konfiguration",
+  "wifiConfigurationSubtitle": "Geben Sie Ihre WLAN-Zugangsdaten ein, damit das Gerät die Firmware herunterladen kann.",
+  "networkNameSsid": "Netzwerkname (SSID)",
+  "enterWifiNetworkName": "WLAN-Netzwerknamen eingeben",
+  "enterWifiPassword": "WLAN-Passwort eingeben"
 }

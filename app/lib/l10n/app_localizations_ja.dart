@@ -7856,13 +7856,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get couldNotOpenUrl => 'URLを開けませんでした。もう一度お試しください。';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => '新しいタスク';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'すべて表示';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'タスクを追加';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -7931,4 +7931,111 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '音声を再生できません。ファイルが破損しているか見つかりません。';
+
+  @override
+  String get connectionGuide => '接続ガイド';
+
+  @override
+  String get iveDoneThis => '完了しました';
+
+  @override
+  String get pairNewDevice => '新しいデバイスをペアリング';
+
+  @override
+  String get dontSeeYourDevice => 'デバイスが見つかりませんか？';
+
+  @override
+  String get reportAnIssue => '問題を報告';
+
+  @override
+  String get pairingTitleOmi => 'Omiの電源を入れる';
+
+  @override
+  String get pairingDescOmi => 'デバイスが振動するまで長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKitをペアリングモードにする';
+
+  @override
+  String get pairingDescOmiDevkit => 'ボタンを1回押して電源を入れてください。ペアリングモードではLEDが紫色に点滅します。';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glassの電源を入れる';
+
+  @override
+  String get pairingDescOmiGlass => 'サイドボタンを3秒間長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Noteをペアリングモードにする';
+
+  @override
+  String get pairingDescPlaudNote => 'サイドボタンを2秒間長押ししてください。ペアリング準備ができると赤いLEDが点滅します。';
+
+  @override
+  String get pairingTitleBee => 'Beeをペアリングモードにする';
+
+  @override
+  String get pairingDescBee => 'ボタンを5回連続で押してください。ライトが青と緑に点滅し始めます。';
+
+  @override
+  String get pairingTitleLimitless => 'Limitlessをペアリングモードにする';
+
+  @override
+  String get pairingDescLimitless => 'ライトが点灯している時に1回押し、デバイスがピンク色に光るまで長押しして離してください。';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendantをペアリングモードにする';
+
+  @override
+  String get pairingDescFriendPendant => 'ペンダントのボタンを押して電源を入れてください。自動的にペアリングモードになります。';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldyをペアリングモードにする';
+
+  @override
+  String get pairingDescFieldy => 'ライトが表示されるまでデバイスを長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watchを接続';
+
+  @override
+  String get pairingDescAppleWatch => 'Apple WatchにOmiアプリをインストールして開き、アプリ内の接続をタップしてください。';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo Oneをペアリングモードにする';
+
+  @override
+  String get pairingDescNeoOne => '電源ボタンをLEDが点滅するまで長押ししてください。デバイスが検出可能になります。';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version の新機能';
+  }
+
+  @override
+  String get addToYourTaskList => 'タスクリストに追加しますか？';
+
+  @override
+  String get failedToCreateShareLink => '共有リンクの作成に失敗しました';
+
+  @override
+  String get deleteGoal => '目標を削除';
+
+  @override
+  String get deviceUpToDate => 'デバイスは最新です';
+
+  @override
+  String get wifiConfiguration => 'WiFi設定';
+
+  @override
+  String get wifiConfigurationSubtitle => 'デバイスがファームウェアをダウンロードできるようにWiFi資格情報を入力してください。';
+
+  @override
+  String get networkNameSsid => 'ネットワーク名（SSID）';
+
+  @override
+  String get enterWifiNetworkName => 'WiFiネットワーク名を入力';
+
+  @override
+  String get enterWifiPassword => 'WiFiパスワードを入力';
 }

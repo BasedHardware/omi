@@ -246,3 +246,73 @@ class TestPromptMessageOrdering:
         context_match = re.search(r"context_message\s*=\s*['\"](.+?)['\"]", source)
         assert context_match, "Could not find context_message definition"
         assert 'language_code' in context_match.group(1), "language_code should be in context_message"
+
+
+class TestPromptCacheRetention:
+    """Tests for 24h prompt cache retention and routing keys (PR #4674)."""
+
+    @staticmethod
+    def _read_clients_source():
+        from pathlib import Path
+
+        clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
+        return clients_path.read_text()
+
+    def test_llm_medium_experiment_has_cache_retention(self):
+        """llm_medium_experiment must have extra_body with prompt_cache_retention=24h."""
+        source = self._read_clients_source()
+        # Find the llm_medium_experiment definition block and check extra_body
+        match = re.search(
+            r'llm_medium_experiment\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"',
+            source,
+            re.DOTALL,
+        )
+        assert match, "llm_medium_experiment missing extra_body with prompt_cache_retention='24h'"
+
+    def test_llm_agent_has_cache_retention(self):
+        """llm_agent must have extra_body with prompt_cache_retention=24h."""
+        source = self._read_clients_source()
+        match = re.search(
+            r'llm_agent\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
+        )
+        assert match, "llm_agent missing extra_body with prompt_cache_retention='24h'"
+
+    def test_llm_agent_stream_has_cache_retention(self):
+        """llm_agent_stream must have extra_body with prompt_cache_retention=24h."""
+        source = self._read_clients_source()
+        match = re.search(
+            r'llm_agent_stream\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
+        )
+        assert match, "llm_agent_stream missing extra_body with prompt_cache_retention='24h'"
+
+    def test_cache_retention_not_in_model_kwargs(self):
+        """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""
+        source = self._read_clients_source()
+        mk_blocks = re.findall(r'model_kwargs\s*=\s*\{[^}]*\}', source)
+        for block in mk_blocks:
+            assert 'prompt_cache_retention' not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
+
+    def test_prompt_cache_key_in_structure_function(self):
+        """get_transcript_structure must use prompt_cache_key='omi-transcript-structure'."""
+        source = inspect.getsource(get_transcript_structure)
+        assert (
+            'prompt_cache_key="omi-transcript-structure"' in source
+        ), "get_transcript_structure missing prompt_cache_key binding"
+
+    def test_prompt_cache_key_in_action_items_function(self):
+        """extract_action_items must use prompt_cache_key='omi-extract-actions'."""
+        source = inspect.getsource(extract_action_items)
+        assert (
+            'prompt_cache_key="omi-extract-actions"' in source
+        ), "extract_action_items missing prompt_cache_key binding"
+
+    def test_distinct_cache_keys_per_function(self):
+        """Each function must have a distinct prompt_cache_key to avoid cache conflation."""
+        source_structure = inspect.getsource(get_transcript_structure)
+        source_actions = inspect.getsource(extract_action_items)
+        key_structure = re.search(r'prompt_cache_key="([^"]+)"', source_structure)
+        key_actions = re.search(r'prompt_cache_key="([^"]+)"', source_actions)
+        assert key_structure and key_actions, "Both functions must have prompt_cache_key"
+        assert key_structure.group(1) != key_actions.group(
+            1
+        ), f"Cache keys must be distinct: structure={key_structure.group(1)}, actions={key_actions.group(1)}"

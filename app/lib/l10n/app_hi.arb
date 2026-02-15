@@ -2585,5 +2585,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है",
-  "audioPlaybackFailed": "ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।"
+  "audioPlaybackFailed": "ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।",
+  "pairingTitleOmi": "Omi चालू करें",
+  "pairingDescOmi": "डिवाइस को तब तक दबाकर रखें जब तक वह वाइब्रेट न करे।",
+  "pairingTitleOmiDevkit": "Omi DevKit को पेयरिंग मोड में डालें",
+  "pairingDescOmiDevkit": "चालू करने के लिए बटन एक बार दबाएं। पेयरिंग मोड में LED बैंगनी रंग में ब्लिंक करेगी।",
+  "pairingTitlePlaudNote": "Plaud Note को पेयरिंग मोड में डालें",
+  "pairingDescPlaudNote": "साइड बटन को 2 सेकंड तक दबाकर रखें। पेयर करने के लिए तैयार होने पर लाल LED ब्लिंक करेगी।",
+  "pairingTitleBee": "Bee को पेयरिंग मोड में डालें",
+  "pairingDescBee": "बटन को लगातार 5 बार दबाएं। लाइट नीले और हरे रंग में ब्लिंक करने लगेगी।",
+  "pairingTitleLimitless": "Limitless को पेयरिंग मोड में डालें",
+  "pairingDescLimitless": "जब कोई भी लाइट दिखाई दे, एक बार दबाएं और फिर दबाकर रखें जब तक डिवाइस गुलाबी लाइट न दिखाए, फिर छोड़ दें।",
+  "pairingTitleFriendPendant": "Friend Pendant को पेयरिंग मोड में डालें",
+  "pairingDescFriendPendant": "पेंडेंट पर बटन दबाकर इसे चालू करें। यह स्वचालित रूप से पेयरिंग मोड में प्रवेश करेगा।",
+  "pairingTitleFieldy": "Fieldy को पेयरिंग मोड में डालें",
+  "pairingDescFieldy": "डिवाइस को तब तक दबाकर रखें जब तक लाइट न दिखे।",
+  "pairingTitleAppleWatch": "Apple Watch कनेक्ट करें",
+  "pairingDescAppleWatch": "अपने Apple Watch पर Omi ऐप इंस्टॉल करें और खोलें, फिर ऐप में कनेक्ट पर टैप करें।",
+  "pairingTitleNeoOne": "Neo One को पेयरिंग मोड में डालें",
+  "pairingDescNeoOne": "पावर बटन को तब तक दबाकर रखें जब तक LED ब्लिंक न करे। डिवाइस खोजने योग्य होगा।",
+  "connectionGuide": "कनेक्शन गाइड",
+  "iveDoneThis": "मैंने यह कर लिया",
+  "pairNewDevice": "नया डिवाइस पेयर करें",
+  "dontSeeYourDevice": "अपना डिवाइस नहीं दिख रहा?",
+  "reportAnIssue": "समस्या की रिपोर्ट करें",
+  "pairingTitleOmiGlass": "Omi Glass चालू करें",
+  "pairingDescOmiGlass": "चालू करने के लिए साइड बटन को 3 सेकंड तक दबाकर रखें।",
+  "addTask": "कार्य जोड़ें",
+  "newTask": "नया कार्य",
+  "viewAll": "सभी देखें",
+  "whatsNewInVersion": "{version} में नया क्या है",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "अपनी कार्य सूची में जोड़ें?",
+  "failedToCreateShareLink": "शेयर लिंक बनाने में विफल",
+  "deleteGoal": "लक्ष्य हटाएं",
+  "deviceUpToDate": "आपका डिवाइस अप टू डेट है",
+  "wifiConfiguration": "वाईफाई कॉन्फ़िगरेशन",
+  "wifiConfigurationSubtitle": "डिवाइस को फ़र्मवेयर डाउनलोड करने देने के लिए अपने वाईफाई क्रेडेंशियल दर्ज करें।",
+  "networkNameSsid": "नेटवर्क नाम (SSID)",
+  "enterWifiNetworkName": "वाईफाई नेटवर्क का नाम दर्ज करें",
+  "enterWifiPassword": "वाईफाई पासवर्ड दर्ज करें"
 }

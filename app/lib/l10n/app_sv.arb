@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Ljudfilen är inte tillgänglig för uppspelning",
-  "audioPlaybackFailed": "Kan inte spela upp ljud. Filen kan vara skadad eller saknas."
+  "audioPlaybackFailed": "Kan inte spela upp ljud. Filen kan vara skadad eller saknas.",
+  "pairingTitleOmi": "Slå på Omi",
+  "pairingDescOmi": "Tryck och håll enheten tills den vibrerar för att slå på den.",
+  "pairingTitleOmiDevkit": "Sätt Omi DevKit i parkopplingsläge",
+  "pairingDescOmiDevkit": "Tryck på knappen en gång för att slå på. LED:en blinkar lila i parkopplingsläge.",
+  "pairingTitlePlaudNote": "Sätt Plaud Note i parkopplingsläge",
+  "pairingDescPlaudNote": "Tryck och håll sidoknappen i 2 sekunder. Den röda LED:en blinkar när den är redo att parkoppla.",
+  "pairingTitleBee": "Sätt Bee i parkopplingsläge",
+  "pairingDescBee": "Tryck på knappen 5 gånger i rad. Ljuset börjar blinka blått och grönt.",
+  "pairingTitleLimitless": "Sätt Limitless i parkopplingsläge",
+  "pairingDescLimitless": "När en lampa lyser, tryck en gång och tryck sedan och håll tills enheten visar ett rosa ljus, släpp sedan.",
+  "pairingTitleFriendPendant": "Sätt Friend Pendant i parkopplingsläge",
+  "pairingDescFriendPendant": "Tryck på knappen på hänget för att slå på det. Det går automatiskt till parkopplingsläge.",
+  "pairingTitleFieldy": "Sätt Fieldy i parkopplingsläge",
+  "pairingDescFieldy": "Tryck och håll enheten tills ljuset visas för att slå på den.",
+  "pairingTitleAppleWatch": "Anslut Apple Watch",
+  "pairingDescAppleWatch": "Installera och öppna Omi-appen på din Apple Watch, tryck sedan på Anslut i appen.",
+  "pairingTitleNeoOne": "Sätt Neo One i parkopplingsläge",
+  "pairingDescNeoOne": "Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.",
+  "connectionGuide": "Anslutningsguide",
+  "iveDoneThis": "Jag har gjort detta",
+  "pairNewDevice": "Parkoppla ny enhet",
+  "dontSeeYourDevice": "Ser du inte din enhet?",
+  "reportAnIssue": "Rapportera ett problem",
+  "pairingTitleOmiGlass": "Slå på Omi Glass",
+  "pairingDescOmiGlass": "Tryck och håll sidoknappen i 3 sekunder för att slå på.",
+  "addTask": "Lägg till uppgift",
+  "newTask": "Ny uppgift",
+  "viewAll": "Visa alla",
+  "whatsNewInVersion": "Nyheter i {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Lägg till i din uppgiftslista?",
+  "failedToCreateShareLink": "Kunde inte skapa delningslänk",
+  "deleteGoal": "Ta bort mål",
+  "deviceUpToDate": "Din enhet är uppdaterad",
+  "wifiConfiguration": "WiFi-konfiguration",
+  "wifiConfigurationSubtitle": "Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.",
+  "networkNameSsid": "Nätverksnamn (SSID)",
+  "enterWifiNetworkName": "Ange WiFi-nätverksnamn",
+  "enterWifiPassword": "Ange WiFi-lösenord"
 }

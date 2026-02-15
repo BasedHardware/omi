@@ -2593,5 +2593,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Lydfilen er ikke tilgængelig til afspilning",
-  "audioPlaybackFailed": "Kan ikke afspille lyd. Filen kan være beskadiget eller manglende."
+  "audioPlaybackFailed": "Kan ikke afspille lyd. Filen kan være beskadiget eller manglende.",
+  "pairingTitleOmi": "Tænd Omi",
+  "pairingDescOmi": "Tryk og hold på enheden, indtil den vibrerer, for at tænde den.",
+  "pairingTitleOmiDevkit": "Sæt Omi DevKit i parringstilstand",
+  "pairingDescOmiDevkit": "Tryk på knappen én gang for at tænde. LED'en blinker lilla i parringstilstand.",
+  "pairingTitlePlaudNote": "Sæt Plaud Note i parringstilstand",
+  "pairingDescPlaudNote": "Tryk og hold sideknappen i 2 sekunder. Den røde LED blinker, når den er klar til parring.",
+  "pairingTitleBee": "Sæt Bee i parringstilstand",
+  "pairingDescBee": "Tryk på knappen 5 gange i træk. Lyset begynder at blinke blåt og grønt.",
+  "pairingTitleLimitless": "Sæt Limitless i parringstilstand",
+  "pairingDescLimitless": "Når et lys er synligt, tryk én gang og tryk derefter og hold, indtil enheden viser et pink lys, slip derefter.",
+  "pairingTitleFriendPendant": "Sæt Friend Pendant i parringstilstand",
+  "pairingDescFriendPendant": "Tryk på knappen på vedhænget for at tænde det. Det går automatisk i parringstilstand.",
+  "pairingTitleFieldy": "Sæt Fieldy i parringstilstand",
+  "pairingDescFieldy": "Tryk og hold på enheden, indtil lyset vises, for at tænde den.",
+  "pairingTitleAppleWatch": "Tilslut Apple Watch",
+  "pairingDescAppleWatch": "Installer og åbn Omi-appen på dit Apple Watch, tryk derefter på Tilslut i appen.",
+  "pairingTitleNeoOne": "Sæt Neo One i parringstilstand",
+  "pairingDescNeoOne": "Tryk og hold tænd/sluk-knappen, indtil LED'en blinker. Enheden vil være synlig.",
+  "connectionGuide": "Tilslutningsguide",
+  "iveDoneThis": "Det har jeg gjort",
+  "pairNewDevice": "Par ny enhed",
+  "dontSeeYourDevice": "Kan du ikke se din enhed?",
+  "reportAnIssue": "Rapportér et problem",
+  "pairingTitleOmiGlass": "Tænd Omi Glass",
+  "pairingDescOmiGlass": "Tryk og hold sideknappen i 3 sekunder for at tænde.",
+  "addTask": "Tilføj opgave",
+  "newTask": "Ny opgave",
+  "viewAll": "Vis alle",
+  "whatsNewInVersion": "Nyheder i {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Tilføj til din opgaveliste?",
+  "failedToCreateShareLink": "Kunne ikke oprette delingslink",
+  "deleteGoal": "Slet mål",
+  "deviceUpToDate": "Din enhed er opdateret",
+  "wifiConfiguration": "WiFi-konfiguration",
+  "wifiConfigurationSubtitle": "Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.",
+  "networkNameSsid": "Netværksnavn (SSID)",
+  "enterWifiNetworkName": "Indtast WiFi-netværksnavn",
+  "enterWifiPassword": "Indtast WiFi-adgangskode"
 }

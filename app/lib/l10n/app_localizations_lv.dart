@@ -8007,13 +8007,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get couldNotOpenUrl => 'Nevarēja atvērt URL. Lūdzu, mēģiniet vēlreiz.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Jauns uzdevums';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Skatīt visu';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Pievienot uzdevumu';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8082,4 +8082,117 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Nevar atskaņot audio. Fails var būt bojāts vai trūkst.';
+
+  @override
+  String get connectionGuide => 'Savienošanas ceļvedis';
+
+  @override
+  String get iveDoneThis => 'Esmu to izdarījis';
+
+  @override
+  String get pairNewDevice => 'Savienot jaunu ierīci';
+
+  @override
+  String get dontSeeYourDevice => 'Neredzat savu ierīci?';
+
+  @override
+  String get reportAnIssue => 'Ziņot par problēmu';
+
+  @override
+  String get pairingTitleOmi => 'Ieslēdziet Omi';
+
+  @override
+  String get pairingDescOmi => 'Nospiediet un turiet ierīci, līdz tā vibrē, lai to ieslēgtu.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Ieslēdziet Omi DevKit savienošanas režīmā';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nospiediet pogu vienu reizi, lai ieslēgtu. LED mirgos violeti savienošanas režīmā.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ieslēdziet Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Nospiediet un turiet sānu pogu 3 sekundes, lai ieslēgtu.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Ieslēdziet Plaud Note savienošanas režīmā';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Nospiediet un turiet sānu pogu 2 sekundes. Sarkanais LED mirgos, kad ierīce ir gatava savienošanai.';
+
+  @override
+  String get pairingTitleBee => 'Ieslēdziet Bee savienošanas režīmā';
+
+  @override
+  String get pairingDescBee => 'Nospiediet pogu 5 reizes pēc kārtas. Gaisma sāks mirgot zilā un zaļā krāsā.';
+
+  @override
+  String get pairingTitleLimitless => 'Ieslēdziet Limitless savienošanas režīmā';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kad redzama jebkura gaisma, nospiediet vienu reizi, tad nospiediet un turiet, līdz ierīce rāda rozā gaismu, tad atlaidiet.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Ieslēdziet Friend Pendant savienošanas režīmā';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nospiediet pogu uz kulona, lai to ieslēgtu. Tas automātiski pārslēgsies savienošanas režīmā.';
+
+  @override
+  String get pairingTitleFieldy => 'Ieslēdziet Fieldy savienošanas režīmā';
+
+  @override
+  String get pairingDescFieldy => 'Nospiediet un turiet ierīci, līdz parādās gaisma, lai to ieslēgtu.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Pievienojiet Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instalējiet un atveriet Omi lietotni savā Apple Watch, tad pieskarieties Savienot lietotnē.';
+
+  @override
+  String get pairingTitleNeoOne => 'Ieslēdziet Neo One savienošanas režīmā';
+
+  @override
+  String get pairingDescNeoOne => 'Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas jauns $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pievienot uzdevumu sarakstam?';
+
+  @override
+  String get failedToCreateShareLink => 'Neizdevās izveidot kopīgošanas saiti';
+
+  @override
+  String get deleteGoal => 'Dzēst mērķi';
+
+  @override
+  String get deviceUpToDate => 'Jūsu ierīce ir atjaunināta';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigurācija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.';
+
+  @override
+  String get networkNameSsid => 'Tīkla nosaukums (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ievadiet WiFi tīkla nosaukumu';
+
+  @override
+  String get enterWifiPassword => 'Ievadiet WiFi paroli';
 }

@@ -552,6 +552,12 @@ class MixpanelManager {
 
   void untaggedSegment() => track('Untagged Segment');
 
+  void editSegmentTextStarted() => track('Edit Segment Text Started');
+
+  void editSegmentTextSaved() => track('Edit Segment Text Saved');
+
+  void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
+
   void deleteAccountClicked() => track('Delete Account Clicked');
 
   void deleteAccountConfirmed() => track('Delete Account Confirmed');
@@ -1899,6 +1905,17 @@ class MixpanelManager {
   // ============================================================================
 
   void connectDevicePageOpened() => track('Connect Device Page Opened');
+
+  void connectionGuideOpened() => track('Connection Guide Opened');
+
+  void connectionGuideDeviceTapped(String deviceId) =>
+      track('Connection Guide Device Tapped', properties: {'device_id': deviceId});
+
+  void connectionGuideDismissed(String deviceId) =>
+      track('Connection Guide Dismissed', properties: {'device_id': deviceId});
+
+  void connectionGuideReportIssue(String deviceId) =>
+      track('Connection Guide Report Issue', properties: {'device_id': deviceId});
 
   void dataPrivacyPageOpened() => track('Data Privacy Page Opened');
 

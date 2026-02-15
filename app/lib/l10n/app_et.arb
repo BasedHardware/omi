@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Helifail ei ole esitamiseks saadaval",
-  "audioPlaybackFailed": "Heli esitamine ebaõnnestus. Fail võib olla rikutud või puududa."
+  "audioPlaybackFailed": "Heli esitamine ebaõnnestus. Fail võib olla rikutud või puududa.",
+  "pairingTitleOmi": "Lülitage Omi sisse",
+  "pairingDescOmi": "Vajutage ja hoidke seadet all, kuni see vibreerib, et seda sisse lülitada.",
+  "pairingTitleOmiDevkit": "Lülitage Omi DevKit sidumisrežiimi",
+  "pairingDescOmiDevkit": "Vajutage nuppu üks kord sisselülitamiseks. LED vilgub sidumisrežiimis lillana.",
+  "pairingTitlePlaudNote": "Lülitage Plaud Note sidumisrežiimi",
+  "pairingDescPlaudNote": "Vajutage ja hoidke külgnuppu 2 sekundit. Punane LED vilgub, kui seade on sidumiseks valmis.",
+  "pairingTitleBee": "Lülitage Bee sidumisrežiimi",
+  "pairingDescBee": "Vajutage nuppu 5 korda järjest. Tuli hakkab vilkuma siniselt ja roheliselt.",
+  "pairingTitleLimitless": "Lülitage Limitless sidumisrežiimi",
+  "pairingDescLimitless": "Kui mõni tuli põleb, vajutage üks kord ja seejärel vajutage ja hoidke all, kuni seade näitab roosat valgust, seejärel vabastage.",
+  "pairingTitleFriendPendant": "Lülitage Friend Pendant sidumisrežiimi",
+  "pairingDescFriendPendant": "Vajutage ripatsil olevat nuppu selle sisselülitamiseks. See lülitub automaatselt sidumisrežiimi.",
+  "pairingTitleFieldy": "Lülitage Fieldy sidumisrežiimi",
+  "pairingDescFieldy": "Vajutage ja hoidke seadet all, kuni ilmub valgus, et seda sisse lülitada.",
+  "pairingTitleAppleWatch": "Ühendage Apple Watch",
+  "pairingDescAppleWatch": "Installige ja avage Omi rakendus oma Apple Watchis, seejärel puudutage rakenduses Ühenda.",
+  "pairingTitleNeoOne": "Lülitage Neo One sidumisrežiimi",
+  "pairingDescNeoOne": "Vajutage ja hoidke toitenuppu, kuni LED vilgub. Seade on leitav.",
+  "connectionGuide": "Ühendamisjuhend",
+  "iveDoneThis": "Olen seda teinud",
+  "pairNewDevice": "Sidu uus seade",
+  "dontSeeYourDevice": "Ei näe oma seadet?",
+  "reportAnIssue": "Teata probleemist",
+  "pairingTitleOmiGlass": "Lülitage Omi Glass sisse",
+  "pairingDescOmiGlass": "Vajutage ja hoidke külgnuppu 3 sekundit sisselülitamiseks.",
+  "addTask": "Lisa ülesanne",
+  "newTask": "Uus ülesanne",
+  "viewAll": "Vaata kõiki",
+  "whatsNewInVersion": "Mis on uut versioonis {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Lisada oma ülesannete loendisse?",
+  "failedToCreateShareLink": "Jagamislingi loomine ebaõnnestus",
+  "deleteGoal": "Kustuta eesmärk",
+  "deviceUpToDate": "Teie seade on ajakohane",
+  "wifiConfiguration": "WiFi seadistamine",
+  "wifiConfigurationSubtitle": "Sisestage WiFi andmed, et seade saaks püsivara alla laadida.",
+  "networkNameSsid": "Võrgu nimi (SSID)",
+  "enterWifiNetworkName": "Sisestage WiFi võrgu nimi",
+  "enterWifiPassword": "Sisestage WiFi parool"
 }

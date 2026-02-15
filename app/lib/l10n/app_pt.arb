@@ -2620,5 +2620,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "O arquivo de áudio não está disponível para reprodução",
-  "audioPlaybackFailed": "Não foi possível reproduzir o áudio. O arquivo pode estar corrompido ou ausente."
+  "audioPlaybackFailed": "Não foi possível reproduzir o áudio. O arquivo pode estar corrompido ou ausente.",
+  "pairingTitleOmi": "Ligue o Omi",
+  "pairingDescOmi": "Pressione e segure o dispositivo até que vibre para ligá-lo.",
+  "pairingTitleOmiDevkit": "Coloque o Omi DevKit no modo de emparelhamento",
+  "pairingDescOmiDevkit": "Pressione o botão uma vez para ligar. O LED piscará em roxo no modo de emparelhamento.",
+  "pairingTitlePlaudNote": "Coloque o Plaud Note no modo de emparelhamento",
+  "pairingDescPlaudNote": "Pressione e segure o botão lateral por 2 segundos. O LED vermelho piscará quando estiver pronto para emparelhar.",
+  "pairingTitleBee": "Coloque o Bee no modo de emparelhamento",
+  "pairingDescBee": "Pressione o botão 5 vezes seguidas. A luz começará a piscar em azul e verde.",
+  "pairingTitleLimitless": "Coloque o Limitless no modo de emparelhamento",
+  "pairingDescLimitless": "Quando qualquer luz estiver visível, pressione uma vez e depois pressione e segure até que o dispositivo mostre uma luz rosa, depois solte.",
+  "pairingTitleFriendPendant": "Coloque o Friend Pendant no modo de emparelhamento",
+  "pairingDescFriendPendant": "Pressione o botão no pingente para ligá-lo. Ele entrará no modo de emparelhamento automaticamente.",
+  "pairingTitleFieldy": "Coloque o Fieldy no modo de emparelhamento",
+  "pairingDescFieldy": "Pressione e segure o dispositivo até que a luz apareça para ligá-lo.",
+  "pairingTitleAppleWatch": "Conectar Apple Watch",
+  "pairingDescAppleWatch": "Instale e abra o aplicativo Omi no seu Apple Watch, depois toque em Conectar no aplicativo.",
+  "pairingTitleNeoOne": "Coloque o Neo One no modo de emparelhamento",
+  "pairingDescNeoOne": "Pressione e segure o botão de energia até que o LED pisque. O dispositivo estará visível.",
+  "connectionGuide": "Guia de Conexão",
+  "iveDoneThis": "Já fiz isso",
+  "pairNewDevice": "Emparelhar novo dispositivo",
+  "dontSeeYourDevice": "Não vê o seu dispositivo?",
+  "reportAnIssue": "Reportar um problema",
+  "pairingTitleOmiGlass": "Ligue o Omi Glass",
+  "pairingDescOmiGlass": "Pressione e segure o botão lateral por 3 segundos para ligar.",
+  "addTask": "Adicionar tarefa",
+  "newTask": "Nova tarefa",
+  "viewAll": "Ver tudo",
+  "whatsNewInVersion": "Novidades na {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Adicionar à sua lista de tarefas?",
+  "failedToCreateShareLink": "Falha ao criar link de compartilhamento",
+  "deleteGoal": "Excluir meta",
+  "deviceUpToDate": "Seu dispositivo está atualizado",
+  "wifiConfiguration": "Configuração WiFi",
+  "wifiConfigurationSubtitle": "Insira suas credenciais WiFi para permitir que o dispositivo baixe o firmware.",
+  "networkNameSsid": "Nome da rede (SSID)",
+  "enterWifiNetworkName": "Insira o nome da rede WiFi",
+  "enterWifiPassword": "Insira a senha do WiFi"
 }

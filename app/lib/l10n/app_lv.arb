@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Audio fails nav pieejams atskaņošanai",
-  "audioPlaybackFailed": "Nevar atskaņot audio. Fails var būt bojāts vai trūkst."
+  "audioPlaybackFailed": "Nevar atskaņot audio. Fails var būt bojāts vai trūkst.",
+  "pairingTitleOmi": "Ieslēdziet Omi",
+  "pairingDescOmi": "Nospiediet un turiet ierīci, līdz tā vibrē, lai to ieslēgtu.",
+  "pairingTitleOmiDevkit": "Ieslēdziet Omi DevKit savienošanas režīmā",
+  "pairingDescOmiDevkit": "Nospiediet pogu vienu reizi, lai ieslēgtu. LED mirgos violeti savienošanas režīmā.",
+  "pairingTitlePlaudNote": "Ieslēdziet Plaud Note savienošanas režīmā",
+  "pairingDescPlaudNote": "Nospiediet un turiet sānu pogu 2 sekundes. Sarkanais LED mirgos, kad ierīce ir gatava savienošanai.",
+  "pairingTitleBee": "Ieslēdziet Bee savienošanas režīmā",
+  "pairingDescBee": "Nospiediet pogu 5 reizes pēc kārtas. Gaisma sāks mirgot zilā un zaļā krāsā.",
+  "pairingTitleLimitless": "Ieslēdziet Limitless savienošanas režīmā",
+  "pairingDescLimitless": "Kad redzama jebkura gaisma, nospiediet vienu reizi, tad nospiediet un turiet, līdz ierīce rāda rozā gaismu, tad atlaidiet.",
+  "pairingTitleFriendPendant": "Ieslēdziet Friend Pendant savienošanas režīmā",
+  "pairingDescFriendPendant": "Nospiediet pogu uz kulona, lai to ieslēgtu. Tas automātiski pārslēgsies savienošanas režīmā.",
+  "pairingTitleFieldy": "Ieslēdziet Fieldy savienošanas režīmā",
+  "pairingDescFieldy": "Nospiediet un turiet ierīci, līdz parādās gaisma, lai to ieslēgtu.",
+  "pairingTitleAppleWatch": "Pievienojiet Apple Watch",
+  "pairingDescAppleWatch": "Instalējiet un atveriet Omi lietotni savā Apple Watch, tad pieskarieties Savienot lietotnē.",
+  "pairingTitleNeoOne": "Ieslēdziet Neo One savienošanas režīmā",
+  "pairingDescNeoOne": "Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.",
+  "connectionGuide": "Savienošanas ceļvedis",
+  "iveDoneThis": "Esmu to izdarījis",
+  "pairNewDevice": "Savienot jaunu ierīci",
+  "dontSeeYourDevice": "Neredzat savu ierīci?",
+  "reportAnIssue": "Ziņot par problēmu",
+  "pairingTitleOmiGlass": "Ieslēdziet Omi Glass",
+  "pairingDescOmiGlass": "Nospiediet un turiet sānu pogu 3 sekundes, lai ieslēgtu.",
+  "addTask": "Pievienot uzdevumu",
+  "newTask": "Jauns uzdevums",
+  "viewAll": "Skatīt visu",
+  "whatsNewInVersion": "Kas jauns {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Pievienot uzdevumu sarakstam?",
+  "failedToCreateShareLink": "Neizdevās izveidot kopīgošanas saiti",
+  "deleteGoal": "Dzēst mērķi",
+  "deviceUpToDate": "Jūsu ierīce ir atjaunināta",
+  "wifiConfiguration": "WiFi konfigurācija",
+  "wifiConfigurationSubtitle": "Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.",
+  "networkNameSsid": "Tīkla nosaukums (SSID)",
+  "enterWifiNetworkName": "Ievadiet WiFi tīkla nosaukumu",
+  "enterWifiPassword": "Ievadiet WiFi paroli"
 }

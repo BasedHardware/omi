@@ -2584,5 +2584,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "Fișierul audio nu este disponibil pentru redare",
-  "audioPlaybackFailed": "Nu se poate reda audio. Fișierul poate fi corupt sau lipsă."
+  "audioPlaybackFailed": "Nu se poate reda audio. Fișierul poate fi corupt sau lipsă.",
+  "pairingTitleOmi": "Porniți Omi",
+  "pairingDescOmi": "Apăsați și mențineți apăsat dispozitivul până vibrează pentru a-l porni.",
+  "pairingTitleOmiDevkit": "Puneți Omi DevKit în modul de asociere",
+  "pairingDescOmiDevkit": "Apăsați butonul o dată pentru a porni. LED-ul va clipi violet în modul de asociere.",
+  "pairingTitlePlaudNote": "Puneți Plaud Note în modul de asociere",
+  "pairingDescPlaudNote": "Apăsați și mențineți apăsat butonul lateral timp de 2 secunde. LED-ul roșu va clipi când este gata de asociere.",
+  "pairingTitleBee": "Puneți Bee în modul de asociere",
+  "pairingDescBee": "Apăsați butonul de 5 ori consecutiv. Lumina va începe să clipească albastru și verde.",
+  "pairingTitleLimitless": "Puneți Limitless în modul de asociere",
+  "pairingDescLimitless": "Când orice lumină este vizibilă, apăsați o dată apoi apăsați și mențineți apăsat până când dispozitivul arată o lumină roz, apoi eliberați.",
+  "pairingTitleFriendPendant": "Puneți Friend Pendant în modul de asociere",
+  "pairingDescFriendPendant": "Apăsați butonul de pe pandantiv pentru a-l porni. Va intra automat în modul de asociere.",
+  "pairingTitleFieldy": "Puneți Fieldy în modul de asociere",
+  "pairingDescFieldy": "Apăsați și mențineți apăsat dispozitivul până apare lumina pentru a-l porni.",
+  "pairingTitleAppleWatch": "Conectați Apple Watch",
+  "pairingDescAppleWatch": "Instalați și deschideți aplicația Omi pe Apple Watch, apoi apăsați Conectare în aplicație.",
+  "pairingTitleNeoOne": "Puneți Neo One în modul de asociere",
+  "pairingDescNeoOne": "Apăsați și mențineți apăsat butonul de alimentare până când LED-ul clipește. Dispozitivul va fi detectabil.",
+  "connectionGuide": "Ghid de conectare",
+  "iveDoneThis": "Am făcut asta",
+  "pairNewDevice": "Asociază un dispozitiv nou",
+  "dontSeeYourDevice": "Nu vedeți dispozitivul?",
+  "reportAnIssue": "Raportați o problemă",
+  "pairingTitleOmiGlass": "Porniți Omi Glass",
+  "pairingDescOmiGlass": "Apăsați și mențineți apăsat butonul lateral timp de 3 secunde pentru a porni.",
+  "addTask": "Adaugă sarcină",
+  "newTask": "Sarcină nouă",
+  "viewAll": "Vezi tot",
+  "whatsNewInVersion": "Ce este nou în {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Adăugați în lista de sarcini?",
+  "failedToCreateShareLink": "Nu s-a putut crea linkul de partajare",
+  "deleteGoal": "Șterge obiectivul",
+  "deviceUpToDate": "Dispozitivul dvs. este la zi",
+  "wifiConfiguration": "Configurare WiFi",
+  "wifiConfigurationSubtitle": "Introduceți datele WiFi pentru a permite dispozitivului să descarce firmware-ul.",
+  "networkNameSsid": "Numele rețelei (SSID)",
+  "enterWifiNetworkName": "Introduceți numele rețelei WiFi",
+  "enterWifiPassword": "Introduceți parola WiFi"
 }

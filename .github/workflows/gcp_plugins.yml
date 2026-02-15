@@ -6,7 +6,7 @@ on:
   push:
     branches: [ "main", "development" ]
     paths:
-      - 'plugins/example/**'
+      - 'plugins/**'
 
 env:
   SERVICE: plugins
@@ -34,7 +34,7 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/example/Dockerfile .
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/Dockerfile .
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       - name: Deploy to Cloud Run

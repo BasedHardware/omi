@@ -15068,6 +15068,216 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to play audio. The file may be corrupted or missing.'**
   String get audioPlaybackFailed;
+
+  /// No description provided for @connectionGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection Guide'**
+  String get connectionGuide;
+
+  /// No description provided for @iveDoneThis.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve done this'**
+  String get iveDoneThis;
+
+  /// No description provided for @pairNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair new device'**
+  String get pairNewDevice;
+
+  /// No description provided for @dontSeeYourDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t see your device?'**
+  String get dontSeeYourDevice;
+
+  /// No description provided for @reportAnIssue.
+  ///
+  /// In en, this message translates to:
+  /// **'Report an issue'**
+  String get reportAnIssue;
+
+  /// Pairing title for Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On Omi'**
+  String get pairingTitleOmi;
+
+  /// Pairing description for Omi device
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold the device until it vibrates to turn it on.'**
+  String get pairingDescOmi;
+
+  /// Pairing title for Omi DevKit
+  ///
+  /// In en, this message translates to:
+  /// **'Put Omi DevKit in Pairing Mode'**
+  String get pairingTitleOmiDevkit;
+
+  /// Pairing description for Omi DevKit
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button once to turn on. The LED will blink purple when in pairing mode.'**
+  String get pairingDescOmiDevkit;
+
+  /// Pairing title for Omi Glass
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On Omi Glass'**
+  String get pairingTitleOmiGlass;
+
+  /// Pairing description for Omi Glass
+  ///
+  /// In en, this message translates to:
+  /// **'Power on by pressing the side button for 3 seconds.'**
+  String get pairingDescOmiGlass;
+
+  /// Pairing title for Plaud Note
+  ///
+  /// In en, this message translates to:
+  /// **'Put Plaud Note in Pairing Mode'**
+  String get pairingTitlePlaudNote;
+
+  /// Pairing description for Plaud Note
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.'**
+  String get pairingDescPlaudNote;
+
+  /// Pairing title for Bee device
+  ///
+  /// In en, this message translates to:
+  /// **'Put Bee in Pairing Mode'**
+  String get pairingTitleBee;
+
+  /// Pairing description for Bee device
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button 5 times continuously. The light will start blinking blue and green.'**
+  String get pairingDescBee;
+
+  /// Pairing title for Limitless device
+  ///
+  /// In en, this message translates to:
+  /// **'Put Limitless in Pairing Mode'**
+  String get pairingTitleLimitless;
+
+  /// Pairing description for Limitless device
+  ///
+  /// In en, this message translates to:
+  /// **'When any light is visible, press once and then press and hold until the device shows a pink light, then release.'**
+  String get pairingDescLimitless;
+
+  /// Pairing title for Friend Pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Put Friend Pendant in Pairing Mode'**
+  String get pairingTitleFriendPendant;
+
+  /// Pairing description for Friend Pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button on the pendant to turn it on. It will enter pairing mode automatically.'**
+  String get pairingDescFriendPendant;
+
+  /// Pairing title for Fieldy device
+  ///
+  /// In en, this message translates to:
+  /// **'Put Fieldy in Pairing Mode'**
+  String get pairingTitleFieldy;
+
+  /// Pairing description for Fieldy device
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold the device until the light appears to turn it on.'**
+  String get pairingDescFieldy;
+
+  /// Pairing title for Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Apple Watch'**
+  String get pairingTitleAppleWatch;
+
+  /// Pairing description for Apple Watch
+  ///
+  /// In en, this message translates to:
+  /// **'Install and open the Omi app on your Apple Watch, then tap Connect in the app.'**
+  String get pairingDescAppleWatch;
+
+  /// Pairing title for Neo One device
+  ///
+  /// In en, this message translates to:
+  /// **'Put Neo One in Pairing Mode'**
+  String get pairingTitleNeoOne;
+
+  /// Pairing description for Neo One device
+  ///
+  /// In en, this message translates to:
+  /// **'Press and hold the power button until the LED blinks. The device will be discoverable.'**
+  String get pairingDescNeoOne;
+
+  /// Title for changelog with version number
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New in {version}'**
+  String whatsNewInVersion(String version);
+
+  /// No description provided for @addToYourTaskList.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to your task list?'**
+  String get addToYourTaskList;
+
+  /// No description provided for @failedToCreateShareLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create share link'**
+  String get failedToCreateShareLink;
+
+  /// No description provided for @deleteGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Goal'**
+  String get deleteGoal;
+
+  /// No description provided for @deviceUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is up to date'**
+  String get deviceUpToDate;
+
+  /// No description provided for @wifiConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Configuration'**
+  String get wifiConfiguration;
+
+  /// No description provided for @wifiConfigurationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your WiFi credentials to allow the device to download the firmware.'**
+  String get wifiConfigurationSubtitle;
+
+  /// No description provided for @networkNameSsid.
+  ///
+  /// In en, this message translates to:
+  /// **'Network Name (SSID)'**
+  String get networkNameSsid;
+
+  /// No description provided for @enterWifiNetworkName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi network name'**
+  String get enterWifiNetworkName;
+
+  /// No description provided for @enterWifiPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi password'**
+  String get enterWifiPassword;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

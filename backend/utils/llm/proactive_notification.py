@@ -6,11 +6,19 @@ from utils.llms.memory import get_prompt_memories
 
 
 def get_proactive_message(
-    uid: str, plugin_prompt: str, params: [str], context: str, chat_messages: List[Message]
+    uid: str,
+    plugin_prompt: str,
+    params: [str],
+    context: str,
+    chat_messages: List[Message],
+    user_name: str = None,
+    user_facts: str = None,
 ) -> str:
-    user_name, memories_str = get_prompt_memories(uid)
+    if user_name is None or user_facts is None:
+        user_name, user_facts = get_prompt_memories(uid)
 
     prompt = plugin_prompt
+    memories_str = user_facts
     for param in params:
         if param == "user_name":
             prompt = prompt.replace("{{user_name}}", user_name)

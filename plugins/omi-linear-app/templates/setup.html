@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear for Omi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --linear-purple: #5E6AD2;
+            --linear-purple-light: #7C83DB;
+            --linear-purple-dark: #4B55C4;
+            --linear-bg: #0D0D0D;
+            --linear-surface: #171717;
+            --linear-surface-elevated: #1F1F1F;
+            --linear-border: #2A2A2A;
+            --linear-text: #FFFFFF;
+            --linear-text-secondary: #9B9B9B;
+            --linear-text-tertiary: #666666;
+            --linear-success: #4ADE80;
+            --linear-warning: #FACC15;
+            --linear-error: #F87171;
+            --omi-accent: #6366f1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--linear-bg);
+            min-height: 100vh;
+            color: var(--linear-text);
+            padding: 20px;
+            background-image: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(94, 106, 210, 0.15), transparent),
+                radial-gradient(ellipse 60% 40% at 100% 100%, rgba(94, 106, 210, 0.08), transparent);
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-top: 20px;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .linear-logo {
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .linear-logo svg {
+            width: 52px;
+            height: 52px;
+        }
+
+        .connector {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .connector-dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--linear-text-tertiary);
+        }
+
+        .omi-logo {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--omi-accent) 0%, #8b5cf6 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: -1px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: var(--linear-text-secondary);
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        .card {
+            background: var(--linear-surface);
+            border: 1px solid var(--linear-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .error-banner {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .error-icon {
+            flex-shrink: 0;
+        }
+
+        .success-banner {
+            background: rgba(74, 222, 128, 0.1);
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .profile-section {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--linear-border);
+        }
+
+        .profile-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--linear-purple) 0%, var(--linear-purple-dark) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 600;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .profile-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .profile-info p {
+            color: var(--linear-text-secondary);
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .connected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(74, 222, 128, 0.12);
+            color: var(--linear-success);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-top: 6px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s ease;
+            width: 100%;
+        }
+
+        .btn-linear {
+            background: var(--linear-purple);
+            color: white;
+        }
+
+        .btn-linear:hover {
+            background: var(--linear-purple-light);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--linear-border);
+            color: var(--linear-text);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--linear-text-secondary);
+            background: var(--linear-surface-elevated);
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            color: var(--linear-error);
+        }
+
+        .btn-danger:hover {
+            background: rgba(248, 113, 113, 0.1);
+        }
+
+        .btn-small {
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--linear-text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .team-select {
+            width: 100%;
+            padding: 11px 14px;
+            background: var(--linear-bg);
+            border: 1px solid var(--linear-border);
+            border-radius: 8px;
+            color: var(--linear-text);
+            font-size: 14px;
+            font-family: inherit;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239B9B9B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .team-select:focus {
+            outline: none;
+            border-color: var(--linear-purple);
+        }
+
+        .team-select option {
+            background: var(--linear-surface);
+            padding: 10px;
+        }
+
+        .helper-text {
+            color: var(--linear-text-tertiary);
+            font-size: 12px;
+            margin-bottom: 16px;
+        }
+
+        .features-list {
+            list-style: none;
+        }
+
+        .features-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--linear-border);
+        }
+
+        .features-list li:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .features-list li:first-child {
+            padding-top: 0;
+        }
+
+        .feature-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--linear-surface-elevated);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .feature-text {
+            flex: 1;
+        }
+
+        .feature-text strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .feature-text span {
+            color: var(--linear-text-secondary);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid var(--linear-border);
+        }
+
+        .footer p {
+            color: var(--linear-text-tertiary);
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
+        .footer a {
+            color: var(--linear-text-secondary);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            color: var(--linear-text);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+        }
+
+        .priority-legend {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--linear-border);
+        }
+
+        .priority-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--linear-text-secondary);
+        }
+
+        .priority-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .priority-urgent { background: #F87171; }
+        .priority-high { background: #FB923C; }
+        .priority-medium { background: #FACC15; }
+        .priority-low { background: #60A5FA; }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <div class="linear-logo">
+                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1.22541 61.5228C0.444112 60.7393 0 59.6817 0 58.5791C0 57.4766 0.444112 56.419 1.22541 55.6355L55.6355 1.22541C56.419 0.444112 57.4766 0 58.5791 0C59.6817 0 60.7393 0.444112 61.5228 1.22541L98.7746 38.4772C99.5559 39.2607 100 40.3183 100 41.4209C100 42.5234 99.5559 43.581 98.7746 44.3645L44.3645 98.7746C43.581 99.5559 42.5234 100 41.4209 100C40.3183 100 39.2607 99.5559 38.4772 98.7746L1.22541 61.5228Z" fill="#5E6AD2"/>
+                    </svg>
+                </div>
+                <div class="connector">
+                    <div class="connector-dot"></div>
+                    <div class="connector-dot"></div>
+                    <div class="connector-dot"></div>
+                </div>
+                <div class="omi-logo">omi</div>
+            </div>
+            <h1>Linear for Omi</h1>
+            <p class="subtitle">Manage your issues with voice commands</p>
+        </div>
+
+        {% if error %}
+        <div class="error-banner">
+            <span class="error-icon">⚠️</span>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+
+        {% if authenticated %}
+        <div class="card">
+            <div class="profile-section">
+                <div class="profile-avatar">
+                    {% if user_profile and user_profile.avatar_url %}
+                    <img src="{{ user_profile.avatar_url }}" alt="Profile">
+                    {% else %}
+                    {{ user_profile.name[0] if user_profile else '?' }}
+                    {% endif %}
+                </div>
+                <div class="profile-info">
+                    <h3>{{ user_profile.display_name if user_profile else 'Linear User' }}</h3>
+                    <p>{{ user_profile.email if user_profile else '' }}</p>
+                    <span class="connected-badge">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Connected
+                    </span>
+                </div>
+            </div>
+
+            <div class="section-title">Default Team</div>
+            <select class="team-select" id="team-select" onchange="setDefaultTeam()">
+                <option value="">Select a default team...</option>
+                {% for team in teams %}
+                <option value="{{ team.id }}" data-name="{{ team.name }}" 
+                    {% if default_team and default_team.id == team.id %}selected{% endif %}>
+                    {{ team.name }} ({{ team.key }})
+                </option>
+                {% endfor %}
+            </select>
+            <p class="helper-text">
+                Issues will be created in this team by default.
+            </p>
+
+            <div class="action-buttons">
+                <a href="/auth/linear?uid={{ uid }}" class="btn btn-outline btn-small">
+                    🔄 Reconnect
+                </a>
+                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                    Disconnect
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Voice Commands</div>
+            <ul class="features-list">
+                <li>
+                    <div class="feature-icon">➕</div>
+                    <div class="feature-text">
+                        <strong>"Create an issue: Fix login bug"</strong>
+                        <span>Create new issues with title and description</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">📋</div>
+                    <div class="feature-text">
+                        <strong>"Show my issues" or "What's on my plate?"</strong>
+                        <span>List all issues assigned to you</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-text">
+                        <strong>"Move ENG-123 to In Progress"</strong>
+                        <span>Update issue status through workflow states</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-text">
+                        <strong>"Search for authentication issues"</strong>
+                        <span>Find issues by keyword or topic</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">📄</div>
+                    <div class="feature-text">
+                        <strong>"What's the status of ENG-456?"</strong>
+                        <span>Get full details about any issue</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">💬</div>
+                    <div class="feature-text">
+                        <strong>"Add a comment to PROD-789"</strong>
+                        <span>Add comments and updates to issues</span>
+                    </div>
+                </li>
+            </ul>
+            
+            <div class="priority-legend">
+                <div class="priority-item">
+                    <div class="priority-dot priority-urgent"></div>
+                    <span>Urgent</span>
+                </div>
+                <div class="priority-item">
+                    <div class="priority-dot priority-high"></div>
+                    <span>High</span>
+                </div>
+                <div class="priority-item">
+                    <div class="priority-dot priority-medium"></div>
+                    <span>Medium</span>
+                </div>
+                <div class="priority-item">
+                    <div class="priority-dot priority-low"></div>
+                    <span>Low</span>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+
+        <div class="card">
+            <div class="section-title">Get Started</div>
+            <p style="color: var(--linear-text-secondary); margin-bottom: 20px; line-height: 1.6; font-size: 14px;">
+                Connect your Linear workspace to manage issues, track progress, and stay productive using voice commands through Omi.
+            </p>
+            
+            <a href="{{ oauth_url }}" class="btn btn-linear">
+                <svg width="20" height="20" viewBox="0 0 100 100" fill="currentColor">
+                    <path d="M1.22541 61.5228C0.444112 60.7393 0 59.6817 0 58.5791C0 57.4766 0.444112 56.419 1.22541 55.6355L55.6355 1.22541C56.419 0.444112 57.4766 0 58.5791 0C59.6817 0 60.7393 0.444112 61.5228 1.22541L98.7746 38.4772C99.5559 39.2607 100 40.3183 100 41.4209C100 42.5234 99.5559 43.581 98.7746 44.3645L44.3645 98.7746C43.581 99.5559 42.5234 100 41.4209 100C40.3183 100 39.2607 99.5559 38.4772 98.7746L1.22541 61.5228Z"/>
+                </svg>
+                Connect Linear
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="section-title">Capabilities</div>
+            <ul class="features-list">
+                <li>
+                    <div class="feature-icon">➕</div>
+                    <div class="feature-text">
+                        <strong>Create Issues</strong>
+                        <span>Create issues with title, description, and priority using voice</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">📋</div>
+                    <div class="feature-text">
+                        <strong>Track Your Work</strong>
+                        <span>View all issues assigned to you at a glance</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">🔄</div>
+                    <div class="feature-text">
+                        <strong>Update Status</strong>
+                        <span>Move issues through your workflow hands-free</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">🔍</div>
+                    <div class="feature-text">
+                        <strong>Search & Discover</strong>
+                        <span>Find any issue by keyword or description</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="feature-icon">💬</div>
+                    <div class="feature-text">
+                        <strong>Add Comments</strong>
+                        <span>Add updates and notes to issues with voice</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>Made for <a href="https://omi.me" target="_blank">Omi</a></p>
+            <p>Your data is secure • <a href="https://linear.app/privacy" target="_blank">Linear Privacy</a></p>
+        </div>
+    </div>
+
+    <script>
+        function setDefaultTeam() {
+            const select = document.getElementById('team-select');
+            const selectedOption = select.options[select.selectedIndex];
+            const teamId = selectedOption.value;
+            const teamName = selectedOption.getAttribute('data-name');
+            
+            if (teamId) {
+                const uid = new URLSearchParams(window.location.search).get('uid');
+                fetch(`/settings/default-team?uid=${uid}&team_id=${teamId}&team_name=${encodeURIComponent(teamName)}`, {
+                    method: 'POST'
+                }).then(response => {
+                    if (response.ok) {
+                        // Show brief success feedback
+                        select.style.borderColor = '#4ADE80';
+                        setTimeout(() => {
+                            select.style.borderColor = '';
+                        }, 2000);
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+

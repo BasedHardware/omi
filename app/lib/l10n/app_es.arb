@@ -2585,5 +2585,51 @@
   "appStore": "App Store",
   "googleSearch": "Google Search",
   "audioPlaybackUnavailable": "El archivo de audio no está disponible para reproducción",
-  "audioPlaybackFailed": "No se puede reproducir el audio. El archivo puede estar dañado o no existir."
+  "audioPlaybackFailed": "No se puede reproducir el audio. El archivo puede estar dañado o no existir.",
+  "pairingTitleOmi": "Enciende Omi",
+  "pairingDescOmi": "Mantén presionado el dispositivo hasta que vibre para encenderlo.",
+  "pairingTitleOmiDevkit": "Pon Omi DevKit en modo de emparejamiento",
+  "pairingDescOmiDevkit": "Presiona el botón una vez para encender. El LED parpadeará en púrpura en modo de emparejamiento.",
+  "pairingTitlePlaudNote": "Pon Plaud Note en modo de emparejamiento",
+  "pairingDescPlaudNote": "Mantén presionado el botón lateral durante 2 segundos. El LED rojo parpadeará cuando esté listo para emparejar.",
+  "pairingTitleBee": "Pon Bee en modo de emparejamiento",
+  "pairingDescBee": "Presiona el botón 5 veces seguidas. La luz comenzará a parpadear en azul y verde.",
+  "pairingTitleLimitless": "Pon Limitless en modo de emparejamiento",
+  "pairingDescLimitless": "Cuando cualquier luz sea visible, presiona una vez y luego mantén presionado hasta que el dispositivo muestre una luz rosa, luego suelta.",
+  "pairingTitleFriendPendant": "Pon Friend Pendant en modo de emparejamiento",
+  "pairingDescFriendPendant": "Presiona el botón del colgante para encenderlo. Entrará en modo de emparejamiento automáticamente.",
+  "pairingTitleFieldy": "Pon Fieldy en modo de emparejamiento",
+  "pairingDescFieldy": "Mantén presionado el dispositivo hasta que aparezca la luz para encenderlo.",
+  "pairingTitleAppleWatch": "Conectar Apple Watch",
+  "pairingDescAppleWatch": "Instala y abre la aplicación Omi en tu Apple Watch, luego toca Conectar en la aplicación.",
+  "pairingTitleNeoOne": "Pon Neo One en modo de emparejamiento",
+  "pairingDescNeoOne": "Mantén presionado el botón de encendido hasta que el LED parpadee. El dispositivo será visible.",
+  "connectionGuide": "Guía de conexión",
+  "iveDoneThis": "Ya lo hice",
+  "pairNewDevice": "Emparejar nuevo dispositivo",
+  "dontSeeYourDevice": "¿No ves tu dispositivo?",
+  "reportAnIssue": "Reportar un problema",
+  "pairingTitleOmiGlass": "Enciende Omi Glass",
+  "pairingDescOmiGlass": "Mantén presionado el botón lateral durante 3 segundos para encender.",
+  "addTask": "Añadir tarea",
+  "newTask": "Nueva tarea",
+  "viewAll": "Ver todo",
+  "whatsNewInVersion": "Novedades en {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "¿Agregar a tu lista de tareas?",
+  "failedToCreateShareLink": "Error al crear el enlace para compartir",
+  "deleteGoal": "Eliminar objetivo",
+  "deviceUpToDate": "Su dispositivo está actualizado",
+  "wifiConfiguration": "Configuración WiFi",
+  "wifiConfigurationSubtitle": "Ingrese sus credenciales WiFi para permitir que el dispositivo descargue el firmware.",
+  "networkNameSsid": "Nombre de red (SSID)",
+  "enterWifiNetworkName": "Ingrese el nombre de la red WiFi",
+  "enterWifiPassword": "Ingrese la contraseña WiFi"
 }

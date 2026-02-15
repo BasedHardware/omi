@@ -791,6 +791,39 @@ def delete_speech_profile_duration(uid: str):
 # ******************************************************
 
 
+# ******************************************************
+# *************** TASK SHARING TOKENS ******************
+# ******************************************************
+
+TASK_SHARE_TTL = 60 * 60 * 24 * 30  # 30 days
+
+
+@try_catch_decorator
+def store_task_share(token: str, uid: str, display_name: str, task_ids: list):
+    """Store a task share token in Redis with 30-day TTL."""
+    data = json.dumps({"uid": uid, "display_name": display_name, "task_ids": task_ids})
+    return r.set(f'task_share:{token}', data, ex=TASK_SHARE_TTL)
+
+
+@try_catch_decorator
+def get_task_share(token: str) -> Optional[dict]:
+    """Get task share data by token. Returns None if expired or not found."""
+    data = r.get(f'task_share:{token}')
+    if data:
+        return json.loads(data)
+    return None
+
+
+@try_catch_decorator
+def try_accept_task_share(token: str, uid: str) -> bool:
+    """Atomically mark a task share as accepted. Returns True on first acceptance, False if already accepted."""
+    key = f'task_share:{token}:accepted'
+    if r.sadd(key, uid) == 1:
+        r.expire(key, TASK_SHARE_TTL)
+        return True
+    return False
+
+
 def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) -> bool:
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)

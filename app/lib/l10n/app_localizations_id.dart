@@ -8002,13 +8002,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get couldNotOpenUrl => 'Tidak dapat membuka URL. Silakan coba lagi.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Tugas baru';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Lihat semua';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Tambah tugas';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8077,4 +8077,116 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Tidak dapat memutar audio. File mungkin rusak atau hilang.';
+
+  @override
+  String get connectionGuide => 'Panduan Koneksi';
+
+  @override
+  String get iveDoneThis => 'Saya sudah melakukannya';
+
+  @override
+  String get pairNewDevice => 'Pasangkan perangkat baru';
+
+  @override
+  String get dontSeeYourDevice => 'Tidak melihat perangkat Anda?';
+
+  @override
+  String get reportAnIssue => 'Laporkan masalah';
+
+  @override
+  String get pairingTitleOmi => 'Nyalakan Omi';
+
+  @override
+  String get pairingDescOmi => 'Tekan dan tahan perangkat hingga bergetar untuk menyalakannya.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Masukkan Omi DevKit ke Mode Pemasangan';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Tekan tombol sekali untuk menyalakan. LED akan berkedip ungu saat dalam mode pemasangan.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Nyalakan Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tekan dan tahan tombol samping selama 3 detik untuk menyalakan.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Masukkan Plaud Note ke Mode Pemasangan';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tekan dan tahan tombol samping selama 2 detik. LED merah akan berkedip saat siap dipasangkan.';
+
+  @override
+  String get pairingTitleBee => 'Masukkan Bee ke Mode Pemasangan';
+
+  @override
+  String get pairingDescBee => 'Tekan tombol 5 kali berturut-turut. Lampu akan mulai berkedip biru dan hijau.';
+
+  @override
+  String get pairingTitleLimitless => 'Masukkan Limitless ke Mode Pemasangan';
+
+  @override
+  String get pairingDescLimitless =>
+      'Saat lampu menyala, tekan sekali lalu tekan dan tahan hingga perangkat menunjukkan lampu merah muda, lalu lepaskan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Masukkan Friend Pendant ke Mode Pemasangan';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tekan tombol pada liontin untuk menyalakannya. Perangkat akan masuk mode pemasangan secara otomatis.';
+
+  @override
+  String get pairingTitleFieldy => 'Masukkan Fieldy ke Mode Pemasangan';
+
+  @override
+  String get pairingDescFieldy => 'Tekan dan tahan perangkat hingga lampu muncul untuk menyalakannya.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Hubungkan Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instal dan buka aplikasi Omi di Apple Watch Anda, lalu ketuk Hubungkan di aplikasi.';
+
+  @override
+  String get pairingTitleNeoOne => 'Masukkan Neo One ke Mode Pemasangan';
+
+  @override
+  String get pairingDescNeoOne => 'Tekan dan tahan tombol daya hingga LED berkedip. Perangkat akan dapat ditemukan.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Yang Baru di $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tambahkan ke daftar tugas Anda?';
+
+  @override
+  String get failedToCreateShareLink => 'Gagal membuat tautan berbagi';
+
+  @override
+  String get deleteGoal => 'Hapus Tujuan';
+
+  @override
+  String get deviceUpToDate => 'Perangkat Anda sudah diperbarui';
+
+  @override
+  String get wifiConfiguration => 'Konfigurasi WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Masukkan kredensial WiFi Anda agar perangkat dapat mengunduh firmware.';
+
+  @override
+  String get networkNameSsid => 'Nama Jaringan (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Masukkan nama jaringan WiFi';
+
+  @override
+  String get enterWifiPassword => 'Masukkan kata sandi WiFi';
 }

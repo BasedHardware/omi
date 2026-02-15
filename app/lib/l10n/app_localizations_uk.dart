@@ -8002,13 +8002,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get couldNotOpenUrl => 'Не вдалося відкрити URL. Будь ласка, спробуйте ще раз.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Нове завдання';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Переглянути все';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Додати завдання';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8077,4 +8077,117 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Неможливо відтворити аудіо. Файл може бути пошкоджений або відсутній.';
+
+  @override
+  String get connectionGuide => 'Посібник з підключення';
+
+  @override
+  String get iveDoneThis => 'Я це зробив';
+
+  @override
+  String get pairNewDevice => 'Сполучити новий пристрій';
+
+  @override
+  String get dontSeeYourDevice => 'Не бачите свій пристрій?';
+
+  @override
+  String get reportAnIssue => 'Повідомити про проблему';
+
+  @override
+  String get pairingTitleOmi => 'Увімкніть Omi';
+
+  @override
+  String get pairingDescOmi => 'Натисніть і утримуйте пристрій, доки він не завібрує, щоб увімкнути його.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Переведіть Omi DevKit в режим сполучення';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Натисніть кнопку один раз для ввімкнення. Світлодіод блиматиме фіолетовим у режимі сполучення.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Увімкніть Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Натисніть і утримуйте бічну кнопку 3 секунди для ввімкнення.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Переведіть Plaud Note в режим сполучення';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Натисніть і утримуйте бічну кнопку протягом 2 секунд. Червоний світлодіод блиматиме, коли пристрій буде готовий до сполучення.';
+
+  @override
+  String get pairingTitleBee => 'Переведіть Bee в режим сполучення';
+
+  @override
+  String get pairingDescBee => 'Натисніть кнопку 5 разів поспіль. Індикатор почне блимати синім і зеленим.';
+
+  @override
+  String get pairingTitleLimitless => 'Переведіть Limitless в режим сполучення';
+
+  @override
+  String get pairingDescLimitless =>
+      'Коли горить будь-який індикатор, натисніть один раз, потім натисніть і утримуйте, доки пристрій не покаже рожеве світло, потім відпустіть.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Переведіть Friend Pendant в режим сполучення';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Натисніть кнопку на кулоні, щоб увімкнути його. Він автоматично перейде в режим сполучення.';
+
+  @override
+  String get pairingTitleFieldy => 'Переведіть Fieldy в режим сполучення';
+
+  @override
+  String get pairingDescFieldy => 'Натисніть і утримуйте пристрій, доки не з\'явиться індикатор, щоб увімкнути його.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Під\'єднайте Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Встановіть і відкрийте додаток Omi на Apple Watch, потім натисніть Під\'єднати в додатку.';
+
+  @override
+  String get pairingTitleNeoOne => 'Переведіть Neo One в режим сполучення';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Натисніть і утримуйте кнопку живлення, доки не заблимає світлодіод. Пристрій стане видимим.';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Що нового у $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Додати до списку завдань?';
+
+  @override
+  String get failedToCreateShareLink => 'Не вдалося створити посилання для поширення';
+
+  @override
+  String get deleteGoal => 'Видалити ціль';
+
+  @override
+  String get deviceUpToDate => 'Ваш пристрій оновлений';
+
+  @override
+  String get wifiConfiguration => 'Налаштування WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Введіть дані WiFi, щоб пристрій міг завантажити прошивку.';
+
+  @override
+  String get networkNameSsid => 'Назва мережі (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Введіть назву мережі WiFi';
+
+  @override
+  String get enterWifiPassword => 'Введіть пароль WiFi';
 }
