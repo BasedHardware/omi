@@ -8164,43 +8164,43 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pairingDescNeoOne => 'Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Lejupielāde no ierīces';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Atkārtota savienošana ar internetu...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Augšupielāde $current no $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Apstrādāts';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Bojāts';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count gaida';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count apstrādāti';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Sinhronizēts';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Nav gaidošu ierakstu';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Vēl nav apstrādātu ierakstu';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Gaida';
 
   @override
   String whatsNewInVersion(String version) {

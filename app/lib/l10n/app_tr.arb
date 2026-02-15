@@ -2665,5 +2665,16 @@
   "wifiConfigurationSubtitle": "Cihazın donanım yazılımını indirebilmesi için WiFi kimlik bilgilerinizi girin.",
   "networkNameSsid": "Ağ Adı (SSID)",
   "enterWifiNetworkName": "WiFi ağ adını girin",
-  "enterWifiPassword": "WiFi şifresini girin"
+  "enterWifiPassword": "WiFi şifresini girin",
+  "downloadingFromDevice": "Cihazdan indiriliyor",
+  "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
+  "uploadingToCloud": "{current}/{total} yükleniyor",
+  "processedStatus": "İşlendi",
+  "corruptedStatus": "Bozuk",
+  "nPending": "{count} beklemede",
+  "nProcessed": "{count} işlendi",
+  "synced": "Senkronize edildi",
+  "noPendingRecordings": "Bekleyen kayıt yok",
+  "noProcessedRecordings": "Henüz işlenmiş kayıt yok",
+  "pending": "Beklemede"
 }

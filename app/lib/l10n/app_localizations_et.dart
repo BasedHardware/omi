@@ -8145,43 +8145,43 @@ class AppLocalizationsEt extends AppLocalizations {
   String get pairingDescNeoOne => 'Vajutage ja hoidke toitenuppu, kuni LED vilgub. Seade on leitav.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Seadmest allalaadimine';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Internetiga uuesti ühendamine...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return '$current/$total üleslaadimine';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Töödeldud';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Rikutud';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count ootel';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count töödeldud';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Sünkroonitud';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Ootel salvestisi pole';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Töödeldud salvestisi pole veel';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Ootel';
 
   @override
   String whatsNewInVersion(String version) {

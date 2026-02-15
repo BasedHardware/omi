@@ -8208,43 +8208,43 @@ class AppLocalizationsEl extends AppLocalizations {
       'Πατήστε παρατεταμένα το κουμπί τροφοδοσίας μέχρι να αναβοσβήσει το LED. Η συσκευή θα είναι ανιχνεύσιμη.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Λήψη από τη συσκευή';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Μεταφόρτωση $current από $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Επεξεργασμένο';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Κατεστραμμένο';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count σε αναμονή';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count επεξεργασμένα';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Συγχρονισμένο';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Δεν υπάρχουν εκκρεμείς εγγραφές';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Εκκρεμεί';
 
   @override
   String whatsNewInVersion(String version) {

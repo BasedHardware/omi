@@ -8153,43 +8153,43 @@ class AppLocalizationsLt extends AppLocalizations {
       'Paspauskite ir palaikykite maitinimo mygtuką, kol LED pradės mirksėti. Įrenginys bus aptinkamas.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Atsisiunčiama iš įrenginio';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Jungiamasi prie interneto iš naujo...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Įkeliama $current iš $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Apdorota';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Sugadinta';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count laukiančių';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count apdorotų';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Sinchronizuota';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Nėra laukiančių įrašų';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Dar nėra apdorotų įrašų';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Laukiama';
 
   @override
   String whatsNewInVersion(String version) {

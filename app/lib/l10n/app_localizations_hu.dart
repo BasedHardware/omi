@@ -8185,43 +8185,43 @@ class AppLocalizationsHu extends AppLocalizations {
       'Tartsa nyomva a bekapcsoló gombot, amíg a LED villogni nem kezd. Az eszköz felfedezhető lesz.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Letöltés az eszközről';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Újracsatlakozás az internethez...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return '$current/$total feltöltése';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Feldolgozva';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Sérült';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count függőben';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count feldolgozva';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Szinkronizálva';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Nincsenek függőben lévő felvételek';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Még nincsenek feldolgozott felvételek';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Függőben';
 
   @override
   String whatsNewInVersion(String version) {

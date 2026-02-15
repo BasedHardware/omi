@@ -8148,43 +8148,43 @@ class AppLocalizationsPt extends AppLocalizations {
       'Pressione e segure o botão de energia até que o LED pisque. O dispositivo estará visível.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Transferindo do dispositivo';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Reconectando à internet...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Enviando $current de $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Processado';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Corrompido';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count pendentes';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count processados';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Sincronizado';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Nenhuma gravação pendente';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Nenhuma gravação processada ainda';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Pendente';
 
   @override
   String whatsNewInVersion(String version) {

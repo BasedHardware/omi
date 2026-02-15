@@ -8173,43 +8173,43 @@ class AppLocalizationsNl extends AppLocalizations {
       'Houd de aan-/uitknop ingedrukt totdat de LED knippert. Het apparaat is dan vindbaar.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Downloaden van apparaat';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Opnieuw verbinden met internet...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return '$current van $total uploaden';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Verwerkt';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Beschadigd';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count in afwachting';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count verwerkt';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Gesynchroniseerd';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Geen wachtende opnames';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Nog geen verwerkte opnames';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'In afwachting';
 
   @override
   String whatsNewInVersion(String version) {

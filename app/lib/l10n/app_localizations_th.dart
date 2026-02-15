@@ -8104,43 +8104,43 @@ class AppLocalizationsTh extends AppLocalizations {
   String get pairingDescNeoOne => 'กดปุ่มเปิด/ปิดค้างจนกว่า LED จะกะพริบ อุปกรณ์จะสามารถค้นหาได้';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'กำลังดาวน์โหลดจากอุปกรณ์';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'กำลังอัปโหลด $current จาก $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'ประมวลผลแล้ว';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'เสียหาย';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count รอดำเนินการ';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count ประมวลผลแล้ว';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'ซิงค์แล้ว';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'ไม่มีการบันทึกที่รอดำเนินการ';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'ยังไม่มีการบันทึกที่ประมวลผลแล้ว';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'รอดำเนินการ';
 
   @override
   String whatsNewInVersion(String version) {

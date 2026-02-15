@@ -8223,43 +8223,43 @@ class AppLocalizationsFr extends AppLocalizations {
       'Appuyez longuement sur le bouton d\'alimentation jusqu\'à ce que la LED clignote. L\'appareil sera détectable.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Téléchargement depuis l\'appareil';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Reconnexion à internet...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Envoi de $current sur $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Traité';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Corrompu';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count en attente';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count traités';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Synchronisé';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Aucun enregistrement en attente';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Aucun enregistrement traité pour le moment';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'En attente';
 
   @override
   String whatsNewInVersion(String version) {

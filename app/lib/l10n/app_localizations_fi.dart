@@ -8145,43 +8145,43 @@ class AppLocalizationsFi extends AppLocalizations {
   String get pairingDescNeoOne => 'Pidä virtapainiketta painettuna, kunnes LED vilkkuu. Laite on löydettävissä.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Ladataan laitteesta';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Yhdistetään uudelleen internetiin...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Ladataan $current/$total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Käsitelty';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Vioittunut';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count odottaa';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count käsiteltyä';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Synkronoitu';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Ei odottavia tallenteita';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Ei vielä käsiteltyjä tallenteita';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Odottaa';
 
   @override
   String whatsNewInVersion(String version) {

@@ -8181,43 +8181,43 @@ class AppLocalizationsBg extends AppLocalizations {
       'Натиснете и задръжте бутона за захранване, докато светодиодът мигне. Устройството ще бъде видимо.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Изтегляне от устройството';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Повторно свързване с интернет...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Качване на $current от $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Обработено';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Повредено';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count в изчакване';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count обработени';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Синхронизирано';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Няма записи в изчакване';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Все още няма обработени записи';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'В изчакване';
 
   @override
   String whatsNewInVersion(String version) {

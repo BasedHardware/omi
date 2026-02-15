@@ -8170,43 +8170,43 @@ class AppLocalizationsMs extends AppLocalizations {
   String get pairingDescNeoOne => 'Tekan dan tahan butang kuasa sehingga LED berkelip. Peranti akan boleh ditemui.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Memuat turun dari peranti';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Menyambung semula ke internet...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Memuat naik $current daripada $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Diproses';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Rosak';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count belum selesai';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count diproses';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Disegerakkan';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Tiada rakaman yang belum selesai';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Belum ada rakaman yang diproses';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Belum selesai';
 
   @override
   String whatsNewInVersion(String version) {

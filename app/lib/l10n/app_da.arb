@@ -2639,5 +2639,16 @@
   "wifiConfigurationSubtitle": "Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.",
   "networkNameSsid": "Netværksnavn (SSID)",
   "enterWifiNetworkName": "Indtast WiFi-netværksnavn",
-  "enterWifiPassword": "Indtast WiFi-adgangskode"
+  "enterWifiPassword": "Indtast WiFi-adgangskode",
+  "downloadingFromDevice": "Downloader fra enhed",
+  "reconnectingToInternet": "Genopretter forbindelse til internet...",
+  "uploadingToCloud": "Uploader {current} af {total}",
+  "processedStatus": "Behandlet",
+  "corruptedStatus": "Beskadiget",
+  "nPending": "{count} afventende",
+  "nProcessed": "{count} behandlede",
+  "synced": "Synkroniseret",
+  "noPendingRecordings": "Ingen afventende optagelser",
+  "noProcessedRecordings": "Ingen behandlede optagelser endnu",
+  "pending": "Afventende"
 }

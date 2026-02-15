@@ -8141,43 +8141,43 @@ class AppLocalizationsNo extends AppLocalizations {
   String get pairingDescNeoOne => 'Trykk og hold strømknappen til LED-en blinker. Enheten vil være synlig.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Laster ned fra enhet';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Kobler til internett på nytt...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Laster opp $current av $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Behandlet';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Ødelagt';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count ventende';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count behandlet';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Synkronisert';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Ingen ventende opptak';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Ingen behandlede opptak ennå';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Ventende';
 
   @override
   String whatsNewInVersion(String version) {

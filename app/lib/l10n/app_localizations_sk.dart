@@ -8137,43 +8137,43 @@ class AppLocalizationsSk extends AppLocalizations {
       'Stlačte a podržte tlačidlo napájania, kým LED nezačne blikať. Zariadenie bude viditeľné.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Sťahovanie zo zariadenia';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Opätovné pripájanie k internetu...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Nahrávanie $current z $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Spracované';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Poškodené';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count čakajúcich';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count spracovaných';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Synchronizované';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Žiadne čakajúce nahrávky';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Zatiaľ žiadne spracované nahrávky';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Čakajúce';
 
   @override
   String whatsNewInVersion(String version) {

@@ -8089,43 +8089,43 @@ class AppLocalizationsAr extends AppLocalizations {
   String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'جارٍ رفع $current من $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'تمت المعالجة';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'تالف';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count قيد الانتظار';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count تمت معالجتها';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'تمت المزامنة';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'قيد الانتظار';
 
   @override
   String whatsNewInVersion(String version) {

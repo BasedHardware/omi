@@ -8160,43 +8160,43 @@ class AppLocalizationsUk extends AppLocalizations {
       'Натисніть і утримуйте кнопку живлення, доки не заблимає світлодіод. Пристрій стане видимим.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Завантаження з пристрою';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Повторне підключення до інтернету...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Завантаження $current з $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Оброблено';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Пошкоджено';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count очікують';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count оброблено';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Синхронізовано';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Немає очікуючих записів';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Ще немає оброблених записів';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Очікування';
 
   @override
   String whatsNewInVersion(String version) {

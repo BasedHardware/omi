@@ -8173,43 +8173,43 @@ class AppLocalizationsRu extends AppLocalizations {
       'Нажмите и удерживайте кнопку питания, пока не замигает светодиод. Устройство станет обнаруживаемым.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Загрузка с устройства';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Повторное подключение к интернету...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Загрузка $current из $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Обработано';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Повреждено';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count ожидающих';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count обработано';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Синхронизировано';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Нет ожидающих записей';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Пока нет обработанных записей';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Ожидание';
 
   @override
   String whatsNewInVersion(String version) {

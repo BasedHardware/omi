@@ -2599,5 +2599,16 @@
   "wifiConfigurationSubtitle": "Въведете данните за WiFi, за да може устройството да изтегли фърмуера.",
   "networkNameSsid": "Име на мрежата (SSID)",
   "enterWifiNetworkName": "Въведете името на WiFi мрежата",
-  "enterWifiPassword": "Въведете парола за WiFi"
+  "enterWifiPassword": "Въведете парола за WiFi",
+  "downloadingFromDevice": "Изтегляне от устройството",
+  "reconnectingToInternet": "Повторно свързване с интернет...",
+  "uploadingToCloud": "Качване на {current} от {total}",
+  "processedStatus": "Обработено",
+  "corruptedStatus": "Повредено",
+  "nPending": "{count} в изчакване",
+  "nProcessed": "{count} обработени",
+  "synced": "Синхронизирано",
+  "noPendingRecordings": "Няма записи в изчакване",
+  "noProcessedRecordings": "Все още няма обработени записи",
+  "pending": "В изчакване"
 }

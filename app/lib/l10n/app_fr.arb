@@ -2665,5 +2665,16 @@
   "wifiConfigurationSubtitle": "Entrez vos identifiants WiFi pour permettre à l'appareil de télécharger le micrologiciel.",
   "networkNameSsid": "Nom du réseau (SSID)",
   "enterWifiNetworkName": "Entrez le nom du réseau WiFi",
-  "enterWifiPassword": "Entrez le mot de passe WiFi"
+  "enterWifiPassword": "Entrez le mot de passe WiFi",
+  "downloadingFromDevice": "Téléchargement depuis l'appareil",
+  "reconnectingToInternet": "Reconnexion à internet...",
+  "uploadingToCloud": "Envoi de {current} sur {total}",
+  "processedStatus": "Traité",
+  "corruptedStatus": "Corrompu",
+  "nPending": "{count} en attente",
+  "nProcessed": "{count} traités",
+  "synced": "Synchronisé",
+  "noPendingRecordings": "Aucun enregistrement en attente",
+  "noProcessedRecordings": "Aucun enregistrement traité pour le moment",
+  "pending": "En attente"
 }

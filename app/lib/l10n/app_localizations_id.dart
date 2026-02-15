@@ -8159,43 +8159,43 @@ class AppLocalizationsId extends AppLocalizations {
   String get pairingDescNeoOne => 'Tekan dan tahan tombol daya hingga LED berkedip. Perangkat akan dapat ditemukan.';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'Mengunduh dari perangkat';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'Menyambung kembali ke internet...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return 'Mengunggah $current dari $total';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => 'Diproses';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => 'Rusak';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count tertunda';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count diproses';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => 'Tersinkronisasi';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => 'Tidak ada rekaman tertunda';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => 'Belum ada rekaman yang diproses';
 
   @override
-  String get pending => 'Pending';
+  String get pending => 'Tertunda';
 
   @override
   String whatsNewInVersion(String version) {

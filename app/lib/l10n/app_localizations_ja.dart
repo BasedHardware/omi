@@ -8008,43 +8008,43 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pairingDescNeoOne => '電源ボタンをLEDが点滅するまで長押ししてください。デバイスが検出可能になります。';
 
   @override
-  String get downloadingFromDevice => 'Downloading from device';
+  String get downloadingFromDevice => 'デバイスからダウンロード中';
 
   @override
-  String get reconnectingToInternet => 'Reconnecting to internet...';
+  String get reconnectingToInternet => 'インターネットに再接続中...';
 
   @override
   String uploadingToCloud(int current, int total) {
-    return 'Uploading $current of $total';
+    return '$current/$totalをアップロード中';
   }
 
   @override
-  String get processedStatus => 'Processed';
+  String get processedStatus => '処理済み';
 
   @override
-  String get corruptedStatus => 'Corrupted';
+  String get corruptedStatus => '破損';
 
   @override
   String nPending(int count) {
-    return '$count pending';
+    return '$count件が保留中';
   }
 
   @override
   String nProcessed(int count) {
-    return '$count processed';
+    return '$count件が処理済み';
   }
 
   @override
-  String get synced => 'Synced';
+  String get synced => '同期済み';
 
   @override
-  String get noPendingRecordings => 'No pending recordings';
+  String get noPendingRecordings => '保留中の録音はありません';
 
   @override
-  String get noProcessedRecordings => 'No processed recordings yet';
+  String get noProcessedRecordings => '処理済みの録音はまだありません';
 
   @override
-  String get pending => 'Pending';
+  String get pending => '保留中';
 
   @override
   String whatsNewInVersion(String version) {
