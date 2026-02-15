@@ -1518,37 +1518,42 @@ class TasksViewModel: ObservableObject {
         // Sort
         let sorted = sortTasks(filteredTasks)
 
-        // Apply display cap for filtered/search mode
+        // Compute all values into locals FIRST, then assign @Published properties
+        // in a single batch to minimize objectWillChange notifications.
+        let newDisplayTasks: [TaskActionItem]
+        let newHasMore: Bool
         if isInFilteredMode {
             allFilteredDisplayTasks = sorted
             let capped = Array(sorted.prefix(displayLimit))
-            displayTasks = capped
-            hasMoreFilteredResults = sorted.count > displayLimit
+            newDisplayTasks = deduplicateById(capped)
+            newHasMore = sorted.count > displayLimit
         } else {
             allFilteredDisplayTasks = []
-            hasMoreFilteredResults = false
-            displayTasks = sorted
+            newDisplayTasks = deduplicateById(sorted)
+            newHasMore = false
         }
 
-        // Deduplicate and compute categorizedTasks for category view
-        displayTasks = deduplicateById(displayTasks)
+        // Compute categorizedTasks from the final display list
         var result: [TaskCategory: [TaskActionItem]] = [:]
         for category in TaskCategory.allCases {
             result[category] = []
         }
-        // Pre-compute date boundaries once for all tasks
         let calendar = Calendar.current
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        for task in displayTasks {
+        for task in newDisplayTasks {
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
+
+        // Assign all @Published properties together to coalesce into fewer view updates
+        displayTasks = newDisplayTasks
+        hasMoreFilteredResults = newHasMore
         categorizedTasks = result
 
         // Debug logging
-        log("TasksViewModel: Categorized \(displayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)")
+        log("TasksViewModel: Categorized \(newDisplayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)")
     }
 
     /// Load more filtered/search results (pagination within already-queried results)
