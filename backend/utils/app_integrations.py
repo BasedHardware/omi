@@ -125,8 +125,8 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             response = requests.post(
                 url,
                 json=payload,
-                timeout=30,
-            )  # TODO: failing?
+                timeout=10,
+            )
             if response.status_code != 200:
                 print('App integration failed', app.id, 'status:', response.status_code, 'result:', response.text[:100])
                 return
@@ -424,7 +424,7 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
         url = app.external_integration.webhook_url
         url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
-            response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
+            response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=5)
             print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code)
         except Exception as e:
             print(f"Plugin integration error: {e}")
@@ -497,7 +497,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
+            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=5)
             if response.status_code != 200:
                 print(
                     'trigger_realtime_integrations',
