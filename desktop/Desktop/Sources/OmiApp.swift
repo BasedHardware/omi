@@ -753,22 +753,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
                 log("App rename migration: moved to \(newPath)")
 
-                // Re-register with Launch Services
-                let lsregister = Process()
-                lsregister.executableURL = URL(fileURLWithPath:
-                    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-                lsregister.arguments = ["-f", newPath]
-                try? lsregister.run()
-                lsregister.waitUntilExit()
+                // Re-register with Launch Services and relaunch from new path (off main thread)
+                DispatchQueue.global(qos: .utility).async {
+                    let lsregister = Process()
+                    lsregister.executableURL = URL(fileURLWithPath:
+                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+                    lsregister.arguments = ["-f", newPath]
+                    try? lsregister.run()
+                    lsregister.waitUntilExit()
 
-                // Relaunch from new path
-                let relaunch = Process()
-                relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                relaunch.arguments = [newPath]
-                try? relaunch.run()
+                    // Relaunch from new path
+                    let relaunch = Process()
+                    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                    relaunch.arguments = [newPath]
+                    try? relaunch.run()
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    NSApp.terminate(nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NSApp.terminate(nil)
+                    }
                 }
             } catch {
                 log("App rename migration failed: \(error.localizedDescription)")

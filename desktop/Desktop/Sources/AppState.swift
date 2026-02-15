@@ -1813,20 +1813,7 @@ class AppState: ObservableObject {
     nonisolated func resetOnboardingAndRestart() {
         log("Resetting onboarding (full cleanup)...")
 
-        // 1. Clean conflicting app bundles from Trash, DerivedData, DMG staging
-        // These pollute Launch Services and cause permission confusion
-        cleanConflictingAppBundles()
-
-        // 2. Eject any mounted Omi DMG volumes
-        ejectMountedDMGVolumes()
-
-        // 3. Reset Launch Services database to clear stale registrations
-        resetLaunchServicesDatabase()
-
-        // 4. Ensure this app is the authoritative version in Launch Services
-        ScreenCaptureService.ensureLaunchServicesRegistration()
-
-        // 5. Clear onboarding-related UserDefaults keys for BOTH bundle IDs
+        // Clear onboarding-related UserDefaults keys (thread-safe, do first)
         let onboardingKeys = [
             "hasCompletedOnboarding",
             "onboardingStep",
@@ -1857,32 +1844,46 @@ class AppState: ObservableObject {
             }
         }
 
-        // 6. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
-        let bundleIds = [
-            "com.omi.computer-macos",       // Production
-            "com.omi.desktop-dev"           // Development
-        ]
+        // Run all blocking Process calls on a background thread
+        DispatchQueue.global(qos: .utility).async { [self] in
+            // 1. Clean conflicting app bundles from Trash, DerivedData, DMG staging
+            cleanConflictingAppBundles()
 
-        for id in bundleIds {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-            process.arguments = ["reset", "All", id]
+            // 2. Eject any mounted Omi DMG volumes
+            ejectMountedDMGVolumes()
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-                log("tccutil reset All for \(id) completed with exit code: \(process.terminationStatus)")
-            } catch {
-                log("Failed to run tccutil for \(id): \(error)")
+            // 3. Reset Launch Services database to clear stale registrations
+            resetLaunchServicesDatabase()
+
+            // 4. Ensure this app is the authoritative version in Launch Services
+            ScreenCaptureService.ensureLaunchServicesRegistration()
+
+            // 5. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
+            let bundleIds = [
+                "com.omi.computer-macos",       // Production
+                "com.omi.desktop-dev"           // Development
+            ]
+
+            for id in bundleIds {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+                process.arguments = ["reset", "All", id]
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    log("tccutil reset All for \(id) completed with exit code: \(process.terminationStatus)")
+                } catch {
+                    log("Failed to run tccutil for \(id): \(error)")
+                }
             }
+
+            // 6. Also clean user TCC database directly via sqlite3
+            self.cleanUserTCCDatabase()
+
+            // 7. Restart the app
+            self.restartApp()
         }
-
-        // 7. Also clean user TCC database directly via sqlite3
-        // (System TCC database for Screen Recording is SIP-protected, only tccutil can reset it)
-        cleanUserTCCDatabase()
-
-        // 8. Restart the app
-        restartApp()
     }
 
     /// Clean conflicting app bundles from Trash, DerivedData, and DMG staging directories

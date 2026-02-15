@@ -197,39 +197,41 @@ final class ScreenCaptureService: Sendable {
             return
         }
 
-        // First ensure this app is the authoritative version in Launch Services
-        // This fixes issues where tccutil resets permission for a stale app registration
-        ensureLaunchServicesRegistration()
+        let bundleURL = Bundle.main.bundleURL
 
-        let success = resetScreenCapturePermission()
+        // Run blocking Process calls on a background thread
+        Task.detached {
+            // First ensure this app is the authoritative version in Launch Services
+            // This fixes issues where tccutil resets permission for a stale app registration
+            ensureLaunchServicesRegistration()
 
-        // Track reset completion
-        AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
+            let success = resetScreenCapturePermission()
 
-        if success {
-            log("Screen capture permission reset, restarting app...")
+            await MainActor.run {
+                // Track reset completion
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
 
-            guard let bundleURL = Bundle.main.bundleURL as URL? else {
-                log("Failed to get bundle URL for restart")
-                return
-            }
+                if success {
+                    log("Screen capture permission reset, restarting app...")
 
-            // Use a shell script to wait briefly, then relaunch the app
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/sh")
-            task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+                    // Use a shell script to wait briefly, then relaunch the app
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
 
-            do {
-                try task.run()
-                log("Restart scheduled, terminating current instance...")
-                DispatchQueue.main.async {
-                    NSApplication.shared.terminate(nil)
+                    do {
+                        try task.run()
+                        log("Restart scheduled, terminating current instance...")
+                        DispatchQueue.main.async {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    } catch {
+                        logError("Failed to schedule restart", error: error)
+                    }
+                } else {
+                    log("Screen capture permission reset failed")
                 }
-            } catch {
-                logError("Failed to schedule restart", error: error)
             }
-        } else {
-            log("Screen capture permission reset failed")
         }
     }
 

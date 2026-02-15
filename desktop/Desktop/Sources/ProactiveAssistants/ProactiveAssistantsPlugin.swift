@@ -171,39 +171,45 @@ public class ProactiveAssistantsPlugin: NSObject {
     /// Unregistering and re-registering clears the flag, then retries authorization.
     static func repairNotificationRegistration() {
         let appPath = Bundle.main.bundlePath
+        let bundleURL = Bundle.main.bundleURL
         log("Repairing LaunchServices registration for notifications: \(appPath)")
 
         let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-        // Unregister to clear stale/launch-disabled entries
-        let unregister = Process()
-        unregister.executableURL = URL(fileURLWithPath: lsregister)
-        unregister.arguments = ["-u", appPath]
-        try? unregister.run()
-        unregister.waitUntilExit()
+        // Run blocking Process calls on a background thread
+        DispatchQueue.global(qos: .utility).async {
+            // Unregister to clear stale/launch-disabled entries
+            let unregister = Process()
+            unregister.executableURL = URL(fileURLWithPath: lsregister)
+            unregister.arguments = ["-u", appPath]
+            try? unregister.run()
+            unregister.waitUntilExit()
 
-        // Force re-register
-        let register = Process()
-        register.executableURL = URL(fileURLWithPath: lsregister)
-        register.arguments = ["-f", appPath]
-        try? register.run()
-        register.waitUntilExit()
+            // Force re-register
+            let register = Process()
+            register.executableURL = URL(fileURLWithPath: lsregister)
+            register.arguments = ["-f", appPath]
+            try? register.run()
+            register.waitUntilExit()
 
-        // Also re-register via LSRegisterURL
-        if let cfURL = Bundle.main.bundleURL as CFURL? {
-            LSRegisterURL(cfURL, true)
-        }
+            DispatchQueue.main.async {
+                // Also re-register via LSRegisterURL (must be on main thread)
+                if let cfURL = bundleURL as CFURL? {
+                    LSRegisterURL(cfURL, true)
+                }
 
-        log("LaunchServices re-registration complete, retrying notification authorization...")
+                log("LaunchServices re-registration complete, retrying notification authorization...")
 
-        // Retry authorization after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            NSApp.activate(ignoringOtherApps: true)
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                if let error = error {
-                    log("Notification retry after repair failed: \(error.localizedDescription)")
-                } else if granted {
-                    log("Notification permission granted after LaunchServices repair")
+                // Retry authorization after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                        if let error = error {
+                            log("Notification retry after repair failed: \(error.localizedDescription)")
+                        } else if granted {
+                            log("Notification permission granted after LaunchServices repair")
+                        }
+                    }
                 }
             }
         }
