@@ -25,6 +25,7 @@ class ViewModelContainer: ObservableObject {
         guard !isLoading else { return }
         isLoading = true
 
+        let startupStart = CFAbsoluteTimeGetCurrent()
         let timer = PerfTimer("ViewModelContainer.loadAllData", logCPU: true)
         logPerf("DATA LOAD: Starting eager data load for all pages", cpu: true)
 
@@ -33,6 +34,8 @@ class ViewModelContainer: ObservableObject {
         await RewindDatabase.shared.configure(userId: userId)
 
         // Pre-initialize database so local SQLite reads are instant
+        let dbInitStart = CFAbsoluteTimeGetCurrent()
+        let hadUncleanShutdown = await RewindDatabase.shared.hadUncleanShutdown()
         do {
             try await RewindDatabase.shared.initialize()
             databaseInitFailed = false
@@ -40,10 +43,21 @@ class ViewModelContainer: ObservableObject {
             logError("ViewModelContainer: Database pre-init failed, DB-dependent loads will be skipped", error: error)
             databaseInitFailed = true
         }
+        let dbInitDuration = CFAbsoluteTimeGetCurrent() - dbInitStart
 
         // Database is ready (or failed) — dismiss the loading screen
         // API calls and data fetches continue in the background
         isInitialLoadComplete = true
+        let timeToInteractive = CFAbsoluteTimeGetCurrent() - startupStart
+
+        // Track startup timing
+        logPerf("DATA LOAD: DB init \(String(format: "%.1f", dbInitDuration * 1000))ms, time-to-interactive \(String(format: "%.1f", timeToInteractive * 1000))ms, uncleanShutdown=\(hadUncleanShutdown)")
+        AnalyticsManager.shared.trackStartupTiming(
+            dbInitMs: dbInitDuration * 1000,
+            timeToInteractiveMs: timeToInteractive * 1000,
+            hadUncleanShutdown: hadUncleanShutdown,
+            databaseInitFailed: databaseInitFailed
+        )
 
         // DB-dependent loads are guarded — skip them if database init failed
         // to prevent a stampede of retries from each storage actor

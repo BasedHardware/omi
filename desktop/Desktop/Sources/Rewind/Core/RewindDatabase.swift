@@ -99,6 +99,12 @@ actor RewindDatabase {
         log("RewindDatabase: Clean shutdown flagged")
     }
 
+    /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+    func hadUncleanShutdown() -> Bool {
+        let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
+        return FileManager.default.fileExists(atPath: flagPath)
+    }
+
     /// Initialize the database with migrations.
     /// If the DB is already open for the correct user, returns immediately.
     /// If the DB is open for a different user (e.g., "anonymous" before configure was called),
@@ -648,11 +654,16 @@ actor RewindDatabase {
     /// Verify database integrity after successful initialization
     private func verifyDatabaseIntegrity(_ queue: DatabaseQueue) throws {
         try queue.read { db in
-            // Quick integrity check on first page
-            let result = try String.fetchOne(db, sql: "PRAGMA quick_check(1)")
-            if result?.lowercased() != "ok" {
-                throw RewindError.databaseCorrupted(message: result ?? "Unknown integrity error")
-            }
+            // Cheap schema-level check: verify we can read from a core table and the page count.
+            // Avoids PRAGMA quick_check which scans the entire DB (75s+ on 4 GB databases).
+            let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+            let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 0
+            let dbSizeMB = (pageCount * pageSize) / (1024 * 1024)
+            log("RewindDatabase: Database size ~\(dbSizeMB) MB (\(pageCount) pages)")
+
+            // Verify schema is readable by querying sqlite_master
+            let tableCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master WHERE type='table'") ?? 0
+            log("RewindDatabase: Schema OK (\(tableCount) tables)")
 
             // Log journal mode (WAL preferred, but may fall back to delete/rollback)
             let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
