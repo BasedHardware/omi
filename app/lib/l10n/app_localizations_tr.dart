@@ -8190,4 +8190,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'WiFi şifresini girin';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

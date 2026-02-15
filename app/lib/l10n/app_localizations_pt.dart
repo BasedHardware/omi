@@ -8179,4 +8179,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Insira a senha do WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

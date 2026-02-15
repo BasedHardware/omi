@@ -8160,4 +8160,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Indtast WiFi-adgangskode';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

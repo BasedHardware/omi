@@ -15278,6 +15278,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter WiFi password'**
   String get enterWifiPassword;
+
+  /// No description provided for @appIconLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

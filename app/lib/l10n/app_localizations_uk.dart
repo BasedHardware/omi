@@ -8190,4 +8190,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Введіть пароль WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

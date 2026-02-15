@@ -8195,4 +8195,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Ievadiet WiFi paroli';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }
