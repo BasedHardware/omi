@@ -217,7 +217,27 @@ actor RewindDatabase {
             // If opening fails (e.g. disk I/O error on WAL), try once more without WAL files
             log("RewindDatabase: Failed to open database: \(error), cleaning WAL and retrying...")
             removeWALFiles(at: dbPath)
-            queue = try DatabaseQueue(path: dbPath, configuration: config)
+            do {
+                queue = try DatabaseQueue(path: dbPath, configuration: config)
+            } catch let retryError {
+                // If still failing, check for database corruption (SQLite error 11)
+                let isCorrupted: Bool
+                if let dbError = retryError as? DatabaseError {
+                    isCorrupted = dbError.resultCode == .SQLITE_CORRUPT
+                        || dbError.resultCode.primaryResultCode == .SQLITE_CORRUPT
+                } else {
+                    isCorrupted = "\(retryError)".contains("malformed")
+                }
+
+                if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+                    log("RewindDatabase: Database is corrupted, attempting recovery...")
+                    try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+                    // Retry with recovered or fresh database
+                    queue = try DatabaseQueue(path: dbPath, configuration: config)
+                } else {
+                    throw retryError
+                }
+            }
         }
         dbQueue = queue
         openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
