@@ -201,13 +201,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Tier gating: migrate old boolean key to new 6-tier system
         TierManager.migrateExistingUsersIfNeeded()
 
-        // New users start at tier 1 (Conversations + Rewind only)
+        // All users get all features (tier 0 = show all)
         // Note: hasLaunchedBefore is also set by trackFirstLaunchIfNeeded(), but that
         // skips dev builds. Set it here too so tier doesn't reset on every dev launch.
         if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            UserDefaults.standard.set(1, forKey: "currentTierLevel")
-            UserDefaults.standard.set(1, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(0, forKey: "currentTierLevel")
+            UserDefaults.standard.set(0, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(true, forKey: "userShowAllFeatures")
         }
 
         AnalyticsManager.shared.trackFirstLaunchIfNeeded()
