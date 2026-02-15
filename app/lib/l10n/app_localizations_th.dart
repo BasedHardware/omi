@@ -8141,4 +8141,36 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'มีอะไรใหม่ใน $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'เพิ่มในรายการงานของคุณ?';
+
+  @override
+  String get failedToCreateShareLink => 'ไม่สามารถสร้างลิงก์แชร์ได้';
+
+  @override
+  String get deleteGoal => 'ลบเป้าหมาย';
+
+  @override
+  String get deviceUpToDate => 'อุปกรณ์ของคุณเป็นเวอร์ชันล่าสุดแล้ว';
+
+  @override
+  String get wifiConfiguration => 'การตั้งค่า WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'ป้อนข้อมูล WiFi เพื่อให้อุปกรณ์ดาวน์โหลดเฟิร์มแวร์ได้';
+
+  @override
+  String get networkNameSsid => 'ชื่อเครือข่าย (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'ป้อนชื่อเครือข่าย WiFi';
+
+  @override
+  String get enterWifiPassword => 'ป้อนรหัสผ่าน WiFi';
 }

@@ -8207,4 +8207,37 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Apa yang Baharu dalam $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tambah ke senarai tugas anda?';
+
+  @override
+  String get failedToCreateShareLink => 'Gagal membuat pautan kongsi';
+
+  @override
+  String get deleteGoal => 'Padam Matlamat';
+
+  @override
+  String get deviceUpToDate => 'Peranti anda sudah dikemas kini';
+
+  @override
+  String get wifiConfiguration => 'Konfigurasi WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Masukkan kelayakan WiFi anda untuk membenarkan peranti memuat turun perisian tegar.';
+
+  @override
+  String get networkNameSsid => 'Nama Rangkaian (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Masukkan nama rangkaian WiFi';
+
+  @override
+  String get enterWifiPassword => 'Masukkan kata laluan WiFi';
 }

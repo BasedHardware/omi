@@ -414,7 +414,7 @@ final class ScreenCaptureService: Sendable {
 
             return jpegData(from: image)
         } catch {
-            logError("ScreenCaptureKit error", error: error)
+            log("ScreenCaptureKit error: \(error.localizedDescription)")
             return nil
         }
     }
@@ -472,7 +472,7 @@ final class ScreenCaptureService: Sendable {
                 configuration: config
             )
         } catch {
-            logError("ScreenCaptureKit CGImage error", error: error)
+            log("ScreenCaptureKit CGImage error: \(error.localizedDescription)")
             return nil
         }
     }

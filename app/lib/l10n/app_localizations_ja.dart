@@ -8045,4 +8045,36 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version の新機能';
+  }
+
+  @override
+  String get addToYourTaskList => 'タスクリストに追加しますか？';
+
+  @override
+  String get failedToCreateShareLink => '共有リンクの作成に失敗しました';
+
+  @override
+  String get deleteGoal => '目標を削除';
+
+  @override
+  String get deviceUpToDate => 'デバイスは最新です';
+
+  @override
+  String get wifiConfiguration => 'WiFi設定';
+
+  @override
+  String get wifiConfigurationSubtitle => 'デバイスがファームウェアをダウンロードできるようにWiFi資格情報を入力してください。';
+
+  @override
+  String get networkNameSsid => 'ネットワーク名（SSID）';
+
+  @override
+  String get enterWifiNetworkName => 'WiFiネットワーク名を入力';
+
+  @override
+  String get enterWifiPassword => 'WiFiパスワードを入力';
 }

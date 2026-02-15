@@ -8223,4 +8223,37 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Ce este nou în $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Adăugați în lista de sarcini?';
+
+  @override
+  String get failedToCreateShareLink => 'Nu s-a putut crea linkul de partajare';
+
+  @override
+  String get deleteGoal => 'Șterge obiectivul';
+
+  @override
+  String get deviceUpToDate => 'Dispozitivul dvs. este la zi';
+
+  @override
+  String get wifiConfiguration => 'Configurare WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduceți datele WiFi pentru a permite dispozitivului să descarce firmware-ul.';
+
+  @override
+  String get networkNameSsid => 'Numele rețelei (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduceți numele rețelei WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduceți parola WiFi';
 }

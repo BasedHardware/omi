@@ -8201,4 +8201,37 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas jauns $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pievienot uzdevumu sarakstam?';
+
+  @override
+  String get failedToCreateShareLink => 'Neizdevās izveidot kopīgošanas saiti';
+
+  @override
+  String get deleteGoal => 'Dzēst mērķi';
+
+  @override
+  String get deviceUpToDate => 'Jūsu ierīce ir atjaunināta';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigurācija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.';
+
+  @override
+  String get networkNameSsid => 'Tīkla nosaukums (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ievadiet WiFi tīkla nosaukumu';
+
+  @override
+  String get enterWifiPassword => 'Ievadiet WiFi paroli';
 }

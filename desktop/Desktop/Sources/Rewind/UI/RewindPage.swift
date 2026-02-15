@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVKit
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -29,6 +30,24 @@ struct RewindPage: View {
     @State private var isRecordingPulsing = false
     @State private var isSavingPulsing = false
 
+    // Expanded transcript state
+    @State private var isTranscriptExpanded = false
+    @State private var savedTranscriptSegments: [SpeakerSegment] = []
+
+    // Split finish/stop button state
+    @State private var isFinishing = false
+    @State private var showSavedSuccess = false
+    @State private var showDiscarded = false
+    @State private var showError = false
+    @AppStorage("recordingButtonMode") private var buttonMode: String = "finish"
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
+    // Rewind intro video (first-time experience)
+    @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
+
     enum SearchViewMode {
         case results  // Full-screen search results
         case timeline // Timeline with search highlights
@@ -37,6 +56,42 @@ struct RewindPage: View {
     /// Whether we're in search mode (has query or active search)
     private var isInSearchMode: Bool {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
+    }
+
+    private var isFinishMode: Bool { buttonMode == "finish" }
+
+    private var finishButtonText: String {
+        if isFinishing { return "Saving..." }
+        if showSavedSuccess { return "Saved!" }
+        if showDiscarded { return "Too Short" }
+        if showError { return "Failed" }
+        return isFinishMode ? "Finish Conversation" : "Stop Recording"
+    }
+
+    private var finishButtonForeground: Color {
+        if showSavedSuccess { return .white }
+        if showDiscarded { return .white }
+        if showError { return .white }
+        return .black
+    }
+
+    private var finishButtonBackground: Color {
+        if showSavedSuccess { return OmiColors.success }
+        if showDiscarded { return OmiColors.warning }
+        if showError { return OmiColors.error }
+        return .white
+    }
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        guard let appState = appState else { return [:] }
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
     }
 
     var body: some View {
@@ -51,35 +106,45 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
-                    // Recording bar (when recording or saving)
-                    if let appState = appState, (appState.isTranscribing || appState.isSavingConversation) {
+                    // Recording bar (always visible when appState exists)
+                    if let appState = appState {
                         rewindRecordingBar(appState: appState)
                     }
 
-                    // Recovery banner (if database was recovered from corruption)
-                    if viewModel.showRecoveryBanner {
-                        recoveryBanner
-                    }
-
-                    // Unified top bar - search field is always here
-                    unifiedTopBar
-
-                    // Content area changes based on mode
-                    if isInSearchMode {
-                        if viewModel.screenshots.isEmpty {
-                            noSearchResultsView
-                        } else if searchViewMode == .timeline {
-                            timelineWithSearch
-                        } else {
-                            fullScreenResultsView
-                        }
-                    } else if viewModel.screenshots.isEmpty {
-                        emptyState
+                    if isTranscriptExpanded {
+                        // Expanded transcript + notes view replaces timeline
+                        expandedTranscriptView
                     } else {
-                        // Normal timeline view (without top bar, since we have unified one)
-                        timelineContentBody
+                        // Recovery banner (if database was recovered from corruption)
+                        if viewModel.showRecoveryBanner {
+                            recoveryBanner
+                        }
+
+                        // Unified top bar - search field is always here
+                        unifiedTopBar
+
+                        // Content area changes based on mode
+                        if isInSearchMode {
+                            if viewModel.screenshots.isEmpty {
+                                noSearchResultsView
+                            } else if searchViewMode == .timeline {
+                                timelineWithSearch
+                            } else {
+                                fullScreenResultsView
+                            }
+                        } else if viewModel.screenshots.isEmpty {
+                            emptyState
+                        } else {
+                            // Normal timeline view (without top bar, since we have unified one)
+                            timelineContentBody
+                        }
                     }
                 }
+            }
+
+            // Rewind intro video overlay (first-time experience)
+            if !hasSeenRewindIntro {
+                rewindIntroOverlay
             }
         }
         .task {
@@ -121,8 +186,20 @@ struct RewindPage: View {
                 selectedGroupIndex = 0
             }
         }
+        .onChange(of: appState?.isTranscribing) { _, newValue in
+            // When recording stops, snapshot the transcript so it survives the clear
+            if newValue != true && isTranscriptExpanded && !liveTranscript.segments.isEmpty {
+                savedTranscriptSegments = liveTranscript.segments
+            }
+        }
         // Global keyboard handlers
         .onKeyPress(.escape) {
+            // Expanded transcript → collapse
+            if isTranscriptExpanded {
+                isTranscriptExpanded = false
+                savedTranscriptSegments = []
+                return .handled
+            }
             // Timeline mode → go back to results list
             if searchViewMode == .timeline {
                 searchViewMode = .results
@@ -213,20 +290,20 @@ struct RewindPage: View {
             Spacer()
 
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(.white.opacity(0.3))
 
             if viewModel.isSearching {
                 Text("Searching...")
-                    .font(.system(size: 16, weight: .medium))
+                    .scaledFont(size: 16, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
             } else {
                 Text("No results found")
-                    .font(.system(size: 16, weight: .medium))
+                    .scaledFont(size: 16, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
 
                 Text("Try a different search term")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.4))
             }
 
@@ -307,7 +384,7 @@ struct RewindPage: View {
                     searchViewMode = .results
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(.white.opacity(0.7))
                         .frame(width: 28, height: 28)
                         .background(Color.white.opacity(0.1))
@@ -316,13 +393,10 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Rewind title/logo with toggle
+                // Screen title
                 HStack(spacing: 8) {
-                    // Toggle for monitoring on/off
-                    rewindToggle
-
-                    Text("Rewind")
-                        .font(.system(size: 16, weight: .semibold))
+                    Text("Screen")
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.white)
 
                     // Global hotkey hint
@@ -331,7 +405,7 @@ struct RewindPage: View {
                         Text("⌥")
                         Text("R")
                     }
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .scaledFont(size: 10, weight: .medium, design: .rounded)
                     .foregroundColor(.white.opacity(0.4))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
@@ -357,7 +431,7 @@ struct RewindPage: View {
                         }
                     } label: {
                         Image(systemName: "list.bullet")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(searchViewMode == .results ? .black : .white.opacity(0.5))
                             .frame(width: 28, height: 24)
                             .background(searchViewMode == .results ? Color.white : Color.clear)
@@ -374,7 +448,7 @@ struct RewindPage: View {
                         searchViewMode = .timeline
                     } label: {
                         Image(systemName: "timeline.selection")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(searchViewMode == .timeline ? .black : .white.opacity(0.5))
                             .frame(width: 28, height: 24)
                             .background(searchViewMode == .timeline ? Color.white : Color.clear)
@@ -391,12 +465,14 @@ struct RewindPage: View {
                 // Stats
                 if let stats = viewModel.stats {
                     Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
 
-            // Settings - always visible
+            Spacer()
+
+            // Settings
             Button {
                 NotificationCenter.default.post(
                     name: .navigateToRewindSettings,
@@ -404,15 +480,52 @@ struct RewindPage: View {
                 )
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .help("Rewind Settings")
+            .help("Screen Settings")
+
+            // Screen recording start/stop
+            if isMonitoring {
+                Button {
+                    toggleMonitoring(enabled: false)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.circle.fill")
+                            .scaledFont(size: 12)
+                        Text("Stop Recording")
+                            .scaledFont(size: 13, weight: .medium)
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white))
+                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    toggleMonitoring(enabled: true)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "record.circle")
+                            .scaledFont(size: 12)
+                        Text("Start Recording")
+                            .scaledFont(size: 13, weight: .medium)
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white))
+                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.black.opacity(0.8))
+        .background(OmiColors.backgroundTertiary.opacity(0.8))
     }
 
     // MARK: - Timeline Content Body (without top bar)
@@ -500,12 +613,12 @@ struct RewindPage: View {
     private func searchField(showResultsCount: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : .white.opacity(0.5))
 
             TextField("Search your screen history...", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.white)
                 .focused($isSearchFocused)
 
@@ -519,11 +632,11 @@ struct RewindPage: View {
                 let total = viewModel.totalScreenshotCount
                 if groups.count == total {
                     Text("\(total) results")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.5))
                 } else {
                     Text("\(groups.count) groups (\(total) total)")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
@@ -534,7 +647,7 @@ struct RewindPage: View {
                     searchViewMode = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.white.opacity(0.5))
                 }
                 .buttonStyle(.plain)
@@ -561,10 +674,10 @@ struct RewindPage: View {
         } label: {
             HStack(spacing: 6) {
                 Text(viewModel.selectedDate.formatted(.dateTime.month().day().year()))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .scaledFont(size: 8, weight: .semibold)
                     .foregroundColor(.white.opacity(0.5))
             }
             .padding(.horizontal, 10)
@@ -650,10 +763,10 @@ struct RewindPage: View {
                 }()
                 VStack(spacing: 6) {
                     Image(systemName: "photo")
-                        .font(.system(size: 24))
+                        .scaledFont(size: 24)
                         .foregroundColor(.white.opacity(0.3))
                     Text("No frame")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.4))
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
@@ -688,7 +801,7 @@ struct RewindPage: View {
                             .fill(Color.white)
                             .frame(width: 8, height: 8)
                         Text("current")
-                            .font(.system(size: 9))
+                            .scaledFont(size: 9)
                             .foregroundColor(.white.opacity(0.4))
                     }
 
@@ -699,7 +812,7 @@ struct RewindPage: View {
                                 .fill(Color.yellow.opacity(0.8))
                                 .frame(width: 8, height: 8)
                             Text("match")
-                                .font(.system(size: 9))
+                                .scaledFont(size: 9)
                                 .foregroundColor(.white.opacity(0.4))
                         }
                     }
@@ -712,17 +825,17 @@ struct RewindPage: View {
                     let screenshot = screenshots[currentIndex]
                     HStack(spacing: 8) {
                         Text("\(currentIndex + 1)/\(screenshots.count)")
-                            .font(.system(size: 10, design: .monospaced))
+                            .scaledFont(size: 10, design: .monospaced)
                             .foregroundColor(.white.opacity(0.5))
                         Text(screenshot.formattedDateCompact)
-                            .font(.system(size: 10, design: .monospaced))
+                            .scaledFont(size: 10, design: .monospaced)
                             .foregroundColor(.white.opacity(0.7))
                     }
                 }
 
                 // Scroll hint
                 Text("scroll to navigate")
-                    .font(.system(size: 9))
+                    .scaledFont(size: 9)
                     .foregroundColor(.white.opacity(0.3))
             }
             .padding(.horizontal, 16)
@@ -829,6 +942,49 @@ struct RewindPage: View {
     }
 
 
+    // MARK: - Rewind Intro Video
+
+    private var rewindIntroOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                RewindIntroVideoView()
+                    .frame(maxWidth: 700, maxHeight: 394) // 16:9 aspect
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: OmiColors.purplePrimary.opacity(0.3), radius: 20)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Get Started")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 10)
+                        .background(OmiColors.purplePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Skip")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
+    }
+
     // MARK: - Empty States
 
     private var emptyState: some View {
@@ -839,16 +995,16 @@ struct RewindPage: View {
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 36))
+                    .scaledFont(size: 36)
                     .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
             }
 
             Text("No Screenshots Yet")
-                .font(.system(size: 20, weight: .semibold))
+                .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(.white)
 
             Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
 
@@ -856,7 +1012,7 @@ struct RewindPage: View {
                 Image(systemName: "lightbulb.fill")
                     .foregroundColor(.yellow)
                 Text("Tip: Use search to find anything you've seen on screen")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.7))
             }
             .padding(.horizontal, 16)
@@ -871,20 +1027,20 @@ struct RewindPage: View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
-                .font(.system(size: 16))
+                .scaledFont(size: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Database Recovered")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(.white)
 
                 if viewModel.recoveredRecordCount > 0 {
                     Text("\(viewModel.recoveredRecordCount) screenshots recovered from corrupted database")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.7))
                 } else {
                     Text("Database was corrupted and has been reset. Your video files are intact.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
@@ -896,7 +1052,7 @@ struct RewindPage: View {
                     Task { await rebuildDatabase() }
                 } label: {
                     Text("Rebuild Index")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -913,7 +1069,7 @@ struct RewindPage: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
@@ -956,7 +1112,7 @@ struct RewindPage: View {
                 .tint(.white)
 
             Text("Loading screenshots...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
         }
     }
@@ -969,16 +1125,16 @@ struct RewindPage: View {
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 36))
+                    .scaledFont(size: 36)
                     .foregroundColor(OmiColors.error)
             }
 
             Text("Failed to Load Screenshots")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(.white)
 
             Text(message)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
 
             Button {
@@ -988,7 +1144,7 @@ struct RewindPage: View {
                     Image(systemName: "arrow.clockwise")
                     Text("Retry")
                 }
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
@@ -999,49 +1155,178 @@ struct RewindPage: View {
         }
     }
 
+    // MARK: - Expanded Transcript View
+
+    @AppStorage("recordingNotesPanelRatio") private var panelRatio: Double = 0.65
+    private let minPanelWidth: CGFloat = 200
+
+    /// The segments to display — live if available, otherwise the saved snapshot
+    private var displaySegments: [SpeakerSegment] {
+        if !liveTranscript.segments.isEmpty {
+            return liveTranscript.segments
+        }
+        return savedTranscriptSegments
+    }
+
+    private var expandedTranscriptView: some View {
+        VStack(spacing: 0) {
+            // Show a back bar only when the recording bar is not visible
+            if appState?.isTranscribing != true && appState?.isSavingConversation != true {
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isTranscriptExpanded = false
+                            savedTranscriptSegments = []
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.up")
+                                .scaledFont(size: 11, weight: .semibold)
+                            Text("Back to Rewind")
+                                .scaledFont(size: 13, weight: .medium)
+                        }
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+            }
+
+            // Split panel: transcript (left) + notes (right)
+            GeometryReader { geometry in
+                let totalWidth = geometry.size.width
+                let transcriptWidth = max(minPanelWidth, totalWidth * panelRatio)
+                let notesWidth = max(minPanelWidth, totalWidth - transcriptWidth - 1)
+
+                HStack(spacing: 0) {
+                    // Left: Live transcript
+                    VStack(spacing: 0) {
+                        if displaySegments.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "waveform")
+                                    .scaledFont(size: 48)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .opacity(0.5)
+                                Text("Listening...")
+                                    .scaledFont(size: 16, weight: .medium)
+                                    .foregroundColor(OmiColors.textSecondary)
+                                Text("Start speaking and your transcript will appear here")
+                                    .scaledFont(size: 14)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(32)
+                        } else {
+                            LiveTranscriptView(
+                                segments: displaySegments,
+                                speakerNames: speakerNames,
+                                onSpeakerTapped: { segment in
+                                    selectedSpeakerSegment = segment
+                                    showNameSpeakerSheet = true
+                                }
+                            )
+                        }
+                    }
+                    .frame(width: transcriptWidth)
+                    .background(OmiColors.backgroundPrimary)
+
+                    // Divider
+                    Rectangle()
+                        .fill(OmiColors.border)
+                        .frame(width: 1)
+
+                    // Right: Notes
+                    LiveNotesView()
+                        .frame(width: notesWidth)
+                }
+            }
+        }
+        .background(OmiColors.backgroundPrimary)
+        .task {
+            await appState?.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment, let appState = appState {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
+    }
+
     // MARK: - Recording Bar
 
     private func rewindRecordingBar(appState: AppState) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            // Left: always show "Audio" label
+            Text("Audio")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(.white)
+
+            // Middle content depends on state
             if appState.isTranscribing {
-                // Pulsing dot
-                ZStack {
-                    Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.3))
-                        .frame(width: 20, height: 20)
-                        .scaleEffect(isRecordingPulsing ? 1.6 : 1.0)
-                        .opacity(isRecordingPulsing ? 0.0 : 0.6)
-
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 10, height: 10)
+                // Transcript text + chevron (clickable to expand/collapse)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isTranscriptExpanded.toggle()
+                        if !isTranscriptExpanded {
+                            savedTranscriptSegments = []
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        if let latestText = liveTranscript.latestText, !liveTranscript.isEmpty {
+                            Text(latestText)
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                                .frame(maxWidth: 260, alignment: .leading)
+                        } else {
+                            Text("Listening")
+                                .scaledFont(size: 14, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+                        }
+                        Image(systemName: isTranscriptExpanded ? "chevron.up" : "chevron.down")
+                            .scaledFont(size: 10, weight: .semibold)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    )
                 }
-                .animation(
-                    .easeInOut(duration: 1.0)
-                        .repeatForever(autoreverses: true),
-                    value: isRecordingPulsing
-                )
-                .onAppear { isRecordingPulsing = true }
-
-                // Latest transcript text
-                if let latestText = liveTranscript.latestText, !liveTranscript.isEmpty {
-                    Text(latestText)
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: 280, alignment: .leading)
-                } else {
-                    Text("Listening")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(OmiColors.textPrimary)
-                }
+                .buttonStyle(.plain)
 
                 // Audio level waveforms
                 HStack(spacing: 16) {
                     HStack(spacing: 6) {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                         AudioLevelWaveformView(
                             level: audioLevels.microphoneLevel,
@@ -1052,7 +1337,7 @@ struct RewindPage: View {
 
                     HStack(spacing: 6) {
                         Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                         AudioLevelWaveformView(
                             level: audioLevels.systemLevel,
@@ -1062,30 +1347,10 @@ struct RewindPage: View {
                     }
                 }
 
-                Spacer()
-
                 // Duration
                 Text(recordingTimer.formattedDuration)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .scaledFont(size: 14, weight: .medium, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
-
-                // Stop button
-                Button(action: {
-                    appState.stopTranscription()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.system(size: 12))
-                        Text("Stop Recording")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
             } else if appState.isSavingConversation {
                 // Saving indicator
                 ZStack {
@@ -1096,7 +1361,7 @@ struct RewindPage: View {
                         .opacity(isSavingPulsing ? 0.0 : 0.6)
 
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.purplePrimary)
                         .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
                 }
@@ -1109,18 +1374,154 @@ struct RewindPage: View {
                 .onDisappear { isSavingPulsing = false }
 
                 Text("Saving conversation...")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 ProgressView()
                     .scaleEffect(0.7)
+            }
 
-                Spacer()
+            Spacer()
+
+            // Right: Split finish/stop button or start button
+            if appState.isTranscribing {
+                HStack(spacing: 0) {
+                    // Main action button
+                    Button(action: {
+                        if isFinishMode {
+                            handleFinish(appState: appState)
+                        } else {
+                            appState.stopTranscription()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            if isFinishing {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12, height: 12)
+                            } else if showSavedSuccess {
+                                Image(systemName: "checkmark")
+                                    .scaledFont(size: 12, weight: .bold)
+                            } else if showDiscarded {
+                                Image(systemName: "xmark")
+                                    .scaledFont(size: 12, weight: .bold)
+                            } else if showError {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .scaledFont(size: 12)
+                            } else {
+                                Image(systemName: "stop.circle.fill")
+                                    .scaledFont(size: 12)
+                            }
+                            Text(finishButtonText)
+                                .scaledFont(size: 13, weight: .medium)
+                        }
+                        .foregroundColor(finishButtonForeground)
+                        .padding(.leading, 14)
+                        .padding(.trailing, 8)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+
+                    // Divider line
+                    Rectangle()
+                        .fill(Color.black.opacity(0.15))
+                        .frame(width: 1, height: 20)
+
+                    // Dropdown chevron
+                    Menu {
+                        Button(action: { buttonMode = "finish" }) {
+                            HStack {
+                                Text("Finish Conversation")
+                                if buttonMode == "finish" {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                        Button(action: { buttonMode = "stop" }) {
+                            HStack {
+                                Text("Stop Recording")
+                                if buttonMode == "stop" {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .scaledFont(size: 9, weight: .bold)
+                            .foregroundColor(finishButtonForeground)
+                            .padding(.leading, 8)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 6)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
+                .background(
+                    Capsule()
+                        .fill(finishButtonBackground)
+                )
+                .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                .help("Finish Conversation: saves current conversation and starts a new one.\nStop Recording: stops the microphone completely.")
+            } else if !appState.isSavingConversation {
+                Button(action: {
+                    appState.startTranscription()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "record.circle")
+                            .scaledFont(size: 12)
+                        Text("Start Recording")
+                            .scaledFont(size: 13, weight: .medium)
+                    }
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.white))
+                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Finish Conversation
+
+    private func handleFinish(appState: AppState) {
+        guard !isFinishing else { return }
+        isFinishing = true
+        Task {
+            let result = await appState.finishConversation()
+            isFinishing = false
+            switch result {
+            case .saved:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = false
+                }
+            case .discarded:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = false
+                }
+            case .error:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = false
+                }
+            }
+        }
     }
 }
 
@@ -1146,13 +1547,13 @@ struct SearchResultListItem: View {
                     HStack(spacing: 6) {
                         AppIconView(appName: screenshot.appName, size: 16)
                         Text(screenshot.appName)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.purplePrimary)
                         if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
                             Text("›")
                                 .foregroundColor(.white.opacity(0.3))
                             Text(windowTitle)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.white.opacity(0.5))
                                 .lineLimit(1)
                         }
@@ -1160,7 +1561,7 @@ struct SearchResultListItem: View {
 
                     // Timestamp (like page title in Google)
                     Text(screenshot.formattedDate)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
 
                     // Context snippet with highlighted search term
@@ -1170,7 +1571,7 @@ struct SearchResultListItem: View {
 
                     // Result number
                     Text("Result \(index + 1) of \(totalCount)")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.white.opacity(0.3))
                         .padding(.top, 2)
                 }
@@ -1240,17 +1641,17 @@ struct SearchResultListItem: View {
                 (Text(before).foregroundColor(.white.opacity(0.6)) +
                  Text(match).foregroundColor(.white).bold() +
                  Text(after).foregroundColor(.white.opacity(0.6)))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .lineLimit(3)
             } else {
                 Text(snippet)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
                     .lineLimit(3)
             }
         } else {
             Text(snippet)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.6))
                 .lineLimit(3)
         }
@@ -1291,13 +1692,13 @@ struct SearchResultGroupItem: View {
                     HStack(spacing: 6) {
                         AppIconView(appName: group.appName, size: 16)
                         Text(group.appName)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.purplePrimary)
                         if let windowTitle = group.windowTitle, !windowTitle.isEmpty {
                             Text("›")
                                 .foregroundColor(.white.opacity(0.3))
                             Text(windowTitle)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.white.opacity(0.5))
                                 .lineLimit(1)
                         }
@@ -1305,7 +1706,7 @@ struct SearchResultGroupItem: View {
 
                     // Time range
                     Text(group.formattedTimeRange)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
 
                     // Context snippet from representative screenshot
@@ -1318,10 +1719,10 @@ struct SearchResultGroupItem: View {
                         if group.count > 1 {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.stack")
-                                    .font(.system(size: 9))
+                                    .scaledFont(size: 9)
                                 Text("\(group.count) screenshots")
                             }
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -1330,7 +1731,7 @@ struct SearchResultGroupItem: View {
                         }
 
                         Text("Group \(index + 1) of \(totalGroups)")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(.white.opacity(0.3))
                     }
                     .padding(.top, 2)
@@ -1401,17 +1802,17 @@ struct SearchResultGroupItem: View {
                 (Text(before).foregroundColor(.white.opacity(0.6)) +
                  Text(match).foregroundColor(.white).bold() +
                  Text(after).foregroundColor(.white.opacity(0.6)))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .lineLimit(3)
             } else {
                 Text(snippet)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
                     .lineLimit(3)
             }
         } else {
             Text(snippet)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.6))
                 .lineLimit(3)
         }
@@ -1449,12 +1850,12 @@ struct SearchResultRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(screenshot.appName)
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.white)
 
                         if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
                             Text("— \(windowTitle)")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(.white.opacity(0.6))
                                 .lineLimit(1)
                         }
@@ -1464,7 +1865,7 @@ struct SearchResultRow: View {
                     if let query = searchQuery,
                        let snippet = screenshot.contextSnippet(for: query) {
                         Text(snippet)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.white.opacity(0.7))
                             .lineLimit(2)
                     }
@@ -1474,13 +1875,13 @@ struct SearchResultRow: View {
 
                 // Timestamp
                 Text(screenshot.formattedDate)
-                    .font(.system(size: 11, design: .monospaced))
+                    .scaledFont(size: 11, design: .monospaced)
                     .foregroundColor(.white.opacity(0.5))
 
                 // Selection indicator
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
             }
@@ -1534,6 +1935,45 @@ struct ScrollWheelMonitor: ViewModifier {
 extension View {
     func onScrollWheel(_ handler: @escaping (CGFloat) -> Void) -> some View {
         modifier(ScrollWheelMonitor(onScroll: handler))
+    }
+}
+
+// MARK: - Rewind Intro Video Player
+
+struct RewindIntroVideoView: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let playerView = AVPlayerView()
+        if let url = Bundle.resourceBundle.url(forResource: "rewind-demo", withExtension: "mp4") {
+            let player = AVPlayer(url: url)
+            playerView.player = player
+            playerView.controlsStyle = .inline
+            playerView.showsFullScreenToggleButton = false
+            player.play()
+
+            NotificationCenter.default.addObserver(
+                context.coordinator,
+                selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
+                name: .AVPlayerItemDidPlayToEndTime,
+                object: player.currentItem
+            )
+            context.coordinator.player = player
+        }
+        return playerView
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
+
+    class Coordinator: NSObject {
+        var player: AVPlayer?
+
+        @objc func playerDidFinishPlaying(_ notification: Notification) {
+            player?.seek(to: .zero)
+            player?.play()
+        }
     }
 }
 

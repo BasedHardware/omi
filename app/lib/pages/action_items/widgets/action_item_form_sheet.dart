@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
@@ -71,8 +72,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
       // Compare due dates - handle null cases explicitly
-      bool dueDateChanged =
-          (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
+      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
           (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
           (_selectedDueDate != null &&
               widget.actionItem!.dueAt != null &&
@@ -209,7 +209,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to create share link'), backgroundColor: Colors.red));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToCreateShareLink), backgroundColor: Colors.red));
     }
   }
 
@@ -317,7 +317,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(Icons.share_outlined, color: Colors.grey.shade400),
+                        icon: FaIcon(FontAwesomeIcons.share, color: Colors.grey.shade400, size: 16),
                         onPressed: _shareActionItem,
                       ),
                       IconButton(
@@ -471,8 +471,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
-            : Colors.transparent,
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(

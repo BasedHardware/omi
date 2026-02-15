@@ -10005,5 +10005,23 @@
   "pending": "Pending",
   "@pending": {
     "description": "Pending tab label for sync page"
-  }
+  },
+  "whatsNewInVersion": "What's New in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Add to your task list?",
+  "failedToCreateShareLink": "Failed to create share link",
+  "deleteGoal": "Delete Goal",
+  "deviceUpToDate": "Your device is up to date",
+  "wifiConfiguration": "WiFi Configuration",
+  "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
+  "networkNameSsid": "Network Name (SSID)",
+  "enterWifiNetworkName": "Enter WiFi network name",
+  "enterWifiPassword": "Enter WiFi password"
 }

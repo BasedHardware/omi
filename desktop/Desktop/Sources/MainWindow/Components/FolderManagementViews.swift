@@ -94,7 +94,7 @@ struct FolderTabsStrip: View {
                 // "+" create button
                 Button(action: onCreateFolder) {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 26, height: 26)
                         .background(
@@ -120,10 +120,10 @@ struct FolderTabsStrip: View {
             HStack(spacing: 5) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                 }
                 Text(label)
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .lineLimit(1)
             }
             .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
@@ -162,7 +162,7 @@ struct FolderFormSheet: View {
             // Header
             HStack {
                 Text(isEditing ? "Edit Folder" : "New Folder")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
@@ -175,11 +175,11 @@ struct FolderFormSheet: View {
                 // Name field
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Name")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                     TextField("Folder name", text: $name)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -196,11 +196,11 @@ struct FolderFormSheet: View {
                 // Description field
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                     TextField("Optional description", text: $descriptionText)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -217,7 +217,7 @@ struct FolderFormSheet: View {
                 // Color picker
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Color")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(32), spacing: 8), count: 5), spacing: 8) {
@@ -331,7 +331,7 @@ struct DeleteFolderSheet: View {
             // Header
             HStack {
                 Text("Delete Folder")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: onDismiss)
@@ -342,12 +342,12 @@ struct DeleteFolderSheet: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 Text("Are you sure you want to delete \"\(folder.name)\"?")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if folder.conversationCount > 0 {
                     Text("This folder has \(folder.conversationCount) conversation\(folder.conversationCount == 1 ? "" : "s"). Choose where to move them:")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textSecondary)
 
                     // Move destination picker
@@ -411,17 +411,17 @@ struct DeleteFolderSheet: View {
                         .frame(width: 8, height: 8)
                 } else {
                     Image(systemName: "tray")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 8)
                 }
                 Text(label)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
                 }
             }

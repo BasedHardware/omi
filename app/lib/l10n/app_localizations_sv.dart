@@ -8188,4 +8188,36 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lägg till i din uppgiftslista?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunde inte skapa delningslänk';
+
+  @override
+  String get deleteGoal => 'Ta bort mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhet är uppdaterad';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.';
+
+  @override
+  String get networkNameSsid => 'Nätverksnamn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ange WiFi-nätverksnamn';
+
+  @override
+  String get enterWifiPassword => 'Ange WiFi-lösenord';
 }

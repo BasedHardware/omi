@@ -197,7 +197,7 @@ struct ConversationRowView: View {
                 showEditDialog = true
             }) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -208,7 +208,7 @@ struct ConversationRowView: View {
             // Copy link
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -239,7 +239,7 @@ struct ConversationRowView: View {
                     }
                 } label: {
                     Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(conversation.folderId != nil ? .white : OmiColors.textTertiary)
                         .frame(width: 22, height: 22)
                         .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -252,7 +252,7 @@ struct ConversationRowView: View {
             // Delete
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.error.opacity(0.8))
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -269,13 +269,13 @@ struct ConversationRowView: View {
             // Checkbox for multi-select mode
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
 
             // Emoji
             Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-                .font(.system(size: 16))
+                .scaledFont(size: 16)
                 .frame(width: 28, height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
@@ -284,7 +284,7 @@ struct ConversationRowView: View {
 
             // Title
             Text(conversation.title)
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(1)
 
@@ -306,7 +306,7 @@ struct ConversationRowView: View {
                 Task { await toggleStar() }
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
@@ -315,27 +315,27 @@ struct ConversationRowView: View {
             // Source label (hide on hover to make room)
             if !isHovering {
                 Text(sourceLabel)
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(OmiColors.textQuaternary)
             }
 
             // Folder label
             if !isHovering, let folderName = folderName {
                 Text(folderName)
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(OmiColors.textQuaternary)
                     .lineLimit(1)
             }
 
             // Time
             Text(formattedTimestamp)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
 
             // Duration (hide on hover to make room)
             if !isHovering {
                 Text(conversation.formattedDuration)
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textQuaternary)
             }
         }
@@ -359,7 +359,7 @@ struct ConversationRowView: View {
             // Checkbox for multi-select mode
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
 
@@ -367,7 +367,7 @@ struct ConversationRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(conversation.title)
-                        .font(.system(size: 15, weight: .medium))
+                        .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
@@ -384,14 +384,14 @@ struct ConversationRowView: View {
 
                     if conversation.structured.title.isEmpty && !isHovering {
                         Text("(\(conversation.id.prefix(8))...)")
-                            .font(.system(size: 11, design: .monospaced))
+                            .scaledFont(size: 11, design: .monospaced)
                             .foregroundColor(OmiColors.textQuaternary)
                     }
                 }
 
                 if !conversation.overview.isEmpty {
                     Text(conversation.overview)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .lineLimit(2)
                 }
@@ -404,7 +404,7 @@ struct ConversationRowView: View {
                 Task { await toggleStar() }
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
@@ -415,12 +415,12 @@ struct ConversationRowView: View {
                 HStack(spacing: 6) {
                     if !isHovering {
                         Text(sourceLabel)
-                            .font(.system(size: 10, weight: .medium))
+                            .scaledFont(size: 10, weight: .medium)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     Text(formattedTimestamp)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -428,13 +428,13 @@ struct ConversationRowView: View {
                     HStack(spacing: 6) {
                         if let folderName = folderName {
                             Text(folderName)
-                                .font(.system(size: 11, weight: .medium))
+                                .scaledFont(size: 11, weight: .medium)
                                 .foregroundColor(OmiColors.textQuaternary)
                                 .lineLimit(1)
                         }
 
                         Text(conversation.formattedDuration)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textQuaternary)
                     }
                 }

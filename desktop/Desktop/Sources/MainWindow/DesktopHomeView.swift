@@ -111,6 +111,17 @@ struct DesktopHomeView: View {
                             async let conversations: Void = appState.loadConversations()
                             async let folders: Void = appState.loadFolders()
                             _ = await (vmLoad, conversations, folders)
+
+                            // Backend-based check: ensure user has a cloud agent VM
+                            await AgentVMService.shared.ensureProvisioned()
+                        }
+                        // Refresh conversations when app becomes active (e.g. switching back from another app)
+                        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                            Task { await appState.loadConversations() }
+                        }
+                        // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
+                        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+                            Task { await appState.loadConversations() }
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -131,7 +142,7 @@ struct DesktopHomeView: View {
                             }
 
                             Text(viewModelContainer.initStatusMessage)
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             ProgressView()
@@ -200,26 +211,36 @@ struct DesktopHomeView: View {
 
     private var mainContent: some View {
         HStack(spacing: 0) {
-            // Show settings sidebar when in settings (always visible, even in rewind mode)
-            if isInSettings {
-                SettingsSidebar(
-                    selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
-                    onBack: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedIndex = previousIndexBeforeSettings
+            // Sidebar slot: settings sidebar overlays main sidebar
+            // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
+            // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
+            // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
+            // tracking system still tries to evaluate them during window key state changes.
+            ZStack {
+                if !hideSidebar {
+                    SidebarView(
+                        selectedIndex: $selectedIndex,
+                        isCollapsed: $isSidebarCollapsed,
+                        appState: appState
+                    )
+                    .clickThrough()
+                    .opacity(isInSettings ? 0 : 1)
+                    .allowsHitTesting(!isInSettings)
+                }
+
+                if isInSettings {
+                    SettingsSidebar(
+                        selectedSection: $selectedSettingsSection,
+                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedIndex = previousIndexBeforeSettings
+                            }
                         }
-                    }
-                )
-            } else if !hideSidebar {
-                // Main sidebar only in full mode (hidden in rewind mode)
-                SidebarView(
-                    selectedIndex: $selectedIndex,
-                    isCollapsed: $isSidebarCollapsed,
-                    appState: appState
-                )
-                .clickThrough()
+                    )
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
 
             // Main content area with rounded container
             ZStack {
@@ -296,8 +317,9 @@ struct DesktopHomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
-            // Navigate to settings > advanced where Task Agent settings live
+            // Navigate to settings > advanced > task assistant subsection
             selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .taskAssistant
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }

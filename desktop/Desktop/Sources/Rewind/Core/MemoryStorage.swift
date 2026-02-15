@@ -335,8 +335,9 @@ actor MemoryStorage {
     func syncServerMemories(_ memories: [ServerMemory]) async throws {
         let db = try await ensureInitialized()
 
-        let skipped = try await db.write { database -> Int in
+        let (skipped, adopted) = try await db.write { database -> (Int, Int) in
             var skipped = 0
+            var adopted = 0
             for memory in memories {
                 if var existingRecord = try MemoryRecord
                     .filter(Column("backendId") == memory.id)
@@ -349,15 +350,28 @@ actor MemoryStorage {
                     }
                     existingRecord.updateFrom(memory)
                     try existingRecord.update(database)
+                } else if var orphan = try MemoryRecord
+                    .filter(Column("backendSynced") == false)
+                    .filter(Column("backendId") == nil)
+                    .filter(Column("content") == memory.content)
+                    .fetchOne(database) {
+                    // Adopt orphaned local record: link it to the backend ID.
+                    // This heals records where insertLocalMemory succeeded but
+                    // markSynced hasn't run yet (or failed).
+                    orphan.backendId = memory.id
+                    orphan.backendSynced = true
+                    orphan.updateFrom(memory)
+                    try orphan.update(database)
+                    adopted += 1
                 } else {
                     _ = try MemoryRecord.from(memory).inserted(database)
                 }
             }
-            return skipped
+            return (skipped, adopted)
         }
 
-        if skipped > 0 {
-            log("MemoryStorage: Synced \(memories.count - skipped) memories from backend (skipped \(skipped) with newer local data)")
+        if skipped > 0 || adopted > 0 {
+            log("MemoryStorage: Synced \(memories.count - skipped) memories from backend (skipped \(skipped) newer local, adopted \(adopted) orphans)")
         } else {
             log("MemoryStorage: Synced \(memories.count) memories from backend")
         }
@@ -388,14 +402,27 @@ actor MemoryStorage {
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            guard var record = try MemoryRecord.fetchOne(database, key: id) else {
+            guard let record = try MemoryRecord.fetchOne(database, key: id) else {
                 throw MemoryStorageError.recordNotFound
             }
 
-            record.backendId = backendId
-            record.backendSynced = true
-            record.updatedAt = Date()
-            try record.update(database)
+            // Check if another record already has this backendId
+            // (race: syncServerMemories inserted it from an API fetch before we got here)
+            if let existing = try MemoryRecord
+                .filter(Column("backendId") == backendId)
+                .fetchOne(database) {
+                // Another record owns this backendId — delete our local duplicate
+                if existing.id != record.id {
+                    try record.delete(database)
+                    return
+                }
+            }
+
+            var mutableRecord = record
+            mutableRecord.backendId = backendId
+            mutableRecord.backendSynced = true
+            mutableRecord.updatedAt = Date()
+            try mutableRecord.update(database)
         }
 
         log("MemoryStorage: Marked memory \(id) as synced (backendId: \(backendId))")

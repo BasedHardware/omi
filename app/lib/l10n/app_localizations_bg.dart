@@ -8218,4 +8218,36 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Какво ново във $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Добавяне към списъка ви със задачи?';
+
+  @override
+  String get failedToCreateShareLink => 'Неуспешно създаване на линк за споделяне';
+
+  @override
+  String get deleteGoal => 'Изтриване на целта';
+
+  @override
+  String get deviceUpToDate => 'Устройството ви е актуално';
+
+  @override
+  String get wifiConfiguration => 'WiFi конфигурация';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Въведете данните за WiFi, за да може устройството да изтегли фърмуера.';
+
+  @override
+  String get networkNameSsid => 'Име на мрежата (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Въведете името на WiFi мрежата';
+
+  @override
+  String get enterWifiPassword => 'Въведете парола за WiFi';
 }

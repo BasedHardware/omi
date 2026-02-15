@@ -15,6 +15,12 @@ struct ConversationDetailView: View {
     var onDelete: (() -> Void)?
     var onTitleUpdated: ((String) -> Void)?
 
+    // People (speaker naming)
+    var people: [Person] = []
+    var onFetchPeople: (() async -> Void)?
+    var onCreatePerson: ((String) async -> Person?)?
+    var onAssignSpeaker: ((String, [Int], String?, Bool) async -> Bool)?
+
     @StateObject private var appProvider = AppProvider()
     @State private var showAppSelector = false
     @State private var isReprocessing = false
@@ -34,6 +40,10 @@ struct ConversationDetailView: View {
     @State private var isUpdatingTitle = false
     @State private var isCopyingLink = false
     @State private var isDeleting = false
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSegmentForNaming: TranscriptSegment? = nil
 
     /// The conversation to display - use loaded version if available, otherwise use prop
     private var displayConversation: ServerConversation {
@@ -83,6 +93,7 @@ struct ConversationDetailView: View {
         }
         .task {
             await appProvider.fetchApps()
+            await onFetchPeople?()
             AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
 
             // Load segments from local database if not already present
@@ -132,6 +143,46 @@ struct ConversationDetailView: View {
             )
             .frame(width: 400, height: 500)
         }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSegmentForNaming {
+                NameSpeakerSheet(
+                    segment: segment,
+                    allSegments: displayConversation.transcriptSegments,
+                    people: people,
+                    onSave: { personId, isUser, segmentIds in
+                        Task {
+                            let success = await onAssignSpeaker?(conversation.id, segmentIds, personId, isUser) ?? false
+                            if success {
+                                // Update local segments with the new personId/isUser
+                                var updated = displayConversation
+                                for idx in segmentIds where idx < updated.transcriptSegments.count {
+                                    let old = updated.transcriptSegments[idx]
+                                    updated.transcriptSegments[idx] = TranscriptSegment(
+                                        id: old.id,
+                                        text: old.text,
+                                        speaker: old.speaker,
+                                        isUser: isUser ? true : old.isUser,
+                                        personId: personId ?? old.personId,
+                                        start: old.start,
+                                        end: old.end
+                                    )
+                                }
+                                loadedConversation = updated
+                            }
+                            showNameSpeakerSheet = false
+                            selectedSegmentForNaming = nil
+                        }
+                    },
+                    onCreatePerson: { name in
+                        await onCreatePerson?(name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                        selectedSegmentForNaming = nil
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Header
@@ -142,9 +193,9 @@ struct ConversationDetailView: View {
             Button(action: onBack) {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                     Text("Back")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                 }
                 .foregroundColor(OmiColors.purplePrimary)
             }
@@ -152,11 +203,11 @@ struct ConversationDetailView: View {
 
             // Emoji
             Text(displayConversation.structured.emoji.isEmpty ? "💬" : displayConversation.structured.emoji)
-                .font(.system(size: 28))
+                .scaledFont(size: 28)
 
             // Title with edit button
             Text(displayConversation.title)
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(1)
 
@@ -166,7 +217,7 @@ struct ConversationDetailView: View {
                 showEditDialog = true
             }) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -212,7 +263,7 @@ struct ConversationDetailView: View {
             // Copy link button
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -227,7 +278,7 @@ struct ConversationDetailView: View {
             // Copy transcript button
             Button(action: copyTranscript) {
                 Image(systemName: "doc.on.doc")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 28, height: 28)
                     .background(
@@ -265,7 +316,7 @@ struct ConversationDetailView: View {
                     }
                 } label: {
                     Image(systemName: displayConversation.folderId != nil ? "folder.fill" : "folder")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(displayConversation.folderId != nil ? OmiColors.purplePrimary : OmiColors.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(
@@ -281,7 +332,7 @@ struct ConversationDetailView: View {
             // Delete button
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.error)
                     .frame(width: 28, height: 28)
                     .background(
@@ -297,8 +348,16 @@ struct ConversationDetailView: View {
     // MARK: - Actions
 
     private func copyTranscript() {
+        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
-            let speakerName = segment.isUser ? "You" : "Speaker \(segment.speaker ?? "Unknown")"
+            let speakerName: String
+            if segment.isUser {
+                speakerName = "You"
+            } else if let personId = segment.personId, let person = peopleDict[personId] {
+                speakerName = person.name
+            } else {
+                speakerName = "Speaker \(segment.speaker ?? "Unknown")"
+            }
             return "[\(speakerName)]: \(segment.text)"
         }.joined(separator: "\n\n")
 
@@ -351,7 +410,7 @@ struct ConversationDetailView: View {
 
     private var statusBadge: some View {
         Text(displayConversation.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-            .font(.system(size: 11, weight: .medium))
+            .scaledFont(size: 11, weight: .medium)
             .foregroundColor(statusColor)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -387,12 +446,12 @@ struct ConversationDetailView: View {
                     VStack(spacing: 8) {
                         HStack(spacing: 6) {
                             Image(systemName: tab == .summary ? "doc.text" : "text.quote")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                             Text(tab.rawValue)
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                             if tab == .transcript {
                                 Text("(\(displayConversation.transcriptSegments.count))")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                         }
@@ -446,11 +505,11 @@ struct ConversationDetailView: View {
             // Empty state
             VStack(spacing: 12) {
                 Image(systemName: "text.quote")
-                    .font(.system(size: 40))
+                    .scaledFont(size: 40)
                     .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                 Text("No transcript available")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -462,7 +521,7 @@ struct ConversationDetailView: View {
                     .scaleEffect(0.8)
 
                 Text("Loading transcript...")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -471,7 +530,7 @@ struct ConversationDetailView: View {
             // Transcript header with copy button
             HStack {
                 Text("\(displayConversation.transcriptSegments.count) segments")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -479,9 +538,9 @@ struct ConversationDetailView: View {
                 Button(action: copyTranscript) {
                     HStack(spacing: 4) {
                         Image(systemName: "doc.on.doc")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                         Text("Copy")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     .foregroundColor(OmiColors.purplePrimary)
                 }
@@ -489,20 +548,32 @@ struct ConversationDetailView: View {
             }
 
             // Transcript content
-            VStack(spacing: 12) {
-                ForEach(displayConversation.transcriptSegments) { segment in
-                    SpeakerBubbleView(
-                        segment: segment,
-                        isUser: segment.isUser
-                    )
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundSecondary)
-            )
+            transcriptBubblesView
         }
+    }
+
+    // MARK: - Transcript Bubbles (shared)
+
+    private var transcriptBubblesView: some View {
+        let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        return VStack(spacing: 12) {
+            ForEach(displayConversation.transcriptSegments) { segment in
+                SpeakerBubbleView(
+                    segment: segment,
+                    isUser: segment.isUser,
+                    personName: segment.personId.flatMap { peopleDict[$0]?.name },
+                    onSpeakerTapped: segment.isUser ? nil : {
+                        selectedSegmentForNaming = segment
+                        showNameSpeakerSheet = true
+                    }
+                )
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundSecondary)
+        )
     }
 
     // MARK: - Overview Section
@@ -510,12 +581,13 @@ struct ConversationDetailView: View {
     private var overviewSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Overview")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text(displayConversation.overview)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
+                .textSelection(.enabled)
                 .lineSpacing(4)
         }
     }
@@ -570,11 +642,11 @@ struct ConversationDetailView: View {
     private func metadataChip(icon: String, text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text(text)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textSecondary)
         }
         .padding(.horizontal, 10)
@@ -591,30 +663,18 @@ struct ConversationDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Transcript")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
 
                 Text("\(displayConversation.transcriptSegments.count) segments")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             // Transcript content
-            VStack(spacing: 12) {
-                ForEach(displayConversation.transcriptSegments) { segment in
-                    SpeakerBubbleView(
-                        segment: segment,
-                        isUser: segment.isUser
-                    )
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(OmiColors.backgroundSecondary)
-            )
+            transcriptBubblesView
         }
     }
 
@@ -624,7 +684,7 @@ struct ConversationDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("App Insights")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -632,9 +692,9 @@ struct ConversationDetailView: View {
                 Button(action: { showAppSelector = true }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                         Text("Reprocess")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     .foregroundColor(OmiColors.purplePrimary)
                 }
@@ -657,7 +717,7 @@ struct ConversationDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Try with Apps")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -670,7 +730,7 @@ struct ConversationDetailView: View {
 
             if memoryApps.isEmpty && !appProvider.isLoading {
                 Text("Enable apps with memory capability to get additional insights")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textTertiary)
                     .padding()
                     .frame(maxWidth: .infinity)
@@ -730,13 +790,13 @@ struct ConversationDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Action Items")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
 
                 Text("\(displayConversation.structured.actionItems.count) items")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -744,12 +804,13 @@ struct ConversationDetailView: View {
                 ForEach(displayConversation.structured.actionItems.filter { !$0.deleted }) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(item.completed ? OmiColors.success : OmiColors.textTertiary)
 
                         Text(item.description)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(item.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .textSelection(.enabled)
                             .strikethrough(item.completed, color: OmiColors.textTertiary)
                     }
                     .padding(12)
@@ -811,23 +872,23 @@ struct AppResultCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(app.name)
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.author)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "app.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(OmiColors.backgroundTertiary)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
 
                     Text("App")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                 }
 
@@ -835,7 +896,7 @@ struct AppResultCard: View {
 
                 Button(action: { withAnimation { isExpanded.toggle() } }) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -844,13 +905,15 @@ struct AppResultCard: View {
             // Content
             if isExpanded || result.content.count < 200 {
                 Text(result.content)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
+                    .textSelection(.enabled)
                     .lineSpacing(4)
             } else {
                 Text(result.content.prefix(200) + "...")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
+                    .textSelection(.enabled)
                     .lineSpacing(4)
             }
         }
@@ -901,7 +964,7 @@ struct SuggestedAppCard: View {
                 }
 
                 Text(app.name)
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .lineLimit(1)
             }
@@ -934,14 +997,14 @@ struct AppSelectorSheet: View {
             // Header
             HStack {
                 Text("Select App")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .scaledFont(size: 20)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -955,15 +1018,15 @@ struct AppSelectorSheet: View {
             if apps.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "square.grid.2x2")
-                        .font(.system(size: 40))
+                        .scaledFont(size: 40)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text("No Apps Available")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     Text("Enable apps with memory capability to reprocess conversations")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -1020,11 +1083,11 @@ struct AppSelectorRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(app.author)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -1035,7 +1098,7 @@ struct AppSelectorRow: View {
                         .scaleEffect(0.7)
                 } else if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
+                        .scaledFont(size: 18)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
             }

@@ -59,15 +59,28 @@ struct ChatSession: Identifiable, Codable, Equatable {
 
 // MARK: - Content Block Model
 
+/// Structured tool input for inline display
+struct ToolCallInput {
+    /// Short summary for inline display (e.g., file path, command)
+    let summary: String
+    /// Full JSON details for expanded view
+    let details: String?
+}
+
 /// A block of content within an AI message (text or tool call indicator)
 enum ChatContentBlock: Identifiable {
     case text(id: String, text: String)
-    case toolCall(id: String, name: String, status: ToolCallStatus)
+    case toolCall(id: String, name: String, status: ToolCallStatus,
+                  toolUseId: String? = nil,
+                  input: ToolCallInput? = nil,
+                  output: String? = nil)
+    case thinking(id: String, text: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
-        case .toolCall(let id, _, _): return id
+        case .toolCall(let id, _, _, _, _, _): return id
+        case .thinking(let id, _): return id
         }
     }
 
@@ -94,6 +107,64 @@ enum ChatContentBlock: Identifiable {
         case "WebFetch": return "Fetching page"
         default: return "Using \(cleanName)"
         }
+    }
+
+    /// Extracts a short summary from tool input for inline display
+    static func toolInputSummary(for toolName: String, input: [String: Any]) -> ToolCallInput? {
+        let cleanName: String
+        if toolName.hasPrefix("mcp__") {
+            cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleanName = toolName
+        }
+
+        let summary: String?
+        switch cleanName {
+        case "Read":
+            summary = input["file_path"] as? String
+        case "Write", "Edit":
+            summary = input["file_path"] as? String
+        case "Bash":
+            if let cmd = input["command"] as? String {
+                summary = cmd.count > 80 ? String(cmd.prefix(80)) + "…" : cmd
+            } else {
+                summary = nil
+            }
+        case "Grep":
+            let pattern = input["pattern"] as? String ?? ""
+            let path = input["path"] as? String
+            summary = path != nil ? "\(pattern) in \(path!)" : pattern
+        case "Glob":
+            summary = input["pattern"] as? String
+        case "WebSearch":
+            summary = input["query"] as? String
+        case "WebFetch":
+            summary = input["url"] as? String
+        case "execute_sql":
+            if let query = input["query"] as? String {
+                summary = query.count > 100 ? String(query.prefix(100)) + "…" : query
+            } else {
+                summary = nil
+            }
+        case "semantic_search":
+            summary = input["query"] as? String
+        default:
+            // Try common key names
+            summary = (input["file_path"] ?? input["path"] ?? input["query"] ?? input["command"]) as? String
+        }
+
+        guard let summary = summary, !summary.isEmpty else { return nil }
+
+        // Build full details JSON
+        let details: String?
+        if let data = try? JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted, .sortedKeys]),
+           let str = String(data: data, encoding: .utf8) {
+            details = str
+        } else {
+            details = nil
+        }
+
+        return ToolCallInput(summary: summary, details: details)
     }
 }
 
@@ -179,11 +250,20 @@ struct Citation: Identifiable {
     }
 }
 
+// MARK: - Chat Mode
+
+/// Controls whether the AI agent can perform write actions (Act) or is restricted to read-only (Ask)
+enum ChatMode: String, CaseIterable {
+    case ask
+    case act
+}
+
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
 class ChatProvider: ObservableObject {
     // MARK: - Published State
+    @Published var chatMode: ChatMode = .ask
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
@@ -249,6 +329,13 @@ class ChatProvider: ObservableObject {
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
+
+    // MARK: - CLAUDE.md & Skills
+    @Published var claudeMdContent: String?
+    @Published var claudeMdPath: String?
+    @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
+    @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
+    @AppStorage("enabledSkillsJSON") private var enabledSkillsJSON: String = "[]"
 
     // MARK: - Current Session ID
     var currentSessionId: String? {
@@ -397,8 +484,8 @@ class ChatProvider: ObservableObject {
     }
 
     /// Select a session and load its messages
-    func selectSession(_ session: ChatSession) async {
-        guard currentSession?.id != session.id || isInDefaultChat else { return }
+    func selectSession(_ session: ChatSession, force: Bool = false) async {
+        guard force || currentSession?.id != session.id || isInDefaultChat else { return }
 
         currentSession = session
         isInDefaultChat = false
@@ -788,9 +875,26 @@ class ChatProvider: ObservableObject {
             prompt += "\n\n<conversation_history>\n\(history)\n</conversation_history>"
         }
 
+        // Append CLAUDE.md instructions if enabled
+        if claudeMdEnabled, let claudeMd = claudeMdContent {
+            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
+        }
+
+        // Append enabled skills as available context
+        let enabledSkillNames = getEnabledSkillNames()
+        if !enabledSkillNames.isEmpty {
+            let skillDescriptions = discoveredSkills
+                .filter { enabledSkillNames.contains($0.name) }
+                .map { "- \($0.name): \($0.description)" }
+                .joined(separator: "\n")
+            if !skillDescriptions.isEmpty {
+                prompt += "\n\n<available_skills>\n\(skillDescriptions)\n</available_skills>"
+            }
+        }
+
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), prompt_length: \(prompt.count) chars")
 
         return prompt
     }
@@ -881,6 +985,7 @@ class ChatProvider: ObservableObject {
         await loadGoalsIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
+        discoverClaudeConfig()
     }
 
     /// Reinitialize after settings change
@@ -890,6 +995,82 @@ class ChatProvider: ObservableObject {
         currentSession = nil
         isInDefaultChat = true
         await initialize()
+    }
+
+    // MARK: - CLAUDE.md & Skills Discovery
+
+    /// Discover ~/.claude/CLAUDE.md and skills from ~/.claude/skills/
+    func discoverClaudeConfig() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeDir = "\(home)/.claude"
+
+        // Discover CLAUDE.md
+        let mdPath = "\(claudeDir)/CLAUDE.md"
+        if FileManager.default.fileExists(atPath: mdPath),
+           let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
+            claudeMdContent = content
+            claudeMdPath = mdPath
+        } else {
+            claudeMdContent = nil
+            claudeMdPath = nil
+        }
+
+        // Discover skills
+        var skills: [(name: String, description: String, path: String)] = []
+        let skillsDir = "\(claudeDir)/skills"
+        if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
+            for dir in skillDirs.sorted() {
+                let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+                if FileManager.default.fileExists(atPath: skillPath),
+                   let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                    let desc = extractSkillDescription(from: content)
+                    skills.append((name: dir, description: desc, path: skillPath))
+                }
+            }
+        }
+        discoveredSkills = skills
+        log("ChatProvider: discovered CLAUDE.md=\(claudeMdContent != nil), skills=\(skills.count)")
+    }
+
+    /// Extract description from YAML frontmatter in SKILL.md
+    private func extractSkillDescription(from content: String) -> String {
+        guard content.hasPrefix("---") else {
+            // No frontmatter — use first non-empty line as description
+            let lines = content.components(separatedBy: "\n")
+            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
+        }
+        let lines = content.components(separatedBy: "\n")
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
+                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
+                value = value.trimmingCharacters(in: .whitespaces)
+                // Remove surrounding quotes if present
+                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
+                   (value.hasPrefix("'") && value.hasSuffix("'")) {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value
+            }
+        }
+        return ""
+    }
+
+    /// Get the set of enabled skill names from UserDefaults
+    func getEnabledSkillNames() -> Set<String> {
+        guard let data = enabledSkillsJSON.data(using: .utf8),
+              let names = try? JSONDecoder().decode([String].self, from: data) else {
+            return Set(discoveredSkills.map { $0.name }) // Default: all enabled
+        }
+        return Set(names)
+    }
+
+    /// Save the set of enabled skill names to UserDefaults
+    func setEnabledSkillNames(_ names: Set<String>) {
+        if let data = try? JSONEncoder().encode(Array(names)),
+           let json = String(data: data, encoding: .utf8) {
+            enabledSkillsJSON = json
+        }
     }
 
     /// Switch to the default chat (messages without session_id, syncs with Flutter app)
@@ -921,6 +1102,59 @@ class ChatProvider: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Stop / Follow-Up
+
+    /// Text of a follow-up queued while the current query is being interrupted.
+    /// Checked at the end of `sendMessage` — if set, a new query is chained automatically.
+    private var pendingFollowUpText: String?
+
+    /// Stop the running agent, keeping partial response
+    func stopAgent() {
+        guard isSending else { return }
+        Task {
+            await claudeBridge.interrupt()
+        }
+        // Result flows back normally through the bridge with partial text
+    }
+
+    /// Send a follow-up message while the agent is still running.
+    /// Interrupts the current query and chains a new one with full context.
+    func sendFollowUp(_ text: String) async {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty, isSending else { return }
+
+        // Add as user message in UI
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+
+        // Persist to backend (fire-and-forget)
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        Task {
+            do {
+                _ = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "human",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId
+                )
+            } catch {
+                logError("Failed to persist follow-up message", error: error)
+            }
+        }
+
+        // Queue the follow-up and interrupt the current query.
+        // When sendMessage finishes (due to the interrupt), it checks
+        // pendingFollowUpText and chains a new full query automatically.
+        pendingFollowUpText = trimmedText
+        await claudeBridge.interrupt()
+        log("ChatProvider: follow-up queued, interrupt sent")
     }
 
     // MARK: - Send Message
@@ -1020,6 +1254,7 @@ class ChatProvider: ObservableObject {
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
                 cwd: workingDirectory,
+                mode: chatMode.rawValue,
                 onTextDelta: { [weak self] delta in
                     Task { @MainActor [weak self] in
                         self?.appendToMessage(id: aiMessageId, text: delta)
@@ -1032,12 +1267,14 @@ class ChatProvider: ObservableObject {
                     log("OMI tool \(name) executed for callId=\(callId)")
                     return result
                 },
-                onToolActivity: { [weak self] name, status in
+                onToolActivity: { [weak self] name, status, toolUseId, input in
                     Task { @MainActor [weak self] in
                         self?.addToolActivity(
                             messageId: aiMessageId,
                             toolName: name,
-                            status: status == "started" ? .running : .completed
+                            status: status == "started" ? .running : .completed,
+                            toolUseId: toolUseId,
+                            input: input
                         )
                         // Track tool timing
                         if status == "started" {
@@ -1047,6 +1284,16 @@ class ChatProvider: ObservableObject {
                             let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
                             AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                         }
+                    }
+                },
+                onThinkingDelta: { [weak self] text in
+                    Task { @MainActor [weak self] in
+                        self?.appendThinking(messageId: aiMessageId, text: text)
+                    }
+                },
+                onToolResultDisplay: { [weak self] toolUseId, name, output in
+                    Task { @MainActor [weak self] in
+                        self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                     }
                 }
             )
@@ -1064,6 +1311,7 @@ class ChatProvider: ObservableObject {
                 messages[index].text = messageText
                 messages[index].citations = citations
                 messages[index].isStreaming = false
+                completeRemainingToolCalls(messageId: aiMessageId)
 
                 if !citations.isEmpty {
                     log("Extracted \(citations.count) citation(s) from response")
@@ -1119,15 +1367,51 @@ class ChatProvider: ObservableObject {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
-            // Remove AI message placeholder on error
-            messages.removeAll { $0.id == aiMessageId }
+            // Only remove the AI message if it's still empty (no streamed text yet).
+            // If text was already streamed and visible, keep it and just stop streaming.
+            if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                    messages.remove(at: index)
+                } else {
+                    messages[index].isStreaming = false
+                    completeRemainingToolCalls(messageId: aiMessageId)
+                    log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
+                    // Still try to persist the partial response
+                    let partialText = messages[index].text
+                    Task { [weak self] in
+                        do {
+                            let response = try await APIClient.shared.saveMessage(
+                                text: partialText,
+                                sender: "ai",
+                                appId: capturedAppId,
+                                sessionId: capturedSessionId
+                            )
+                            await MainActor.run {
+                                if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
+                                    self?.messages[syncIndex].id = response.id
+                                    self?.messages[syncIndex].isSynced = true
+                                }
+                            }
+                            log("Saved partial AI response to backend: \(response.id)")
+                        } catch {
+                            logError("Failed to persist partial AI response", error: error)
+                        }
+                    }
+                }
+            }
 
             logError("Failed to get AI response", error: error)
-            errorMessage = "Failed to get response: \(error.localizedDescription)"
             AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
         }
 
         isSending = false
+
+        // If a follow-up was queued while we were running, chain it as a new full query
+        if let followUp = pendingFollowUpText {
+            pendingFollowUpText = nil
+            log("ChatProvider: chaining follow-up query")
+            await sendMessage(followUp)
+        }
     }
 
     /// Generate a title for the session using LLM
@@ -1189,21 +1473,88 @@ class ChatProvider: ObservableObject {
     }
 
     /// Add a tool call indicator to a streaming message
-    private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus) {
+    private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
+        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
+
         if status == .running {
+            // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
+            if let toolUseId = toolUseId, toolInput != nil {
+                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
+                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: st,
+                            toolUseId: toolUseId, input: toolInput, output: output
+                        )
+                        return
+                    }
+                }
+            }
+            // No existing block to update — create a new one
             messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running)
+                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
+                          toolUseId: toolUseId, input: toolInput)
             )
         } else {
-            // Find and update the most recent tool call with this name
+            // Mark as completed — find by toolUseId first, fall back to name
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running) = messages[index].contentBlocks[i],
-                   name == toolName {
-                    messages[index].contentBlocks[i] = .toolCall(id: id, name: name, status: .completed)
-                    break
+                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
+                    if matches {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: .completed,
+                            toolUseId: toolUseId ?? existingTuid,
+                            input: toolInput ?? existingInput,
+                            output: output
+                        )
+                        break
+                    }
                 }
+            }
+        }
+    }
+
+    /// Add tool result output to an existing tool call block
+    private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let blockName, let status, let tuid, let input, _) = messages[index].contentBlocks[i],
+               (tuid == toolUseId || (tuid == nil && blockName == name)) {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: blockName, status: status,
+                    toolUseId: toolUseId, input: input, output: output
+                )
+                return
+            }
+        }
+    }
+
+    /// Append thinking text to the streaming message
+    private func appendThinking(messageId: String, text: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+
+        // Append to the last thinking block if it exists, otherwise create new
+        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+           case .thinking(let id, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+            messages[index].contentBlocks[lastBlockIndex] = .thinking(id: id, text: existing + text)
+        } else {
+            messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: text))
+        }
+    }
+
+    /// Mark any remaining `.running` tool call blocks as `.completed` in a message.
+    /// Called when a query finishes (success or interrupt) so spinners don't spin forever.
+    private func completeRemainingToolCalls(messageId: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: name, status: .completed,
+                    toolUseId: toolUseId, input: input, output: output
+                )
             }
         }
     }

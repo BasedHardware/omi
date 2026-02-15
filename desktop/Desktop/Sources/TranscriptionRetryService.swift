@@ -164,6 +164,7 @@ class TranscriptionRetryService {
                     speaker: "SPEAKER_\(String(format: "%02d", segment.speaker))",
                     speakerId: segment.speaker,
                     isUser: segment.speaker == 0,
+                    personId: segment.personId,
                     start: segment.startTime,
                     end: segment.endTime
                 )

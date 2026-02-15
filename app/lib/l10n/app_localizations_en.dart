@@ -8181,4 +8181,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'What\'s New in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Add to your task list?';
+
+  @override
+  String get failedToCreateShareLink => 'Failed to create share link';
+
+  @override
+  String get deleteGoal => 'Delete Goal';
+
+  @override
+  String get deviceUpToDate => 'Your device is up to date';
+
+  @override
+  String get wifiConfiguration => 'WiFi Configuration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Enter your WiFi credentials to allow the device to download the firmware.';
+
+  @override
+  String get networkNameSsid => 'Network Name (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Enter WiFi network name';
+
+  @override
+  String get enterWifiPassword => 'Enter WiFi password';
 }

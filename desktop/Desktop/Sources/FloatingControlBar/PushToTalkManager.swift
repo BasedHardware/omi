@@ -98,6 +98,9 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Option Key Handling
 
   private func handleFlagsChanged(_ event: NSEvent) {
+    // Don't process PTT when the floating bar is hidden
+    guard FloatingControlBarManager.shared.isVisible else { return }
+
     let settings = ShortcutSettings.shared
 
     let pttActive: Bool
@@ -190,13 +193,18 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
 
+    // Play start-of-PTT sound
+    NSSound(named: "Funk")?.play()
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: "hold")
     updateBarState()
 
     // Capture screenshot in background — do NOT block the main thread
     Task.detached { [weak self] in
       let url = ScreenCaptureManager.captureScreen()
+      guard let self else { return }
       await MainActor.run {
-        self?.capturedScreenshotURL = url
+        self.capturedScreenshotURL = url
         log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
       }
     }
@@ -210,6 +218,11 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
     state = .lockedListening
 
+    // Play start-of-PTT sound for locked mode
+    NSSound(named: "Funk")?.play()
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: "locked")
+
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
     if transcriptionService == nil {
@@ -218,8 +231,9 @@ class PushToTalkManager: ObservableObject {
 
       Task.detached { [weak self] in
         let url = ScreenCaptureManager.captureScreen()
+        guard let self else { return }
         await MainActor.run {
-          self?.capturedScreenshotURL = url
+          self.capturedScreenshotURL = url
         }
       }
 
@@ -241,18 +255,31 @@ class PushToTalkManager: ObservableObject {
     updateBarState()
   }
 
+  private var finalizedMode: String = "hold"
+
   private func finalize() {
     guard state == .listening || state == .lockedListening else { return }
 
+    finalizedMode = state == .lockedListening ? "locked" : "hold"
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
     updateBarState()
 
-    log("PushToTalkManager: finalizing — waiting for last segments")
+    // Stop mic immediately — no more audio capture
+    audioCaptureService?.stopCapture()
 
-    // Wait 500ms for DeepGram to flush final segments, then send
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+    // Flush remaining audio buffer and tell Deepgram we're done sending
+    // (keeps WebSocket open to receive final transcription results)
+    transcriptionService?.finishStream()
+
+    // Play end-of-PTT sound
+    NSSound(named: "Bottle")?.play()
+
+    log("PushToTalkManager: finalizing — mic stopped, waiting for Deepgram to finish")
+
+    // Wait 1.5s for Deepgram to process remaining audio and send final results
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
       Task { @MainActor in
         self?.sendTranscript()
       }
@@ -269,15 +296,23 @@ class PushToTalkManager: ObservableObject {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     let screenshot = capturedScreenshotURL
+    let hasQuery = !query.isEmpty
 
-    // Reset state
+    AnalyticsManager.shared.floatingBarPTTEnded(
+      mode: finalizedMode,
+      hadTranscript: hasQuery,
+      transcriptLength: query.count
+    )
+
+    // Reset state — skip PTT collapse resize when we have a query,
+    // because openAIInputWithQuery will resize to the correct size
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
     capturedScreenshotURL = nil
-    updateBarState()
+    updateBarState(skipResize: hasQuery)
 
-    guard !query.isEmpty else {
+    guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
       return
     }
@@ -327,7 +362,7 @@ class PushToTalkManager: ObservableObject {
             self?.stopListening()
           }
         },
-        onConnected: { [weak self] in
+        onConnected: {
           Task { @MainActor in
             log("PushToTalkManager: DeepGram connected")
           }
@@ -366,7 +401,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func handleTranscript(_ segment: TranscriptionService.TranscriptSegment) {
-    guard state == .listening || state == .lockedListening else { return }
+    guard state == .listening || state == .lockedListening || state == .finalizing else { return }
 
     if segment.speechFinal || segment.isFinal {
       transcriptSegments.append(segment.text)
@@ -389,7 +424,7 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Bar State Sync
 
-  private func updateBarState() {
+  private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
     let wasListening = barState.isVoiceListening
     barState.isVoiceListening =
@@ -400,6 +435,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     // Resize the floating bar window for PTT state changes
+    guard !skipResize else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {

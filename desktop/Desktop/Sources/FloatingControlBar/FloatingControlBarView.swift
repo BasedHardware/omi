@@ -35,27 +35,51 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(DraggableAreaView(targetWindow: window))
         .floatingBackground()
     }
 
     private var controlBarView: some View {
-        HStack(spacing: 12) {
-            Spacer()
-
+        VStack(spacing: 1) {
             if state.isVoiceListening {
                 voiceListeningView
             } else {
-                commandButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
+                compactButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
                     onAskAI()
                 }
             }
 
-            Spacer()
+            HStack(spacing: 6) {
+                compactLabel("Hide", keys: ["\u{2318}", "\\"])
+                compactLabel("Push to talk", keys: ["\u{2325}"])
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(height: 60)
-        .background(DraggableAreaView(targetWindow: window))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .frame(height: 50)
+    }
+
+    private func compactButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            compactLabel(title, keys: keys)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactLabel(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(.white)
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .scaledFont(size: 9)
+                    .foregroundColor(.white)
+                    .frame(width: 15, height: 15)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(3)
+            }
+        }
     }
 
     private var voiceListeningView: some View {
@@ -68,12 +92,12 @@ struct FloatingControlBarView: View {
                 .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: state.isVoiceListening)
 
             Image(systemName: "mic.fill")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(.white)
 
             if state.isVoiceLocked {
                 Text("LOCKED")
-                    .font(.system(size: 10, weight: .bold))
+                    .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -83,13 +107,13 @@ struct FloatingControlBarView: View {
 
             if !state.voiceTranscript.isEmpty {
                 Text(state.voiceTranscript)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.tail)
             } else {
                 Text(state.isVoiceLocked ? "Tap \u{2325} to send" : "Release \u{2325} to send")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }
         }
@@ -118,7 +142,7 @@ struct FloatingControlBarView: View {
             onCancel: onCloseAI,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-                let totalHeight = 60 + height + 24
+                let totalHeight = 50 + height + 24
                 state.inputViewHeight = totalHeight
             },
             onCaptureScreenshot: onCaptureScreenshot
@@ -151,23 +175,5 @@ struct FloatingControlBarView: View {
             ))
     }
 
-    private func commandButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-                ForEach(keys, id: \.self) { key in
-                    Text(key)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(4)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
 
 }

@@ -15284,6 +15284,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pending'**
   String get pending;
+
+  /// Title for changelog with version number
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New in {version}'**
+  String whatsNewInVersion(String version);
+
+  /// No description provided for @addToYourTaskList.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to your task list?'**
+  String get addToYourTaskList;
+
+  /// No description provided for @failedToCreateShareLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create share link'**
+  String get failedToCreateShareLink;
+
+  /// No description provided for @deleteGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Goal'**
+  String get deleteGoal;
+
+  /// No description provided for @deviceUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is up to date'**
+  String get deviceUpToDate;
+
+  /// No description provided for @wifiConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Configuration'**
+  String get wifiConfiguration;
+
+  /// No description provided for @wifiConfigurationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your WiFi credentials to allow the device to download the firmware.'**
+  String get wifiConfigurationSubtitle;
+
+  /// No description provided for @networkNameSsid.
+  ///
+  /// In en, this message translates to:
+  /// **'Network Name (SSID)'**
+  String get networkNameSsid;
+
+  /// No description provided for @enterWifiNetworkName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi network name'**
+  String get enterWifiNetworkName;
+
+  /// No description provided for @enterWifiPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi password'**
+  String get enterWifiPassword;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

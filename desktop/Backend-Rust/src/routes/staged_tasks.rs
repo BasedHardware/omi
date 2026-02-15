@@ -445,6 +445,8 @@ async fn migrate_ai_tasks(
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await
             {
@@ -487,6 +489,31 @@ async fn migrate_ai_tasks(
     }))
 }
 
+/// POST /v1/staged-tasks/migrate-conversation-items
+/// Migrates action items created by the old conversation extraction path
+/// (have conversation_id but no source) to staged_tasks.
+/// Idempotent — safe to call multiple times.
+async fn migrate_conversation_items(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match state
+        .firestore
+        .migrate_conversation_action_items_to_staged(&user.uid)
+        .await
+    {
+        Ok((migrated, deleted)) => Ok(Json(serde_json::json!({
+            "status": "ok",
+            "migrated": migrated,
+            "deleted": deleted
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to migrate conversation items: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub fn staged_tasks_routes() -> Router<AppState> {
     Router::new()
         .route(
@@ -496,5 +523,6 @@ pub fn staged_tasks_routes() -> Router<AppState> {
         .route("/v1/staged-tasks/batch-scores", patch(batch_update_staged_scores))
         .route("/v1/staged-tasks/promote", post(promote_staged_task))
         .route("/v1/staged-tasks/migrate", post(migrate_ai_tasks))
+        .route("/v1/staged-tasks/migrate-conversation-items", post(migrate_conversation_items))
         .route("/v1/staged-tasks/:id", axum::routing::delete(delete_staged_task))
 }

@@ -8035,4 +8035,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version 的新功能';
+  }
+
+  @override
+  String get addToYourTaskList => '添加到您的任务列表？';
+
+  @override
+  String get failedToCreateShareLink => '无法创建分享链接';
+
+  @override
+  String get deleteGoal => '删除目标';
+
+  @override
+  String get deviceUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get wifiConfiguration => 'WiFi 配置';
+
+  @override
+  String get wifiConfigurationSubtitle => '输入您的WiFi凭据以允许设备下载固件。';
+
+  @override
+  String get networkNameSsid => '网络名称 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => '输入WiFi网络名称';
+
+  @override
+  String get enterWifiPassword => '输入WiFi密码';
 }

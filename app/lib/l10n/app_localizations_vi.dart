@@ -8187,4 +8187,36 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Có gì mới trong $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Thêm vào danh sách công việc?';
+
+  @override
+  String get failedToCreateShareLink => 'Không thể tạo liên kết chia sẻ';
+
+  @override
+  String get deleteGoal => 'Xóa mục tiêu';
+
+  @override
+  String get deviceUpToDate => 'Thiết bị của bạn đã được cập nhật';
+
+  @override
+  String get wifiConfiguration => 'Cấu hình WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Nhập thông tin WiFi để thiết bị có thể tải xuống firmware.';
+
+  @override
+  String get networkNameSsid => 'Tên mạng (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Nhập tên mạng WiFi';
+
+  @override
+  String get enterWifiPassword => 'Nhập mật khẩu WiFi';
 }

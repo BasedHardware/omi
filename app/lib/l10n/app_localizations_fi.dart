@@ -8182,4 +8182,36 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Uutta versiossa $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lisätäänkö tehtävälistallesi?';
+
+  @override
+  String get failedToCreateShareLink => 'Jakolinkin luominen epäonnistui';
+
+  @override
+  String get deleteGoal => 'Poista tavoite';
+
+  @override
+  String get deviceUpToDate => 'Laitteesi on ajan tasalla';
+
+  @override
+  String get wifiConfiguration => 'WiFi-asetukset';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Syötä WiFi-tunnuksesi, jotta laite voi ladata laiteohjelmiston.';
+
+  @override
+  String get networkNameSsid => 'Verkon nimi (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Syötä WiFi-verkon nimi';
+
+  @override
+  String get enterWifiPassword => 'Syötä WiFi-salasana';
 }

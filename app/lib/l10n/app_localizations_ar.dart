@@ -8126,4 +8126,36 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'ما الجديد في $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'إضافة إلى قائمة مهامك؟';
+
+  @override
+  String get failedToCreateShareLink => 'فشل إنشاء رابط المشاركة';
+
+  @override
+  String get deleteGoal => 'حذف الهدف';
+
+  @override
+  String get deviceUpToDate => 'جهازك محدّث';
+
+  @override
+  String get wifiConfiguration => 'إعدادات الواي فاي';
+
+  @override
+  String get wifiConfigurationSubtitle => 'أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.';
+
+  @override
+  String get networkNameSsid => 'اسم الشبكة (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'أدخل اسم شبكة الواي فاي';
+
+  @override
+  String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
 }

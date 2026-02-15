@@ -18,15 +18,23 @@ actor ClaudeAgentBridge {
     /// Callback for OMI tool calls that need Swift execution
     typealias ToolCallHandler = @Sendable (String, String, [String: Any]) async -> String
 
-    /// Callback for tool activity events (name, status: "started"/"completed")
-    typealias ToolActivityHandler = @Sendable (String, String) -> Void
+    /// Callback for tool activity events (name, status, toolUseId?, input?)
+    typealias ToolActivityHandler = @Sendable (String, String, String?, [String: Any]?) -> Void
+
+    /// Callback for thinking text deltas
+    typealias ThinkingDeltaHandler = @Sendable (String) -> Void
+
+    /// Callback for tool result display (toolUseId, name, output)
+    typealias ToolResultDisplayHandler = @Sendable (String, String, String) -> Void
 
     /// Inbound message types (Bridge → Swift, read from stdout)
     private enum InboundMessage {
         case `init`(sessionId: String)
         case textDelta(text: String)
+        case thinkingDelta(text: String)
         case toolUse(callId: String, name: String, input: [String: Any])
-        case toolActivity(name: String, status: String)
+        case toolActivity(name: String, status: String, toolUseId: String?, input: [String: Any]?)
+        case toolResultDisplay(toolUseId: String, name: String, output: String)
         case result(text: String, sessionId: String, costUsd: Double?)
         case error(message: String)
     }
@@ -170,9 +178,12 @@ actor ClaudeAgentBridge {
         prompt: String,
         systemPrompt: String,
         cwd: String? = nil,
+        mode: String? = nil,
         onTextDelta: @escaping TextDeltaHandler,
         onToolCall: @escaping ToolCallHandler,
-        onToolActivity: @escaping ToolActivityHandler
+        onToolActivity: @escaping ToolActivityHandler,
+        onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
+        onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in }
     ) async throws -> QueryResult {
         guard isRunning else {
             throw BridgeError.notRunning
@@ -188,6 +199,9 @@ actor ClaudeAgentBridge {
         if let cwd = cwd {
             queryDict["cwd"] = cwd
         }
+        if let mode = mode {
+            queryDict["mode"] = mode
+        }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
@@ -198,7 +212,7 @@ actor ClaudeAgentBridge {
 
         // Read messages until we get a result or error
         while true {
-            let message = try await waitForMessage(timeout: 120.0)
+            let message = try await waitForMessage()
 
             switch message {
             case .`init`:
@@ -221,8 +235,14 @@ actor ClaudeAgentBridge {
                     sendLine(resultString)
                 }
 
-            case .toolActivity(let name, let status):
-                onToolActivity(name, status)
+            case .thinkingDelta(let text):
+                onThinkingDelta(text)
+
+            case .toolActivity(let name, let status, let toolUseId, let input):
+                onToolActivity(name, status, toolUseId, input)
+
+            case .toolResultDisplay(let toolUseId, let name, let output):
+                onToolResultDisplay(toolUseId, name, output)
 
             case .result(let text, _, let costUsd):
                 return QueryResult(text: text, costUsd: costUsd ?? 0)
@@ -231,6 +251,15 @@ actor ClaudeAgentBridge {
                 throw BridgeError.agentError(message)
             }
         }
+    }
+
+    // MARK: - Streaming Input Controls
+
+    /// Interrupt the running agent, keeping partial response.
+    /// The bridge will abort the current query and send back a partial result.
+    func interrupt() {
+        guard isRunning else { return }
+        sendLine("{\"type\":\"interrupt\"}")
     }
 
     // MARK: - Private
@@ -299,10 +328,22 @@ actor ClaudeAgentBridge {
             let input = dict["input"] as? [String: Any] ?? [:]
             return .toolUse(callId: callId, name: name, input: input)
 
+        case "thinking_delta":
+            let text = dict["text"] as? String ?? ""
+            return .thinkingDelta(text: text)
+
         case "tool_activity":
             let name = dict["name"] as? String ?? ""
             let status = dict["status"] as? String ?? "started"
-            return .toolActivity(name: name, status: status)
+            let toolUseId = dict["toolUseId"] as? String
+            let input = dict["input"] as? [String: Any]
+            return .toolActivity(name: name, status: status, toolUseId: toolUseId, input: input)
+
+        case "tool_result_display":
+            let toolUseId = dict["toolUseId"] as? String ?? ""
+            let name = dict["name"] as? String ?? ""
+            let output = dict["output"] as? String ?? ""
+            return .toolResultDisplay(toolUseId: toolUseId, name: name, output: output)
 
         case "result":
             let text = dict["text"] as? String ?? ""
@@ -329,7 +370,7 @@ actor ClaudeAgentBridge {
         }
     }
 
-    private func waitForMessage(timeout: TimeInterval) async throws -> InboundMessage {
+    private func waitForMessage(timeout: TimeInterval? = nil) async throws -> InboundMessage {
         // Check pending first
         if !pendingMessages.isEmpty {
             return pendingMessages.removeFirst()
@@ -339,16 +380,18 @@ actor ClaudeAgentBridge {
         messageGeneration &+= 1
         let expectedGeneration = messageGeneration
 
-        // Wait for next message with timeout
+        // Wait for next message (with optional timeout)
         return try await withCheckedThrowingContinuation { continuation in
             self.messageContinuation = continuation
 
-            // Set up timeout — only fires if this is still the active generation
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                if self.messageGeneration == expectedGeneration, self.messageContinuation != nil {
-                    self.messageContinuation = nil
-                    continuation.resume(throwing: BridgeError.timeout)
+            // Set up timeout only if specified — process termination handler covers crash cases
+            if let timeout = timeout {
+                Task {
+                    try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    if self.messageGeneration == expectedGeneration, self.messageContinuation != nil {
+                        self.messageContinuation = nil
+                        continuation.resume(throwing: BridgeError.timeout)
+                    }
                 }
             }
         }

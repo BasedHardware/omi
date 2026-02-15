@@ -2,6 +2,7 @@
 
 pub mod action_items;
 pub mod advice;
+pub mod agent;
 pub mod apps;
 pub mod auth;
 pub mod chat;
@@ -15,6 +16,7 @@ pub mod health;
 pub mod knowledge_graph;
 pub mod memories;
 pub mod messages;
+pub mod people;
 pub mod personas;
 pub mod updates;
 pub mod staged_tasks;
@@ -24,6 +26,7 @@ pub mod webhooks;
 
 pub use action_items::action_items_routes;
 pub use advice::advice_routes;
+pub use agent::agent_routes;
 pub use apps::apps_routes;
 pub use auth::auth_routes;
 pub use chat::chat_routes;
@@ -37,6 +40,7 @@ pub use health::health_routes;
 pub use knowledge_graph::knowledge_graph_routes;
 pub use memories::memories_routes;
 pub use messages::messages_routes;
+pub use people::people_routes;
 pub use personas::personas_routes;
 pub use staged_tasks::staged_tasks_routes;
 pub use stats::stats_routes;

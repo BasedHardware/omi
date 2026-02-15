@@ -8222,4 +8222,36 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Újdonságok a $version verzióban';
+  }
+
+  @override
+  String get addToYourTaskList => 'Hozzáadás a feladatlistádhoz?';
+
+  @override
+  String get failedToCreateShareLink => 'Nem sikerült megosztási linket létrehozni';
+
+  @override
+  String get deleteGoal => 'Cél törlése';
+
+  @override
+  String get deviceUpToDate => 'Az eszköze naprakész';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfiguráció';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Adja meg WiFi hitelesítő adatait, hogy az eszköz letölthesse a firmware-t.';
+
+  @override
+  String get networkNameSsid => 'Hálózat neve (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Adja meg a WiFi hálózat nevét';
+
+  @override
+  String get enterWifiPassword => 'Adja meg a WiFi jelszót';
 }

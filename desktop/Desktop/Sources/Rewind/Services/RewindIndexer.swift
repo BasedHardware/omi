@@ -484,6 +484,12 @@ actor RewindIndexer {
 
                         try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
                         totalProcessed += 1
+                    } catch RewindError.screenshotNotFound {
+                        // Screenshot/video file is permanently missing — clear skippedForBattery so we don't retry forever
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
+                    } catch let RewindError.corruptedVideoChunk(path) {
+                        log("RewindIndexer: Skipping corrupted chunk \(path) for screenshot \(id)")
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
                     } catch {
                         logError("RewindIndexer: Backfill OCR failed for screenshot \(id): \(error)")
                     }

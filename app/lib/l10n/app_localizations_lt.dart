@@ -8190,4 +8190,37 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas naujo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridėti prie užduočių sąrašo?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepavyko sukurti bendrinimo nuorodos';
+
+  @override
+  String get deleteGoal => 'Ištrinti tikslą';
+
+  @override
+  String get deviceUpToDate => 'Jūsų įrenginys yra atnaujintas';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigūracija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Įveskite WiFi prisijungimo duomenis, kad įrenginys galėtų atsisiųsti programinę įrangą.';
+
+  @override
+  String get networkNameSsid => 'Tinklo pavadinimas (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Įveskite WiFi tinklo pavadinimą';
+
+  @override
+  String get enterWifiPassword => 'Įveskite WiFi slaptažodį';
 }

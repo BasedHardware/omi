@@ -8252,4 +8252,37 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Neuigkeiten in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Zur Aufgabenliste hinzufügen?';
+
+  @override
+  String get failedToCreateShareLink => 'Freigabelink konnte nicht erstellt werden';
+
+  @override
+  String get deleteGoal => 'Ziel löschen';
+
+  @override
+  String get deviceUpToDate => 'Ihr Gerät ist auf dem neuesten Stand';
+
+  @override
+  String get wifiConfiguration => 'WLAN-Konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Geben Sie Ihre WLAN-Zugangsdaten ein, damit das Gerät die Firmware herunterladen kann.';
+
+  @override
+  String get networkNameSsid => 'Netzwerkname (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WLAN-Netzwerknamen eingeben';
+
+  @override
+  String get enterWifiPassword => 'WLAN-Passwort eingeben';
 }

@@ -8233,4 +8233,37 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novetats a $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Afegir a la llista de tasques?';
+
+  @override
+  String get failedToCreateShareLink => 'No s\'ha pogut crear l\'enllaç per compartir';
+
+  @override
+  String get deleteGoal => 'Eliminar objectiu';
+
+  @override
+  String get deviceUpToDate => 'El dispositiu està actualitzat';
+
+  @override
+  String get wifiConfiguration => 'Configuració WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.';
+
+  @override
+  String get networkNameSsid => 'Nom de la xarxa (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduïu el nom de la xarxa WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
 }

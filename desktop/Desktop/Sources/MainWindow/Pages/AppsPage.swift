@@ -14,7 +14,7 @@ struct SafeDismissButton: View {
 
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: 14, weight: .medium))
+            .scaledFont(size: 14, weight: .medium)
             .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
             .frame(width: 28, height: 28)
             .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
@@ -76,7 +76,7 @@ struct DismissButton: View {
 
     var body: some View {
         Image(systemName: icon)
-            .font(.system(size: 14, weight: .medium))
+            .scaledFont(size: 14, weight: .medium)
             .foregroundColor(isPressed ? OmiColors.textTertiary : OmiColors.textSecondary)
             .frame(width: 28, height: 28)
             .background(showBackground ? OmiColors.backgroundSecondary : Color.clear)
@@ -136,17 +136,17 @@ struct AppsPage: View {
                                     ProgressView()
                                         .scaleEffect(1.2)
                                     Text("Loading...")
-                                        .font(.system(size: 14))
+                                        .scaledFont(size: 14)
                                         .foregroundColor(OmiColors.textTertiary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
                             } else if filteredApps.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 32))
+                                        .scaledFont(size: 32)
                                         .foregroundColor(OmiColors.textTertiary)
                                     Text("No apps found")
-                                        .font(.system(size: 16, weight: .medium))
+                                        .scaledFont(size: 16, weight: .medium)
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 200)
@@ -156,9 +156,9 @@ struct AppsPage: View {
                                     Button(action: { viewAllSection = nil }) {
                                         HStack(spacing: 6) {
                                             Image(systemName: "chevron.left")
-                                                .font(.system(size: 12, weight: .medium))
+                                                .scaledFont(size: 12, weight: .medium)
                                             Text("Back")
-                                                .font(.system(size: 13, weight: .medium))
+                                                .scaledFont(size: 13, weight: .medium)
                                         }
                                         .foregroundColor(OmiColors.textSecondary)
                                     }
@@ -180,7 +180,7 @@ struct AppsPage: View {
                                             ProgressView()
                                                 .scaleEffect(0.8)
                                             Text("Loading more...")
-                                                .font(.system(size: 13))
+                                                .scaledFont(size: 13)
                                                 .foregroundColor(OmiColors.textTertiary)
                                         } else {
                                             Color.clear
@@ -343,11 +343,11 @@ struct AppsPage: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal.decrease.circle")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                     Text(selectedCategoryLabel)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .medium))
+                        .scaledFont(size: 9, weight: .medium)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -466,11 +466,11 @@ struct AppsPage: View {
     private var emptyView: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.grid.2x2")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No apps found")
-                .font(.system(size: 20, weight: .semibold))
+                .scaledFont(size: 20, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             if !searchText.isEmpty {
@@ -546,9 +546,9 @@ struct FilterToggle: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                 Text(label)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -578,10 +578,10 @@ struct SmallHeaderButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(color)
                 Text(label)
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
             }
             .padding(.horizontal, 10)
@@ -608,7 +608,7 @@ struct HorizontalAppSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -626,11 +626,11 @@ struct HorizontalAppSection: View {
                                         .fill(OmiColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 18, weight: .medium))
+                                        .scaledFont(size: 18, weight: .medium)
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 Text("See more")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .frame(width: 70)
@@ -644,11 +644,11 @@ struct HorizontalAppSection: View {
                                         .fill(OmiColors.backgroundSecondary)
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 18, weight: .medium))
+                                        .scaledFont(size: 18, weight: .medium)
                                         .foregroundColor(OmiColors.textSecondary)
                                 }
                                 Text("View all")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .frame(width: 70)
@@ -672,7 +672,7 @@ struct AppGridSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             LazyVGrid(columns: [
@@ -717,7 +717,7 @@ struct CompactAppCard: View {
 
                 VStack(spacing: 2) {
                     Text(app.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
@@ -725,20 +725,20 @@ struct CompactAppCard: View {
                     HStack(spacing: 3) {
                         if let rating = app.formattedRating {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 8))
+                                .scaledFont(size: 8)
                                 .foregroundColor(.yellow)
                             Text(rating)
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         if let installs = app.formattedInstalls {
                             if app.formattedRating != nil {
                                 Text("·")
-                                    .font(.system(size: 10))
+                                    .scaledFont(size: 10)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             Text(installs)
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     }
@@ -789,7 +789,7 @@ struct SmallAppButton: View {
                     .frame(width: 50, height: 22)
             } else {
                 Text(app.enabled ? "Open" : "Install")
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(.black)
                     .frame(width: 50, height: 22)
                     .background(Color.white)
@@ -834,12 +834,12 @@ struct AppCard: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(app.name)
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                             .lineLimit(1)
 
                         Text(app.author)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
                     }
@@ -848,7 +848,7 @@ struct AppCard: View {
                 }
 
                 Text(app.description)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -859,20 +859,20 @@ struct AppCard: View {
                         if let rating = app.formattedRating {
                             HStack(spacing: 3) {
                                 Image(systemName: "star.fill")
-                                    .font(.system(size: 10))
+                                    .scaledFont(size: 10)
                                     .foregroundColor(.yellow)
                                 Text(rating)
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                         }
                         if let installs = app.formattedInstalls {
                             HStack(spacing: 3) {
                                 Image(systemName: "arrow.down.circle")
-                                    .font(.system(size: 10))
+                                    .scaledFont(size: 10)
                                     .foregroundColor(OmiColors.textTertiary)
                                 Text(installs)
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                         }
@@ -931,7 +931,7 @@ struct AppActionButton: View {
                     .frame(width: 60, height: 28)
             } else {
                 Text(app.enabled ? "Open" : "Install")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.black)
                     .frame(width: 60, height: 28)
                     .background(Color.white)
@@ -968,7 +968,7 @@ struct AppFilterSheet: View {
             // Header
             HStack {
                 Text("Filters")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -978,7 +978,7 @@ struct AppFilterSheet: View {
                         appProvider.clearFilters()
                         Task { await appProvider.searchApps() }
                     }
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
                 }
 
@@ -994,7 +994,7 @@ struct AppFilterSheet: View {
                     // Categories
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Category")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         FlowLayout(spacing: 8) {
@@ -1017,7 +1017,7 @@ struct AppFilterSheet: View {
                     // Capabilities
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Capability")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         FlowLayout(spacing: 8) {
@@ -1040,7 +1040,7 @@ struct AppFilterSheet: View {
                     // Other filters
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Other")
-                            .font(.system(size: 14, weight: .semibold))
+                            .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Toggle("Show installed only", isOn: $appProvider.showInstalledOnly)
@@ -1075,7 +1075,7 @@ struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(isSelected ? Color.white : OmiColors.backgroundSecondary)
@@ -1119,13 +1119,13 @@ struct CategoryAppsSheet: View {
                 DismissButton(action: dismissSheet, icon: "chevron.left", showBackground: false)
 
                 Text(category.title)
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 Text("\(categoryApps.count) apps")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .padding()
@@ -1200,11 +1200,11 @@ struct AppDetailSheet: View {
 
                         VStack(alignment: .leading, spacing: 6) {
                             Text(app.name)
-                                .font(.system(size: 24, weight: .bold))
+                                .scaledFont(size: 24, weight: .bold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text(app.author)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             HStack(spacing: 12) {
@@ -1214,12 +1214,12 @@ struct AppDetailSheet: View {
                                             .foregroundColor(.yellow)
                                         Text("\(rating) (\(app.ratingCount))")
                                     }
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
 
                                 Text("\(app.installs) installs")
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textSecondary)
                             }
                         }
@@ -1237,7 +1237,7 @@ struct AppDetailSheet: View {
                                     .frame(width: 100, height: 36)
                             } else {
                                 Text(app.enabled ? "Disable" : "Install")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .scaledFont(size: 14, weight: .semibold)
                                     .foregroundColor(app.enabled ? .white : .black)
                                     .frame(width: 100, height: 36)
                                     .background(app.enabled ? OmiColors.error : Color.white)
@@ -1257,11 +1257,11 @@ struct AppDetailSheet: View {
                     // Description
                     VStack(alignment: .leading, spacing: 8) {
                         Text("About")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.description)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -1270,7 +1270,7 @@ struct AppDetailSheet: View {
                     if !app.capabilities.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Capabilities")
-                                .font(.system(size: 16, weight: .semibold))
+                                .scaledFont(size: 16, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             FlowLayout(spacing: 8) {
@@ -1284,11 +1284,11 @@ struct AppDetailSheet: View {
                     // Category
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Category")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(app.category.replacingOccurrences(of: "-", with: " ").capitalized)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
                     }
 
@@ -1299,7 +1299,7 @@ struct AppDetailSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Reviews")
-                                .font(.system(size: 16, weight: .semibold))
+                                .scaledFont(size: 16, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Spacer()
@@ -1308,9 +1308,9 @@ struct AppDetailSheet: View {
                                 Button(action: { showAddReview = true }) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "plus")
-                                            .font(.system(size: 12, weight: .medium))
+                                            .scaledFont(size: 12, weight: .medium)
                                         Text("Add Review")
-                                            .font(.system(size: 13, weight: .medium))
+                                            .scaledFont(size: 13, weight: .medium)
                                     }
                                     .foregroundColor(OmiColors.textSecondary)
                                 }
@@ -1323,14 +1323,14 @@ struct AppDetailSheet: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Text("Your Review")
-                                        .font(.system(size: 13, weight: .medium))
+                                        .scaledFont(size: 13, weight: .medium)
                                         .foregroundColor(OmiColors.textPrimary)
 
                                     Spacer()
 
                                     Button(action: { showAddReview = true }) {
                                         Text("Edit")
-                                            .font(.system(size: 12, weight: .medium))
+                                            .scaledFont(size: 12, weight: .medium)
                                             .foregroundColor(OmiColors.textTertiary)
                                     }
                                     .buttonStyle(.plain)
@@ -1348,7 +1348,7 @@ struct AppDetailSheet: View {
                             }
                         } else if userReview == nil && reviews.isEmpty {
                             Text("No reviews yet. Be the first to review this app!")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                                 .padding(.vertical, 8)
                         }
@@ -1441,7 +1441,7 @@ struct AddReviewSheet: View {
                 Spacer()
 
                 Text(existingReview != nil ? "Edit Review" : "Add Review")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -1473,11 +1473,11 @@ struct AddReviewSheet: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(app.name)
-                                .font(.system(size: 16, weight: .semibold))
+                                .scaledFont(size: 16, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text(app.author)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -1487,7 +1487,7 @@ struct AddReviewSheet: View {
                     // Star Rating Picker
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your Rating")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         StarRatingPicker(rating: $selectedRating)
@@ -1497,19 +1497,19 @@ struct AddReviewSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("Your Review")
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Spacer()
 
                             Text("\(reviewText.count)/\(maxReviewLength)")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(reviewText.count > maxReviewLength ? OmiColors.error : OmiColors.textTertiary)
                         }
 
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $reviewText)
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textPrimary)
                                 .scrollContentBackground(.hidden)
                                 .frame(minHeight: 120, maxHeight: 200)
@@ -1528,7 +1528,7 @@ struct AddReviewSheet: View {
 
                             if reviewText.isEmpty {
                                 Text("Share your experience with this app...")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textTertiary)
                                     .padding(.leading, 17)
                                     .padding(.top, 20)
@@ -1543,7 +1543,7 @@ struct AddReviewSheet: View {
                             Image(systemName: "exclamationmark.circle.fill")
                                 .foregroundColor(OmiColors.error)
                             Text(errorMessage)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.error)
                         }
                     }
@@ -1557,7 +1557,7 @@ struct AddReviewSheet: View {
                                     .tint(OmiColors.textPrimary)
                             } else {
                                 Text(existingReview != nil ? "Update Review" : "Submit Review")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .scaledFont(size: 14, weight: .semibold)
                             }
                         }
                         .foregroundColor(OmiColors.textPrimary)
@@ -1620,7 +1620,7 @@ struct StarRatingPicker: View {
         HStack(spacing: 8) {
             ForEach(1...maxRating, id: \.self) { star in
                 Image(systemName: starImage(for: star))
-                    .font(.system(size: starSize))
+                    .scaledFont(size: starSize)
                     .foregroundColor(starColor(for: star))
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.15)) {
@@ -1636,7 +1636,7 @@ struct StarRatingPicker: View {
 
             if rating > 0 {
                 Text(ratingLabel)
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
                     .padding(.leading, 8)
             }
@@ -1691,9 +1691,9 @@ struct CapabilityBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
             Text(capability.replacingOccurrences(of: "_", with: " ").capitalized)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -1715,7 +1715,7 @@ struct ReviewCard: View {
                 HStack(spacing: 2) {
                     ForEach(1...5, id: \.self) { star in
                         Image(systemName: star <= review.score ? "star.fill" : "star")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(star <= review.score ? .yellow : OmiColors.textTertiary)
                     }
                 }
@@ -1723,23 +1723,23 @@ struct ReviewCard: View {
                 Spacer()
 
                 Text(review.ratedAt, style: .date)
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Text(review.review)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
                 .lineLimit(3)
 
             if let response = review.response {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Developer Response")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text(response)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textSecondary)
                         .lineLimit(2)
                 }
@@ -1916,18 +1916,18 @@ struct CreateAppCard: View {
                     .frame(width: 44, height: 44)
 
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(iconColor)
             }
 
             Text(title)
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .padding(12)

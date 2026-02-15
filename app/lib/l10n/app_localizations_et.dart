@@ -8182,4 +8182,36 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Mis on uut versioonis $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lisada oma ülesannete loendisse?';
+
+  @override
+  String get failedToCreateShareLink => 'Jagamislingi loomine ebaõnnestus';
+
+  @override
+  String get deleteGoal => 'Kustuta eesmärk';
+
+  @override
+  String get deviceUpToDate => 'Teie seade on ajakohane';
+
+  @override
+  String get wifiConfiguration => 'WiFi seadistamine';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Sisestage WiFi andmed, et seade saaks püsivara alla laadida.';
+
+  @override
+  String get networkNameSsid => 'Võrgu nimi (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Sisestage WiFi võrgu nimi';
+
+  @override
+  String get enterWifiPassword => 'Sisestage WiFi parool';
 }

@@ -8210,4 +8210,36 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Что нового в $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Добавить в список задач?';
+
+  @override
+  String get failedToCreateShareLink => 'Не удалось создать ссылку для обмена';
+
+  @override
+  String get deleteGoal => 'Удалить цель';
+
+  @override
+  String get deviceUpToDate => 'Ваше устройство обновлено';
+
+  @override
+  String get wifiConfiguration => 'Настройка WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Введите данные WiFi, чтобы устройство могло загрузить прошивку.';
+
+  @override
+  String get networkNameSsid => 'Имя сети (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Введите имя сети WiFi';
+
+  @override
+  String get enterWifiPassword => 'Введите пароль WiFi';
 }

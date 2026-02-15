@@ -8185,4 +8185,37 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novidades na $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Adicionar à sua lista de tarefas?';
+
+  @override
+  String get failedToCreateShareLink => 'Falha ao criar link de compartilhamento';
+
+  @override
+  String get deleteGoal => 'Excluir meta';
+
+  @override
+  String get deviceUpToDate => 'Seu dispositivo está atualizado';
+
+  @override
+  String get wifiConfiguration => 'Configuração WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Insira suas credenciais WiFi para permitir que o dispositivo baixe o firmware.';
+
+  @override
+  String get networkNameSsid => 'Nome da rede (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Insira o nome da rede WiFi';
+
+  @override
+  String get enterWifiPassword => 'Insira a senha do WiFi';
 }

@@ -57,13 +57,16 @@ struct TimeBasedTimelineView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> TimeBasedTimelineNSView {
         let view = TimeBasedTimelineNSView()
-        view.onSelect = onSelect
-        view.onHover = { index in
+        context.coordinator.onSelect = onSelect
+        view.onSelectCoordinator = context.coordinator
+        view.onHover = { [weak view] index in
+            guard view != nil else { return }
             DispatchQueue.main.async {
                 hoveredIndex = index
             }
         }
-        view.onGapHover = { gapIndex in
+        view.onGapHover = { [weak view] gapIndex in
+            guard view != nil else { return }
             DispatchQueue.main.async {
                 hoveredGapIndex = gapIndex
             }
@@ -71,16 +74,44 @@ struct TimeBasedTimelineView: NSViewRepresentable {
         return view
     }
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        var onSelect: ((Int) -> Void)?
+    }
+
     func updateNSView(_ nsView: TimeBasedTimelineNSView, context: Context) {
+        let screenshotsChanged = nsView.screenshots.count != screenshots.count
+        let indexChanged = nsView.currentIndex != currentIndex
+        let searchChanged = nsView.searchResultIndices != searchResultIndices
+
         nsView.screenshots = screenshots
         nsView.currentIndex = currentIndex
         nsView.searchResultIndices = searchResultIndices
         nsView.hoveredIndex = hoveredIndex
         nsView.hoveredGapIndex = hoveredGapIndex
         nsView.barHeight = barHeight
-        nsView.onSelect = onSelect
-        nsView.rebuildSegments()
-        nsView.needsDisplay = true
+
+        // Update onSelect through coordinator to avoid deallocating closures
+        // during the constraint update cycle (causes EXC_BREAKPOINT in block_destroy_helper)
+        context.coordinator.onSelect = onSelect
+        if nsView.onSelectCoordinator == nil {
+            nsView.onSelectCoordinator = context.coordinator
+        }
+
+        // Only rebuild segments when data actually changed — NOT on hover updates.
+        // Rebuilding on every hover triggers a constraint feedback loop:
+        // mouseMoved → onHover binding → updateNSView → rebuildSegments → updateTrackingAreas → crash
+        if screenshotsChanged || searchChanged {
+            // Defer segment rebuild out of SwiftUI's layout cycle to prevent
+            // re-entrant constraint updates that crash in updateConstraintsForSubtreeIfNeeded
+            nsView.deferredRebuildSegments()
+        } else if indexChanged {
+            // Index change only needs a redraw, not a full segment rebuild
+            nsView.needsDisplay = true
+        }
     }
 }
 
@@ -93,7 +124,12 @@ class TimeBasedTimelineNSView: NSView {
     var hoveredIndex: Int?
     var hoveredGapIndex: Int?
     var barHeight: CGFloat = 32
-    var onSelect: ((Int) -> Void)?
+    // Use coordinator for onSelect to avoid closure deallocation during constraint cycles
+    weak var onSelectCoordinator: TimeBasedTimelineView.Coordinator?
+    var onSelect: ((Int) -> Void)? {
+        get { onSelectCoordinator?.onSelect }
+        set { onSelectCoordinator?.onSelect = newValue }
+    }
     var onHover: ((Int?) -> Void)?
     var onGapHover: ((Int?) -> Void)?
 
@@ -102,6 +138,7 @@ class TimeBasedTimelineNSView: NSView {
     private var segmentRects: [NSRect] = []  // Cached rects for each segment
     private var frameXPositions: [CGFloat] = []  // X position for each frame
     private var lastLayoutBounds: NSRect = .zero  // Track bounds changes
+    private var isRebuildingSegments = false  // Guard against re-entrant rebuilds
 
     // Gap threshold: 2 minutes
     private let gapThreshold: TimeInterval = 120
@@ -129,6 +166,14 @@ class TimeBasedTimelineNSView: NSView {
         addTrackingArea(trackingArea!)
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        // Recalculate layout positions when bounds change (safe — not in constraint cycle)
+        if !segments.isEmpty {
+            calculateLayout()
+        }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let existing = trackingArea {
@@ -139,6 +184,18 @@ class TimeBasedTimelineNSView: NSView {
 
     // MARK: - Segment Building
 
+    /// Defer segment rebuild to the next runloop iteration.
+    /// This prevents re-entrant constraint updates when called from updateNSView
+    /// during SwiftUI's layout cycle (OMI-COMPUTER-1G crash fix).
+    func deferredRebuildSegments() {
+        guard !isRebuildingSegments else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.rebuildSegments()
+            self.needsDisplay = true
+        }
+    }
+
     private func needsLayoutRecalculation() -> Bool {
         // Recalculate if bounds have changed significantly
         let currentRect = timelineRect()
@@ -148,6 +205,9 @@ class TimeBasedTimelineNSView: NSView {
     }
 
     func rebuildSegments() {
+        guard !isRebuildingSegments else { return }
+        isRebuildingSegments = true
+        defer { isRebuildingSegments = false }
         segments = []
         segmentRects = []
         frameXPositions = Array(repeating: 0, count: screenshots.count)
@@ -286,7 +346,7 @@ class TimeBasedTimelineNSView: NSView {
             onHover?(nil)
             onGapHover?(gapIndex)
             showGapTooltip(for: segments[gapIndex], at: location)
-        } else if let index = indexAtPoint(location) {
+        } else if let index = indexAtPoint(location), index >= 0, index < screenshots.count {
             hoveredIndex = index
             hoveredGapIndex = nil
             onHover?(index)
@@ -315,12 +375,12 @@ class TimeBasedTimelineNSView: NSView {
         let rect = timelineRect()
         guard rect.contains(point), !screenshots.isEmpty else { return nil }
 
-        // Ensure layout is calculated
-        if frameXPositions.isEmpty || needsLayoutRecalculation() {
-            rebuildSegments()
+        // Recalculate layout if bounds changed (lightweight, no segment rebuild)
+        if !segments.isEmpty && needsLayoutRecalculation() {
+            calculateLayout()
         }
 
-        // If we still have no positions or all positions are 0, use linear fallback
+        // If layout hasn't been computed yet, use linear fallback
         if frameXPositions.isEmpty || (frameXPositions.count > 1 && frameXPositions.allSatisfy { $0 == 0 }) {
             // Linear fallback (like the old implementation)
             let relativeX = point.x - rect.minX
@@ -373,7 +433,7 @@ class TimeBasedTimelineNSView: NSView {
     private func showTooltip(for screenshot: Screenshot, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot))
+        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
         tooltipView.frame.size = tooltipView.fittingSize
 
         let windowPoint = convert(point, to: nil)
@@ -399,7 +459,7 @@ class TimeBasedTimelineNSView: NSView {
     private func showGapTooltip(for segment: TimelineSegment, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration))
+        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
         tooltipView.frame.size = tooltipView.fittingSize
 
         let windowPoint = convert(point, to: nil)
@@ -432,9 +492,17 @@ class TimeBasedTimelineNSView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard !screenshots.isEmpty else { return }
 
-        // Recalculate layout if bounds have changed (needed for proper click detection)
-        if segmentRects.isEmpty || needsLayoutRecalculation() {
-            rebuildSegments()
+        // Only recalculate layout positions when bounds change — never do a full
+        // rebuildSegments() during draw, as it can trigger updateTrackingAreas
+        // and re-entrant constraint updates (OMI-COMPUTER-1G crash).
+        if !segments.isEmpty && needsLayoutRecalculation() {
+            calculateLayout()
+        }
+
+        // If segments haven't been built yet, schedule a deferred rebuild and skip this draw
+        guard !segments.isEmpty, !segmentRects.isEmpty else {
+            deferredRebuildSegments()
+            return
         }
 
         let rect = timelineRect()
@@ -489,6 +557,7 @@ class TimeBasedTimelineNSView: NSView {
 
         for i in 0..<frameCount {
             let frameIndex = segment.startIndex + i
+            guard frameIndex >= 0, frameIndex < screenshots.count else { continue }
             let screenshot = screenshots[frameIndex]
             let x = rect.minX + CGFloat(i) * blockWidth
             let blockRect = NSRect(x: x, y: rect.minY, width: max(1, blockWidth - 0.5), height: rect.height)
@@ -627,11 +696,11 @@ struct TooltipView: View {
         HStack(spacing: 6) {
             AppIconView(appName: screenshot.appName, size: 14)
             Text(screenshot.appName)
-                .font(.system(size: 10, weight: .medium))
+                .scaledFont(size: 10, weight: .medium)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Text(screenshot.formattedTime)
-                .font(.system(size: 10, design: .monospaced))
+                .scaledFont(size: 10, design: .monospaced)
                 .foregroundColor(.white.opacity(0.7))
         }
         .padding(.horizontal, 8)
@@ -653,10 +722,10 @@ struct GapTooltipView: View {
     var body: some View {
         VStack(spacing: 2) {
             Text("No capture")
-                .font(.system(size: 9, weight: .medium))
+                .scaledFont(size: 9, weight: .medium)
                 .foregroundColor(.white.opacity(0.6))
             Text(formatDuration(duration))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .scaledFont(size: 11, weight: .semibold, design: .monospaced)
                 .foregroundColor(.white)
         }
         .padding(.horizontal, 10)

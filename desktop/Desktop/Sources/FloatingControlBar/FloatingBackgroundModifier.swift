@@ -4,18 +4,21 @@ import SwiftUI
 struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material
     var blendingMode: NSVisualEffectView.BlendingMode
+    var alphaValue: CGFloat
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
         view.blendingMode = blendingMode
         view.state = .active
+        view.alphaValue = alphaValue
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
+        nsView.alphaValue = alphaValue
     }
 }
 
@@ -26,7 +29,7 @@ struct FloatingBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(
-                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
             )
             .cornerRadius(cornerRadius)
     }

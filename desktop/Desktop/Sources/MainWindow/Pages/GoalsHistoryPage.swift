@@ -14,9 +14,9 @@ struct GoalsHistoryPage: View {
                 Button(action: onDismiss) {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .semibold))
+                            .scaledFont(size: 12, weight: .semibold)
                         Text("Back")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                     }
                     .foregroundColor(OmiColors.textTertiary)
                 }
@@ -25,7 +25,7 @@ struct GoalsHistoryPage: View {
                 Spacer()
 
                 Text("Goals History")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -45,30 +45,30 @@ struct GoalsHistoryPage: View {
                     ProgressView()
                         .scaleEffect(1.0)
                     Text("Loading history...")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = error {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 32))
+                        .scaledFont(size: 32)
                         .foregroundColor(.orange)
                     Text(error)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if completedGoals.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "trophy")
-                        .font(.system(size: 40))
+                        .scaledFont(size: 40)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
                     Text("No goals history yet")
-                        .font(.system(size: 15, weight: .medium))
+                        .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                     Text("Completed and removed goals will appear here")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -150,20 +150,20 @@ struct CompletedGoalRow: View {
                     .fill(OmiColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 36, height: 36)
                 Text(goalEmoji)
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
             }
 
             // Content
             VStack(alignment: .leading, spacing: 4) {
                 Text(goal.title)
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
                     // Type badge
                     Text(typeBadgeText)
-                        .font(.system(size: 10, weight: .medium))
+                        .scaledFont(size: 10, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -174,7 +174,7 @@ struct CompletedGoalRow: View {
 
                     // Final value
                     Text("\(Int(goal.currentValue))/\(Int(goal.targetValue))\(goal.unit.map { " \($0)" } ?? "")")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -185,21 +185,21 @@ struct CompletedGoalRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 if isCompleted {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(Color(red: 0.133, green: 0.773, blue: 0.369))
 
                     if !completionDateText.isEmpty {
                         Text(completionDateText)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                     Text("Removed")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.7))
                 }
             }

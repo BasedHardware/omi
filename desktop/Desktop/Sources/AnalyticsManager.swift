@@ -795,6 +795,59 @@ class AnalyticsManager {
         return props
     }
 
+    // MARK: - Floating Bar Events
+
+    /// Track when the floating bar is toggled visible/hidden
+    func floatingBarToggled(visible: Bool, source: String) {
+        let props: [String: Any] = [
+            "visible": visible,
+            "source": source
+        ]
+        MixpanelManager.shared.track("Floating Bar Toggled", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_toggled", properties: props)
+    }
+
+    /// Track when Ask OMI is opened (AI input panel shown)
+    func floatingBarAskOmiOpened(source: String) {
+        let props: [String: Any] = ["source": source]
+        MixpanelManager.shared.track("Floating Bar Ask OMI Opened", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ask_omi_opened", properties: props)
+    }
+
+    /// Track when the AI conversation is closed
+    func floatingBarAskOmiClosed() {
+        MixpanelManager.shared.track("Floating Bar Ask OMI Closed")
+        PostHogManager.shared.track("floating_bar_ask_omi_closed")
+    }
+
+    /// Track when an AI query is sent from the floating bar
+    func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool) {
+        let props: [String: Any] = [
+            "message_length": messageLength,
+            "has_screenshot": hasScreenshot
+        ]
+        MixpanelManager.shared.track("Floating Bar Query Sent", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    }
+
+    /// Track when push-to-talk starts listening
+    func floatingBarPTTStarted(mode: String) {
+        let props: [String: Any] = ["mode": mode]
+        MixpanelManager.shared.track("Floating Bar PTT Started", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
+    }
+
+    /// Track when push-to-talk ends and sends (or discards) transcript
+    func floatingBarPTTEnded(mode: String, hadTranscript: Bool, transcriptLength: Int) {
+        let props: [String: Any] = [
+            "mode": mode,
+            "had_transcript": hadTranscript,
+            "transcript_length": transcriptLength
+        ]
+        MixpanelManager.shared.track("Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
+    }
+
     // MARK: - Display Info
 
     /// Track display characteristics (notch, screen size, etc.)

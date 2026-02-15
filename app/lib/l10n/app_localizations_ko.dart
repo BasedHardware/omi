@@ -8047,4 +8047,36 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version의 새로운 기능';
+  }
+
+  @override
+  String get addToYourTaskList => '작업 목록에 추가하시겠습니까?';
+
+  @override
+  String get failedToCreateShareLink => '공유 링크 생성에 실패했습니다';
+
+  @override
+  String get deleteGoal => '목표 삭제';
+
+  @override
+  String get deviceUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get wifiConfiguration => 'WiFi 설정';
+
+  @override
+  String get wifiConfigurationSubtitle => '기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.';
+
+  @override
+  String get networkNameSsid => '네트워크 이름 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi 네트워크 이름을 입력하세요';
+
+  @override
+  String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
 }

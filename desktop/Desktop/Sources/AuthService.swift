@@ -690,9 +690,18 @@ class AuthService {
 
         guard httpResponse.statusCode == 200 else {
             let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
-            NSLog("OMI AUTH: Token refresh error: %@", errorBody)
-            // Clear tokens and require re-sign-in
-            clearTokens()
+            NSLog("OMI AUTH: Token refresh error (HTTP %d): %@", httpResponse.statusCode, errorBody)
+            // Only clear tokens for definitive auth failures (invalid/revoked refresh token).
+            // Transient errors (network issues, 500s) should not destroy the session.
+            let isDefinitiveAuthFailure = errorBody.contains("TOKEN_EXPIRED")
+                || errorBody.contains("INVALID_REFRESH_TOKEN")
+                || errorBody.contains("USER_NOT_FOUND")
+                || errorBody.contains("USER_DISABLED")
+                || httpResponse.statusCode == 400
+            if isDefinitiveAuthFailure {
+                NSLog("OMI AUTH: Definitive auth failure - clearing tokens")
+                clearTokens()
+            }
             throw AuthError.notSignedIn
         }
 

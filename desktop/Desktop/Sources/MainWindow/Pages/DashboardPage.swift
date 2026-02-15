@@ -50,7 +50,7 @@ class DashboardViewModel: ObservableObject {
 
         // Load all data in parallel
         async let scoreTask: Void = loadScores()
-        async let tasksTask: Void = tasksStore.loadTasks()  // Use shared store
+        async let tasksTask: Void = tasksStore.loadTasksIfNeeded()  // Don't re-fetch if ViewModelContainer already loaded
         async let goalsTask: Void = loadGoals()
 
         let _ = await (scoreTask, tasksTask, goalsTask)
@@ -202,37 +202,6 @@ struct DashboardPage: View {
 
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Dashboard")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(OmiColors.textPrimary)
-
-                    Text(formattedDate)
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                Spacer()
-
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-
-                Button(action: {
-                    Task {
-                        await viewModel.loadDashboardData()
-                    }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
-                }
-                .buttonStyle(.plain)
-            }
-
             // 4 Widgets in 2x2 grid
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
                 // Top row: Score + Focus
@@ -293,11 +262,6 @@ struct DashboardPage: View {
         .padding(.bottom, 8)
     }
 
-    private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
-        return formatter.string(from: Date())
-    }
 }
 
 #Preview {

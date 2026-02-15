@@ -8174,4 +8174,36 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Čo je nové vo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridať do zoznamu úloh?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodarilo sa vytvoriť odkaz na zdieľanie';
+
+  @override
+  String get deleteGoal => 'Vymazať cieľ';
+
+  @override
+  String get deviceUpToDate => 'Vaše zariadenie je aktuálne';
+
+  @override
+  String get wifiConfiguration => 'Konfigurácia WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadajte prihlasovacie údaje WiFi, aby zariadenie mohlo stiahnuť firmvér.';
+
+  @override
+  String get networkNameSsid => 'Názov siete (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadajte názov WiFi siete';
+
+  @override
+  String get enterWifiPassword => 'Zadajte heslo WiFi';
 }

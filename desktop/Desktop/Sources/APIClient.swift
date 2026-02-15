@@ -21,6 +21,12 @@ actor APIClient {
     let session: URLSession
     private let decoder: JSONDecoder
 
+    // Short-lived caches to deduplicate simultaneous calls from multiple services
+    private var goalsCacheTime: Date?
+    private var goalsCache: [Goal]?
+    private var conversationsCountCacheTime: Date?
+    private var conversationsCountCache: Int?
+
     init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -72,9 +78,11 @@ actor APIClient {
 
     func get<T: Decodable>(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -113,9 +121,11 @@ actor APIClient {
 
     func delete(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -365,11 +375,15 @@ extension APIClient {
         return try await post("v1/conversations/search", body: body)
     }
 
-    /// Gets the total count of conversations
+    /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
     func getConversationsCount(
         includeDiscarded: Bool = false,
         statuses: [ConversationStatus] = [.completed, .processing]
     ) async throws -> Int {
+        if let cache = conversationsCountCache, let time = conversationsCountCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
+
         var queryItems: [String] = [
             "include_discarded=\(includeDiscarded)"
         ]
@@ -386,6 +400,8 @@ extension APIClient {
         }
 
         let response: CountResponse = try await get(endpoint)
+        conversationsCountCache = response.count
+        conversationsCountCacheTime = Date()
         return response.count
     }
 
@@ -1173,6 +1189,7 @@ extension APIClient {
         let speaker: String
         let speakerId: Int
         let isUser: Bool
+        let personId: String?
         let start: Double
         let end: Double
 
@@ -1180,6 +1197,7 @@ extension APIClient {
             case text, speaker
             case speakerId = "speaker_id"
             case isUser = "is_user"
+            case personId = "person_id"
             case start, end
         }
     }
@@ -1373,9 +1391,11 @@ extension APIClient {
     func patch<T: Decodable, B: Encodable>(
         _ endpoint: String,
         body: B,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -1645,6 +1665,23 @@ extension APIClient {
         let _: StatusResponse = try await patch("v1/action-items/batch-scores", body: request)
     }
 
+    /// Batch update sort orders and indent levels for multiple action items
+    func batchUpdateSortOrders(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)]) async throws {
+        struct SortUpdate: Encodable {
+            let id: String
+            let sort_order: Int
+            let indent_level: Int
+        }
+        struct BatchRequest: Encodable {
+            let items: [SortUpdate]
+        }
+        struct StatusResponse: Decodable {
+            let status: String
+        }
+        let request = BatchRequest(items: updates.map { SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel) })
+        let _: StatusResponse = try await patch("v1/action-items/batch", body: request)
+    }
+
     // MARK: - Task Sharing
 
     /// Shares tasks and returns a shareable URL
@@ -1836,6 +1873,12 @@ extension APIClient {
         struct StatusResponse: Decodable { let status: String }
         let _: StatusResponse = try await post("v1/staged-tasks/migrate")
     }
+
+    /// Migrate conversation-extracted action items (no source field) to staged_tasks
+    func migrateConversationItemsToStaged() async throws {
+        struct MigrateResponse: Decodable { let status: String; let migrated: Int; let deleted: Int }
+        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
+    }
 }
 
 /// Response for staged task promotion
@@ -1854,9 +1897,14 @@ struct PromoteResponse: Codable {
 
 extension APIClient {
 
-    /// Fetches all active goals (up to 3)
+    /// Fetches all active goals (up to 3). Uses 5-second cache to deduplicate parallel calls.
     func getGoals() async throws -> [Goal] {
+        if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
         let response: GoalsListResponse = try await get("v1/goals/all")
+        goalsCache = response.goals
+        goalsCacheTime = Date()
         return response.goals
     }
 
@@ -1902,7 +1950,9 @@ extension APIClient {
             unit: unit
         )
 
-        return try await post("v1/goals", body: request)
+        let goal: Goal = try await post("v1/goals", body: request)
+        goalsCache = nil
+        return goal
     }
 
     /// Updates a goal's progress
@@ -1953,12 +2003,15 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        return try decoder.decode(Goal.self, from: data)
+        let goal = try decoder.decode(Goal.self, from: data)
+        goalsCache = nil
+        return goal
     }
 
     /// Deletes a goal
     func deleteGoal(id: String) async throws {
         try await delete("v1/goals/\(id)")
+        goalsCache = nil
     }
 
     /// Gets progress history for a goal
@@ -2024,8 +2077,17 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     /// ID of the goal this task is linked to
     let goalId: String?
 
+    // Ordering (synced to backend)
+    var sortOrder: Int?            // Sort position within category
+    var indentLevel: Int?          // 0-3 indent depth
+
     // Prioritization (stored locally, not synced to backend)
     var relevanceScore: Int?       // 0-100 relevance score from TaskPrioritizationService
+
+    // Desktop extraction context (stored locally, not synced to backend)
+    var contextSummary: String?    // Summary of screen context at extraction time
+    var currentActivity: String?   // What user was doing when task was detected
+    var agentEditedFiles: [String]? // Files the agent previously edited
 
     // Agent execution tracking (stored locally, not synced to backend)
     var agentStatus: String?       // nil, "pending", "processing", "completed", "failed"
@@ -2067,6 +2129,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         case deletedReason = "deleted_reason"
         case keptTaskId = "kept_task_id"
         case goalId = "goal_id"
+        case sortOrder = "sort_order"
+        case indentLevel = "indent_level"
         case relevanceScore = "relevance_score"
     }
 
@@ -2090,7 +2154,12 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason: String? = nil,
         keptTaskId: String? = nil,
         goalId: String? = nil,
+        sortOrder: Int? = nil,
+        indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
+        contextSummary: String? = nil,
+        currentActivity: String? = nil,
+        agentEditedFiles: [String]? = nil,
         agentStatus: String? = nil,
         agentPrompt: String? = nil,
         agentPlan: String? = nil,
@@ -2117,7 +2186,12 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         self.deletedReason = deletedReason
         self.keptTaskId = keptTaskId
         self.goalId = goalId
+        self.sortOrder = sortOrder
+        self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
+        self.contextSummary = contextSummary
+        self.currentActivity = currentActivity
+        self.agentEditedFiles = agentEditedFiles
         self.agentStatus = agentStatus
         self.agentPrompt = agentPrompt
         self.agentPlan = agentPlan
@@ -2147,9 +2221,14 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
         keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
         goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
+        sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
+        indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
         relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
 
-        // Agent fields are local-only, not decoded from API
+        // Local-only fields, not decoded from API
+        contextSummary = nil
+        currentActivity = nil
+        agentEditedFiles = nil
         agentStatus = nil
         agentPrompt = nil
         agentPlan = nil
@@ -2312,6 +2391,67 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         case "health": return "pink"
         default: return "gray"
         }
+    }
+
+    /// All meaningful task data formatted for chat context.
+    /// Add new fields here when they're added to the struct so chat always gets everything.
+    var chatContext: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+
+        var lines: [String] = []
+
+        // Core
+        lines.append("Task: \(description)")
+        if let category = category { lines.append("Category: \(category)") }
+        if !tags.isEmpty { lines.append("Tags: \(tags.joined(separator: ", "))") }
+        if let priority = priority { lines.append("Priority: \(priority)") }
+        lines.append("Status: \(completed ? "completed" : "active")")
+        lines.append("Created: \(formatter.string(from: createdAt))")
+        if let dueAt = dueAt { lines.append("Due: \(formatter.string(from: dueAt))") }
+        if let completedAt = completedAt { lines.append("Completed: \(formatter.string(from: completedAt))") }
+
+        // Source & origin
+        if let source = source { lines.append("Source: \(sourceLabel) (\(source))") }
+        if let app = sourceApp { lines.append("Source app: \(app)") }
+        if let title = windowTitle { lines.append("Window title: \(title)") }
+        if let conf = confidence { lines.append("Extraction confidence: \(String(format: "%.0f%%", conf * 100))") }
+
+        // Screen context at extraction time
+        if let ctx = contextSummary, !ctx.isEmpty { lines.append("Context when detected: \(ctx)") }
+        if let act = currentActivity, !act.isEmpty { lines.append("User activity: \(act)") }
+
+        // Relationships
+        if let convId = conversationId { lines.append("Conversation ID: \(convId)") }
+        if let goalId = goalId { lines.append("Linked goal: \(goalId)") }
+
+        // Agent work
+        if let status = agentStatus { lines.append("Agent status: \(status)") }
+        if let prompt = agentPrompt, !prompt.isEmpty {
+            lines.append("Agent prompt: \(String(prompt.prefix(1000)))")
+        }
+        if let plan = agentPlan, !plan.isEmpty {
+            lines.append("Agent plan:\n\(String(plan.prefix(2000)))")
+        }
+        if let files = agentEditedFiles, !files.isEmpty {
+            lines.append("Files edited by agent: \(files.joined(separator: ", "))")
+        }
+
+        // Raw metadata (catches anything not explicitly listed above)
+        if let meta = parsedMetadata {
+            let coveredKeys: Set<String> = [
+                "tags", "source_app", "window_title", "confidence",
+                "source_category", "source_subcategory"
+            ]
+            let extra = meta.filter { !coveredKeys.contains($0.key) }
+            if !extra.isEmpty {
+                let pairs = extra.map { "\($0.key): \($0.value)" }.sorted()
+                lines.append("Additional metadata: \(pairs.joined(separator: ", "))")
+            }
+        }
+
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -3694,18 +3834,11 @@ extension APIClient {
         struct SaveRequest: Encodable {
             let text: String
             let sender: String
+            let app_id: String?
+            let session_id: String?
         }
-        let body = SaveRequest(text: text, sender: sender)
-        // app_id must be a query parameter (backend reads it from URL, not body)
-        var endpoint = "v2/messages"
-        var queryItems: [String] = []
-        if let appId = appId {
-            queryItems.append("app_id=\(appId)")
-        }
-        if !queryItems.isEmpty {
-            endpoint += "?\(queryItems.joined(separator: "&"))"
-        }
-        return try await post(endpoint, body: body)
+        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId)
+        return try await post("v2/messages", body: body)
     }
 
     /// Fetch chat message history
@@ -4157,5 +4290,126 @@ extension APIClient {
         )
 
         let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body)
+    }
+
+    // MARK: - Agent VM
+
+    struct AgentProvisionResponse: Decodable {
+        let status: String
+        let vmName: String
+        let ip: String?
+        let authToken: String
+        let agentStatus: String
+    }
+
+    /// Provision a cloud agent VM for the current user (fire-and-forget)
+    func provisionAgentVM() async throws -> AgentProvisionResponse {
+        return try await post("v2/agent/provision")
+    }
+
+    struct AgentStatusResponse: Decodable {
+        let vmName: String
+        let zone: String
+        let ip: String?
+        let status: String
+        let authToken: String
+        let createdAt: String
+        let lastQueryAt: String?
+    }
+
+    /// Get current agent VM status
+    func getAgentStatus() async throws -> AgentStatusResponse? {
+        return try await get("v2/agent/status")
+    }
+}
+
+// MARK: - People Models
+
+struct Person: Codable, Identifiable {
+    let id: String
+    let name: String
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - People API
+
+extension APIClient {
+
+    /// Fetches all people for the current user
+    func getPeople() async throws -> [Person] {
+        return try await get("v1/users/people")
+    }
+
+    /// Creates a new person
+    func createPerson(name: String) async throws -> Person {
+        struct CreatePersonRequest: Encodable {
+            let name: String
+        }
+        return try await post("v1/users/people", body: CreatePersonRequest(name: name))
+    }
+
+    /// Updates a person's name
+    func updatePersonName(personId: String, newName: String) async throws {
+        let encodedName = newName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? newName
+        let url = URL(string: baseURL + "v1/users/people/\(personId)/name?value=\(encodedName)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    /// Deletes a person
+    func deletePerson(personId: String) async throws {
+        try await delete("v1/users/people/\(personId)")
+    }
+
+    /// Bulk assigns segments to a person or user
+    func assignSegmentsBulk(
+        conversationId: String,
+        segmentIds: [String],
+        isUser: Bool,
+        personId: String?
+    ) async throws {
+        struct AssignBulkRequest: Encodable {
+            let assignType: String
+            let value: String?
+            let segmentIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case assignType = "assign_type"
+                case value
+                case segmentIds = "segment_ids"
+            }
+        }
+
+        let body = AssignBulkRequest(
+            assignType: isUser ? "is_user" : "person_id",
+            value: isUser ? "true" : personId,
+            segmentIds: segmentIds
+        )
+
+        let url = URL(string: baseURL + "v1/conversations/\(conversationId)/segments/assign-bulk")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
     }
 }

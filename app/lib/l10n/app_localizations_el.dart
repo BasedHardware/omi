@@ -8245,4 +8245,37 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Τι νέο υπάρχει στο $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Προσθήκη στη λίστα εργασιών σας;';
+
+  @override
+  String get failedToCreateShareLink => 'Αποτυχία δημιουργίας συνδέσμου κοινοποίησης';
+
+  @override
+  String get deleteGoal => 'Διαγραφή στόχου';
+
+  @override
+  String get deviceUpToDate => 'Η συσκευή σας είναι ενημερωμένη';
+
+  @override
+  String get wifiConfiguration => 'Ρύθμιση WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.';
+
+  @override
+  String get networkNameSsid => 'Όνομα δικτύου (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Εισαγάγετε το όνομα δικτύου WiFi';
+
+  @override
+  String get enterWifiPassword => 'Εισαγάγετε τον κωδικό WiFi';
 }

@@ -2,6 +2,13 @@ import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type { ToolUseMessage, ToolResultMessage } from "./protocol.js";
 
+// Current query mode — set by handleQuery before each query
+let currentMode: "ask" | "act" = "act";
+
+export function setQueryMode(mode: "ask" | "act"): void {
+  currentMode = mode;
+}
+
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
   string,
@@ -58,6 +65,20 @@ SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE b
 Use for: app usage stats, time queries, task management, aggregations, anything structured.`,
   { query: z.string().describe("SQL query to execute") },
   async ({ query }) => {
+    // In ask mode, only allow SELECT queries
+    if (currentMode === "ask") {
+      const normalized = query.trim().toUpperCase();
+      if (!normalized.startsWith("SELECT")) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Blocked: Only SELECT queries are allowed in Ask mode. Switch to Act mode to run UPDATE/INSERT/DELETE.",
+            },
+          ],
+        };
+      }
+    }
     const result = await requestSwiftTool("execute_sql", { query });
     return { content: [{ type: "text" as const, text: result }] };
   }

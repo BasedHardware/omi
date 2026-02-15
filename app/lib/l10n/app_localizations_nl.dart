@@ -8210,4 +8210,36 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nieuw in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Toevoegen aan je takenlijst?';
+
+  @override
+  String get failedToCreateShareLink => 'Kan deellink niet aanmaken';
+
+  @override
+  String get deleteGoal => 'Doel verwijderen';
+
+  @override
+  String get deviceUpToDate => 'Uw apparaat is up-to-date';
+
+  @override
+  String get wifiConfiguration => 'WiFi-configuratie';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Voer uw WiFi-gegevens in zodat het apparaat de firmware kan downloaden.';
+
+  @override
+  String get networkNameSsid => 'Netwerknaam (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Voer de WiFi-netwerknaam in';
+
+  @override
+  String get enterWifiPassword => 'Voer het WiFi-wachtwoord in';
 }

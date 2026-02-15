@@ -8260,4 +8260,37 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nouveautés de $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Ajouter à votre liste de tâches ?';
+
+  @override
+  String get failedToCreateShareLink => 'Échec de la création du lien de partage';
+
+  @override
+  String get deleteGoal => 'Supprimer l\'objectif';
+
+  @override
+  String get deviceUpToDate => 'Votre appareil est à jour';
+
+  @override
+  String get wifiConfiguration => 'Configuration WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Entrez vos identifiants WiFi pour permettre à l\'appareil de télécharger le micrologiciel.';
+
+  @override
+  String get networkNameSsid => 'Nom du réseau (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Entrez le nom du réseau WiFi';
+
+  @override
+  String get enterWifiPassword => 'Entrez le mot de passe WiFi';
 }

@@ -9,6 +9,7 @@ class SettingsSyncManager {
 
     /// Pull settings from server and apply non-nil values to local singletons.
     func syncFromServer() async {
+        guard AuthService.shared.isSignedIn else { return }
         do {
             let remote = try await APIClient.shared.getAssistantSettings()
             applyRemoteSettings(remote)

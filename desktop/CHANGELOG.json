@@ -1,6 +1,65 @@
 {
   "releases": [
     {
+      "version": "0.8.2",
+      "date": "2026-02-14",
+      "changes": [
+        "Smarter action items: confidence scoring filters out low-quality tasks, priority classification added",
+        "Conversation action items now saved as staged tasks with automatic migration",
+        "Conversation source tracking for better platform-aware processing",
+        "Split finish/stop button in Rewind for clearer recording controls",
+        "Unread chat indicators and streaming status on task rows",
+        "Analysis throttle and troubleshooting settings in Advanced preferences",
+        "Fixed capture timer handling for sleep/wake and special system modes",
+        "Fixed memory duplication from orphaned records and sync races",
+        "Fixed token refresh clearing on non-definitive failures",
+        "Prevented empty or duplicate staged tasks from being created",
+        "Performance: lazy task rendering, background log writes, goal caching, deduplicated fetches",
+        "Prevented settings sync and task refresh when not signed in"
+      ]
+    },
+    {
+      "version": "0.8.1",
+      "date": "2026-02-13",
+      "changes": [
+        "Speaker naming: tap any speaker in live or recorded transcripts to assign a name",
+        "Ask/Act mode toggle: restrict AI chat to read-only queries for safer browsing",
+        "Font scaling: adjust text size across the entire app from settings or menu shortcuts",
+        "Thinking and tool visibility: see AI reasoning and tool inputs/outputs in chat",
+        "Inline task creation with keyboard navigation and sort order/indentation support",
+        "Saved filter views for quickly switching between task lists",
+        "Text selection enabled across conversations, transcripts, notes, and advice",
+        "Rewind intro video overlay for first-time users",
+        "Chat input redesigned: Enter to submit, Shift+Enter for newline, auto-growing field",
+        "Conversations auto-refresh on app focus and every 30 seconds",
+        "WebSocket watchdog with automatic reconnection",
+        "Encrypted and compressed transcript segments for better privacy",
+        "New app icon",
+        "Fixed timeline crashes and chat auto-scroll performance",
+        "Fixed task hover crashes and chat input sizing issues"
+      ]
+    },
+    {
+      "version": "0.8.0",
+      "date": "2026-02-13",
+      "changes": [
+        "Floating control bar: always-accessible AI assistant and push-to-talk voice input from any app",
+        "Follow-up messages: continue conversations and interrupt AI responses mid-stream",
+        "Cloud agent VM: automatic provisioning for background AI tasks",
+        "Data & Privacy settings with configurable protection levels",
+        "Expanded transcript view in Rewind for full recording review",
+        "Screen and audio recording controls directly in Rewind page",
+        "Streamlined onboarding: single permissions step, no more skipping",
+        "Task undo: deleted tasks can be recovered with an undo toast",
+        "Keyboard shortcuts for task management",
+        "Optimistic task updates for instant UI feedback",
+        "Conversations embedded in dashboard instead of separate page",
+        "WebSocket streaming for faster AI agent responses",
+        "Fixed resize flicker and stale state flashing in floating bar",
+        "Fixed stream errors and client aborts during database upload"
+      ]
+    },
+    {
       "version": "0.7.1",
       "date": "2026-02-13",
       "changes": [

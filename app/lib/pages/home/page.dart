@@ -246,7 +246,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       switch (pageAlias) {
+        case "action-items":
+          homePageIdx = 1;
+          break;
         case "memories":
+        case "facts":
           homePageIdx = 2;
           break;
         case "apps":
@@ -412,6 +416,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               );
             }
           });
+          break;
+        case "action-items":
+          // Tab index already set to 1 (ActionItemsPage) above
           break;
         default:
       }

@@ -8196,4 +8196,37 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version sürümündeki yenilikler';
+  }
+
+  @override
+  String get addToYourTaskList => 'Görev listenize eklensin mi?';
+
+  @override
+  String get failedToCreateShareLink => 'Paylaşım bağlantısı oluşturulamadı';
+
+  @override
+  String get deleteGoal => 'Hedefi Sil';
+
+  @override
+  String get deviceUpToDate => 'Cihazınız güncel';
+
+  @override
+  String get wifiConfiguration => 'WiFi Yapılandırması';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Cihazın donanım yazılımını indirebilmesi için WiFi kimlik bilgilerinizi girin.';
+
+  @override
+  String get networkNameSsid => 'Ağ Adı (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi ağ adını girin';
+
+  @override
+  String get enterWifiPassword => 'WiFi şifresini girin';
 }

@@ -8167,4 +8167,36 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheder i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tilføj til din opgaveliste?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunne ikke oprette delingslink';
+
+  @override
+  String get deleteGoal => 'Slet mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhed er opdateret';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Indtast dine WiFi-oplysninger, så enheden kan downloade firmwaren.';
+
+  @override
+  String get networkNameSsid => 'Netværksnavn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Indtast WiFi-netværksnavn';
+
+  @override
+  String get enterWifiPassword => 'Indtast WiFi-adgangskode';
 }

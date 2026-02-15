@@ -145,7 +145,15 @@ public class ProactiveAssistantsPlugin: NSObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    log("Notification permission request error: \(error.localizedDescription)")
+                    let nsError = error as NSError
+                    log("Notification permission request error: \(error.localizedDescription) (domain=\(nsError.domain) code=\(nsError.code))")
+
+                    // UNErrorDomain code 1 = notificationsNotAllowed
+                    // This happens when LaunchServices has the app marked as launch-disabled,
+                    // preventing notification center registration. Repair and retry once.
+                    if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                        Self.repairNotificationRegistration()
+                    }
                 }
 
                 if !granted {
@@ -154,6 +162,49 @@ public class ProactiveAssistantsPlugin: NSObject {
 
                 // Continue with monitoring regardless of notification permission
                 self?.continueStartMonitoring(completion: completion)
+            }
+        }
+    }
+
+    /// Repair LaunchServices registration when notification authorization fails with "not allowed".
+    /// The launch-disabled flag in LaunchServices prevents notification center registration.
+    /// Unregistering and re-registering clears the flag, then retries authorization.
+    static func repairNotificationRegistration() {
+        let appPath = Bundle.main.bundlePath
+        log("Repairing LaunchServices registration for notifications: \(appPath)")
+
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+        // Unregister to clear stale/launch-disabled entries
+        let unregister = Process()
+        unregister.executableURL = URL(fileURLWithPath: lsregister)
+        unregister.arguments = ["-u", appPath]
+        try? unregister.run()
+        unregister.waitUntilExit()
+
+        // Force re-register
+        let register = Process()
+        register.executableURL = URL(fileURLWithPath: lsregister)
+        register.arguments = ["-f", appPath]
+        try? register.run()
+        register.waitUntilExit()
+
+        // Also re-register via LSRegisterURL
+        if let cfURL = Bundle.main.bundleURL as CFURL? {
+            LSRegisterURL(cfURL, true)
+        }
+
+        log("LaunchServices re-registration complete, retrying notification authorization...")
+
+        // Retry authorization after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NSApp.activate(ignoringOtherApps: true)
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                if let error = error {
+                    log("Notification retry after repair failed: \(error.localizedDescription)")
+                } else if granted {
+                    log("Notification permission granted after LaunchServices repair")
+                }
             }
         }
     }
@@ -419,6 +470,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func captureFrame() async {
         guard isMonitoring, let screenCaptureService = screenCaptureService else { return }
 
+        // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
+        // This avoids burning through consecutive failures and generating unnecessary error events
+        if isInSpecialSystemMode() {
+            return
+        }
+
         // Get current window info (use real app name, not cached)
         let (realAppName, windowTitle, windowID) = WindowMonitor.getActiveWindowInfoStatic()
 
@@ -635,6 +692,10 @@ public class ProactiveAssistantsPlugin: NSObject {
             Task { @MainActor in
                 self?.wasMonitoringBeforeSleep = self?.isMonitoring ?? false
                 log("ProactiveAssistantsPlugin: System going to sleep, wasMonitoring=\(self?.wasMonitoringBeforeSleep ?? false)")
+
+                // Pause the capture timer while sleeping (same as screen lock)
+                self?.captureTimer?.invalidate()
+                self?.captureTimer = nil
             }
         }
         systemEventObservers.append(sleepObserver)
@@ -684,7 +745,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         consecutiveFailures = 0
         lastCaptureSucceeded = true
 
-        // If we were monitoring before sleep, reinitialize capture service
+        // If we were monitoring before sleep, reinitialize capture service and restart timer
         if wasMonitoringBeforeSleep && isMonitoring {
             log("ProactiveAssistantsPlugin: Restarting screen capture after wake")
 
@@ -693,6 +754,19 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             // Refresh permission state
             refreshScreenRecordingPermission()
+
+            // Restart capture timer after a brief delay to let the system settle
+            captureTimer?.invalidate()
+            captureTimer = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self = self, self.isMonitoring else { return }
+                self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
+                    Task { @MainActor in
+                        await self?.captureFrame()
+                    }
+                }
+                log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
+            }
         }
 
         wasMonitoringBeforeSleep = false

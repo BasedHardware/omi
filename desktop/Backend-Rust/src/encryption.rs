@@ -1,14 +1,31 @@
 // Encryption utilities - Port from Python backend utils/encryption.py
-// Used to decrypt user data with enhanced protection level (AES-256-GCM)
+// Used to encrypt/decrypt user data with enhanced protection level (AES-256-GCM)
 
 use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, OsRng},
+    AeadCore, Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use std::fmt;
+
+/// Errors that can occur during encryption
+#[derive(Debug)]
+pub enum EncryptionError {
+    /// AES-GCM encryption failed
+    EncryptionFailed,
+}
+
+impl fmt::Display for EncryptionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EncryptionError::EncryptionFailed => write!(f, "AES-GCM encryption failed"),
+        }
+    }
+}
+
+impl std::error::Error for EncryptionError {}
 
 /// Errors that can occur during decryption
 #[derive(Debug)]
@@ -44,6 +61,23 @@ fn derive_key(master_secret: &[u8], uid: &str) -> [u8; 32] {
     hk.expand(b"user-data-encryption", &mut key)
         .expect("32 bytes is a valid length for HKDF");
     key
+}
+
+/// Encrypts a string using a user-specific key.
+/// Returns base64(12-byte nonce + ciphertext + auth tag).
+/// Matches Python: encryption.encrypt(data, uid)
+pub fn encrypt(data: &str, uid: &str, master_secret: &[u8]) -> Result<String, EncryptionError> {
+    let key = derive_key(master_secret, uid);
+    let cipher = Aes256Gcm::new_from_slice(&key).expect("Key is 32 bytes");
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+
+    let ciphertext = cipher.encrypt(&nonce, data.as_bytes())
+        .map_err(|_| EncryptionError::EncryptionFailed)?;
+
+    // Format: base64(nonce + ciphertext)
+    let mut payload = nonce.to_vec();
+    payload.extend_from_slice(&ciphertext);
+    Ok(BASE64.encode(&payload))
 }
 
 /// Decrypts a base64 encoded string using a user-specific key.
@@ -100,5 +134,16 @@ mod tests {
         // Valid base64 but too short to be encrypted data
         let result = decrypt("SGVsbG8=", "test-uid", b"testsecret12345678901234567890123");
         assert!(matches!(result, Err(DecryptionError::PayloadTooShort)));
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_roundtrip() {
+        let secret = b"testsecret12345678901234567890123";
+        let uid = "test-user-123";
+        let plaintext = "Hello, this is a test message!";
+
+        let encrypted = encrypt(plaintext, uid, secret).unwrap();
+        let decrypted = decrypt(&encrypted, uid, secret).unwrap();
+        assert_eq!(decrypted, plaintext);
     }
 }

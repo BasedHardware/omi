@@ -73,6 +73,21 @@ actor TaskPromotionService {
                     } catch {
                         log("TaskPromotion: Failed to sync promoted task locally: \(error)")
                     }
+
+                    // Send notification for the promoted task
+                    let notificationsEnabled = await MainActor.run {
+                        TaskAssistantSettings.shared.notificationsEnabled
+                    }
+                    if notificationsEnabled {
+                        let message = promotedTask.description
+                        await MainActor.run {
+                            NotificationService.shared.sendNotification(
+                                title: "Task",
+                                message: message,
+                                assistantId: "task"
+                            )
+                        }
+                    }
                 } else {
                     let reason = response.reason ?? "cap reached or no staged tasks"
                     log("TaskPromotion: No more promotions — \(reason)")

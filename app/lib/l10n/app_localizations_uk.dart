@@ -8197,4 +8197,36 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Що нового у $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Додати до списку завдань?';
+
+  @override
+  String get failedToCreateShareLink => 'Не вдалося створити посилання для поширення';
+
+  @override
+  String get deleteGoal => 'Видалити ціль';
+
+  @override
+  String get deviceUpToDate => 'Ваш пристрій оновлений';
+
+  @override
+  String get wifiConfiguration => 'Налаштування WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Введіть дані WiFi, щоб пристрій міг завантажити прошивку.';
+
+  @override
+  String get networkNameSsid => 'Назва мережі (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Введіть назву мережі WiFi';
+
+  @override
+  String get enterWifiPassword => 'Введіть пароль WiFi';
 }

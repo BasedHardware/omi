@@ -8164,4 +8164,37 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version में नया क्या है';
+  }
+
+  @override
+  String get addToYourTaskList => 'अपनी कार्य सूची में जोड़ें?';
+
+  @override
+  String get failedToCreateShareLink => 'शेयर लिंक बनाने में विफल';
+
+  @override
+  String get deleteGoal => 'लक्ष्य हटाएं';
+
+  @override
+  String get deviceUpToDate => 'आपका डिवाइस अप टू डेट है';
+
+  @override
+  String get wifiConfiguration => 'वाईफाई कॉन्फ़िगरेशन';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'डिवाइस को फ़र्मवेयर डाउनलोड करने देने के लिए अपने वाईफाई क्रेडेंशियल दर्ज करें।';
+
+  @override
+  String get networkNameSsid => 'नेटवर्क नाम (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'वाईफाई नेटवर्क का नाम दर्ज करें';
+
+  @override
+  String get enterWifiPassword => 'वाईफाई पासवर्ड दर्ज करें';
 }

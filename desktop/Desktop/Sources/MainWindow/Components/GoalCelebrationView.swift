@@ -29,7 +29,7 @@ struct GoalCelebrationView: View {
                 if phase == .text, let goal = completedGoal {
                     VStack(spacing: 16) {
                         Text("Goal Completed!")
-                            .font(.system(size: 32, weight: .bold))
+                            .scaledFont(size: 32, weight: .bold)
                             .foregroundStyle(
                                 LinearGradient(
                                     colors: [.yellow, .orange, .yellow],
@@ -40,13 +40,13 @@ struct GoalCelebrationView: View {
                             .shadow(color: .yellow.opacity(0.6), radius: 12)
 
                         Text(goal.title)
-                            .font(.system(size: 18, weight: .medium))
+                            .scaledFont(size: 18, weight: .medium)
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
 
                         Text("\(Int(goal.targetValue)) \(goal.unit ?? "") reached")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(.white.opacity(0.7))
                     }
                     .transition(.scale(scale: 0.7).combined(with: .opacity))

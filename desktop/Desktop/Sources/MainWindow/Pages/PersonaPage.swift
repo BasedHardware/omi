@@ -95,11 +95,11 @@ struct PersonaPage: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("AI Persona")
-                    .font(.system(size: 28, weight: .bold))
+                    .scaledFont(size: 28, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text("Create an AI clone of yourself that others can chat with")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
@@ -110,7 +110,7 @@ struct PersonaPage: View {
                     Task { await loadPersona() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -127,7 +127,7 @@ struct PersonaPage: View {
                 .scaleEffect(1.2)
 
             Text("Loading persona...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -139,11 +139,11 @@ struct PersonaPage: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .scaledFont(size: 40)
                 .foregroundColor(OmiColors.error)
 
             Text(message)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textSecondary)
                 .multilineTextAlignment(.center)
 
@@ -151,7 +151,7 @@ struct PersonaPage: View {
                 Task { await loadPersona() }
             } label: {
                 Text("Try Again")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(.white)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
@@ -175,17 +175,17 @@ struct PersonaPage: View {
                     .frame(width: 100, height: 100)
 
                 Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 44))
+                    .scaledFont(size: 44)
                     .foregroundColor(OmiColors.purplePrimary)
             }
 
             VStack(spacing: 8) {
                 Text("No Persona Yet")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text("Create an AI clone of yourself using your public memories. Others can then chat with your persona to learn about you.")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
@@ -198,7 +198,7 @@ struct PersonaPage: View {
                     Image(systemName: "plus")
                     Text("Create Persona")
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .scaledFont(size: 15, weight: .semibold)
                 .foregroundColor(.white)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
@@ -210,10 +210,10 @@ struct PersonaPage: View {
             // Info about public memories
             HStack(spacing: 8) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
 
                 Text("Make memories public in the Memories page to enhance your persona")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
             }
             .foregroundColor(OmiColors.textTertiary)
             .padding(.top, 8)
@@ -241,26 +241,26 @@ struct PersonaPage: View {
                                 .aspectRatio(contentMode: .fill)
                         } placeholder: {
                             Image(systemName: "person.fill")
-                                .font(.system(size: 32))
+                                .scaledFont(size: 32)
                                 .foregroundColor(OmiColors.purplePrimary)
                         }
                         .frame(width: 80, height: 80)
                         .clipShape(Circle())
                     } else {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 32))
+                            .scaledFont(size: 32)
                             .foregroundColor(OmiColors.purplePrimary)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(persona.name)
-                        .font(.system(size: 20, weight: .semibold))
+                        .scaledFont(size: 20, weight: .semibold)
                         .foregroundColor(OmiColors.textPrimary)
 
                     if let username = persona.username {
                         Text("@\(username)")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -271,7 +271,7 @@ struct PersonaPage: View {
                             .frame(width: 8, height: 8)
 
                         Text(persona.statusText)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                     }
                     .padding(.top, 4)
@@ -287,7 +287,7 @@ struct PersonaPage: View {
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 36, height: 36)
                             .background(OmiColors.backgroundTertiary)
@@ -299,7 +299,7 @@ struct PersonaPage: View {
                         showingDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.error)
                             .frame(width: 36, height: 36)
                             .background(OmiColors.error.opacity(0.15))
@@ -315,12 +315,12 @@ struct PersonaPage: View {
             // Description section
             VStack(alignment: .leading, spacing: 12) {
                 Text("Description")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 if isEditing {
                     TextEditor(text: $editDescription)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textPrimary)
                         .frame(height: 80)
                         .padding(8)
@@ -332,7 +332,7 @@ struct PersonaPage: View {
                         )
                 } else {
                     Text(persona.description.isEmpty ? "No description yet" : persona.description)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(persona.description.isEmpty ? OmiColors.textTertiary : OmiColors.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -360,7 +360,7 @@ struct PersonaPage: View {
             // Actions section
             VStack(alignment: .leading, spacing: 12) {
                 Text("Actions")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 if isEditing {
@@ -369,7 +369,7 @@ struct PersonaPage: View {
                             isEditing = false
                         } label: {
                             Text("Cancel")
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
@@ -382,7 +382,7 @@ struct PersonaPage: View {
                             Task { await saveEdits() }
                         } label: {
                             Text("Save Changes")
-                                .font(.system(size: 14, weight: .semibold))
+                                .scaledFont(size: 14, weight: .semibold)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
@@ -405,7 +405,7 @@ struct PersonaPage: View {
 
                             Text(isRegenerating ? "Regenerating..." : "Regenerate from Memories")
                         }
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -431,16 +431,16 @@ struct PersonaPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(isWarning ? OmiColors.warning : OmiColors.purplePrimary)
 
                 Text(title)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Text(value)
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(isWarning ? OmiColors.warning : OmiColors.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -460,13 +460,13 @@ struct PersonaPage: View {
             } label: {
                 HStack {
                     Text("Persona Prompt")
-                        .font(.system(size: 14, weight: .semibold))
+                        .scaledFont(size: 14, weight: .semibold)
                         .foregroundColor(OmiColors.textSecondary)
 
                     Spacer()
 
                     Image(systemName: isPromptExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -474,7 +474,7 @@ struct PersonaPage: View {
 
             if isPromptExpanded {
                 Text(prompt)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -635,7 +635,7 @@ private struct CreatePersonaSheetContent: View {
             // Header
             HStack {
                 Text("Create AI Persona")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -652,12 +652,12 @@ private struct CreatePersonaSheetContent: View {
                 // Name field
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Name")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     TextField("Your display name", text: $newPersonaName)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textPrimary)
                         .padding(12)
                         .background(OmiColors.backgroundPrimary)
@@ -671,17 +671,17 @@ private struct CreatePersonaSheetContent: View {
                 // Username field
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Username (optional)")
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
 
                     HStack {
                         Text("@")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textTertiary)
 
                         TextField("username", text: $newPersonaUsername)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textPrimary)
                             .onChange(of: newPersonaUsername) { _, newValue in
                                 newPersonaUsername = newValue.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "_" }
@@ -708,17 +708,17 @@ private struct CreatePersonaSheetContent: View {
                     )
 
                     Text("3-30 characters, lowercase letters, numbers, and underscores only")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
                 // Info
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
 
                     Text("Your persona will be built from your public memories. Make more memories public to improve it.")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                 }
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(12)
@@ -739,7 +739,7 @@ private struct CreatePersonaSheetContent: View {
 
                         Text(isCreating ? "Creating..." : "Create Persona")
                     }
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(size: 15, weight: .semibold)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)

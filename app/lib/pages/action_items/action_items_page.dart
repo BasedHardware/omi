@@ -1135,17 +1135,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               context: context,
               builder: (context) => AlertDialog(
                 backgroundColor: const Color(0xFF1F1F25),
-                title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
                 content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
+                    child: Text(context.l10n.cancel),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Delete'),
+                    child: Text(context.l10n.delete),
                   ),
                 ],
               ),
@@ -1614,18 +1614,18 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                           context: context,
                           builder: (context) => AlertDialog(
                             backgroundColor: const Color(0xFF1F1F25),
-                            title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                            title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
                             content:
                                 Text('Delete "${widget.goal.title}"?', style: const TextStyle(color: Colors.white70)),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
+                                child: Text(context.l10n.cancel),
                               ),
                               TextButton(
                                 onPressed: () => Navigator.pop(context, true),
                                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: const Text('Delete'),
+                                child: Text(context.l10n.delete),
                               ),
                             ],
                           ),

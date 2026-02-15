@@ -74,12 +74,18 @@ class TranscriptionService {
 
     // Reconnection
     private var reconnectAttempts = 0
-    private let maxReconnectAttempts = 5
+    private let maxReconnectAttempts = 10
     private var reconnectTask: Task<Void, Never>?
 
     // Keepalive
     private var keepaliveTask: Task<Void, Never>?
     private let keepaliveInterval: TimeInterval = 8.0  // Send ping every 8 seconds
+
+    // Watchdog: detect stale connections where WebSocket dies silently
+    private var watchdogTask: Task<Void, Never>?
+    private var lastDataReceivedAt: Date?
+    private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
+    private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
     // Audio buffering
     private var audioBuffer = Data()
@@ -130,11 +136,37 @@ class TranscriptionService {
         reconnectTask = nil
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
 
         // Flush any remaining audio
         flushAudioBuffer()
 
         disconnect()
+    }
+
+    /// Signal Deepgram that no more audio will be sent, but keep connection open
+    /// to receive final transcription results. Call stop() later to fully disconnect.
+    func finishStream() {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
+
+        flushAudioBuffer()
+
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+
+        let closeMsg = "{\"type\": \"CloseStream\"}"
+        webSocketTask.send(.string(closeMsg)) { error in
+            if let error = error {
+                logError("TranscriptionService: CloseStream send error", error: error)
+            }
+        }
+        log("TranscriptionService: CloseStream sent, waiting for final results")
     }
 
     /// Send audio data to DeepGram (buffered for efficiency)
@@ -228,6 +260,7 @@ class TranscriptionService {
         // Create URLSession and WebSocket task
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 0  // No resource timeout for long-lived WebSocket
         urlSession = URLSession(configuration: configuration)
         webSocketTask = urlSession?.webSocketTask(with: request)
 
@@ -242,8 +275,10 @@ class TranscriptionService {
             guard let self = self, self.webSocketTask?.state == .running else { return }
             self.isConnected = true
             self.reconnectAttempts = 0
+            self.lastDataReceivedAt = Date()
             log("TranscriptionService: Connected")
             self.startKeepalive()
+            self.startWatchdog()
             self.onConnected?()
         }
     }
@@ -275,10 +310,29 @@ class TranscriptionService {
         }
     }
 
+    /// Start watchdog to detect stale connections (WebSocket dies silently)
+    private func startWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(self?.watchdogInterval ?? 30.0) * 1_000_000_000)
+                guard !Task.isCancelled, let self = self, self.isConnected else { break }
+
+                if let lastData = self.lastDataReceivedAt,
+                   Date().timeIntervalSince(lastData) > self.staleThreshold {
+                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s) - forcing reconnect")
+                    self.handleDisconnection()
+                }
+            }
+        }
+    }
+
     private func disconnect() {
         isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
@@ -293,6 +347,8 @@ class TranscriptionService {
         isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
         webSocketTask = nil
         onDisconnected?()
 
@@ -331,6 +387,9 @@ class TranscriptionService {
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+        // Track that we received data (for watchdog stale detection)
+        lastDataReceivedAt = Date()
+
         switch message {
         case .string(let text):
             parseResponse(text)

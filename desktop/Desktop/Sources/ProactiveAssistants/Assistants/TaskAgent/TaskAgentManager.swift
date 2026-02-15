@@ -208,42 +208,7 @@ class TaskAgentManager: ObservableObject {
     // MARK: - Private Implementation
 
     private func buildPrompt(for task: TaskActionItem, context: TaskAgentContext) -> String {
-        var prompt = """
-        # Task: \(task.description)
-
-        Tags: \(task.tags.isEmpty ? "unknown" : task.tags.joined(separator: ", "))
-        Priority: \(task.priority ?? "medium")
-        """
-
-        if let sourceApp = task.sourceApp {
-            prompt += "\nSource App: \(sourceApp)"
-        }
-
-        if let contextSummary = context.contextSummary {
-            prompt += "\n\nContext from screen:\n\(contextSummary)"
-        }
-
-        // Add custom prefix if configured
-        let customPrefix = TaskAgentSettings.shared.customPromptPrefix
-        if !customPrefix.isEmpty {
-            prompt += "\n\nAdditional context:\n\(customPrefix)"
-        }
-
-        prompt += """
-
-
-        ## Instructions
-
-        Analyze this task and create an implementation plan. Consider:
-        1. What files need to be modified
-        2. What is the approach
-        3. Any potential issues or considerations
-        4. Estimated complexity
-
-        After creating the plan, wait for user approval before implementing.
-        """
-
-        return prompt
+        TaskAgentSettings.shared.buildTaskPrompt(for: task)
     }
 
     private func launchTmuxSession(sessionName: String, prompt: String, workingDir: String) async throws {

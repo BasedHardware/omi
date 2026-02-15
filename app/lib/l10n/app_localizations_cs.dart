@@ -8180,4 +8180,36 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Co je nového ve $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Přidat do seznamu úkolů?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodařilo se vytvořit odkaz ke sdílení';
+
+  @override
+  String get deleteGoal => 'Smazat cíl';
+
+  @override
+  String get deviceUpToDate => 'Vaše zařízení je aktuální';
+
+  @override
+  String get wifiConfiguration => 'Konfigurace WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadejte přihlašovací údaje WiFi, aby zařízení mohlo stáhnout firmware.';
+
+  @override
+  String get networkNameSsid => 'Název sítě (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadejte název WiFi sítě';
+
+  @override
+  String get enterWifiPassword => 'Zadejte heslo WiFi';
 }
