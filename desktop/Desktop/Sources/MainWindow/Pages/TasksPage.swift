@@ -626,13 +626,7 @@ class TasksViewModel: ObservableObject {
     }
 
     // Keyboard navigation state
-    @Published var keyboardSelectedTaskId: String? {
-        didSet {
-            if oldValue != keyboardSelectedTaskId {
-                objectWillChange.send()
-            }
-        }
-    }
+    @Published var keyboardSelectedTaskId: String?
     @Published var isInlineCreating = false
     @Published var inlineCreateAfterTaskId: String?
     @Published var editingTaskId: String?
@@ -875,7 +869,7 @@ class TasksViewModel: ObservableObject {
     // MARK: - Keyboard Navigation
 
     /// Find a task by ID across all store arrays
-    private func findTask(_ id: String) -> TaskActionItem? {
+    func findTask(_ id: String) -> TaskActionItem? {
         store.incompleteTasks.first(where: { $0.id == id })
             ?? store.completedTasks.first(where: { $0.id == id })
     }
@@ -1739,7 +1733,6 @@ class TasksViewModel: ObservableObject {
         if categorizedTasks[cat] != nil {
             categorizedTasks[cat]?.insert(lastAction.task, at: 0)
         }
-        objectWillChange.send()
 
         // Hide toast if stack is now empty
         if undoStack.isEmpty {
@@ -1770,7 +1763,6 @@ class TasksViewModel: ObservableObject {
         for category in TaskCategory.allCases {
             categorizedTasks[category]?.removeAll { $0.id == taskId }
         }
-        objectWillChange.send()
     }
 
     /// Update a single task in displayTasks without full recompute
@@ -1783,7 +1775,6 @@ class TasksViewModel: ObservableObject {
                 categorizedTasks[category]?[index] = updated
             }
         }
-        objectWillChange.send()
     }
 
     // MARK: - Multi-Select
@@ -2073,12 +2064,6 @@ struct TasksPage: View {
     }
 
     // MARK: - Tasks Content
-
-    /// Find a task by ID across all store arrays
-    private func findTask(_ id: String) -> TaskActionItem? {
-        store.incompleteTasks.first(where: { $0.id == id })
-            ?? store.completedTasks.first(where: { $0.id == id })
-    }
 
     private var tasksContent: some View {
         VStack(spacing: 0) {
