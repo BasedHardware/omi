@@ -561,7 +561,10 @@ def _save_action_items_inner(uid: str, conversation: Conversation):
         created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
 
         def _run_auto_sync():
-            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+            try:
+                asyncio.run(auto_sync_action_items_batch(uid, created_items))
+            except Exception as e:
+                logging.exception(f"Error in background task _run_auto_sync for uid={uid}: {e}")
 
         _conversation_bg_executor.submit(_run_auto_sync)
 
