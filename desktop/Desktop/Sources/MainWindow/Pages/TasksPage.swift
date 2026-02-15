@@ -1894,7 +1894,6 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
-    @ObservedObject private var store = TasksStore.shared
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -1994,8 +1993,7 @@ struct TasksPage: View {
     /// The currently active task for the chat panel
     private var activeTask: TaskActionItem? {
         guard let taskId = chatCoordinator.activeTaskId else { return nil }
-        return store.incompleteTasks.first(where: { $0.id == taskId })
-            ?? store.completedTasks.first(where: { $0.id == taskId })
+        return viewModel.findTask(taskId)
     }
 
     /// Open chat for a task
