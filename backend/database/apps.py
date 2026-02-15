@@ -93,6 +93,11 @@ def set_app_popular_db(app_id: str, popular: bool):
     app_ref.update({'is_popular': popular})
 
 
+def set_app_official_db(app_id: str, official: bool):
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.update({'official': official})
+
+
 def search_apps_db(
     uid: str,
     category: str | None = None,
