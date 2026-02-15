@@ -8196,6 +8196,45 @@ class AppLocalizationsIt extends AppLocalizations {
       'Tieni premuto il pulsante di accensione finché il LED non lampeggia. Il dispositivo sarà rilevabile.';
 
   @override
+  String get downloadingFromDevice => 'Download dal dispositivo';
+
+  @override
+  String get reconnectingToInternet => 'Riconnessione a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Caricamento di $current di $total';
+  }
+
+  @override
+  String get processedStatus => 'Elaborato';
+
+  @override
+  String get corruptedStatus => 'Corrotto';
+
+  @override
+  String nPending(int count) {
+    return '$count in attesa';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count elaborati';
+  }
+
+  @override
+  String get synced => 'Sincronizzato';
+
+  @override
+  String get noPendingRecordings => 'Nessuna registrazione in attesa';
+
+  @override
+  String get noProcessedRecordings => 'Nessuna registrazione elaborata ancora';
+
+  @override
+  String get pending => 'In attesa';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Novità nella $version';
   }

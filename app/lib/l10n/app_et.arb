@@ -2630,5 +2630,16 @@
   "wifiConfigurationSubtitle": "Sisestage WiFi andmed, et seade saaks püsivara alla laadida.",
   "networkNameSsid": "Võrgu nimi (SSID)",
   "enterWifiNetworkName": "Sisestage WiFi võrgu nimi",
-  "enterWifiPassword": "Sisestage WiFi parool"
+  "enterWifiPassword": "Sisestage WiFi parool",
+  "downloadingFromDevice": "Seadmest allalaadimine",
+  "reconnectingToInternet": "Internetiga uuesti ühendamine...",
+  "uploadingToCloud": "{current}/{total} üleslaadimine",
+  "processedStatus": "Töödeldud",
+  "corruptedStatus": "Rikutud",
+  "nPending": "{count} ootel",
+  "nProcessed": "{count} töödeldud",
+  "synced": "Sünkroonitud",
+  "noPendingRecordings": "Ootel salvestisi pole",
+  "noProcessedRecordings": "Töödeldud salvestisi pole veel",
+  "pending": "Ootel"
 }

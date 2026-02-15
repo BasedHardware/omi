@@ -8160,6 +8160,45 @@ class AppLocalizationsUk extends AppLocalizations {
       'Натисніть і утримуйте кнопку живлення, доки не заблимає світлодіод. Пристрій стане видимим.';
 
   @override
+  String get downloadingFromDevice => 'Завантаження з пристрою';
+
+  @override
+  String get reconnectingToInternet => 'Повторне підключення до інтернету...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Завантаження $current з $total';
+  }
+
+  @override
+  String get processedStatus => 'Оброблено';
+
+  @override
+  String get corruptedStatus => 'Пошкоджено';
+
+  @override
+  String nPending(int count) {
+    return '$count очікують';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count оброблено';
+  }
+
+  @override
+  String get synced => 'Синхронізовано';
+
+  @override
+  String get noPendingRecordings => 'Немає очікуючих записів';
+
+  @override
+  String get noProcessedRecordings => 'Ще немає оброблених записів';
+
+  @override
+  String get pending => 'Очікування';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Що нового у $version';
   }

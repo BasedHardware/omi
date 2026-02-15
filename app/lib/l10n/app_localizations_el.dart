@@ -8208,6 +8208,45 @@ class AppLocalizationsEl extends AppLocalizations {
       'Πατήστε παρατεταμένα το κουμπί τροφοδοσίας μέχρι να αναβοσβήσει το LED. Η συσκευή θα είναι ανιχνεύσιμη.';
 
   @override
+  String get downloadingFromDevice => 'Λήψη από τη συσκευή';
+
+  @override
+  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Μεταφόρτωση $current από $total';
+  }
+
+  @override
+  String get processedStatus => 'Επεξεργασμένο';
+
+  @override
+  String get corruptedStatus => 'Κατεστραμμένο';
+
+  @override
+  String nPending(int count) {
+    return '$count σε αναμονή';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count επεξεργασμένα';
+  }
+
+  @override
+  String get synced => 'Συγχρονισμένο';
+
+  @override
+  String get noPendingRecordings => 'Δεν υπάρχουν εκκρεμείς εγγραφές';
+
+  @override
+  String get noProcessedRecordings => 'Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα';
+
+  @override
+  String get pending => 'Εκκρεμεί';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Τι νέο υπάρχει στο $version';
   }

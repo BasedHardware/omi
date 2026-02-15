@@ -1,12 +1,13 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
 export 'package:omi/backend/http/api/conversations.dart' show SyncLocalFilesResponse, syncLocalFiles;
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage, {double? speedKBps});
+  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase});
 }
 
 /// Listener for WiFi connection progress

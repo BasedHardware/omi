@@ -8164,6 +8164,45 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pairingDescNeoOne => 'Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.';
 
   @override
+  String get downloadingFromDevice => 'Lejupielāde no ierīces';
+
+  @override
+  String get reconnectingToInternet => 'Atkārtota savienošana ar internetu...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Augšupielāde $current no $total';
+  }
+
+  @override
+  String get processedStatus => 'Apstrādāts';
+
+  @override
+  String get corruptedStatus => 'Bojāts';
+
+  @override
+  String nPending(int count) {
+    return '$count gaida';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count apstrādāti';
+  }
+
+  @override
+  String get synced => 'Sinhronizēts';
+
+  @override
+  String get noPendingRecordings => 'Nav gaidošu ierakstu';
+
+  @override
+  String get noProcessedRecordings => 'Vēl nav apstrādātu ierakstu';
+
+  @override
+  String get pending => 'Gaida';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Kas jauns $version';
   }

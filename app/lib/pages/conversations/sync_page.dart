@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -158,8 +159,7 @@ class WalListItem extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  dateTimeFormat(
-                                      'MMM d, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                                  dateTimeFormat('h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -181,7 +181,7 @@ class WalListItem extends StatelessWidget {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.2),
+                                          color: Colors.deepPurple.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Row(
@@ -205,7 +205,7 @@ class WalListItem extends StatelessWidget {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withOpacity(0.15),
+                                          color: Colors.deepPurple.withValues(alpha: 0.15),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Row(
@@ -263,8 +263,8 @@ class WalListItem extends StatelessWidget {
                             )
                           else if (hasError)
                             _buildStatusChip(context.l10n.failedStatus, Colors.red)
-                          else if (wal.status == WalStatus.miss)
-                            _buildFaIcon(FontAwesomeIcons.circleExclamation, size: 16),
+                          else if (wal.status == WalStatus.corrupted)
+                            _buildStatusChip(context.l10n.corruptedStatus, Colors.grey),
                         ],
                       ),
                       if (wal.isSyncing &&
@@ -327,27 +327,13 @@ class SyncPage extends StatefulWidget {
   State<SyncPage> createState() => _SyncPageState();
 }
 
-class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
+class _SyncPageState extends State<SyncPage> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyncProvider>().refreshWals();
     });
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
   }
 
   Widget _buildSettingsItem({
@@ -385,6 +371,41 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConversationsCreatedCard(SyncProvider syncProvider) {
+    if (!syncProvider.syncCompleted || syncProvider.syncedConversationsPointers.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: GestureDetector(
+          onTap: () => routeToPage(context, const SyncedConversationsPage()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                SizedBox(width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck, color: Colors.green)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -495,89 +516,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             },
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChips(WalStats? stats) {
-    return Consumer<SyncProvider>(
-      builder: (context, syncProvider, child) {
-        final phoneCount = stats?.phoneFiles ?? 0;
-        final sdCardRelatedCount = stats?.sdcardRelatedFiles ?? 0; // On SD card + from SD card
-        final flashPageRelatedCount = stats?.flashPageRelatedFiles ?? 0; // On flash page + from flash page
-        final totalCount = stats?.totalFiles ?? 0;
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              _buildChip(context.l10n.all, totalCount, syncProvider.storageFilter == null,
-                  () => syncProvider.clearStorageFilter()),
-              const SizedBox(width: 8),
-              _buildChip(
-                  context.l10n.phone,
-                  phoneCount,
-                  syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
-                  () => syncProvider.setStorageFilter(WalStorage.disk)),
-              const SizedBox(width: 8),
-              if (sdCardRelatedCount > 0) ...[
-                _buildChip(context.l10n.sdCard, sdCardRelatedCount, syncProvider.storageFilter == WalStorage.sdcard,
-                    () => syncProvider.setStorageFilter(WalStorage.sdcard)),
-                const SizedBox(width: 8),
-              ],
-              if (flashPageRelatedCount > 0)
-                _buildChip(
-                    context.l10n.limitless,
-                    flashPageRelatedCount,
-                    syncProvider.storageFilter == WalStorage.flashPage,
-                    () => syncProvider.setStorageFilter(WalStorage.flashPage)),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildChip(String label, int count, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.12) : const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(100),
-          border: isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 1) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey.shade400,
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.white.withOpacity(0.2) : const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '$count',
-                style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade500,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -854,11 +792,47 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       final progress =
           syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
       final speedKBps = syncProvider.syncSpeedKBps;
-      final isSdCardSyncing = syncProvider.isSdCardSyncing;
+      final phase = syncProvider.syncState.phase;
 
       // Get sync method from the currently syncing WAL
       final syncingWal = syncProvider.allWals.where((w) => w.isSyncing).firstOrNull;
       final isWifiSync = syncingWal?.syncMethod == SyncMethod.wifi;
+
+      // Phase-aware display properties
+      final String phaseText;
+      final IconData phaseIcon;
+      final Color phaseColor;
+      final bool showCancel;
+      final bool showSpeed;
+
+      switch (phase) {
+        case SyncPhase.downloadingFromDevice:
+          phaseText = context.l10n.downloadingFromDevice;
+          phaseIcon = Icons.download;
+          phaseColor = Colors.deepPurpleAccent;
+          showCancel = true;
+          showSpeed = true;
+        case SyncPhase.waitingForInternet:
+          phaseText = context.l10n.reconnectingToInternet;
+          phaseIcon = Icons.wifi;
+          phaseColor = Colors.orange;
+          showCancel = false;
+          showSpeed = false;
+        case SyncPhase.uploadingToCloud:
+          phaseText =
+              context.l10n.uploadingToCloud(syncProvider.processedWalsCount, syncProvider.initialMissingWalsCount);
+          phaseIcon = Icons.cloud_upload;
+          phaseColor = Colors.blue;
+          showCancel = true;
+          showSpeed = false;
+        case SyncPhase.idle:
+          phaseText =
+              context.l10n.processingProgress(syncProvider.processedWalsCount, syncProvider.initialMissingWalsCount);
+          phaseIcon = Icons.sync;
+          phaseColor = Colors.deepPurpleAccent;
+          showCancel = syncProvider.isSdCardSyncing;
+          showSpeed = true;
+      }
 
       return Container(
         decoration: BoxDecoration(
@@ -875,12 +849,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isWifiSync ? Colors.blue.withOpacity(0.2) : Colors.deepPurple.withOpacity(0.2),
+                      color: (isWifiSync ? Colors.blue : phaseColor).withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      isWifiSync ? Icons.bolt : Icons.bluetooth,
-                      color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
+                      isWifiSync ? Icons.bolt : phaseIcon,
+                      color: isWifiSync ? Colors.blue : phaseColor,
                       size: 20,
                     ),
                   ),
@@ -893,17 +867,14 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                           children: [
                             Flexible(
                               child: Text(
-                                isSdCardSyncing
-                                    ? context.l10n.downloadingFromSdCard
-                                    : context.l10n.processingProgress(
-                                        syncProvider.processedWalsCount, syncProvider.initialMissingWalsCount),
+                                phaseText,
                                 style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
-                        if (speedKBps != null && speedKBps > 0) ...[
+                        if (showSpeed && speedKBps != null && speedKBps > 0) ...[
                           const SizedBox(height: 4),
                           Text(
                             '${speedKBps.toStringAsFixed(1)} KB/s',
@@ -917,7 +888,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     '${(progress * 100).toInt()}%',
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                   ),
-                  if (isSdCardSyncing) ...[
+                  if (showCancel) ...[
                     const SizedBox(width: 12),
                     GestureDetector(
                       onTap: () => _showCancelSyncDialog(context, syncProvider),
@@ -939,40 +910,11 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 child: LinearProgressIndicator(
                   value: progress,
                   backgroundColor: const Color(0xFF3C3C43),
-                  color: isWifiSync ? Colors.blue : Colors.deepPurpleAccent,
+                  color: isWifiSync ? Colors.blue : phaseColor,
                   minHeight: 4,
                 ),
               ),
             ],
-          ),
-        ),
-      );
-    }
-
-    // Completed state
-    if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: GestureDetector(
-          onTap: () => routeToPage(context, const SyncedConversationsPage()),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                SizedBox(width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck, color: Colors.green)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-              ],
-            ),
           ),
         ),
       );
@@ -1042,6 +984,183 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildStatusChips(SyncProvider syncProvider) {
+    final pendingCount = syncProvider.pendingWals.length;
+    final syncedCount = syncProvider.syncedWals.length;
+
+    return Row(
+      children: [
+        _buildStatusChipButton(
+          context.l10n.pending,
+          syncProvider.statusFilter == WalStatusFilter.pending,
+          () => syncProvider.setStatusFilter(WalStatusFilter.pending),
+          count: pendingCount,
+        ),
+        const SizedBox(width: 8),
+        _buildStatusChipButton(
+          context.l10n.synced,
+          syncProvider.statusFilter == WalStatusFilter.synced,
+          () => syncProvider.setStatusFilter(WalStatusFilter.synced),
+          count: syncedCount,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusChipButton(String label, bool isSelected, VoidCallback onTap, {int? count}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withValues(alpha: 0.12) : const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(100),
+          border: isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1) : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade400,
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            if (count != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.grey.shade500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyFilterState(BuildContext context, WalStatusFilter filter) {
+    final isPending = filter == WalStatusFilter.pending;
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          _buildFaIcon(
+            isPending ? FontAwesomeIcons.circleCheck : FontAwesomeIcons.clockRotateLeft,
+            size: 24,
+            color: isPending ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            isPending ? context.l10n.noPendingRecordings : context.l10n.noProcessedRecordings,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+          if (isPending) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.allCaughtUp,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingList(List<Wal> pendingWals) {
+    // Group by source
+    final phoneWals = <Wal>[];
+    final sdCardWals = <Wal>[];
+    final limitlessWals = <Wal>[];
+
+    for (final wal in pendingWals) {
+      if (wal.storage == WalStorage.sdcard || wal.originalStorage == WalStorage.sdcard) {
+        sdCardWals.add(wal);
+      } else if (wal.storage == WalStorage.flashPage || wal.originalStorage == WalStorage.flashPage) {
+        limitlessWals.add(wal);
+      } else {
+        phoneWals.add(wal);
+      }
+    }
+
+    // If only one source, skip the section headers
+    final sourceCount =
+        (phoneWals.isNotEmpty ? 1 : 0) + (sdCardWals.isNotEmpty ? 1 : 0) + (limitlessWals.isNotEmpty ? 1 : 0);
+    if (sourceCount <= 1) {
+      return OptimizedWalsListWidget(wals: pendingWals);
+    }
+
+    // Build a single flattened list with source headers interleaved
+    final List<_PendingListItem> items = [];
+    void addSection(String label, IconData icon, Color color, List<Wal> wals) {
+      items.add(_PendingListItem.header(label, icon, color, wals.length));
+      for (final wal in wals) {
+        items.add(_PendingListItem.wal(wal));
+      }
+    }
+
+    if (phoneWals.isNotEmpty) addSection(context.l10n.phone, FontAwesomeIcons.mobileScreen, Colors.grey, phoneWals);
+    if (sdCardWals.isNotEmpty) {
+      addSection(context.l10n.sdCard, FontAwesomeIcons.sdCard, Colors.deepPurpleAccent, sdCardWals);
+    }
+    if (limitlessWals.isNotEmpty) {
+      addSection(context.l10n.limitless, FontAwesomeIcons.bolt, Colors.teal, limitlessWals);
+    }
+
+    return SliverList.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        if (item.isHeader) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(20, index == 0 ? 0 : 20, 20, 8),
+            child: Row(
+              children: [
+                _buildFaIcon(item.icon!, size: 14, color: item.color!),
+                const SizedBox(width: 8),
+                Text(
+                  item.label!,
+                  style: TextStyle(color: item.color, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${item.count}',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: WalListItem(
+            wal: item.wal!,
+            walIdx: index,
+            date: DateTime.fromMillisecondsSinceEpoch(item.wal!.timerStart * 1000),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(20),
@@ -1076,9 +1195,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
-        var provider = Provider.of<SyncProvider>(context, listen: false);
-        if (!provider.isSyncing) provider.clearSyncResult();
+      onPopInvokedWithResult: (didPop, result) {
+        // Sync result persists until next sync starts
       },
       child: Consumer<SyncProvider>(builder: (context, syncProvider, child) {
         return Scaffold(
@@ -1116,7 +1234,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     height: 36,
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.grey.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Center(
@@ -1127,83 +1245,64 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               ),
             ],
           ),
-          body: FutureBuilder<WalStats>(
-            future: syncProvider.getWalStats(),
-            builder: (context, statsSnapshot) {
-              return CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 16),
-                          _buildProcessCard(syncProvider),
-                          const SizedBox(height: 16),
-                          FutureBuilder<bool>(
-                            future: ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported(),
-                            builder: (context, wifiSnapshot) {
-                              final wifiSupported = wifiSnapshot.data ?? false;
-                              return _buildSettingsCard(showTransferMethod: wifiSupported);
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                          _buildSectionHeader(context.l10n.recordings),
-                          _buildFilterChips(statsSnapshot.data),
-                          const SizedBox(height: 16),
-                        ],
+          body: CustomScrollView(
+            slivers: [
+              // Settings + Process card + status chips
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildProcessCard(syncProvider),
+                      const SizedBox(height: 16),
+                      _buildConversationsCreatedCard(syncProvider),
+                      FutureBuilder<bool>(
+                        future: ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported(),
+                        builder: (context, wifiSnapshot) {
+                          return _buildSettingsCard(showTransferMethod: wifiSnapshot.data ?? false);
+                        },
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      _buildStatusChips(syncProvider),
+                      const SizedBox(height: 16),
+                    ],
                   ),
-                  Consumer<SyncProvider>(
-                    builder: (context, syncProvider, child) {
-                      if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
-                        return const SliverToBoxAdapter(
-                          child: Center(
-                              child: Padding(
-                                  padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: Colors.white))),
-                        );
-                      }
+                ),
+              ),
+              // Recordings list
+              Consumer<SyncProvider>(
+                builder: (context, syncProvider, child) {
+                  if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
+                    return const SliverToBoxAdapter(
+                      child: Center(
+                          child: Padding(
+                              padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: Colors.white))),
+                    );
+                  }
 
-                      final filteredWals = syncProvider.filteredWals;
+                  if (syncProvider.allWals.isEmpty) {
+                    return SliverToBoxAdapter(child: _buildEmptyState(context));
+                  }
 
-                      if (syncProvider.allWals.isEmpty) {
-                        return SliverToBoxAdapter(child: _buildEmptyState(context));
-                      }
+                  final wals = syncProvider.filteredByStatusWals;
 
-                      if (filteredWals.isEmpty && syncProvider.storageFilter != null) {
-                        return SliverToBoxAdapter(
-                          child: Container(
-                            margin: const EdgeInsets.all(20),
-                            padding: const EdgeInsets.all(32),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1C1C1E),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildFaIcon(FontAwesomeIcons.filter, size: 24),
-                                const SizedBox(height: 16),
-                                Text(context.l10n.noRecordings,
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-                                const SizedBox(height: 4),
-                                Text(context.l10n.tryDifferentFilter,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
+                  if (wals.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: _buildEmptyFilterState(context, syncProvider.statusFilter),
+                    );
+                  }
 
-                      return OptimizedWalsListWidget(wals: filteredWals);
-                    },
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                ],
-              );
-            },
+                  if (syncProvider.statusFilter == WalStatusFilter.pending) {
+                    return _buildPendingList(wals);
+                  }
+
+                  return OptimizedWalsListWidget(wals: wals);
+                },
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
           ),
         );
       }),
@@ -1283,4 +1382,24 @@ class WalItem extends ListItem {
   final int index;
   final DateTime date;
   WalItem(this.wal, this.index, this.date);
+}
+
+class _PendingListItem {
+  final bool isHeader;
+  final String? label;
+  final IconData? icon;
+  final Color? color;
+  final int? count;
+  final Wal? wal;
+
+  _PendingListItem.header(this.label, this.icon, this.color, this.count)
+      : isHeader = true,
+        wal = null;
+
+  _PendingListItem.wal(this.wal)
+      : isHeader = false,
+        label = null,
+        icon = null,
+        color = null,
+        count = null;
 }

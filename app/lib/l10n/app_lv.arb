@@ -2630,5 +2630,16 @@
   "wifiConfigurationSubtitle": "Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.",
   "networkNameSsid": "Tīkla nosaukums (SSID)",
   "enterWifiNetworkName": "Ievadiet WiFi tīkla nosaukumu",
-  "enterWifiPassword": "Ievadiet WiFi paroli"
+  "enterWifiPassword": "Ievadiet WiFi paroli",
+  "downloadingFromDevice": "Lejupielāde no ierīces",
+  "reconnectingToInternet": "Atkārtota savienošana ar internetu...",
+  "uploadingToCloud": "Augšupielāde {current} no {total}",
+  "processedStatus": "Apstrādāts",
+  "corruptedStatus": "Bojāts",
+  "nPending": "{count} gaida",
+  "nProcessed": "{count} apstrādāti",
+  "synced": "Sinhronizēts",
+  "noPendingRecordings": "Nav gaidošu ierakstu",
+  "noProcessedRecordings": "Vēl nav apstrādātu ierakstu",
+  "pending": "Gaida"
 }

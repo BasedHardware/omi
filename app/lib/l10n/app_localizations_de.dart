@@ -8215,6 +8215,45 @@ class AppLocalizationsDe extends AppLocalizations {
       'Halten Sie die Ein-/Aus-Taste gedrückt, bis die LED blinkt. Das Gerät wird erkennbar sein.';
 
   @override
+  String get downloadingFromDevice => 'Wird vom Gerät heruntergeladen';
+
+  @override
+  String get reconnectingToInternet => 'Verbindung zum Internet wird wiederhergestellt...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Hochladen von $current von $total';
+  }
+
+  @override
+  String get processedStatus => 'Verarbeitet';
+
+  @override
+  String get corruptedStatus => 'Beschädigt';
+
+  @override
+  String nPending(int count) {
+    return '$count ausstehend';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count verarbeitet';
+  }
+
+  @override
+  String get synced => 'Synchronisiert';
+
+  @override
+  String get noPendingRecordings => 'Keine ausstehenden Aufnahmen';
+
+  @override
+  String get noProcessedRecordings => 'Noch keine verarbeiteten Aufnahmen';
+
+  @override
+  String get pending => 'Ausstehend';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Neuigkeiten in $version';
   }

@@ -2726,5 +2726,16 @@
   "wifiConfigurationSubtitle": "Adja meg WiFi hitelesítő adatait, hogy az eszköz letölthesse a firmware-t.",
   "networkNameSsid": "Hálózat neve (SSID)",
   "enterWifiNetworkName": "Adja meg a WiFi hálózat nevét",
-  "enterWifiPassword": "Adja meg a WiFi jelszót"
+  "enterWifiPassword": "Adja meg a WiFi jelszót",
+  "downloadingFromDevice": "Letöltés az eszközről",
+  "reconnectingToInternet": "Újracsatlakozás az internethez...",
+  "uploadingToCloud": "{current}/{total} feltöltése",
+  "processedStatus": "Feldolgozva",
+  "corruptedStatus": "Sérült",
+  "nPending": "{count} függőben",
+  "nProcessed": "{count} feldolgozva",
+  "synced": "Szinkronizálva",
+  "noPendingRecordings": "Nincsenek függőben lévő felvételek",
+  "noProcessedRecordings": "Még nincsenek feldolgozott felvételek",
+  "pending": "Függőben"
 }

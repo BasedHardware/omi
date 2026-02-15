@@ -8151,6 +8151,45 @@ class AppLocalizationsSv extends AppLocalizations {
   String get pairingDescNeoOne => 'Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.';
 
   @override
+  String get downloadingFromDevice => 'Laddar ner från enhet';
+
+  @override
+  String get reconnectingToInternet => 'Återansluter till internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laddar upp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Bearbetad';
+
+  @override
+  String get corruptedStatus => 'Skadad';
+
+  @override
+  String nPending(int count) {
+    return '$count väntande';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count bearbetade';
+  }
+
+  @override
+  String get synced => 'Synkroniserad';
+
+  @override
+  String get noPendingRecordings => 'Inga väntande inspelningar';
+
+  @override
+  String get noProcessedRecordings => 'Inga bearbetade inspelningar ännu';
+
+  @override
+  String get pending => 'Väntande';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Nyheter i $version';
   }

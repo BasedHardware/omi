@@ -2672,5 +2672,16 @@
   "wifiConfigurationSubtitle": "Masukkan kredensial WiFi Anda agar perangkat dapat mengunduh firmware.",
   "networkNameSsid": "Nama Jaringan (SSID)",
   "enterWifiNetworkName": "Masukkan nama jaringan WiFi",
-  "enterWifiPassword": "Masukkan kata sandi WiFi"
+  "enterWifiPassword": "Masukkan kata sandi WiFi",
+  "downloadingFromDevice": "Mengunduh dari perangkat",
+  "reconnectingToInternet": "Menyambung kembali ke internet...",
+  "uploadingToCloud": "Mengunggah {current} dari {total}",
+  "processedStatus": "Diproses",
+  "corruptedStatus": "Rusak",
+  "nPending": "{count} tertunda",
+  "nProcessed": "{count} diproses",
+  "synced": "Tersinkronisasi",
+  "noPendingRecordings": "Tidak ada rekaman tertunda",
+  "noProcessedRecordings": "Belum ada rekaman yang diproses",
+  "pending": "Tertunda"
 }

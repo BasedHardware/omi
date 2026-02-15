@@ -8137,6 +8137,45 @@ class AppLocalizationsSk extends AppLocalizations {
       'Stlačte a podržte tlačidlo napájania, kým LED nezačne blikať. Zariadenie bude viditeľné.';
 
   @override
+  String get downloadingFromDevice => 'Sťahovanie zo zariadenia';
+
+  @override
+  String get reconnectingToInternet => 'Opätovné pripájanie k internetu...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Nahrávanie $current z $total';
+  }
+
+  @override
+  String get processedStatus => 'Spracované';
+
+  @override
+  String get corruptedStatus => 'Poškodené';
+
+  @override
+  String nPending(int count) {
+    return '$count čakajúcich';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count spracovaných';
+  }
+
+  @override
+  String get synced => 'Synchronizované';
+
+  @override
+  String get noPendingRecordings => 'Žiadne čakajúce nahrávky';
+
+  @override
+  String get noProcessedRecordings => 'Zatiaľ žiadne spracované nahrávky';
+
+  @override
+  String get pending => 'Čakajúce';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Čo je nové vo $version';
   }

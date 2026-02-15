@@ -8130,6 +8130,45 @@ class AppLocalizationsDa extends AppLocalizations {
   String get pairingDescNeoOne => 'Tryk og hold tænd/sluk-knappen, indtil LED\'en blinker. Enheden vil være synlig.';
 
   @override
+  String get downloadingFromDevice => 'Downloader fra enhed';
+
+  @override
+  String get reconnectingToInternet => 'Genopretter forbindelse til internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Uploader $current af $total';
+  }
+
+  @override
+  String get processedStatus => 'Behandlet';
+
+  @override
+  String get corruptedStatus => 'Beskadiget';
+
+  @override
+  String nPending(int count) {
+    return '$count afventende';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count behandlede';
+  }
+
+  @override
+  String get synced => 'Synkroniseret';
+
+  @override
+  String get noPendingRecordings => 'Ingen afventende optagelser';
+
+  @override
+  String get noProcessedRecordings => 'Ingen behandlede optagelser endnu';
+
+  @override
+  String get pending => 'Afventende';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Nyheder i $version';
   }

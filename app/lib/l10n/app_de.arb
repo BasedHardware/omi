@@ -2598,5 +2598,16 @@
   "wifiConfigurationSubtitle": "Geben Sie Ihre WLAN-Zugangsdaten ein, damit das Gerät die Firmware herunterladen kann.",
   "networkNameSsid": "Netzwerkname (SSID)",
   "enterWifiNetworkName": "WLAN-Netzwerknamen eingeben",
-  "enterWifiPassword": "WLAN-Passwort eingeben"
+  "enterWifiPassword": "WLAN-Passwort eingeben",
+  "downloadingFromDevice": "Wird vom Gerät heruntergeladen",
+  "reconnectingToInternet": "Verbindung zum Internet wird wiederhergestellt...",
+  "uploadingToCloud": "Hochladen von {current} von {total}",
+  "processedStatus": "Verarbeitet",
+  "corruptedStatus": "Beschädigt",
+  "nPending": "{count} ausstehend",
+  "nProcessed": "{count} verarbeitet",
+  "synced": "Synchronisiert",
+  "noPendingRecordings": "Keine ausstehenden Aufnahmen",
+  "noProcessedRecordings": "Noch keine verarbeiteten Aufnahmen",
+  "pending": "Ausstehend"
 }

@@ -8162,6 +8162,45 @@ class AppLocalizationsEs extends AppLocalizations {
       'Mantén presionado el botón de encendido hasta que el LED parpadee. El dispositivo será visible.';
 
   @override
+  String get downloadingFromDevice => 'Descargando del dispositivo';
+
+  @override
+  String get reconnectingToInternet => 'Reconectando a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Subiendo $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Procesado';
+
+  @override
+  String get corruptedStatus => 'Corrupto';
+
+  @override
+  String nPending(int count) {
+    return '$count pendientes';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count procesados';
+  }
+
+  @override
+  String get synced => 'Sincronizado';
+
+  @override
+  String get noPendingRecordings => 'No hay grabaciones pendientes';
+
+  @override
+  String get noProcessedRecordings => 'Aún no hay grabaciones procesadas';
+
+  @override
+  String get pending => 'Pendiente';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Novedades en $version';
   }

@@ -2631,5 +2631,16 @@
   "wifiConfigurationSubtitle": "Ingrese sus credenciales WiFi para permitir que el dispositivo descargue el firmware.",
   "networkNameSsid": "Nombre de red (SSID)",
   "enterWifiNetworkName": "Ingrese el nombre de la red WiFi",
-  "enterWifiPassword": "Ingrese la contraseña WiFi"
+  "enterWifiPassword": "Ingrese la contraseña WiFi",
+  "downloadingFromDevice": "Descargando del dispositivo",
+  "reconnectingToInternet": "Reconectando a internet...",
+  "uploadingToCloud": "Subiendo {current} de {total}",
+  "processedStatus": "Procesado",
+  "corruptedStatus": "Corrupto",
+  "nPending": "{count} pendientes",
+  "nProcessed": "{count} procesados",
+  "synced": "Sincronizado",
+  "noPendingRecordings": "No hay grabaciones pendientes",
+  "noProcessedRecordings": "Aún no hay grabaciones procesadas",
+  "pending": "Pendiente"
 }
