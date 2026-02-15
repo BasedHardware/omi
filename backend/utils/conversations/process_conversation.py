@@ -1,3 +1,4 @@
+import atexit
 import os
 import random
 import re
@@ -40,7 +41,9 @@ from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
+from utils.apps import get_available_apps, sync_update_persona_prompt
+from database.apps import get_omi_personas_by_uid_db
+from database.redis_db import can_update_persona, set_persona_update_timestamp
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -76,6 +79,7 @@ from utils.other.storage import precache_conversation_audio
 # Bounded thread pool for post-conversation background work.
 # Prevents thread explosion under sustained load (was spawning 7+ raw threads per conversation).
 _conversation_bg_executor = ThreadPoolExecutor(max_workers=32, thread_name_prefix="conv-bg")
+atexit.register(_conversation_bg_executor.shutdown, wait=True)
 
 
 def _get_structured(
@@ -377,8 +381,11 @@ def _update_goal_progress(uid: str, conversation: Conversation):
 
 
 def _extract_memories(uid: str, conversation: Conversation):
-    with track_usage(uid, Features.MEMORIES):
-        _extract_memories_inner(uid, conversation)
+    try:
+        with track_usage(uid, Features.MEMORIES):
+            _extract_memories_inner(uid, conversation)
+    except Exception as e:
+        logging.exception(f"Error in background task _extract_memories for conv {conversation.id}: {e}")
 
 
 def _extract_memories_inner(uid: str, conversation: Conversation):
@@ -491,10 +498,13 @@ def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
 
 
 def _extract_trends(uid: str, conversation: Conversation):
-    with track_usage(uid, Features.TRENDS):
-        extracted_items = trends_extractor(uid, conversation)
-        parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
-        trends_db.save_trends(conversation, parsed)
+    try:
+        with track_usage(uid, Features.TRENDS):
+            extracted_items = trends_extractor(uid, conversation)
+            parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
+            trends_db.save_trends(conversation, parsed)
+    except Exception as e:
+        logging.exception(f"Error in background task _extract_trends for conv {conversation.id}: {e}")
 
 
 def _save_action_items(uid: str, conversation: Conversation):
@@ -502,6 +512,13 @@ def _save_action_items(uid: str, conversation: Conversation):
     Save action items from a conversation to the dedicated action_items collection.
     This runs in addition to storing them in the conversation for backward compatibility.
     """
+    try:
+        _save_action_items_inner(uid, conversation)
+    except Exception as e:
+        logging.exception(f"Error in background task _save_action_items for conv {conversation.id}: {e}")
+
+
+def _save_action_items_inner(uid: str, conversation: Conversation):
     if not conversation.structured or not conversation.structured.action_items:
         return
 
@@ -550,51 +567,61 @@ def _save_action_items(uid: str, conversation: Conversation):
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
-    vector = generate_embedding(str(conversation.structured)) if not update_only else None
-    tz = notification_db.get_user_time_zone(uid)
+    try:
+        vector = generate_embedding(str(conversation.structured)) if not update_only else None
+        tz = notification_db.get_user_time_zone(uid)
 
-    metadata = {}
+        metadata = {}
 
-    # Extract metadata based on conversation source
-    if conversation.source == ConversationSource.external_integration:
-        text_source = conversation.external_data.get('text_source')
-        text_content = conversation.external_data.get('text')
-        if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
-            text_source_spec = conversation.external_data.get('text_source_spec')
-            if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = retrieve_metadata_from_message(
-                    uid, conversation.created_at, text_content, tz, text_source_spec
-                )
-            elif text_source == ExternalIntegrationConversationSource.other.value:
-                metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
-    else:
-        # For regular conversations with transcript segments
-        segments = [t.dict() for t in conversation.transcript_segments]
-        metadata = retrieve_metadata_fields_from_transcript(
-            uid, conversation.created_at, segments, tz, photos=conversation.photos
-        )
+        # Extract metadata based on conversation source
+        if conversation.source == ConversationSource.external_integration:
+            text_source = conversation.external_data.get('text_source')
+            text_content = conversation.external_data.get('text')
+            if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
+                text_source_spec = conversation.external_data.get('text_source_spec')
+                if text_source == ExternalIntegrationConversationSource.message.value:
+                    metadata = retrieve_metadata_from_message(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+                elif text_source == ExternalIntegrationConversationSource.other.value:
+                    metadata = retrieve_metadata_from_text(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+        else:
+            # For regular conversations with transcript segments
+            segments = [t.dict() for t in conversation.transcript_segments]
+            metadata = retrieve_metadata_fields_from_transcript(
+                uid, conversation.created_at, segments, tz, photos=conversation.photos
+            )
 
-    metadata['created_at'] = int(conversation.created_at.timestamp())
+        metadata['created_at'] = int(conversation.created_at.timestamp())
 
-    if not update_only:
-        print('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation, vector, metadata)
-    else:
-        print('save_structured_vector updating metadata')
-        update_vector_metadata(uid, conversation.id, metadata)
+        if not update_only:
+            print('save_structured_vector creating vector')
+            upsert_vector2(uid, conversation, vector, metadata)
+        else:
+            print('save_structured_vector updating metadata')
+            update_vector_metadata(uid, conversation.id, metadata)
+    except Exception as e:
+        logging.exception(f"Error in background task save_structured_vector for conv {conversation.id}: {e}")
 
 
-def _update_personas_async(uid: str):
-    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
-    personas = get_omi_personas_by_uid_db(uid)
-    if personas:
-        threads = []
-        for persona in personas:
-            threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
-
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+def _update_personas_via_pool(uid: str):
+    """Submit individual persona updates to the shared executor instead of spawning raw threads."""
+    try:
+        if not can_update_persona(uid):
+            print(f"[PERSONAS] Rate limited - uid={uid} already updated today")
+            return
+        personas = get_omi_personas_by_uid_db(uid)
+        if personas:
+            set_persona_update_timestamp(uid)
+            for persona in personas:
+                _conversation_bg_executor.submit(sync_update_persona_prompt, persona)
+            print(f"[PERSONAS] Submitted {len(personas)} persona updates to pool for uid={uid}")
+        else:
+            print(f"[PERSONAS] No personas found for uid={uid}")
+    except Exception as e:
+        logging.exception(f"Error in background task _update_personas_via_pool for uid={uid}: {e}")
 
 
 def process_conversation(
@@ -717,7 +744,7 @@ def process_conversation(
 
     if not is_reprocess:
         _conversation_bg_executor.submit(conversation_created_webhook, uid, conversation)
-        _conversation_bg_executor.submit(update_personas_async, uid)
+        _conversation_bg_executor.submit(_update_personas_via_pool, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
