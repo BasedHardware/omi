@@ -332,6 +332,7 @@ private struct PageContentView: View {
     @Binding var selectedTabIndex: Int
 
     var body: some View {
+        let _ = log("RENDER: PageContentView body evaluated (index=\(selectedIndex))")
         Group {
             switch selectedIndex {
             case 0:
