@@ -4,7 +4,7 @@ from typing import Optional
 
 class TranscriptSegment(BaseModel):
     text: str = ''
-    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_name: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = 0
     is_user: bool = False
     start: float = 0.0
