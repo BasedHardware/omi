@@ -1316,7 +1316,29 @@ async def _stream_handler(
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],
                     }
-            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings", uid, session_id)
+
+            # Shared profiles, load each sharer's own user-level embedding
+            shared_owners = user_db.get_profiles_shared_with_user(uid)
+            for owner_uid in shared_owners:
+                if owner_uid == uid:
+                    continue
+                try:
+                    profile = user_db.get_user_profile(owner_uid)
+                    emb = profile.get('speaker_embedding')
+                    if emb:
+                        name = profile.get('name') or owner_uid[:8]
+                        person_embeddings_cache[f"shared:{owner_uid}"] = {
+                            'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                            'name': name,
+                        }
+                except Exception as e:
+                    print(f"Failed to load shared profile from {owner_uid}: {e}", uid, session_id)
+
+            print(
+                f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)",
+                uid,
+                session_id,
+            )
         except Exception as e:
             print(f"Speaker ID: failed to load embeddings: {e}", uid, session_id)
             return
@@ -1334,7 +1356,7 @@ async def _stream_handler(
 
             speaker_id = seg['speaker_id']
 
-            # Skip if already resolved
+            # Skip if already resolved in session
             if speaker_id in speaker_to_person_map:
                 continue
 
@@ -1928,6 +1950,7 @@ async def _stream_handler(
                                     can_assign
                                     and person_id
                                     and person_id != 'user'
+                                    and not person_id.startswith("shared:")
                                     and private_cloud_sync_enabled
                                     and send_speaker_sample_request is not None
                                     and current_conversation_id

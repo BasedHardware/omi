@@ -241,6 +241,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     deviceProvider.connectedDevice,
                                     bottomMargin: 150,
                                     suggestions: provider.suggestionsBySegmentId,
+                                    sharedSpeakerNames: provider.sharedSpeakerNames,
                                     taggingSegmentIds: provider.taggingSegmentIds,
                                     onAcceptSuggestion: (suggestion) {
                                       provider.assignSpeakerToConversation(suggestion.speakerId, suggestion.personId,
