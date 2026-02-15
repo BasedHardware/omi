@@ -516,14 +516,15 @@ class TasksViewModel: ObservableObject {
     @Published private(set) var filteredFromDatabase: [TaskActionItem] = []
     @Published private(set) var isLoadingFiltered = false
 
-    /// Cached tag counts - recomputed when tasks change
-    @Published private(set) var tagCounts: [TaskFilterTag: Int] = [:]
+    /// Cached tag counts - recomputed when tasks change (not @Published to avoid extra re-renders;
+    /// values are read during re-renders triggered by displayTasks/categorizedTasks changes)
+    private(set) var tagCounts: [TaskFilterTag: Int] = [:]
 
     /// Dynamically discovered tags (sources/categories not in predefined list)
-    @Published private(set) var dynamicTags: [DynamicFilterTag] = []
+    private(set) var dynamicTags: [DynamicFilterTag] = []
 
     /// Counts for dynamic tags
-    @Published private(set) var dynamicTagCounts: [String: Int] = [:]
+    private(set) var dynamicTagCounts: [String: Int] = [:]
 
     /// Selected dynamic tags
     @Published var selectedDynamicTags: Set<DynamicFilterTag> = [] {
@@ -689,11 +690,11 @@ class TasksViewModel: ObservableObject {
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
     @Published private(set) var categorizedTasks: [TaskCategory: [TaskActionItem]] = [:]
-    @Published private(set) var todoCount: Int = 0
-    @Published private(set) var doneCount: Int = 0
+    private(set) var todoCount: Int = 0
+    private(set) var doneCount: Int = 0
 
     /// Whether there are more filtered/search results beyond the display limit
-    @Published private(set) var hasMoreFilteredResults = false
+    private(set) var hasMoreFilteredResults = false
 
     /// Full filtered results before display cap (kept for pagination)
     private var allFilteredDisplayTasks: [TaskActionItem] = []
@@ -1518,22 +1519,19 @@ class TasksViewModel: ObservableObject {
         // Sort
         let sorted = sortTasks(filteredTasks)
 
-        // Compute all values into locals FIRST, then assign @Published properties
-        // in a single batch to minimize objectWillChange notifications.
-        let newDisplayTasks: [TaskActionItem]
-        let newHasMore: Bool
+        // Apply display cap for filtered/search mode
         if isInFilteredMode {
             allFilteredDisplayTasks = sorted
             let capped = Array(sorted.prefix(displayLimit))
-            newDisplayTasks = deduplicateById(capped)
-            newHasMore = sorted.count > displayLimit
+            displayTasks = deduplicateById(capped)
+            hasMoreFilteredResults = sorted.count > displayLimit
         } else {
             allFilteredDisplayTasks = []
-            newDisplayTasks = deduplicateById(sorted)
-            newHasMore = false
+            hasMoreFilteredResults = false
+            displayTasks = deduplicateById(sorted)
         }
 
-        // Compute categorizedTasks from the final display list
+        // Compute categorizedTasks for category view
         var result: [TaskCategory: [TaskActionItem]] = [:]
         for category in TaskCategory.allCases {
             result[category] = []
@@ -1542,18 +1540,14 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        for task in newDisplayTasks {
+        for task in displayTasks {
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
-
-        // Assign all @Published properties together to coalesce into fewer view updates
-        displayTasks = newDisplayTasks
-        hasMoreFilteredResults = newHasMore
         categorizedTasks = result
 
         // Debug logging
-        log("TasksViewModel: Categorized \(newDisplayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)")
+        log("TasksViewModel: Categorized \(displayTasks.count) tasks - Today: \(result[.today]?.count ?? 0), Tomorrow: \(result[.tomorrow]?.count ?? 0), Later: \(result[.later]?.count ?? 0), No Deadline: \(result[.noDeadline]?.count ?? 0)")
     }
 
     /// Load more filtered/search results (pagination within already-queried results)
