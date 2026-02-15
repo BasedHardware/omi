@@ -381,8 +381,12 @@ async def _websocket_util_trigger(
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
-                    audiobuffer.extend(audio_data)
-                    trigger_audiobuffer.extend(audio_data)
+                    # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
+                    # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
+                    if has_audio_apps_enabled:
+                        trigger_audiobuffer.extend(audio_data)
+                    if audio_bytes_webhook_delay_seconds:
+                        audiobuffer.extend(audio_data)
 
                     # Private cloud sync - queue chunks for background processing
                     if private_cloud_sync_enabled and current_conversation_id:
