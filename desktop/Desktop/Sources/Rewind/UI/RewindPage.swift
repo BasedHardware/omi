@@ -34,12 +34,11 @@ struct RewindPage: View {
     @State private var isTranscriptExpanded = false
     @State private var savedTranscriptSegments: [SpeakerSegment] = []
 
-    // Split finish/stop button state
+    // Finish conversation button state
     @State private var isFinishing = false
     @State private var showSavedSuccess = false
     @State private var showDiscarded = false
     @State private var showError = false
-    @AppStorage("recordingButtonMode") private var buttonMode: String = "finish"
 
     // Speaker naming state
     @State private var showNameSpeakerSheet = false
@@ -58,14 +57,12 @@ struct RewindPage: View {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
     }
 
-    private var isFinishMode: Bool { buttonMode == "finish" }
-
     private var finishButtonText: String {
         if isFinishing { return "Saving..." }
         if showSavedSuccess { return "Saved!" }
         if showDiscarded { return "Too Short" }
         if showError { return "Failed" }
-        return isFinishMode ? "Finish Conversation" : "Stop Recording"
+        return "Finish Conversation"
     }
 
     private var finishButtonForeground: Color {
