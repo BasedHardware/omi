@@ -5,7 +5,7 @@ import GRDB
 actor RewindDatabase {
     static let shared = RewindDatabase()
 
-    private var dbQueue: DatabaseQueue?
+    private var dbQueue: DatabasePool?
 
     /// Track if we recovered from corruption (for UI notification)
     private(set) var didRecoverFromCorruption = false
@@ -41,8 +41,8 @@ actor RewindDatabase {
     /// Whether the database has been successfully initialized
     var isInitialized: Bool { dbQueue != nil }
 
-    /// Get the database queue for other storage actors
-    func getDatabaseQueue() -> DatabaseQueue? {
+    /// Get the database pool for other storage actors
+    func getDatabaseQueue() -> DatabasePool? {
         return dbQueue
     }
 
