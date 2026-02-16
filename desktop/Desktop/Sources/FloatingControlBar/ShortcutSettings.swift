@@ -128,7 +128,7 @@ class ShortcutSettings: ObservableObject {
            let mode = PTTTranscriptionMode(rawValue: saved) {
             self.pttTranscriptionMode = mode
         } else {
-            self.pttTranscriptionMode = .live
+            self.pttTranscriptionMode = .batch
         }
     }
 }

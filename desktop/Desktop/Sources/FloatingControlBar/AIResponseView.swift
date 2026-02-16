@@ -129,11 +129,16 @@ struct AIResponseView: View {
                 }
             }
         } label: {
-            Text(currentModelLabel)
-                .scaledFont(size: 14)
-                .foregroundColor(.secondary)
+            HStack(spacing: 2) {
+                Text(currentModelLabel)
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+            }
+            .scaledFont(size: 14)
+            .foregroundColor(.secondary)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
     }
 

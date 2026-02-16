@@ -45,6 +45,9 @@ class PushToTalkManager: ObservableObject {
   private var batchAudioBuffer = Data()
   private let batchAudioLock = NSLock()
 
+  // Live mode: timeout for waiting on final transcript after CloseStream
+  private var liveFinalizationTimeout: DispatchWorkItem?
+
   // Screenshot
   private var capturedScreenshotURL: URL?
 
@@ -356,15 +359,20 @@ class PushToTalkManager: ObservableObject {
         self.sendTranscript()
       }
     } else {
-      // Live mode: flush remaining audio and wait for Deepgram streaming results
+      // Live mode: flush remaining audio and wait for final transcript from Deepgram
       transcriptionService?.finishStream()
-      log("PushToTalkManager: finalizing (live) — mic stopped, waiting for Deepgram to finish")
+      log("PushToTalkManager: finalizing (live) — mic stopped, waiting for final transcript")
 
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      // Safety timeout: if Deepgram doesn't send a final segment within 3s, send what we have
+      let timeout = DispatchWorkItem { [weak self] in
         Task { @MainActor in
-          self?.sendTranscript()
+          guard let self, self.state == .finalizing else { return }
+          log("PushToTalkManager: live finalization timeout — sending transcript")
+          self.sendTranscript()
         }
       }
+      liveFinalizationTimeout = timeout
+      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
     }
   }
 
