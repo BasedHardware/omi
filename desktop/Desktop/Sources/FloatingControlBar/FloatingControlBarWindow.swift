@@ -145,9 +145,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         if state.showingAIConversation && !state.showingAIResponse {
             // Already showing input, close it
             closeAIConversation()
-        } else if state.showingAIConversation {
-            // Showing response, close it
-            closeAIConversation()
+        } else if state.showingAIConversation && state.showingAIResponse {
+            // Showing response — focus the follow-up input instead of closing
+            makeKeyAndOrderFront(nil)
+            focusInputField()
         } else {
             AnalyticsManager.shared.floatingBarAskOmiOpened(source: "button")
             onAskAI?()
@@ -571,6 +572,15 @@ class FloatingControlBarManager {
     /// Open the AI input panel.
     func openAIInput() {
         guard let window = window else { return }
+
+        // If a conversation is already showing, just focus the follow-up input
+        if window.state.showingAIConversation && window.state.showingAIResponse {
+            if !window.isVisible { show() }
+            window.makeKeyAndOrderFront(nil)
+            window.focusInputField()
+            return
+        }
+
         AnalyticsManager.shared.floatingBarAskOmiOpened(source: "shortcut")
         if !window.isVisible {
             show()
