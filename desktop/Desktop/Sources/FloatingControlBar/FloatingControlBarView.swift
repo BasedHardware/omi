@@ -11,6 +11,8 @@ struct FloatingControlBarView: View {
     var onCloseAI: () -> Void
     var onCaptureScreenshot: () -> Void
 
+    @State private var isHovering = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Main control bar - always visible
@@ -34,8 +36,36 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if isHovering && !state.showingAIConversation && !state.isVoiceListening {
+                Button {
+                    openFloatingBarSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.6))
+                        .frame(width: 18, height: 18)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground()
+    }
+
+    private func openFloatingBarSettings() {
+        // Bring main window to front and navigate to floating bar settings
+        NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
     }
 
     private var controlBarView: some View {

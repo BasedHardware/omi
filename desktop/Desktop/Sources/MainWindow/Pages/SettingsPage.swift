@@ -337,6 +337,10 @@ struct SettingsContentView: View {
             selectedSection = .advanced
             selectedAdvancedSubsection = .taskAssistant
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
             appState.checkNotificationPermission()

@@ -299,6 +299,13 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.settings.rawValue
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
             // Navigate to Rewind page (index 6) - triggered by global hotkey Cmd+Option+R
             log("DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))")
