@@ -1282,7 +1282,7 @@ class ChatProvider: ObservableObject {
                 systemPrompt: systemPrompt,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
-                model: modelOverride,
+                model: model ?? modelOverride,
                 onTextDelta: { [weak self] delta in
                     Task { @MainActor [weak self] in
                         self?.appendToMessage(id: aiMessageId, text: delta)
