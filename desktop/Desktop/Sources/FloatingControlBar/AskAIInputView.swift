@@ -99,24 +99,35 @@ struct AskAIInputView: View {
     }
 
     private var modelPicker: some View {
-        Menu {
-            ForEach(FloatingControlBarState.availableModels, id: \.id) { model in
-                Button(action: { state.selectedModel = model.id }) {
-                    HStack {
-                        Text(model.label)
-                        if state.selectedModel == model.id {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
+        HStack(spacing: 2) {
             Text(currentModelLabel)
-                .scaledFont(size: 11)
-                .foregroundColor(.secondary)
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
         }
-        .menuStyle(.borderlessButton)
+        .scaledFont(size: 11)
+        .foregroundColor(.secondary)
         .fixedSize()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showModelMenu()
+        }
+    }
+
+    private func showModelMenu() {
+        let menu = NSMenu()
+        for model in FloatingControlBarState.availableModels {
+            let item = NSMenuItem(title: model.label, action: #selector(ModelMenuTarget.selectModel(_:)), keyEquivalent: "")
+            item.state = state.selectedModel == model.id ? .on : .off
+            item.representedObject = model.id
+            item.target = ModelMenuTarget.shared
+            menu.addItem(item)
+        }
+        ModelMenuTarget.shared.onSelect = { [state] modelId in
+            state.selectedModel = modelId
+        }
+        if let event = NSApp.currentEvent, let contentView = event.window?.contentView {
+            menu.popUp(positioning: nil, at: event.locationInWindow, in: contentView)
+        }
     }
 
     private var currentModelLabel: String {

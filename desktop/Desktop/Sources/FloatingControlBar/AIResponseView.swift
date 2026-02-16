@@ -370,7 +370,7 @@ struct ThinkingDotsView: View {
 
 // MARK: - Model Menu Helper
 
-private class ModelMenuTarget: NSObject {
+class ModelMenuTarget: NSObject {
     static let shared = ModelMenuTarget()
     var onSelect: ((String) -> Void)?
 
