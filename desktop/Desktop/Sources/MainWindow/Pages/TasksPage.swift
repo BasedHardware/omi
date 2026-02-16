@@ -498,9 +498,8 @@ class TasksViewModel: ObservableObject {
                     }
                 }
             }
-            // When non-status/non-date filters are applied, query SQLite directly
-            // Date filters (like last7Days) are applied in-memory, not via SQLite
-            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+            // When non-status filters (including date) are applied, query SQLite directly
+            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             if hasNonStatusFilters {
                 Task { await loadFilteredTasksFromDatabase() }
             } else {
@@ -1163,10 +1162,10 @@ class TasksViewModel: ObservableObject {
             }
         }
 
-        // If non-status filters are active, re-query SQLite to pick up changes
+        // If non-status filters (including date) are active, re-query SQLite to pick up changes
         // (e.g. a task was just toggled completed and should no longer appear).
         // Otherwise just recompute from the in-memory store arrays.
-        let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+        let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
         if hasNonStatusFilters {
             Task { await loadFilteredTasksFromDatabase() }
@@ -1504,19 +1503,17 @@ class TasksViewModel: ObservableObject {
         }
 
         // Apply status filters to SQLite results (if needed)
-        // Note: Non-status filters are already applied by SQLite query
-        // Date filters (like last7Days) are applied in-memory, not via SQLite
+        // Note: Non-status filters (including date) are already applied by SQLite query
         let hasSQLiteFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
         let hasDateFilters = selectedTags.contains(where: { $0.group == .date })
         let filterContext = TaskFilterTag.FilterContext()
         var filteredTasks: [TaskActionItem]
         if !searchText.isEmpty {
             filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
-        } else if hasSQLiteFilters {
-            // SQLite already filtered by category/source/priority
-            // But we may still need to apply status + date filters
-            let statusFiltered = applyStatusFilters(sourceTasks)
-            filteredTasks = hasDateFilters ? applyDateFilters(statusFiltered, context: filterContext) : statusFiltered
+        } else if hasSQLiteFilters || hasDateFilters {
+            // SQLite already filtered by category/source/priority/date
+            // Just apply status filters (todo/done/deleted)
+            filteredTasks = applyStatusFilters(sourceTasks)
         } else {
             filteredTasks = applyTagFilters(sourceTasks, context: filterContext)
         }
