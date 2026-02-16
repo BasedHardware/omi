@@ -281,6 +281,8 @@ class PushToTalkManager: ObservableObject {
   private func stopListening() {
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
+    liveFinalizationTimeout?.cancel()
+    liveFinalizationTimeout = nil
     stopAudioTranscription()
     state = .idle
     capturedScreenshotURL = nil
@@ -545,6 +547,14 @@ class PushToTalkManager: ObservableObject {
     // Also update follow-up transcript if in follow-up mode
     if barState?.isVoiceFollowUp == true {
       barState?.voiceFollowUpTranscript = liveText
+    }
+
+    // In finalizing state, a final segment means Deepgram is done — send immediately
+    if state == .finalizing && (segment.speechFinal || segment.isFinal) {
+      log("PushToTalkManager: received final transcript during finalization — sending now")
+      liveFinalizationTimeout?.cancel()
+      liveFinalizationTimeout = nil
+      sendTranscript()
     }
   }
 
