@@ -99,7 +99,6 @@ struct DesktopHomeView: View {
                             FloatingControlBarManager.shared.setup(appState: appState)
                             if FloatingControlBarManager.shared.isEnabled {
                                 FloatingControlBarManager.shared.show()
-                                AnalyticsManager.shared.floatingBarToggled(visible: true, source: "app_launch")
                             }
 
                             // Set up push-to-talk voice input

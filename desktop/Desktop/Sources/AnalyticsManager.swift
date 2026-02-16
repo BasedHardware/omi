@@ -804,6 +804,10 @@ class AnalyticsManager {
         // -- Launch at Login --
         props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
 
+        // -- Floating Bar (AskOmi) --
+        props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
+        props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
+
         return props
     }
 
