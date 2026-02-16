@@ -153,7 +153,12 @@ actor ActionItemStorage {
         categories: [String]? = nil,     // OR logic: matches any category
         sources: [String]? = nil,        // OR logic: matches any source
         priorities: [String]? = nil,     // OR logic: matches any priority
-        originCategories: [String]? = nil // OR logic: matches any source_category in metadata
+        originCategories: [String]? = nil, // OR logic: matches any source_category in metadata
+        dateAfter: Date? = nil,          // last7Days: dueAt >= date OR (dueAt IS NULL AND createdAt >= date)
+        dueDateAfter: Date? = nil,       // dueAt >= date
+        dueDateBefore: Date? = nil,      // dueAt < date
+        dueDateIsNull: Bool? = nil,      // true = only tasks without dueAt
+        createdAfter: Date? = nil        // createdAt >= date (independent of dueAt, unlike dateAfter)
     ) async throws -> [TaskActionItem] {
         let db = try await ensureInitialized()
 
@@ -170,6 +175,30 @@ actor ActionItemStorage {
                     query = query.filter(Column("completed") == states[0])
                 }
                 // If both true and false, no filter needed (show all)
+            }
+
+            // Filter by date (last7Days logic: dueAt >= date OR (dueAt IS NULL AND createdAt >= date))
+            if let dateAfter = dateAfter {
+                query = query.filter(
+                    Column("dueAt") >= dateAfter ||
+                    (Column("dueAt") == nil && Column("createdAt") >= dateAfter)
+                )
+            }
+
+            // Filter by due date range (for dashboard overdue/today queries)
+            if let dueDateAfter = dueDateAfter {
+                query = query.filter(Column("dueAt") >= dueDateAfter)
+            }
+            if let dueDateBefore = dueDateBefore {
+                query = query.filter(Column("dueAt") < dueDateBefore)
+            }
+            if let dueDateIsNull = dueDateIsNull {
+                query = dueDateIsNull
+                    ? query.filter(Column("dueAt") == nil)
+                    : query.filter(Column("dueAt") != nil)
+            }
+            if let createdAfter = createdAfter {
+                query = query.filter(Column("createdAt") >= createdAfter)
             }
 
             // Filter by categories (OR logic, checking tagsJson and legacy category)

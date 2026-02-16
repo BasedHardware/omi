@@ -9,6 +9,8 @@ class TranscriptionRetryService {
     private var isProcessing = false
     private let retryInterval: TimeInterval = 60  // Check every 60 seconds
     private let maxRetries = 5
+    private var consecutiveDBFailures = 0
+    private let maxConsecutiveDBFailures = 3
 
     private init() {}
 
@@ -77,6 +79,15 @@ class TranscriptionRetryService {
                 }
             }
 
+            // Recover sessions stuck in 'uploading' (app quit/crash during upload, or markSessionCompleted failed)
+            let stuckUploadingSessions = try await TranscriptionStorage.shared.getStuckUploadingSessions(olderThan: 300)
+            if !stuckUploadingSessions.isEmpty {
+                log("TranscriptionRetryService: Found \(stuckUploadingSessions.count) stuck uploading sessions")
+                for session in stuckUploadingSessions {
+                    await recoverStuckSession(session)
+                }
+            }
+
             // Also check for failed sessions that can be retried
             let failedSessions = try await TranscriptionStorage.shared.getFailedSessions(maxRetries: maxRetries)
             if !failedSessions.isEmpty {
@@ -114,8 +125,16 @@ class TranscriptionRetryService {
         do {
             // Get pending sessions
             let pendingSessions = try await TranscriptionStorage.shared.getPendingUploadSessions()
+            consecutiveDBFailures = 0 // DB query succeeded, reset counter
+
             for session in pendingSessions {
                 await uploadSession(session)
+            }
+
+            // Recover sessions stuck in 'uploading' for more than 5 minutes
+            let stuckSessions = try await TranscriptionStorage.shared.getStuckUploadingSessions(olderThan: 300)
+            for session in stuckSessions {
+                await recoverStuckSession(session)
             }
 
             // Get failed sessions that are ready for retry
@@ -127,7 +146,54 @@ class TranscriptionRetryService {
             }
 
         } catch {
-            logError("TranscriptionRetryService: Queue processing failed", error: error)
+            consecutiveDBFailures += 1
+            if consecutiveDBFailures >= maxConsecutiveDBFailures {
+                log("TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, stopping timer to avoid error flood")
+                stop()
+            } else {
+                logError("TranscriptionRetryService: Queue processing failed (\(consecutiveDBFailures)/\(maxConsecutiveDBFailures))", error: error)
+            }
+        }
+    }
+
+    // MARK: - Stuck Session Recovery
+
+    /// Recover a session stuck in 'uploading' — check if backend already has it before re-uploading
+    private func recoverStuckSession(_ session: TranscriptionSessionRecord) async {
+        guard let sessionId = session.id else { return }
+
+        log("TranscriptionRetryService: Recovering stuck session \(sessionId)")
+
+        // Check if the backend already has a conversation for this time window
+        // (upload succeeded but markSessionCompleted failed silently)
+        do {
+            let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
+            let existing = try await APIClient.shared.getConversations(
+                limit: 5,
+                startDate: session.startedAt.addingTimeInterval(-2),
+                endDate: finishedAt.addingTimeInterval(2)
+            )
+
+            // Look for a conversation with matching started_at/finished_at
+            if let match = existing.first(where: { conv in
+                guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
+                    && abs(convFinished.timeIntervalSince(finishedAt)) < 5
+            }) {
+                log("TranscriptionRetryService: Session \(sessionId) already exists on backend as \(match.id), marking completed")
+                try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
+                return
+            }
+        } catch {
+            log("TranscriptionRetryService: Could not check backend for session \(sessionId), will re-upload: \(error.localizedDescription)")
+        }
+
+        // No match found — mark as pending so it gets re-uploaded
+        log("TranscriptionRetryService: Session \(sessionId) not found on backend, marking as pending upload")
+        do {
+            try await TranscriptionStorage.shared.finishSession(id: sessionId)
+        } catch {
+            logError("TranscriptionRetryService: Failed to mark session \(sessionId) as pending", error: error)
         }
     }
 
@@ -151,6 +217,23 @@ class TranscriptionRetryService {
             guard sessionWithSegments.hasContent else {
                 log("TranscriptionRetryService: Session \(sessionId) has no segments, deleting")
                 try? await TranscriptionStorage.shared.deleteSession(id: sessionId)
+                return
+            }
+
+            // Check if backend already has a conversation for this time window (prevents duplicates on retry)
+            let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
+            if let existing = try? await APIClient.shared.getConversations(
+                limit: 5,
+                startDate: session.startedAt.addingTimeInterval(-2),
+                endDate: finishedAt.addingTimeInterval(2)
+            ), let match = existing.first(where: { conv in
+                guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
+                    && abs(convFinished.timeIntervalSince(finishedAt)) < 5
+                    && conv.source == ConversationSource(rawValue: session.source)
+            }) {
+                log("TranscriptionRetryService: Session \(sessionId) already exists on backend as \(match.id), marking completed")
+                try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
                 return
             }
 

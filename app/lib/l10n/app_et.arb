@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Võrgu nimi (SSID)",
   "enterWifiNetworkName": "Sisestage WiFi võrgu nimi",
   "enterWifiPassword": "Sisestage WiFi parool",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Seadmest allalaadimine",
+  "reconnectingToInternet": "Internetiga uuesti ühendamine...",
+  "uploadingToCloud": "{current}/{total} üleslaadimine",
+  "processedStatus": "Töödeldud",
+  "corruptedStatus": "Rikutud",
+  "nPending": "{count} ootel",
+  "nProcessed": "{count} töödeldud",
+  "synced": "Sünkroonitud",
+  "noPendingRecordings": "Ootel salvestisi pole",
+  "noProcessedRecordings": "Töödeldud salvestisi pole veel",
+  "pending": "Ootel"
 }

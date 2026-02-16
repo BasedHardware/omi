@@ -77,6 +77,7 @@ async fn create_action_item(
             request.metadata.as_deref(),
             request.category.as_deref(),
             request.relevance_score,
+            None, // from_staged
         )
         .await
     {
@@ -220,6 +221,7 @@ async fn batch_create_action_items(
                 item_request.metadata.as_deref(),
                 item_request.category.as_deref(),
                 item_request.relevance_score,
+                None, // from_staged
             )
             .await
         {
@@ -491,6 +493,7 @@ async fn accept_tasks(
                         Some(&metadata),
                         item.category.as_deref(),
                         item.relevance_score,
+                        None, // from_staged
                     )
                     .await
                 {

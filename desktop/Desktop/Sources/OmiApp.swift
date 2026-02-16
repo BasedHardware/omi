@@ -201,13 +201,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Tier gating: migrate old boolean key to new 6-tier system
         TierManager.migrateExistingUsersIfNeeded()
 
-        // New users start at tier 1 (Conversations + Rewind only)
+        // All users get all features (tier 0 = show all)
         // Note: hasLaunchedBefore is also set by trackFirstLaunchIfNeeded(), but that
         // skips dev builds. Set it here too so tier doesn't reset on every dev launch.
         if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            UserDefaults.standard.set(1, forKey: "currentTierLevel")
-            UserDefaults.standard.set(1, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(0, forKey: "currentTierLevel")
+            UserDefaults.standard.set(0, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(true, forKey: "userShowAllFeatures")
         }
 
         AnalyticsManager.shared.trackFirstLaunchIfNeeded()
@@ -634,6 +635,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.menuBarOpened()
     }
 
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Keep app running in menu bar when all windows are closed
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Remove window observers
         for observer in windowObservers {
@@ -747,22 +753,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
                 log("App rename migration: moved to \(newPath)")
 
-                // Re-register with Launch Services
-                let lsregister = Process()
-                lsregister.executableURL = URL(fileURLWithPath:
-                    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-                lsregister.arguments = ["-f", newPath]
-                try? lsregister.run()
-                lsregister.waitUntilExit()
+                // Re-register with Launch Services and relaunch from new path (off main thread)
+                DispatchQueue.global(qos: .utility).async {
+                    let lsregister = Process()
+                    lsregister.executableURL = URL(fileURLWithPath:
+                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+                    lsregister.arguments = ["-f", newPath]
+                    try? lsregister.run()
+                    lsregister.waitUntilExit()
 
-                // Relaunch from new path
-                let relaunch = Process()
-                relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                relaunch.arguments = [newPath]
-                try? relaunch.run()
+                    // Relaunch from new path
+                    let relaunch = Process()
+                    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                    relaunch.arguments = [newPath]
+                    try? relaunch.run()
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    NSApp.terminate(nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NSApp.terminate(nil)
+                    }
                 }
             } catch {
                 log("App rename migration failed: \(error.localizedDescription)")

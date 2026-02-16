@@ -12,6 +12,8 @@ import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
+enum WalStatusFilter { pending, synced }
+
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
@@ -22,9 +24,30 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isLoadingWals = false;
   bool get isLoadingWals => _isLoadingWals;
 
-  // Storage filter
+  // Storage filter (used by RecordingsListPage)
   WalStorage? _storageFilter;
   WalStorage? get storageFilter => _storageFilter;
+
+  // Status filter (used by SyncPage)
+  WalStatusFilter _statusFilter = WalStatusFilter.pending;
+  WalStatusFilter get statusFilter => _statusFilter;
+
+  void setStatusFilter(WalStatusFilter filter) {
+    _statusFilter = filter;
+    notifyListeners();
+  }
+
+  List<Wal> get pendingWals =>
+      _allWals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted || w.isSyncing).toList();
+
+  List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
+
+  List<Wal> get filteredByStatusWals {
+    if (_statusFilter == WalStatusFilter.pending) {
+      return pendingWals;
+    }
+    return syncedWals;
+  }
 
   List<Wal> get filteredWals {
     if (_storageFilter == null) {
@@ -63,11 +86,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   SyncState _syncState = const SyncState();
   SyncState get syncState => _syncState;
 
-  // Track initial missing WALs count for progress calculation
-  int _initialMissingWalsCount = 0;
+  // Track WAL processing progress
+  int _totalWalsToProcess = 0;
+  int _walsProcessedCount = 0;
 
   // Computed properties for backward compatibility
-  List<Wal> get missingWals => filteredWals.where((w) => w.status == WalStatus.miss).toList();
+  List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
   int get missingWalsInSeconds =>
       missingWals.isEmpty ? 0 : missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
@@ -155,7 +179,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
     _updateSyncState(_syncState.toIdle());
-    _initialMissingWalsCount = missingWals.length;
+    _totalWalsToProcess = missingWals.length;
+    _walsProcessedCount = 0;
     await _performSync(
       operation: () => _walService.getSyncs().syncAll(progress: this, connectionListener: connectionListener),
       context: 'sync all WALs',
@@ -186,6 +211,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       }
 
       final result = await operation();
+
+      // If sync was cancelled while awaiting, don't override the cancel state.
+      // cancelSync() already processed any partial conversation results.
+      if (!_syncState.isSyncing && _syncState.status != SyncStatus.fetchingConversations) {
+        return;
+      }
 
       if (result != null && _hasConversationResults(result)) {
         Logger.debug(
@@ -219,6 +250,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       baseMessage = 'Connection interrupted';
     } else if (baseMessage.toLowerCase().contains('timeout')) {
       baseMessage = 'Device did not respond';
+    } else if (baseMessage.toLowerCase().contains('could not be processed')) {
+      baseMessage = 'Audio file could not be processed';
+    } else if (baseMessage.toLowerCase().contains('too large')) {
+      baseMessage = 'Recording is too large to upload';
+    } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
+      baseMessage = 'Server is temporarily unavailable. Try again later';
+    } else if (baseMessage.toLowerCase().contains('upload failed')) {
+      baseMessage = 'Upload failed. Check your connection and try again';
     }
 
     if (wal != null) {
@@ -318,6 +357,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     // Update progress based on WALs synced if we're currently syncing
     if (_syncState.isSyncing) {
+      _walsProcessedCount++;
+      // If device download created new WALs, total grows dynamically
+      final currentMissing = _allWals.where((w) => w.status == WalStatus.miss).length;
+      final newTotal = _walsProcessedCount + currentMissing;
+      if (newTotal > _totalWalsToProcess) {
+        _totalWalsToProcess = newTotal;
+      }
       final walProgress = walBasedProgress;
       _updateSyncState(_syncState.toSyncing(progress: walProgress));
     }
@@ -329,16 +375,30 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSyncedProgress(double percentage, {double? speedKBps}) {
+  void onWalSyncedProgress(double percentage, {double? speedKBps, SyncPhase? phase}) {
     if (_syncState.isSyncing) {
-      _updateSyncState(_syncState.toSyncing(progress: percentage, speedKBps: speedKBps));
+      _updateSyncState(_syncState.toSyncing(progress: percentage, speedKBps: speedKBps, phase: phase));
     }
   }
 
-  /// Cancel ongoing sync operation
+  /// Cancel ongoing sync operation.
+  /// If batches already completed, immediately shows their conversation results.
   void cancelSync() {
+    // Grab accumulated results before cancelling
+    final partialResults = _walService.getSyncs().accumulatedResponse;
     _walService.getSyncs().cancelSync();
-    _updateSyncState(_syncState.toIdle());
+    // Immediately clear isSyncing on all loaded WALs so UI updates right away
+    for (final wal in _allWals) {
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+    }
+    // If batches already completed with conversations, show them immediately
+    if (partialResults != null && _hasConversationResults(partialResults)) {
+      _processConversationResults(partialResults);
+    } else {
+      _updateSyncState(_syncState.toIdle());
+    }
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
@@ -366,21 +426,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   // Calculate progress based on WALs synced
   double get walBasedProgress {
-    if (_initialMissingWalsCount == 0) return 0.0;
-    final currentMissingCount = missingWals.length;
-    final syncedCount = _initialMissingWalsCount - currentMissingCount;
-    return (syncedCount / _initialMissingWalsCount).clamp(0.0, 1.0);
+    if (_totalWalsToProcess == 0) return 0.0;
+    return (_walsProcessedCount / _totalWalsToProcess).clamp(0.0, 1.0);
   }
 
   // Get the number of WALs processed
-  int get processedWalsCount {
-    if (_initialMissingWalsCount == 0) return 0;
-    final currentMissingCount = missingWals.length;
-    return _initialMissingWalsCount - currentMissingCount;
-  }
+  int get processedWalsCount => _walsProcessedCount;
 
-  // Get the initial missing WALs count
-  int get initialMissingWalsCount => _initialMissingWalsCount;
+  // Get the total WALs to process
+  int get initialMissingWalsCount => _totalWalsToProcess;
 
   @override
   void dispose() {

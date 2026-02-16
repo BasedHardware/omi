@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Tīkla nosaukums (SSID)",
   "enterWifiNetworkName": "Ievadiet WiFi tīkla nosaukumu",
   "enterWifiPassword": "Ievadiet WiFi paroli",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Lejupielāde no ierīces",
+  "reconnectingToInternet": "Atkārtota savienošana ar internetu...",
+  "uploadingToCloud": "Augšupielāde {current} no {total}",
+  "processedStatus": "Apstrādāts",
+  "corruptedStatus": "Bojāts",
+  "nPending": "{count} gaida",
+  "nProcessed": "{count} apstrādāti",
+  "synced": "Sinhronizēts",
+  "noPendingRecordings": "Nav gaidošu ierakstu",
+  "noProcessedRecordings": "Vēl nav apstrādātu ierakstu",
+  "pending": "Gaida"
 }

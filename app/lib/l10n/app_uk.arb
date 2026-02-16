@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Назва мережі (SSID)",
   "enterWifiNetworkName": "Введіть назву мережі WiFi",
   "enterWifiPassword": "Введіть пароль WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Завантаження з пристрою",
+  "reconnectingToInternet": "Повторне підключення до інтернету...",
+  "uploadingToCloud": "Завантаження {current} з {total}",
+  "processedStatus": "Оброблено",
+  "corruptedStatus": "Пошкоджено",
+  "nPending": "{count} очікують",
+  "nProcessed": "{count} оброблено",
+  "synced": "Синхронізовано",
+  "noPendingRecordings": "Немає очікуючих записів",
+  "noProcessedRecordings": "Ще немає оброблених записів",
+  "pending": "Очікування"
 }

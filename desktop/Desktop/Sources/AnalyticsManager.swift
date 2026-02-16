@@ -214,6 +214,18 @@ class AnalyticsManager {
         PostHogManager.shared.appLaunched()
     }
 
+    func trackStartupTiming(dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool, databaseInitFailed: Bool) {
+        guard !Self.isDevBuild else { return }
+        let properties: [String: Any] = [
+            "db_init_ms": round(dbInitMs),
+            "time_to_interactive_ms": round(timeToInteractiveMs),
+            "had_unclean_shutdown": hadUncleanShutdown,
+            "database_init_failed": databaseInitFailed
+        ]
+        PostHogManager.shared.track("App Startup Timing", properties: properties)
+        MixpanelManager.shared.track("App Startup Timing", properties: properties.compactMapValues { $0 as? MixpanelType })
+    }
+
     /// Track first launch with comprehensive system diagnostics
     /// This only fires once per installation
     func trackFirstLaunchIfNeeded() {
@@ -791,6 +803,10 @@ class AnalyticsManager {
 
         // -- Launch at Login --
         props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
+
+        // -- Floating Bar (AskOmi) --
+        props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
+        props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
 
         return props
     }

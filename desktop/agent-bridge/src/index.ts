@@ -64,21 +64,39 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     setQueryMode(mode);
     logErr(`Query mode: ${mode}`);
 
-    // In ask mode, only allow read-only tools (no Write, Edit, Bash)
+    // In ask mode, only allow read-only built-in tools + read-only MCP tools
+    // MCP tools use the naming convention: mcp__<server>__<tool>
+    const readOnlyPlaywrightTools = [
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_console_messages",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_tabs",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_navigate_back",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_resize",
+    ];
+
     const allowedTools = isAskMode
-      ? ["Read", "Glob", "Grep", "WebSearch", "WebFetch"]
+      ? [
+          "Read", "Glob", "Grep", "WebSearch", "WebFetch",
+          // OMI MCP tools (execute_sql is gated in omi-tools.ts to SELECT-only)
+          "mcp__omi-tools__execute_sql",
+          "mcp__omi-tools__semantic_search",
+          // Read-only Playwright tools
+          ...readOnlyPlaywrightTools,
+        ]
       : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
 
-    // In ask mode, exclude playwright (no browser actions)
+    // Always include both MCP servers
     const mcpServers: Record<string, unknown> = {
       "omi-tools": omiServer,
-    };
-    if (!isAskMode) {
-      mcpServers["playwright"] = {
+      "playwright": {
         command: process.execPath,
         args: [playwrightCli],
-      };
-    }
+      },
+    };
 
     const options: Record<string, unknown> = {
       model: "claude-opus-4-6",

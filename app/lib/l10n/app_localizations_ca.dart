@@ -8196,6 +8196,45 @@ class AppLocalizationsCa extends AppLocalizations {
       'Manteniu premut el botó d\'engegada fins que el LED parpellegi. El dispositiu serà detectable.';
 
   @override
+  String get downloadingFromDevice => 'Descarregant del dispositiu';
+
+  @override
+  String get reconnectingToInternet => 'Reconnectant a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Pujant $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Processat';
+
+  @override
+  String get corruptedStatus => 'Corrupte';
+
+  @override
+  String nPending(int count) {
+    return '$count pendents';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processats';
+  }
+
+  @override
+  String get synced => 'Sincronitzat';
+
+  @override
+  String get noPendingRecordings => 'No hi ha enregistraments pendents';
+
+  @override
+  String get noProcessedRecordings => 'Encara no hi ha enregistraments processats';
+
+  @override
+  String get pending => 'Pendent';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Novetats a $version';
   }

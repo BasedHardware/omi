@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Numele rețelei (SSID)",
   "enterWifiNetworkName": "Introduceți numele rețelei WiFi",
   "enterWifiPassword": "Introduceți parola WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Se descarcă de pe dispozitiv",
+  "reconnectingToInternet": "Se reconectează la internet...",
+  "uploadingToCloud": "Se încarcă {current} din {total}",
+  "processedStatus": "Procesat",
+  "corruptedStatus": "Corupt",
+  "nPending": "{count} în așteptare",
+  "nProcessed": "{count} procesate",
+  "synced": "Sincronizat",
+  "noPendingRecordings": "Nu există înregistrări în așteptare",
+  "noProcessedRecordings": "Nu există încă înregistrări procesate",
+  "pending": "În așteptare"
 }

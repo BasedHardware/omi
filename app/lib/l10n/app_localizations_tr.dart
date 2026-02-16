@@ -8159,6 +8159,45 @@ class AppLocalizationsTr extends AppLocalizations {
   String get pairingDescNeoOne => 'LED yanıp sönene kadar güç düğmesini basılı tutun. Cihaz keşfedilebilir olacaktır.';
 
   @override
+  String get downloadingFromDevice => 'Cihazdan indiriliyor';
+
+  @override
+  String get reconnectingToInternet => 'İnternete yeniden bağlanılıyor...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total yükleniyor';
+  }
+
+  @override
+  String get processedStatus => 'İşlendi';
+
+  @override
+  String get corruptedStatus => 'Bozuk';
+
+  @override
+  String nPending(int count) {
+    return '$count beklemede';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count işlendi';
+  }
+
+  @override
+  String get synced => 'Senkronize edildi';
+
+  @override
+  String get noPendingRecordings => 'Bekleyen kayıt yok';
+
+  @override
+  String get noProcessedRecordings => 'Henüz işlenmiş kayıt yok';
+
+  @override
+  String get pending => 'Beklemede';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version sürümündeki yenilikler';
   }

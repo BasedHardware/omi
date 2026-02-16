@@ -1,6 +1,60 @@
 {
   "releases": [
     {
+      "version": "0.8.6",
+      "date": "2026-02-15",
+      "changes": [
+        "Ask Omi floating bar now has a follow-up input field for continuing conversations",
+        "Added settings gear icon on the floating bar for quick access to configuration",
+        "New solid background option for the floating bar (Settings > Advanced > Ask Omi Floating Bar)",
+        "Copy entire conversation to clipboard with one click in AI Chat",
+        "Text selection now works across the entire chat area",
+        "Conversations auto-refresh silently without flickering or scroll jumps",
+        "Added auto-install updates option in Settings",
+        "Improved settings search with more keywords and subsections",
+        "Agent bridge now supports read-only Playwright tools in Ask mode"
+      ]
+    },
+    {
+      "version": "0.8.5",
+      "date": "2026-02-15",
+      "changes": [
+        "AI-suggested tasks now clearly marked with a promotion indicator",
+        "Dashboard loads faster by querying tasks directly from local database",
+        "Fixed transcription sessions getting stuck in 'uploading' state after app crashes",
+        "Fixed duplicate conversations when recovering failed uploads",
+        "Improved sidebar performance during audio recording",
+        "Agent sessions now properly detect when coding tasks are complete",
+        "Fixed completed tasks taking up to 60 seconds to refresh in dashboard",
+        "Fixed cursor jumping bug when dismissing modals"
+      ]
+    },
+    {
+      "version": "0.8.4",
+      "date": "2026-02-15",
+      "changes": [
+        "Fixed audio recording quality on Bluetooth headphones (no more automatic switch to low-quality call mode)",
+        "All users now have access to all features",
+        "Improved app startup speed with optimized database checks",
+        "Simplified Rewind page controls",
+        "Fixed database corruption during user data migration",
+        "Fixed memory leaks in Focus Assistant and Live Notes",
+        "Fixed app not staying in menu bar when all windows closed",
+        "Fixed floating control bar auto-showing on startup",
+        "Improved screen capture permission reset reliability",
+        "Added memory diagnostics for performance troubleshooting"
+      ]
+    },
+    {
+      "version": "0.8.3",
+      "date": "2026-02-14",
+      "changes": [
+        "Notifications for promoted tasks so you know when AI discovers new action items",
+        "Fixed tooltip crash in sidebar",
+        "Faster, safer downloads served from Google Cloud Storage"
+      ]
+    },
+    {
       "version": "0.8.2",
       "date": "2026-02-14",
       "changes": [

@@ -2727,5 +2727,16 @@
   "networkNameSsid": "Hálózat neve (SSID)",
   "enterWifiNetworkName": "Adja meg a WiFi hálózat nevét",
   "enterWifiPassword": "Adja meg a WiFi jelszót",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Letöltés az eszközről",
+  "reconnectingToInternet": "Újracsatlakozás az internethez...",
+  "uploadingToCloud": "{current}/{total} feltöltése",
+  "processedStatus": "Feldolgozva",
+  "corruptedStatus": "Sérült",
+  "nPending": "{count} függőben",
+  "nProcessed": "{count} feldolgozva",
+  "synced": "Szinkronizálva",
+  "noPendingRecordings": "Nincsenek függőben lévő felvételek",
+  "noProcessedRecordings": "Még nincsenek feldolgozott felvételek",
+  "pending": "Függőben"
 }

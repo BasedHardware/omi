@@ -109,6 +109,7 @@ struct ChatPage: View {
     @State private var selectedCitation: Citation?
     @State private var citedConversation: ServerConversation?
     @State private var isLoadingCitation = false
+    @State private var copied = false
 
     var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -301,6 +302,19 @@ struct ChatPage: View {
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(8)
 
+            // Copy conversation button
+            if !chatProvider.messages.isEmpty {
+                Button(action: {
+                    copyConversation()
+                }) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 14)
+                        .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy conversation")
+            }
+
             // Clear chat button
             if !chatProvider.messages.isEmpty {
                 Button(action: {
@@ -428,6 +442,22 @@ struct ChatPage: View {
         )
     }
 
+    /// Copy the entire conversation to clipboard
+    private func copyConversation() {
+        let text: String = chatProvider.messages.map { message in
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            return "\(sender): \(message.text)"
+        }.joined(separator: "\n\n")
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copied = false
+        }
+    }
+
     /// Handle tapping on a citation card
     private func handleCitationTap(_ citation: Citation) {
         guard citation.sourceType == .conversation else {
@@ -512,7 +542,6 @@ struct ChatBubble: View {
                             if !text.isEmpty {
                                 Markdown(text)
                                     .scaledMarkdownTheme(.ai)
-                                    .textSelection(.enabled)
                                     .if_available_writingToolsNone()
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
@@ -537,7 +566,6 @@ struct ChatBubble: View {
                     // User messages or AI messages without content blocks (loaded from Firestore)
                     Markdown(message.text)
                         .scaledMarkdownTheme(message.sender)
-                        .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
@@ -700,7 +728,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(10)
-                                .textSelection(.enabled)
                         }
                     }
 
@@ -715,7 +742,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(15)
-                                .textSelection(.enabled)
                         }
                     }
                 }
@@ -773,7 +799,6 @@ struct ThinkingBlock: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .italic()
-                    .textSelection(.enabled)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .lineLimit(30)

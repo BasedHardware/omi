@@ -2599,5 +2599,16 @@
   "networkNameSsid": "Netzwerkname (SSID)",
   "enterWifiNetworkName": "WLAN-Netzwerknamen eingeben",
   "enterWifiPassword": "WLAN-Passwort eingeben",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Wird vom Gerät heruntergeladen",
+  "reconnectingToInternet": "Verbindung zum Internet wird wiederhergestellt...",
+  "uploadingToCloud": "Hochladen von {current} von {total}",
+  "processedStatus": "Verarbeitet",
+  "corruptedStatus": "Beschädigt",
+  "nPending": "{count} ausstehend",
+  "nProcessed": "{count} verarbeitet",
+  "synced": "Synchronisiert",
+  "noPendingRecordings": "Keine ausstehenden Aufnahmen",
+  "noProcessedRecordings": "Noch keine verarbeiteten Aufnahmen",
+  "pending": "Ausstehend"
 }

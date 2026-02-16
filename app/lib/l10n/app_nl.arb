@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Netwerknaam (SSID)",
   "enterWifiNetworkName": "Voer de WiFi-netwerknaam in",
   "enterWifiPassword": "Voer het WiFi-wachtwoord in",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Downloaden van apparaat",
+  "reconnectingToInternet": "Opnieuw verbinden met internet...",
+  "uploadingToCloud": "{current} van {total} uploaden",
+  "processedStatus": "Verwerkt",
+  "corruptedStatus": "Beschadigd",
+  "nPending": "{count} in afwachting",
+  "nProcessed": "{count} verwerkt",
+  "synced": "Gesynchroniseerd",
+  "noPendingRecordings": "Geen wachtende opnames",
+  "noProcessedRecordings": "Nog geen verwerkte opnames",
+  "pending": "In afwachting"
 }

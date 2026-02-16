@@ -9,6 +9,13 @@ enum SyncStatus {
   error,
 }
 
+enum SyncPhase {
+  idle,
+  downloadingFromDevice,
+  waitingForInternet,
+  uploadingToCloud,
+}
+
 extension SyncMethodExtension on SyncMethod {
   String get displayName {
     switch (this) {
@@ -40,6 +47,7 @@ extension SyncMethodExtension on SyncMethod {
 
 class SyncState {
   final SyncStatus status;
+  final SyncPhase phase;
   final double progress;
   final String? errorMessage;
   final Wal? failedWal;
@@ -49,6 +57,7 @@ class SyncState {
 
   const SyncState({
     this.status = SyncStatus.idle,
+    this.phase = SyncPhase.idle,
     this.progress = 0.0,
     this.errorMessage,
     this.failedWal,
@@ -59,6 +68,7 @@ class SyncState {
 
   SyncState copyWith({
     SyncStatus? status,
+    SyncPhase? phase,
     double? progress,
     String? errorMessage,
     Wal? failedWal,
@@ -69,6 +79,7 @@ class SyncState {
   }) {
     return SyncState(
       status: status ?? this.status,
+      phase: phase ?? this.phase,
       progress: progress ?? this.progress,
       errorMessage: errorMessage,
       failedWal: failedWal,
@@ -87,6 +98,7 @@ class SyncState {
 
   SyncState toIdle() => copyWith(
         status: SyncStatus.idle,
+        phase: SyncPhase.idle,
         progress: 0.0,
         errorMessage: null,
         failedWal: null,
@@ -94,8 +106,9 @@ class SyncState {
         clearSyncMethod: true,
       );
 
-  SyncState toSyncing({double progress = 0.0, double? speedKBps, SyncMethod? syncMethod}) => copyWith(
+  SyncState toSyncing({double progress = 0.0, double? speedKBps, SyncMethod? syncMethod, SyncPhase? phase}) => copyWith(
         status: SyncStatus.syncing,
+        phase: phase,
         progress: progress,
         errorMessage: null,
         speedKBps: speedKBps,

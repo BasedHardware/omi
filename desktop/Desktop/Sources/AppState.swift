@@ -5,7 +5,9 @@ import AVFoundation
 @preconcurrency import ObjectiveC
 
 /// Speaker segment for diarized transcription
-struct SpeakerSegment {
+struct SpeakerSegment: Identifiable {
+    /// Stable identity derived from speaker + start time (unique per segment)
+    var id: String { "\(speaker)-\(start)" }
     var speaker: Int
     var text: String
     var start: Double
@@ -1288,9 +1290,94 @@ class AppState: ObservableObject {
         NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
     }
 
-    /// Refresh conversations (for pull-to-refresh)
+    /// Refresh conversations silently (for auto-refresh timer and app-activate).
+    /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
     func refreshConversations() async {
-        await loadConversations()
+        // Skip if currently doing a full load
+        guard !isLoadingConversations else { return }
+
+        // Calculate date range if date filter is set
+        let startDate: Date?
+        let endDate: Date?
+        if let filterDate = selectedDateFilter {
+            let calendar = Calendar.current
+            startDate = calendar.startOfDay(for: filterDate)
+            endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
+        } else {
+            startDate = nil
+            endDate = nil
+        }
+
+        do {
+            let fetchedConversations = try await APIClient.shared.getConversations(
+                limit: 50,
+                offset: 0,
+                statuses: [.completed, .processing],
+                includeDiscarded: false,
+                startDate: startDate,
+                endDate: endDate,
+                folderId: selectedFolderId,
+                starred: showStarredOnly ? true : nil
+            )
+
+            // Merge in-place: update existing, add new, remove gone
+            let merged = mergeConversations(source: fetchedConversations, current: conversations)
+            if merged != conversations {
+                conversations = merged
+                log("Conversations: Auto-refresh updated (\(merged.count) items)")
+            }
+
+            // Sync to local database in background
+            Task.detached(priority: .background) {
+                for conversation in fetchedConversations {
+                    try? await TranscriptionStorage.shared.syncServerConversation(conversation)
+                }
+            }
+        } catch {
+            // Silently ignore errors during auto-refresh — cached data stays visible
+            logError("Conversations: Auto-refresh failed", error: error)
+        }
+
+        // Update total count
+        do {
+            let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
+            if totalConversationsCount != count {
+                totalConversationsCount = count
+            }
+        } catch {
+            // Keep existing count
+        }
+    }
+
+    /// Merge fetched conversations into the current list in-place.
+    /// Updates changed items, adds new ones, removes ones no longer in source.
+    private func mergeConversations(source: [ServerConversation], current: [ServerConversation]) -> [ServerConversation] {
+        let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+        let sourceIds = Set(source.map { $0.id })
+        let currentIds = Set(current.map { $0.id })
+
+        var result = current
+
+        // Update existing items in-place
+        for i in result.indices {
+            if let updated = sourceById[result[i].id], updated != result[i] {
+                result[i] = updated
+            }
+        }
+
+        // Remove items no longer in source
+        result.removeAll { !sourceIds.contains($0.id) }
+
+        // Add new items from source that aren't in current
+        let newIds = sourceIds.subtracting(currentIds)
+        if !newIds.isEmpty {
+            let newItems = source.filter { newIds.contains($0.id) }
+            result.append(contentsOf: newItems)
+            // Re-sort by createdAt descending (newest first) to maintain order
+            result.sort { $0.createdAt > $1.createdAt }
+        }
+
+        return result
     }
 
     /// Update the starred status of a conversation locally
@@ -1547,7 +1634,13 @@ class AppState: ObservableObject {
 
             // Mark session as completed in DB
             if let sessionId = sessionId {
-                try? await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: response.id)
+                do {
+                    try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: response.id)
+                } catch {
+                    logError("Transcription: Failed to mark session \(sessionId) as completed (backendId: \(response.id))", error: error)
+                    // Session is stuck in 'uploading' state — mark as failed so retry service can recover it
+                    try? await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: "markSessionCompleted failed: \(error.localizedDescription)")
+                }
             }
 
             if response.discarded {
@@ -1811,20 +1904,7 @@ class AppState: ObservableObject {
     nonisolated func resetOnboardingAndRestart() {
         log("Resetting onboarding (full cleanup)...")
 
-        // 1. Clean conflicting app bundles from Trash, DerivedData, DMG staging
-        // These pollute Launch Services and cause permission confusion
-        cleanConflictingAppBundles()
-
-        // 2. Eject any mounted Omi DMG volumes
-        ejectMountedDMGVolumes()
-
-        // 3. Reset Launch Services database to clear stale registrations
-        resetLaunchServicesDatabase()
-
-        // 4. Ensure this app is the authoritative version in Launch Services
-        ScreenCaptureService.ensureLaunchServicesRegistration()
-
-        // 5. Clear onboarding-related UserDefaults keys for BOTH bundle IDs
+        // Clear onboarding-related UserDefaults keys (thread-safe, do first)
         let onboardingKeys = [
             "hasCompletedOnboarding",
             "onboardingStep",
@@ -1855,32 +1935,46 @@ class AppState: ObservableObject {
             }
         }
 
-        // 6. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
-        let bundleIds = [
-            "com.omi.computer-macos",       // Production
-            "com.omi.desktop-dev"           // Development
-        ]
+        // Run all blocking Process calls on a background thread
+        DispatchQueue.global(qos: .utility).async { [self] in
+            // 1. Clean conflicting app bundles from Trash, DerivedData, DMG staging
+            cleanConflictingAppBundles()
 
-        for id in bundleIds {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-            process.arguments = ["reset", "All", id]
+            // 2. Eject any mounted Omi DMG volumes
+            ejectMountedDMGVolumes()
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-                log("tccutil reset All for \(id) completed with exit code: \(process.terminationStatus)")
-            } catch {
-                log("Failed to run tccutil for \(id): \(error)")
+            // 3. Reset Launch Services database to clear stale registrations
+            resetLaunchServicesDatabase()
+
+            // 4. Ensure this app is the authoritative version in Launch Services
+            ScreenCaptureService.ensureLaunchServicesRegistration()
+
+            // 5. Reset ALL TCC permissions using tccutil for BOTH bundle IDs
+            let bundleIds = [
+                "com.omi.computer-macos",       // Production
+                "com.omi.desktop-dev"           // Development
+            ]
+
+            for id in bundleIds {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+                process.arguments = ["reset", "All", id]
+
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    log("tccutil reset All for \(id) completed with exit code: \(process.terminationStatus)")
+                } catch {
+                    log("Failed to run tccutil for \(id): \(error)")
+                }
             }
+
+            // 6. Also clean user TCC database directly via sqlite3
+            self.cleanUserTCCDatabase()
+
+            // 7. Restart the app
+            self.restartApp()
         }
-
-        // 7. Also clean user TCC database directly via sqlite3
-        // (System TCC database for Screen Recording is SIP-protected, only tccutil can reset it)
-        cleanUserTCCDatabase()
-
-        // 8. Restart the app
-        restartApp()
     }
 
     /// Clean conflicting app bundles from Trash, DerivedData, and DMG staging directories
@@ -2163,6 +2257,8 @@ extension Notification.Name {
     static let navigateToDeviceSettings = Notification.Name("navigateToDeviceSettings")
     /// Posted to navigate to Task Assistant settings (Developer Settings)
     static let navigateToTaskSettings = Notification.Name("navigateToTaskSettings")
+    /// Posted to navigate to Ask Omi Floating Bar settings
+    static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
     /// Posted when a new Rewind frame is captured (for live frame count updates)
     static let rewindFrameCaptured = Notification.Name("rewindFrameCaptured")
     /// Posted when Rewind page finishes loading initial data

@@ -2600,5 +2600,16 @@
   "networkNameSsid": "Název sítě (SSID)",
   "enterWifiNetworkName": "Zadejte název WiFi sítě",
   "enterWifiPassword": "Zadejte heslo WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Stahování ze zařízení",
+  "reconnectingToInternet": "Opětovné připojování k internetu...",
+  "uploadingToCloud": "Nahrávání {current} z {total}",
+  "processedStatus": "Zpracováno",
+  "corruptedStatus": "Poškozeno",
+  "nPending": "{count} čekajících",
+  "nProcessed": "{count} zpracovaných",
+  "synced": "Synchronizováno",
+  "noPendingRecordings": "Žádné čekající nahrávky",
+  "noProcessedRecordings": "Zatím žádné zpracované nahrávky",
+  "pending": "Čekající"
 }

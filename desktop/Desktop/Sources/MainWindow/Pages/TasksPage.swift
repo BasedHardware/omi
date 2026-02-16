@@ -498,9 +498,8 @@ class TasksViewModel: ObservableObject {
                     }
                 }
             }
-            // When non-status/non-date filters are applied, query SQLite directly
-            // Date filters (like last7Days) are applied in-memory, not via SQLite
-            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+            // When non-status filters (including date) are applied, query SQLite directly
+            let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             if hasNonStatusFilters {
                 Task { await loadFilteredTasksFromDatabase() }
             } else {
@@ -514,14 +513,15 @@ class TasksViewModel: ObservableObject {
     @Published private(set) var filteredFromDatabase: [TaskActionItem] = []
     @Published private(set) var isLoadingFiltered = false
 
-    /// Cached tag counts - recomputed when tasks change
-    @Published private(set) var tagCounts: [TaskFilterTag: Int] = [:]
+    /// Cached tag counts - recomputed when tasks change (not @Published to avoid extra re-renders;
+    /// values are read during re-renders triggered by displayTasks/categorizedTasks changes)
+    private(set) var tagCounts: [TaskFilterTag: Int] = [:]
 
     /// Dynamically discovered tags (sources/categories not in predefined list)
-    @Published private(set) var dynamicTags: [DynamicFilterTag] = []
+    private(set) var dynamicTags: [DynamicFilterTag] = []
 
     /// Counts for dynamic tags
-    @Published private(set) var dynamicTagCounts: [String: Int] = [:]
+    private(set) var dynamicTagCounts: [String: Int] = [:]
 
     /// Selected dynamic tags
     @Published var selectedDynamicTags: Set<DynamicFilterTag> = [] {
@@ -624,13 +624,7 @@ class TasksViewModel: ObservableObject {
     }
 
     // Keyboard navigation state
-    @Published var keyboardSelectedTaskId: String? {
-        didSet {
-            if oldValue != keyboardSelectedTaskId {
-                objectWillChange.send()
-            }
-        }
-    }
+    @Published var keyboardSelectedTaskId: String?
     @Published var isInlineCreating = false
     @Published var inlineCreateAfterTaskId: String?
     @Published var editingTaskId: String?
@@ -693,11 +687,11 @@ class TasksViewModel: ObservableObject {
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
     @Published private(set) var categorizedTasks: [TaskCategory: [TaskActionItem]] = [:]
-    @Published private(set) var todoCount: Int = 0
-    @Published private(set) var doneCount: Int = 0
+    private(set) var todoCount: Int = 0
+    private(set) var doneCount: Int = 0
 
     /// Whether there are more filtered/search results beyond the display limit
-    @Published private(set) var hasMoreFilteredResults = false
+    private(set) var hasMoreFilteredResults = false
 
     /// Full filtered results before display cap (kept for pagination)
     private var allFilteredDisplayTasks: [TaskActionItem] = []
@@ -727,7 +721,6 @@ class TasksViewModel: ObservableObject {
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.recomputeAllCaches()
-                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
 
@@ -873,7 +866,7 @@ class TasksViewModel: ObservableObject {
     // MARK: - Keyboard Navigation
 
     /// Find a task by ID across all store arrays
-    private func findTask(_ id: String) -> TaskActionItem? {
+    func findTask(_ id: String) -> TaskActionItem? {
         store.incompleteTasks.first(where: { $0.id == id })
             ?? store.completedTasks.first(where: { $0.id == id })
     }
@@ -1118,6 +1111,7 @@ class TasksViewModel: ObservableObject {
 
     /// Recompute all caches when tasks change
     private func recomputeAllCaches() {
+        log("RENDER: recomputeAllCaches triggered")
         recomputeVersion += 1
         let version = recomputeVersion
 
@@ -1168,10 +1162,10 @@ class TasksViewModel: ObservableObject {
             }
         }
 
-        // If non-status filters are active, re-query SQLite to pick up changes
+        // If non-status filters (including date) are active, re-query SQLite to pick up changes
         // (e.g. a task was just toggled completed and should no longer appear).
         // Otherwise just recompute from the in-memory store arrays.
-        let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
+        let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
         if hasNonStatusFilters {
             Task { await loadFilteredTasksFromDatabase() }
@@ -1234,9 +1228,10 @@ class TasksViewModel: ObservableObject {
     /// Load filtered tasks from SQLite when non-status filters are applied
     private func loadFilteredTasksFromDatabase() async {
         let nonStatusTags = selectedTags.filter { $0.group != .status && $0.group != .date }
+        let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
 
-        guard !nonStatusTags.isEmpty || hasDynamicFilters else {
+        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters else {
             filteredFromDatabase = []
             recomputeDisplayCaches()
             return
@@ -1313,6 +1308,11 @@ class TasksViewModel: ObservableObject {
 
         let includeDeleted = statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe)
 
+        // Extract date filter (last7Days)
+        let dateAfter: Date? = dateTags.contains(.last7Days)
+            ? Calendar.current.date(byAdding: .day, value: -7, to: Date())
+            : nil
+
         do {
             let results = try await ActionItemStorage.shared.getFilteredActionItems(
                 limit: 10000,
@@ -1321,7 +1321,8 @@ class TasksViewModel: ObservableObject {
                 categories: categories.isEmpty ? nil : categories,
                 sources: sources.isEmpty ? nil : sources,
                 priorities: priorities,
-                originCategories: originCategories
+                originCategories: originCategories,
+                dateAfter: dateAfter
             )
             filteredFromDatabase = results
             log("TasksViewModel: Loaded \(results.count) filtered tasks from SQLite")
@@ -1486,6 +1487,7 @@ class TasksViewModel: ObservableObject {
 
     /// Recompute display-related caches when filters or sort change
     private func recomputeDisplayCaches() {
+        log("RENDER: recomputeDisplayCaches called")
         // Determine the source of tasks based on current state
         let sourceTasks: [TaskActionItem]
 
@@ -1501,19 +1503,17 @@ class TasksViewModel: ObservableObject {
         }
 
         // Apply status filters to SQLite results (if needed)
-        // Note: Non-status filters are already applied by SQLite query
-        // Date filters (like last7Days) are applied in-memory, not via SQLite
+        // Note: Non-status filters (including date) are already applied by SQLite query
         let hasSQLiteFilters = selectedTags.contains(where: { $0.group != .status && $0.group != .date })
         let hasDateFilters = selectedTags.contains(where: { $0.group == .date })
         let filterContext = TaskFilterTag.FilterContext()
         var filteredTasks: [TaskActionItem]
         if !searchText.isEmpty {
             filteredTasks = applyNonStatusTagFilters(sourceTasks, context: filterContext)
-        } else if hasSQLiteFilters {
-            // SQLite already filtered by category/source/priority
-            // But we may still need to apply status + date filters
-            let statusFiltered = applyStatusFilters(sourceTasks)
-            filteredTasks = hasDateFilters ? applyDateFilters(statusFiltered, context: filterContext) : statusFiltered
+        } else if hasSQLiteFilters || hasDateFilters {
+            // SQLite already filtered by category/source/priority/date
+            // Just apply status filters (todo/done/deleted)
+            filteredTasks = applyStatusFilters(sourceTasks)
         } else {
             filteredTasks = applyTagFilters(sourceTasks, context: filterContext)
         }
@@ -1525,21 +1525,19 @@ class TasksViewModel: ObservableObject {
         if isInFilteredMode {
             allFilteredDisplayTasks = sorted
             let capped = Array(sorted.prefix(displayLimit))
-            displayTasks = capped
+            displayTasks = deduplicateById(capped)
             hasMoreFilteredResults = sorted.count > displayLimit
         } else {
             allFilteredDisplayTasks = []
             hasMoreFilteredResults = false
-            displayTasks = sorted
+            displayTasks = deduplicateById(sorted)
         }
 
-        // Deduplicate and compute categorizedTasks for category view
-        displayTasks = deduplicateById(displayTasks)
+        // Compute categorizedTasks for category view
         var result: [TaskCategory: [TaskActionItem]] = [:]
         for category in TaskCategory.allCases {
             result[category] = []
         }
-        // Pre-compute date boundaries once for all tasks
         let calendar = Calendar.current
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
@@ -1737,7 +1735,6 @@ class TasksViewModel: ObservableObject {
         if categorizedTasks[cat] != nil {
             categorizedTasks[cat]?.insert(lastAction.task, at: 0)
         }
-        objectWillChange.send()
 
         // Hide toast if stack is now empty
         if undoStack.isEmpty {
@@ -1768,7 +1765,6 @@ class TasksViewModel: ObservableObject {
         for category in TaskCategory.allCases {
             categorizedTasks[category]?.removeAll { $0.id == taskId }
         }
-        objectWillChange.send()
     }
 
     /// Update a single task in displayTasks without full recompute
@@ -1781,7 +1777,6 @@ class TasksViewModel: ObservableObject {
                 categorizedTasks[category]?[index] = updated
             }
         }
-        objectWillChange.send()
     }
 
     // MARK: - Multi-Select
@@ -1892,7 +1887,6 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
-    @ObservedObject private var store = TasksStore.shared
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -1992,8 +1986,7 @@ struct TasksPage: View {
     /// The currently active task for the chat panel
     private var activeTask: TaskActionItem? {
         guard let taskId = chatCoordinator.activeTaskId else { return nil }
-        return store.incompleteTasks.first(where: { $0.id == taskId })
-            ?? store.completedTasks.first(where: { $0.id == taskId })
+        return viewModel.findTask(taskId)
     }
 
     /// Open chat for a task
@@ -2073,12 +2066,6 @@ struct TasksPage: View {
     }
 
     // MARK: - Tasks Content
-
-    /// Find a task by ID across all store arrays
-    private func findTask(_ id: String) -> TaskActionItem? {
-        store.incompleteTasks.first(where: { $0.id == id })
-            ?? store.completedTasks.first(where: { $0.id == id })
-    }
 
     private var tasksContent: some View {
         VStack(spacing: 0) {

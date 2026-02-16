@@ -28,6 +28,11 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(doubleTapForLock, forKey: "shortcut_doubleTapForLock") }
     }
 
+    /// When true, the floating bar uses a solid dark background instead of semi-transparent blur.
+    @Published var solidBackground: Bool {
+        didSet { UserDefaults.standard.set(solidBackground, forKey: "shortcut_solidBackground") }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttKey"),
            let key = PTTKey(rawValue: saved) {
@@ -36,5 +41,6 @@ class ShortcutSettings: ObservableObject {
             self.pttKey = .option
         }
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
+        self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
     }
 }

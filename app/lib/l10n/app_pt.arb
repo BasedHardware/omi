@@ -2667,5 +2667,16 @@
   "networkNameSsid": "Nome da rede (SSID)",
   "enterWifiNetworkName": "Insira o nome da rede WiFi",
   "enterWifiPassword": "Insira a senha do WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Transferindo do dispositivo",
+  "reconnectingToInternet": "Reconectando à internet...",
+  "uploadingToCloud": "Enviando {current} de {total}",
+  "processedStatus": "Processado",
+  "corruptedStatus": "Corrompido",
+  "nPending": "{count} pendentes",
+  "nProcessed": "{count} processados",
+  "synced": "Sincronizado",
+  "noPendingRecordings": "Nenhuma gravação pendente",
+  "noProcessedRecordings": "Nenhuma gravação processada ainda",
+  "pending": "Pendente"
 }

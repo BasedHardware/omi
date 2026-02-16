@@ -2600,5 +2600,16 @@
   "networkNameSsid": "Nom de la xarxa (SSID)",
   "enterWifiNetworkName": "Introduïu el nom de la xarxa WiFi",
   "enterWifiPassword": "Introduïu la contrasenya WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Descarregant del dispositiu",
+  "reconnectingToInternet": "Reconnectant a internet...",
+  "uploadingToCloud": "Pujant {current} de {total}",
+  "processedStatus": "Processat",
+  "corruptedStatus": "Corrupte",
+  "nPending": "{count} pendents",
+  "nProcessed": "{count} processats",
+  "synced": "Sincronitzat",
+  "noPendingRecordings": "No hi ha enregistraments pendents",
+  "noProcessedRecordings": "Encara no hi ha enregistraments processats",
+  "pending": "Pendent"
 }

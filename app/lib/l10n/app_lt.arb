@@ -2631,5 +2631,16 @@
   "networkNameSsid": "Tinklo pavadinimas (SSID)",
   "enterWifiNetworkName": "Įveskite WiFi tinklo pavadinimą",
   "enterWifiPassword": "Įveskite WiFi slaptažodį",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Atsisiunčiama iš įrenginio",
+  "reconnectingToInternet": "Jungiamasi prie interneto iš naujo...",
+  "uploadingToCloud": "Įkeliama {current} iš {total}",
+  "processedStatus": "Apdorota",
+  "corruptedStatus": "Sugadinta",
+  "nPending": "{count} laukiančių",
+  "nProcessed": "{count} apdorotų",
+  "synced": "Sinchronizuota",
+  "noPendingRecordings": "Nėra laukiančių įrašų",
+  "noProcessedRecordings": "Dar nėra apdorotų įrašų",
+  "pending": "Laukiama"
 }

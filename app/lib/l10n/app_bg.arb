@@ -2600,5 +2600,16 @@
   "networkNameSsid": "Име на мрежата (SSID)",
   "enterWifiNetworkName": "Въведете името на WiFi мрежата",
   "enterWifiPassword": "Въведете парола за WiFi",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Изтегляне от устройството",
+  "reconnectingToInternet": "Повторно свързване с интернет...",
+  "uploadingToCloud": "Качване на {current} от {total}",
+  "processedStatus": "Обработено",
+  "corruptedStatus": "Повредено",
+  "nPending": "{count} в изчакване",
+  "nProcessed": "{count} обработени",
+  "synced": "Синхронизирано",
+  "noPendingRecordings": "Няма записи в изчакване",
+  "noProcessedRecordings": "Все още няма обработени записи",
+  "pending": "В изчакване"
 }

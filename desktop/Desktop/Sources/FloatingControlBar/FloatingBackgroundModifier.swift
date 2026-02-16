@@ -22,14 +22,21 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
-/// Background modifier using NSVisualEffectView with dark blur.
+/// Background modifier using NSVisualEffectView with dark blur or solid background.
 struct FloatingBackgroundModifier: ViewModifier {
     let cornerRadius: CGFloat
+    @ObservedObject private var settings = ShortcutSettings.shared
 
     func body(content: Content) -> some View {
         content
             .background(
-                VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
+                Group {
+                    if settings.solidBackground {
+                        Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
+                    } else {
+                        VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
+                    }
+                }
             )
             .cornerRadius(cornerRadius)
     }

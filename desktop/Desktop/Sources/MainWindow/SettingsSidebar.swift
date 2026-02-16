@@ -18,25 +18,72 @@ struct SettingsSearchItem: Identifiable {
     }
 
     static let allSearchableItems: [SettingsSearchItem] = [
-        // Top-level sections
+        // General
         SettingsSearchItem(name: "Screen Analysis", keywords: ["monitor", "screenshot", "capture"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Transcription", keywords: ["audio", "recording", "microphone", "speech"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Notifications", keywords: ["alerts", "notify"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Ask Omi", keywords: ["floating bar", "chat bar"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Font Size", keywords: ["text size", "zoom", "scale"], section: .general, advancedSubsection: nil, icon: "gearshape"),
-        SettingsSearchItem(name: "Device", keywords: ["hardware", "bluetooth", "omi device"], section: .device, advancedSubsection: nil, icon: "wave.3.right.circle"),
+        SettingsSearchItem(name: "Reset Window Size", keywords: ["resize", "window", "default size"], section: .general, advancedSubsection: nil, icon: "gearshape"),
+
+        // Device
+        SettingsSearchItem(name: "Device", keywords: ["hardware", "omi device"], section: .device, advancedSubsection: nil, icon: "wave.3.right.circle"),
+        SettingsSearchItem(name: "Bluetooth", keywords: ["bluetooth", "ble", "connect", "pair", "wireless"], section: .device, advancedSubsection: nil, icon: "wave.3.right.circle"),
+        SettingsSearchItem(name: "Firmware Update", keywords: ["firmware", "flash", "device update"], section: .device, advancedSubsection: nil, icon: "wave.3.right.circle"),
+
+        // Focus
         SettingsSearchItem(name: "Focus", keywords: ["distraction", "productivity"], section: .focus, advancedSubsection: nil, icon: "eye"),
+
+        // Rewind
         SettingsSearchItem(name: "Rewind", keywords: ["screen history", "screenshots", "recording"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+        SettingsSearchItem(name: "Excluded Apps", keywords: ["exclude", "ignore", "block apps", "blocklist"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+        SettingsSearchItem(name: "Battery Optimization", keywords: ["battery", "power", "energy", "low power"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+        SettingsSearchItem(name: "Data Retention", keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+
+        // Transcription
         SettingsSearchItem(name: "Transcription Settings", keywords: ["language", "vocabulary", "speech"], section: .transcription, advancedSubsection: nil, icon: "waveform"),
+        SettingsSearchItem(name: "Language Mode", keywords: ["language", "multilingual", "single language"], section: .transcription, advancedSubsection: nil, icon: "waveform"),
+        SettingsSearchItem(name: "Custom Vocabulary", keywords: ["vocabulary", "words", "custom words", "dictionary"], section: .transcription, advancedSubsection: nil, icon: "waveform"),
+
+        // Notifications
         SettingsSearchItem(name: "Notification Settings", keywords: ["daily summary", "frequency", "alerts"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Notification Frequency", keywords: ["frequency", "how often", "interval"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Focus Notifications", keywords: ["focus", "distraction", "notify focus"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Task Notifications", keywords: ["task", "action item", "notify task"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Advice Notifications", keywords: ["advice", "tips", "notify advice"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Memory Notifications", keywords: ["memory", "facts", "notify memory"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Daily Summary", keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+
+        // Privacy
         SettingsSearchItem(name: "Privacy", keywords: ["data", "encryption", "cloud sync", "recordings"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
-        SettingsSearchItem(name: "Account", keywords: ["profile", "sign out", "email"], section: .account, advancedSubsection: nil, icon: "person.circle"),
-        SettingsSearchItem(name: "AI Chat", keywords: ["claude", "skills", "chat settings"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
+        SettingsSearchItem(name: "Store Recordings", keywords: ["store", "save recordings", "audio storage"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
+        SettingsSearchItem(name: "Private Cloud Sync", keywords: ["cloud", "sync", "private cloud"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
+        SettingsSearchItem(name: "Encryption", keywords: ["encrypt", "security", "end to end"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
+        SettingsSearchItem(name: "What We Track", keywords: ["tracking", "analytics", "telemetry", "data collection"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
+
+        // Account
+        SettingsSearchItem(name: "Account", keywords: ["profile", "email"], section: .account, advancedSubsection: nil, icon: "person.circle"),
+        SettingsSearchItem(name: "Sign Out", keywords: ["sign out", "log out", "logout", "signout"], section: .account, advancedSubsection: nil, icon: "person.circle"),
+
+        // AI Chat
+        SettingsSearchItem(name: "AI Chat", keywords: ["claude", "chat settings"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
+        SettingsSearchItem(name: "CLAUDE.md", keywords: ["claude md", "claude config", "instructions"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
+        SettingsSearchItem(name: "Skills", keywords: ["skills", "plugins", "abilities"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
+
+        // About
+        SettingsSearchItem(name: "Software Updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates"], section: .about, advancedSubsection: nil, icon: "info.circle"),
+        SettingsSearchItem(name: "Auto-Install Updates", keywords: ["auto install", "automatic install", "download updates", "install updates"], section: .about, advancedSubsection: nil, icon: "info.circle"),
+        SettingsSearchItem(name: "Version Info", keywords: ["version", "build", "app version", "build number"], section: .about, advancedSubsection: nil, icon: "info.circle"),
+        SettingsSearchItem(name: "Report an Issue", keywords: ["bug", "feedback", "report", "issue"], section: .about, advancedSubsection: nil, icon: "info.circle"),
+
         // Advanced subsections
         SettingsSearchItem(name: "AI User Profile", keywords: ["profile", "generate"], section: .advanced, advancedSubsection: .aiUserProfile, icon: "brain"),
         SettingsSearchItem(name: "Your Stats", keywords: ["statistics", "conversations", "usage"], section: .advanced, advancedSubsection: .stats, icon: "chart.bar"),
         SettingsSearchItem(name: "Feature Tiers", keywords: ["tiers", "unlock", "features", "progress"], section: .advanced, advancedSubsection: .featureTiers, icon: "lock.shield"),
         SettingsSearchItem(name: "Focus Assistant", keywords: ["distraction", "cooldown", "glow"], section: .advanced, advancedSubsection: .focusAssistant, icon: "eye.fill"),
+        SettingsSearchItem(name: "Visual Glow Effect", keywords: ["glow", "visual", "border glow", "screen glow"], section: .advanced, advancedSubsection: .focusAssistant, icon: "eye.fill"),
+        SettingsSearchItem(name: "Focus Cooldown", keywords: ["cooldown", "delay", "focus timer"], section: .advanced, advancedSubsection: .focusAssistant, icon: "eye.fill"),
+        SettingsSearchItem(name: "Focus Analysis Prompt", keywords: ["prompt", "analysis", "focus prompt", "custom prompt"], section: .advanced, advancedSubsection: .focusAssistant, icon: "eye.fill"),
         SettingsSearchItem(name: "Task Assistant", keywords: ["tasks", "extraction", "confidence", "agent"], section: .advanced, advancedSubsection: .taskAssistant, icon: "checklist"),
         SettingsSearchItem(name: "Advice Assistant", keywords: ["tips", "suggestions", "advice"], section: .advanced, advancedSubsection: .adviceAssistant, icon: "lightbulb.fill"),
         SettingsSearchItem(name: "Memory Assistant", keywords: ["memories", "facts", "extraction"], section: .advanced, advancedSubsection: .memoryAssistant, icon: "brain.head.profile"),

@@ -84,6 +84,7 @@ final class ScreenCaptureService: Sendable {
     /// Force re-register this app with Launch Services to ensure it's the authoritative version
     /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
     /// about which app to grant permissions to.
+    /// Runs the process on a background thread to avoid blocking the main thread.
     static func ensureLaunchServicesRegistration() {
         guard let bundlePath = Bundle.main.bundlePath as String? else {
             log("Launch Services: Failed to get bundle path")
@@ -94,20 +95,22 @@ final class ScreenCaptureService: Sendable {
 
         let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: lsregisterPath)
-        // -f = force registration even if already registered
-        // This makes this specific app bundle authoritative
-        process.arguments = ["-f", bundlePath]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: lsregisterPath)
+            // -f = force registration even if already registered
+            // This makes this specific app bundle authoritative
+            process.arguments = ["-f", bundlePath]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-            log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
-        } catch {
-            logError("Launch Services: Failed to register", error: error)
+            do {
+                try process.run()
+                process.waitUntilExit()
+                log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
+            } catch {
+                logError("Launch Services: Failed to register", error: error)
+            }
         }
     }
 
@@ -194,39 +197,41 @@ final class ScreenCaptureService: Sendable {
             return
         }
 
-        // First ensure this app is the authoritative version in Launch Services
-        // This fixes issues where tccutil resets permission for a stale app registration
-        ensureLaunchServicesRegistration()
+        let bundleURL = Bundle.main.bundleURL
 
-        let success = resetScreenCapturePermission()
+        // Run blocking Process calls on a background thread
+        Task.detached {
+            // First ensure this app is the authoritative version in Launch Services
+            // This fixes issues where tccutil resets permission for a stale app registration
+            ensureLaunchServicesRegistration()
 
-        // Track reset completion
-        AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
+            let success = resetScreenCapturePermission()
 
-        if success {
-            log("Screen capture permission reset, restarting app...")
+            await MainActor.run {
+                // Track reset completion
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
 
-            guard let bundleURL = Bundle.main.bundleURL as URL? else {
-                log("Failed to get bundle URL for restart")
-                return
-            }
+                if success {
+                    log("Screen capture permission reset, restarting app...")
 
-            // Use a shell script to wait briefly, then relaunch the app
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/sh")
-            task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+                    // Use a shell script to wait briefly, then relaunch the app
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
 
-            do {
-                try task.run()
-                log("Restart scheduled, terminating current instance...")
-                DispatchQueue.main.async {
-                    NSApplication.shared.terminate(nil)
+                    do {
+                        try task.run()
+                        log("Restart scheduled, terminating current instance...")
+                        DispatchQueue.main.async {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    } catch {
+                        logError("Failed to schedule restart", error: error)
+                    }
+                } else {
+                    log("Screen capture permission reset failed")
                 }
-            } catch {
-                logError("Failed to schedule restart", error: error)
             }
-        } else {
-            log("Screen capture permission reset failed")
         }
     }
 

@@ -2666,5 +2666,16 @@
   "networkNameSsid": "Ağ Adı (SSID)",
   "enterWifiNetworkName": "WiFi ağ adını girin",
   "enterWifiPassword": "WiFi şifresini girin",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Cihazdan indiriliyor",
+  "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
+  "uploadingToCloud": "{current}/{total} yükleniyor",
+  "processedStatus": "İşlendi",
+  "corruptedStatus": "Bozuk",
+  "nPending": "{count} beklemede",
+  "nProcessed": "{count} işlendi",
+  "synced": "Senkronize edildi",
+  "noPendingRecordings": "Bekleyen kayıt yok",
+  "noProcessedRecordings": "Henüz işlenmiş kayıt yok",
+  "pending": "Beklemede"
 }
