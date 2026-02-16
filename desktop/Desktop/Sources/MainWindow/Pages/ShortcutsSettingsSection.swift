@@ -10,6 +10,7 @@ struct ShortcutsSettingsSection: View {
             askOmiKeyCard
             pttKeyCard
             doubleTapCard
+            pttSoundsCard
             referenceCard
         }
     }
@@ -152,6 +153,28 @@ struct ShortcutsSettingsSection: View {
             }
             Spacer()
             Toggle("", isOn: $settings.doubleTapForLock)
+                .toggleStyle(.switch)
+                .tint(OmiColors.purplePrimary)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        )
+    }
+
+    private var pttSoundsCard: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Push-to-Talk Sounds")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text("Play audio feedback when starting and ending voice input.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $settings.pttSoundsEnabled)
                 .toggleStyle(.switch)
                 .tint(OmiColors.purplePrimary)
         }

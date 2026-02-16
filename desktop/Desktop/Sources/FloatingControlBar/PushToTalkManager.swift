@@ -194,7 +194,11 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
 
     // Play start-of-PTT sound
-    NSSound(named: "Funk")?.play()
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Funk")
+      sound?.volume = 0.3
+      sound?.play()
+    }
 
     // Check if an AI conversation is already active — enter follow-up mode
     let isFollowUp = barState?.showingAIResponse == true
@@ -228,7 +232,11 @@ class PushToTalkManager: ObservableObject {
     state = .lockedListening
 
     // Play start-of-PTT sound for locked mode
-    NSSound(named: "Funk")?.play()
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Funk")
+      sound?.volume = 0.3
+      sound?.play()
+    }
 
     // Check if an AI conversation is already active — enter follow-up mode
     let isFollowUp = barState?.showingAIResponse == true
@@ -302,7 +310,11 @@ class PushToTalkManager: ObservableObject {
     transcriptionService?.finishStream()
 
     // Play end-of-PTT sound
-    NSSound(named: "Bottle")?.play()
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Bottle")
+      sound?.volume = 0.3
+      sound?.play()
+    }
 
     log("PushToTalkManager: finalizing — mic stopped, waiting for Deepgram to finish")
 
