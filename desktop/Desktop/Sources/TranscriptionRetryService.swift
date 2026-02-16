@@ -220,6 +220,23 @@ class TranscriptionRetryService {
                 return
             }
 
+            // Check if backend already has a conversation for this time window (prevents duplicates on retry)
+            let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
+            if let existing = try? await APIClient.shared.getConversations(
+                limit: 5,
+                startDate: session.startedAt.addingTimeInterval(-2),
+                endDate: finishedAt.addingTimeInterval(2)
+            ), let match = existing.first(where: { conv in
+                guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
+                    && abs(convFinished.timeIntervalSince(finishedAt)) < 5
+                    && conv.source == ConversationSource(rawValue: session.source)
+            }) {
+                log("TranscriptionRetryService: Session \(sessionId) already exists on backend as \(match.id), marking completed")
+                try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
+                return
+            }
+
             // Mark as uploading
             try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
 
