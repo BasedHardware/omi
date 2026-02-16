@@ -147,6 +147,8 @@ class TranscriptionRetryService {
 
         } catch {
             consecutiveDBFailures += 1
+            // Report to RewindDatabase for runtime corruption detection
+            await RewindDatabase.shared.reportQueryError(error)
             if consecutiveDBFailures >= maxConsecutiveDBFailures {
                 log("TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, stopping timer to avoid error flood")
                 stop()

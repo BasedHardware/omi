@@ -81,9 +81,12 @@ actor RewindIndexer {
             let backoffSeconds = min(pow(2.0, Double(initFailureCount)), Self.maxBackoffSeconds)
             nextRetryTime = Date().addingTimeInterval(backoffSeconds)
 
-            // Only log every few failures to avoid spamming Sentry
-            if initFailureCount <= 3 || initFailureCount % 10 == 0 {
+            // First 3 failures: send to Sentry for diagnostics (logError).
+            // After that: log locally only (log) to avoid flooding Sentry with a known-dead DB.
+            if initFailureCount <= 3 {
                 logError("RewindIndexer: Failed to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s): \(error)")
+            } else if initFailureCount % 10 == 0 {
+                log("RewindIndexer: Still failing to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s)")
             }
             return false
         }
@@ -209,6 +212,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process frame: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
@@ -285,6 +289,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process CGImage frame: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
@@ -382,6 +387,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process frame with metadata: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
