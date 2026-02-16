@@ -57,7 +57,8 @@ struct AskAIInputView: View {
                             let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
                             onSend?(trimmed)
-                        }
+                        },
+                        focusOnAppear: true
                     )
                     .onChange(of: localInput) { _, newValue in
                         userInput = newValue

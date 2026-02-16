@@ -247,18 +247,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         resizeToFixedHeight(120, animated: true)
         setupInputHeightObserver()
 
-        // Focus input after SwiftUI creates the text view.
-        // Use two attempts: first try quickly, retry if the text view isn't ready yet.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            guard let self = self else { return }
-            self.makeKeyAndOrderFront(nil)
-            if !self.focusInputField() {
-                // Text view not ready yet — retry after a longer delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    self?.makeKeyAndOrderFront(nil)
-                    self?.focusInputField()
-                }
-            }
+        // Make the window key so the ResizableTextEditor's focusOnAppear can take effect.
+        // The text editor itself handles focusing via updateNSView once it's in the window.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.makeKeyAndOrderFront(nil)
         }
 
         // Capture screenshot in background without hiding the bar

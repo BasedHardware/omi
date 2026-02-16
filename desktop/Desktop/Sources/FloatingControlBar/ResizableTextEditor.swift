@@ -81,6 +81,8 @@ struct ResizableTextEditor: NSViewRepresentable {
         let onHeightChange: (CGFloat) -> Void
         let onSubmit: (() -> Void)?
         private var lastHeight: CGFloat = 0
+        /// Holds the text view until it's in a window and can be focused.
+        weak var pendingFocusTextView: NSTextView?
 
         init(
             text: Binding<String>, minHeight: CGFloat, maxHeight: CGFloat,
