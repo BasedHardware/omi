@@ -295,6 +295,9 @@ final class ScreenCaptureService: Sendable {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
+            if focusResult == .apiDisabled || focusResult == .cannotComplete {
+                log("ACCESSIBILITY_AX: getWindowInfoViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck")
+            }
             return nil
         }
 

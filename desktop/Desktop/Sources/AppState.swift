@@ -89,6 +89,7 @@ class AppState: ObservableObject {
     private var lastNotificationBadgeEnabled: Bool?
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
     @Published var hasAutomationPermission = false
+    @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
     @Published var hasAccessibilityPermission = false
     @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
 
@@ -464,6 +465,23 @@ class AppState: ObservableObject {
         // Run a simple AppleScript to trigger the permission prompt
         // This must be done on a background thread since it's nonisolated
         Task.detached {
+            // First, ensure System Events is running — without it, the TCC prompt won't appear
+            // and checkAutomationPermission returns -600 (procNotFound)
+            let launchScript = NSAppleScript(source: """
+                launch application "System Events"
+            """)
+            var launchError: NSDictionary?
+            launchScript?.executeAndReturnError(&launchError)
+            if let launchError = launchError {
+                log("AUTOMATION_TRIGGER: Failed to launch System Events: \(launchError)")
+            } else {
+                log("AUTOMATION_TRIGGER: System Events launched successfully")
+            }
+
+            // Small delay to let System Events initialize
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            // Now trigger the actual TCC prompt
             let script = NSAppleScript(source: """
                 tell application "System Events"
                     return name of first process whose frontmost is true
@@ -471,7 +489,24 @@ class AppState: ObservableObject {
             """)
             var error: NSDictionary?
             script?.executeAndReturnError(&error)
-            // Then open settings on main thread
+
+            if let error = error {
+                let errorNum = error[NSAppleScript.errorNumber] as? Int ?? 0
+                let errorMsg = error[NSAppleScript.errorMessage] as? String ?? "unknown"
+                log("AUTOMATION_TRIGGER: AppleScript failed: \(errorNum) - \(errorMsg)")
+            } else {
+                log("AUTOMATION_TRIGGER: AppleScript succeeded, permission may have been granted")
+            }
+
+            // Re-check permission status before opening settings
+            await MainActor.run { [weak self] in
+                self?.checkAutomationPermission()
+            }
+
+            // Small delay to let the check complete
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            // Open settings so user can toggle if needed
             await MainActor.run {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
                     NSWorkspace.shared.open(url)

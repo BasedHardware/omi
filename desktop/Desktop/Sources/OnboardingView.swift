@@ -706,27 +706,34 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var buttonSection: some View {
-        HStack(spacing: 16) {
-            // Back button (not shown on first step or name step)
-            if currentStep > 0 && currentStep != 1 {
-                Button(action: { currentStep -= 1 }) {
-                    Text("Back")
+        VStack(spacing: 8) {
+            HStack(spacing: 16) {
+                // Back button (not shown on first step or name step)
+                if currentStep > 0 && currentStep != 1 {
+                    Button(action: { currentStep -= 1 }) {
+                        Text("Back")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+
+                // Main action / Continue button
+                Button(action: handleMainAction) {
+                    Text(mainButtonTitle)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
 
-            // Main action / Continue button
-            Button(action: handleMainAction) {
-                Text(mainButtonTitle)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+            if currentStep == 3 && !requiredPermissionsGranted {
+                Text("You can grant permissions later in Settings")
+                    .scaledFont(size: 12)
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(currentStep == 3 && !requiredPermissionsGranted)
         }
         .padding(.horizontal, 40)
         .padding(.bottom, 20)

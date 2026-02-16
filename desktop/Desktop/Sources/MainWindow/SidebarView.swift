@@ -989,17 +989,19 @@ struct SidebarView: View {
 
     private var accessibilityPermissionRow: some View {
         let isDenied = appState.isAccessibilityPermissionDenied()
-        let color: Color = isDenied ? .red : OmiColors.warning
+        let isBroken = appState.isAccessibilityBroken  // TCC yes but AX calls fail
+        let needsReset = isBroken  // Show reset when broken
+        let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
-            Image(systemName: isDenied ? "hand.raised.slash.fill" : "hand.raised.fill")
+            Image(systemName: (isDenied || isBroken) ? "hand.raised.slash.fill" : "hand.raised.fill")
                 .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
-                .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
+                .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text("Accessibility")
+                Text(isBroken ? "Accessibility (Reset Required)" : "Accessibility")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -1007,10 +1009,15 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    // Trigger the permission request, which will also open settings
-                    appState.triggerAccessibilityPermission()
+                    if needsReset {
+                        // Reset and restart to fix broken accessibility state
+                        appState.resetAccessibilityPermissionAndRestart()
+                    } else {
+                        // Trigger the permission request, which will also open settings
+                        appState.triggerAccessibilityPermission()
+                    }
                 }) {
-                    Text(isDenied ? "Fix" : "Grant")
+                    Text(needsReset ? "Reset" : (isDenied ? "Fix" : "Grant"))
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -1027,13 +1034,13 @@ struct SidebarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(permissionPulse && isDenied ? 0.25 : 0.15))
+                .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(color.opacity(0.3), lineWidth: isDenied ? 2 : 1)
+                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
                 )
         )
-        .help(isCollapsed ? "Accessibility permission required" : "")
+        .help(isCollapsed ? (isBroken ? "Accessibility needs reset" : "Accessibility permission required") : "")
     }
 
     // MARK: - Toggle Handlers
