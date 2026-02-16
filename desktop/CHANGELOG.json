@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "0.8.8",
+      "date": "2026-02-16",
+      "changes": [
+        "Accessibility permission reset: detects broken state after macOS updates and offers one-click fix",
+        "Database upgraded to connection pool for better performance during concurrent reads",
+        "Automation permission check now handles System Events not running (fixes -600 error)",
+        "Onboarding no longer blocks on permissions — grant them later from Settings",
+        "Hiding the floating bar now persists across app restarts",
+        "Native notifications when support replies in Help chat",
+        "Faster conversation sync by skipping unchanged sessions"
+      ]
+    },
+    {
       "version": "0.8.7",
       "date": "2026-02-16",
       "changes": [

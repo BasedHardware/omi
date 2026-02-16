@@ -135,6 +135,7 @@ struct CrispWebView: NSViewRepresentable {
             log("Crisp: received operator message: \(preview)")
 
             Task { @MainActor in
+                log("Crisp: sending macOS notification for: \(preview)")
                 NotificationService.shared.sendNotification(
                     title: "Help from Founder",
                     message: preview,
