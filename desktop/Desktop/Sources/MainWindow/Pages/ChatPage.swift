@@ -347,6 +347,17 @@ struct ChatPage: View {
                     )
                 }
             }
+
+            // AI Chat settings button
+            Button(action: {
+                NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
+            }) {
+                Image(systemName: "gear")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("AI Chat settings")
         }
     }
 

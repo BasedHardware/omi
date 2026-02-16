@@ -205,8 +205,9 @@ struct AIResponseView: View {
     private var currentContentView: some View {
         Group {
             if isLoading && responseText.isEmpty {
-                Spacer()
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                ThinkingDotsView()
+                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+                    .padding(.horizontal, 4)
             } else if !responseText.isEmpty {
                 Markdown(responseText)
                     .scaledMarkdownTheme(.ai)

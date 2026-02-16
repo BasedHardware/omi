@@ -17,6 +17,7 @@ struct ChatInputView: View {
     /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
     var pendingText: Binding<String>?
 
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
     @State private var inputText = ""
     @FocusState private var isInputFocused: Bool
 
@@ -26,11 +27,66 @@ struct ChatInputView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            // Controls row: Ask/Act toggle + Send/Stop button, right-aligned
-            HStack(spacing: 8) {
-                Spacer()
+            // Input field with floating toggle and send button
+            ZStack(alignment: .topTrailing) {
+                // Input field — TextEditor with auto-grow height
+                ZStack(alignment: .topLeading) {
+                    // Hidden text to calculate content height (drives ZStack size)
+                    Text(inputText.isEmpty ? " " : inputText + " ")
+                        .scaledFont(size: 14)
+                        .padding(.horizontal, 17)
+                        .padding(.vertical, 12)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .opacity(0)
+                        .accessibilityHidden(true)
 
-                ChatModeToggle(mode: $mode)
+                    // Placeholder text
+                    if inputText.isEmpty {
+                        Text(placeholder)
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextEditor(text: $inputText)
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .focused($isInputFocused)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(minHeight: 0, maxHeight: .infinity)
+                        .onKeyPress(keys: [.return], phases: .down) { keyPress in
+                            if keyPress.modifiers.contains(.shift) {
+                                return .ignored // Shift+Enter: newline
+                            }
+                            handleSubmit()
+                            return .handled // Enter: send
+                        }
+                }
+                .frame(maxHeight: 200)
+                .fixedSize(horizontal: false, vertical: true)
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(12)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isInputFocused = true
+                }
+
+                // Floating Ask/Act toggle (top-right, inside the input area)
+                if askModeEnabled {
+                    ChatModeToggle(mode: $mode)
+                        .padding(.top, 8)
+                        .padding(.trailing, 8)
+                }
+            }
+
+            // Send/Stop button row — right-aligned below the input
+            HStack {
+                Spacer()
 
                 if isSending && !hasText {
                     Button(action: { onStop?() }) {
@@ -49,65 +105,27 @@ struct ChatInputView: View {
                     .disabled(!hasText)
                 }
             }
-
-            // Input field — TextEditor with auto-grow height
-            ZStack(alignment: .topLeading) {
-                // Hidden text to calculate content height (drives ZStack size)
-                Text(inputText.isEmpty ? " " : inputText + " ")
-                    .scaledFont(size: 14)
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 12)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-
-                // Placeholder text
-                if inputText.isEmpty {
-                    Text(placeholder)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .allowsHitTesting(false)
-                }
-
-                TextEditor(text: $inputText)
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
-                    .focused($isInputFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 0, maxHeight: .infinity)
-                    .onKeyPress(keys: [.return], phases: .down) { keyPress in
-                        if keyPress.modifiers.contains(.shift) {
-                            return .ignored // Shift+Enter: newline
-                        }
-                        handleSubmit()
-                        return .handled // Enter: send
-                    }
+        }
+        .onAppear {
+            isInputFocused = true
+            // When ask mode is disabled, ensure we're always in act mode
+            if !askModeEnabled {
+                mode = .act
             }
-            .frame(maxHeight: 200)
-            .fixedSize(horizontal: false, vertical: true)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(12)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                isInputFocused = true
+            if let pending = pendingText?.wrappedValue, !pending.isEmpty {
+                inputText = pending
+                pendingText?.wrappedValue = ""
             }
-            .onAppear {
-                isInputFocused = true
-                if let pending = pendingText?.wrappedValue, !pending.isEmpty {
-                    inputText = pending
-                    pendingText?.wrappedValue = ""
-                }
+        }
+        .onChange(of: pendingText?.wrappedValue ?? "") { _, newValue in
+            if !newValue.isEmpty {
+                inputText = newValue
+                pendingText?.wrappedValue = ""
             }
-            .onChange(of: pendingText?.wrappedValue ?? "") { _, newValue in
-                if !newValue.isEmpty {
-                    inputText = newValue
-                    pendingText?.wrappedValue = ""
-                }
+        }
+        .onChange(of: askModeEnabled) { _, enabled in
+            if !enabled {
+                mode = .act
             }
         }
     }
