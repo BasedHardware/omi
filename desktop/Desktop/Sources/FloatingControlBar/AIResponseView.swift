@@ -204,7 +204,7 @@ struct AIResponseView: View {
 
     private var currentContentView: some View {
         Group {
-            if isLoading && responseText.isEmpty {
+            if responseText.isEmpty {
                 ThinkingDotsView()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .padding(.horizontal, 4)
