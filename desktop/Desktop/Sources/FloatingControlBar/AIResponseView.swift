@@ -290,7 +290,7 @@ struct AIResponseView: View {
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.8))
                     .lineLimit(2)
-                    .truncationMode(.tail)
+                    .truncationMode(.head)
             } else {
                 Text("Listening...")
                     .scaledFont(size: 13)

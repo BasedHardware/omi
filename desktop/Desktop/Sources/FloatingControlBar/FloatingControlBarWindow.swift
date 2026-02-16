@@ -203,8 +203,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         AnalyticsManager.shared.floatingBarAskOmiClosed()
 
         // Cancel any in-flight chat streaming to prevent re-expansion
-        chatCancellable?.cancel()
-        chatCancellable = nil
+        FloatingControlBarManager.shared.cancelChat()
 
         // Cancel PTT if in follow-up mode
         if state.isVoiceFollowUp {
