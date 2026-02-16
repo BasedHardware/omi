@@ -2322,6 +2322,10 @@ impl FirestoreService {
             fields["relevance_score"] = json!({"integerValue": score.to_string()});
         }
 
+        if let Some(staged) = from_staged {
+            fields["from_staged"] = json!({"booleanValue": staged});
+        }
+
         let doc = json!({"fields": fields});
 
         let response = self
@@ -2936,9 +2940,9 @@ impl FirestoreService {
         Ok(count)
     }
 
-    /// Get active AI action items (source = "screenshot", not completed, not deleted).
+    /// Get active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Returns the actual items for dedup comparison during promotion.
-    /// Uses a composite filter to query source="screenshot" AND completed=false at the Firestore level.
+    /// Uses a composite filter to query from_staged=true AND completed=false at the Firestore level.
     pub async fn get_active_ai_action_items(
         &self,
         uid: &str,
@@ -2961,9 +2965,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2993,10 +2997,7 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .collect();
 
@@ -3864,6 +3865,7 @@ impl FirestoreService {
             relevance_score: self.parse_int(fields, "relevance_score"),
             sort_order: self.parse_int(fields, "sort_order"),
             indent_level: self.parse_int(fields, "indent_level"),
+            from_staged: self.parse_bool(fields, "from_staged").ok(),
         })
     }
 

@@ -310,6 +310,7 @@ async fn promote_staged_task(
             top_task.metadata.as_deref(),
             top_task.category.as_deref(),
             top_task.relevance_score,
+            Some(true), // from_staged: promoted from staged_tasks
         )
         .await
     {
