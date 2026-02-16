@@ -1263,11 +1263,8 @@ class ChatProvider: ObservableObject {
         var toolStartTimes: [String: Date] = [:]
 
         do {
-            // Fetch context from backend (LLM determines if context is needed)
-            let contextString = await fetchContext(for: trimmedText)
-
-            // Build system prompt with fetched context
-            let systemPrompt = buildSystemPrompt(contextString: contextString)
+            // Build system prompt with locally cached memories (no backend Gemini call)
+            let systemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
 
             // Query the Claude Agent SDK bridge with streaming
             // Each query is standalone — conversation history is in the system prompt
