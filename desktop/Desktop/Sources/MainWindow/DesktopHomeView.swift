@@ -95,6 +95,9 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
                             }
 
+                            // Start Crisp chat in background for notifications
+                            CrispManager.shared.start()
+
                             // Set up floating control bar (only show if user hasn't disabled it)
                             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: viewModelContainer.chatProvider)
                             if FloatingControlBarManager.shared.isEnabled {

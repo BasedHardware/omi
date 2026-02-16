@@ -80,6 +80,7 @@ struct SidebarView: View {
     @ObservedObject private var focusStorage = FocusStorage.shared
     @ObservedObject private var deviceProvider = DeviceProvider.shared
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @ObservedObject private var crispManager = CrispManager.shared
 
     // State for Get Omi Widget (shown when no device is paired, dismissible)
     @AppStorage("showGetOmiWidget") private var showGetOmiWidget = true
@@ -323,8 +324,10 @@ struct SidebarView: View {
                         isSelected: selectedIndex == SidebarNavItem.help.rawValue,
                         isCollapsed: isCollapsed,
                         iconWidth: iconWidth,
+                        badge: crispManager.unreadCount,
                         onTap: {
                             selectedIndex = SidebarNavItem.help.rawValue
+                            crispManager.markAsRead()
                             AnalyticsManager.shared.tabChanged(tabName: SidebarNavItem.help.title)
                         }
                     )
