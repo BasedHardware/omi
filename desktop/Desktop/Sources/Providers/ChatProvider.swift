@@ -647,16 +647,16 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Context (Memories)
 
-    /// Fetches user memories from the backend for use in prompts
+    /// Loads user memories from local SQLite for use in prompts
     private func loadMemoriesIfNeeded() async {
         guard !memoriesLoaded else { return }
 
         do {
-            cachedMemories = try await APIClient.shared.getMemories(limit: 50)
+            cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
             memoriesLoaded = true
-            log("ChatProvider loaded \(cachedMemories.count) memories for context")
+            log("ChatProvider loaded \(cachedMemories.count) memories from local DB")
         } catch {
-            logError("Failed to load memories for chat context", error: error)
+            logError("Failed to load memories from local DB", error: error)
             // Continue without memories - non-critical
         }
     }
@@ -678,14 +678,14 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Goals
 
-    /// Fetches user goals from the backend for use in prompts
+    /// Loads user goals from local SQLite for use in prompts
     private func loadGoalsIfNeeded() async {
         guard !goalsLoaded else { return }
 
         do {
-            cachedGoals = try await APIClient.shared.getGoals()
+            cachedGoals = try await GoalStorage.shared.getLocalGoals(activeOnly: false)
             goalsLoaded = true
-            log("ChatProvider loaded \(cachedGoals.count) goals for context")
+            log("ChatProvider loaded \(cachedGoals.count) goals from local DB")
         } catch {
             logError("Failed to load goals for chat context", error: error)
         }
