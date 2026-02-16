@@ -91,6 +91,23 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(pttSoundsEnabled, forKey: "shortcut_pttSoundsEnabled") }
     }
 
+    /// Push-to-talk transcription mode.
+    enum PTTTranscriptionMode: String, CaseIterable {
+        case live = "Live"
+        case batch = "Batch"
+
+        var description: String {
+            switch self {
+            case .live: return "Real-time transcription as you speak"
+            case .batch: return "Transcribe after recording for better accuracy"
+            }
+        }
+    }
+
+    @Published var pttTranscriptionMode: PTTTranscriptionMode {
+        didSet { UserDefaults.standard.set(pttTranscriptionMode.rawValue, forKey: "shortcut_pttTranscriptionMode") }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttKey"),
            let key = PTTKey(rawValue: saved) {
@@ -107,5 +124,11 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
+        if let saved = UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode"),
+           let mode = PTTTranscriptionMode(rawValue: saved) {
+            self.pttTranscriptionMode = mode
+        } else {
+            self.pttTranscriptionMode = .live
+        }
     }
 }
