@@ -3264,6 +3264,14 @@ struct SettingsContentView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                     }
+
+                    if updaterViewModel.automaticallyChecksForUpdates {
+                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available") {
+                            Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                        }
+                    }
                 }
             }
 

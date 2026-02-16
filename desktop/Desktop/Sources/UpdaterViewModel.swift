@@ -80,11 +80,25 @@ final class UpdaterViewModel: ObservableObject {
 
     private let updaterController: SPUStandardUpdaterController
     private let updaterDelegate = UpdaterDelegate()
+    private var isInitialized = false
 
     /// Whether automatic update checks are enabled
     @Published var automaticallyChecksForUpdates: Bool {
         didSet {
             updaterController.updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
+            if isInitialized {
+                AnalyticsManager.shared.settingToggled(setting: "automatic_update_checks", enabled: automaticallyChecksForUpdates)
+            }
+        }
+    }
+
+    /// Whether updates are automatically downloaded and installed
+    @Published var automaticallyDownloadsUpdates: Bool {
+        didSet {
+            updaterController.updater.automaticallyDownloadsUpdates = automaticallyDownloadsUpdates
+            if isInitialized {
+                AnalyticsManager.shared.settingToggled(setting: "auto_install_updates", enabled: automaticallyDownloadsUpdates)
+            }
         }
     }
 
@@ -118,8 +132,9 @@ final class UpdaterViewModel: ObservableObject {
             userDriverDelegate: nil
         )
 
-        // Initialize published property from updater state (must be before using `self`)
+        // Initialize published properties from updater state (must be before using `self`)
         automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
+        automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
         // Wire up delegate back-reference
         updaterDelegate.viewModel = self
@@ -135,6 +150,8 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.updater.publisher(for: \.sessionInProgress)
             .receive(on: DispatchQueue.main)
             .assign(to: &$updateSessionInProgress)
+
+        isInitialized = true
     }
 
     /// Quick check if Sparkle is mid-update (safe to call from anywhere)
