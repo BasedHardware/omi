@@ -117,29 +117,35 @@ struct AIResponseView: View {
     }
 
     private var modelPicker: some View {
-        Menu {
-            ForEach(FloatingControlBarState.availableModels, id: \.id) { model in
-                Button(action: { state.selectedModel = model.id }) {
-                    HStack {
-                        Text(model.label)
-                        if state.selectedModel == model.id {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 2) {
-                Text(currentModelLabel)
-                Image(systemName: "chevron.down")
-                    .imageScale(.small)
-            }
-            .scaledFont(size: 14)
-            .foregroundColor(.secondary)
+        HStack(spacing: 2) {
+            Text(currentModelLabel)
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .scaledFont(size: 14)
+        .foregroundColor(.secondary)
         .fixedSize()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showModelMenu()
+        }
+    }
+
+    private func showModelMenu() {
+        let menu = NSMenu()
+        for model in FloatingControlBarState.availableModels {
+            let item = NSMenuItem(title: model.label, action: #selector(ModelMenuTarget.selectModel(_:)), keyEquivalent: "")
+            item.state = state.selectedModel == model.id ? .on : .off
+            item.representedObject = model.id
+            item.target = ModelMenuTarget.shared
+            menu.addItem(item)
+        }
+        ModelMenuTarget.shared.onSelect = { [state] modelId in
+            state.selectedModel = modelId
+        }
+        if let event = NSApp.currentEvent, let contentView = event.window?.contentView {
+            menu.popUp(positioning: nil, at: event.locationInWindow, in: contentView)
+        }
     }
 
     private var currentModelLabel: String {
@@ -357,6 +363,19 @@ struct ThinkingDotsView: View {
         }
         .onReceive(timer) { _ in
             activeDot = (activeDot + 1) % dotCount
+        }
+    }
+}
+
+// MARK: - Model Menu Helper
+
+private class ModelMenuTarget: NSObject {
+    static let shared = ModelMenuTarget()
+    var onSelect: ((String) -> Void)?
+
+    @objc func selectModel(_ sender: NSMenuItem) {
+        if let modelId = sender.representedObject as? String {
+            onSelect?(modelId)
         }
     }
 }
