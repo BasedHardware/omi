@@ -14,27 +14,32 @@ struct HelpPage: View {
     }
 }
 
-/// Displays the persistent Crisp WKWebView from CrispManager.
-/// Uses Auto Layout constraints so the webview fills the container even when
-/// the container's initial bounds are zero (which is the case in makeNSView).
+/// Visible Crisp chat webview — separate from CrispManager's background monitoring webview.
 struct CrispWebView: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let container = NSView()
-        guard let webView = CrispManager.shared.webView else { return container }
+    private let websiteID = "0dcf3d1f-863d-4576-a534-31f2bb102ae5"
 
-        // Reparent: remove from previous container if needed
-        webView.removeFromSuperview()
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
 
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-        return container
+        var urlString = "https://go.crisp.chat/chat/embed/?website_id=\(websiteID)"
+        if let email = AuthState.shared.userEmail,
+           let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString += "&user_email=\(encodedEmail)"
+        }
+        let name = AuthService.shared.displayName
+        if !name.isEmpty,
+           let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            urlString += "&user_nickname=\(encodedName)"
+        }
+
+        if let url = URL(string: urlString) {
+            webView.load(URLRequest(url: url))
+        }
+        return webView
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
