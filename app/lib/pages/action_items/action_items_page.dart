@@ -174,8 +174,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildFab() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 48.0),
+    return Positioned(
+      right: 20,
+      bottom: 100,
       child: FloatingActionButton(
         heroTag: 'action_items_fab',
         onPressed: () {
@@ -375,22 +376,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: _buildFab(),
-          body: GestureDetector(
-            onTap: () {},
-            child: RefreshIndicator(
-              onRefresh: () async {
-                HapticFeedback.mediumImpact();
-                return provider.forceRefreshActionItems();
-              },
-              color: Colors.deepPurple,
-              backgroundColor: Colors.white,
-              child: provider.isLoading && provider.actionItems.isEmpty
-                  ? _buildLoadingState()
-                  : categorizedItems.values.every((l) => l.isEmpty)
-                      ? _buildEmptyTasksList()
-                      : _buildTasksList(categorizedItems, provider),
-            ),
+          body: Stack(
+            children: [
+              GestureDetector(
+                onTap: () {},
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    HapticFeedback.mediumImpact();
+                    return provider.forceRefreshActionItems();
+                  },
+                  color: Colors.deepPurple,
+                  backgroundColor: Colors.white,
+                  child: provider.isLoading && provider.actionItems.isEmpty
+                      ? _buildLoadingState()
+                      : categorizedItems.values.every((l) => l.isEmpty)
+                          ? _buildEmptyTasksList()
+                          : _buildTasksList(categorizedItems, provider),
+                ),
+              ),
+              _buildFab(),
+            ],
           ),
         );
       },
