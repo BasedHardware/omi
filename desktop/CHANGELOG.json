@@ -1,6 +1,20 @@
 {
   "releases": [
     {
+      "version": "0.8.5",
+      "date": "2026-02-15",
+      "changes": [
+        "AI-suggested tasks now clearly marked with a promotion indicator",
+        "Dashboard loads faster by querying tasks directly from local database",
+        "Fixed transcription sessions getting stuck in 'uploading' state after app crashes",
+        "Fixed duplicate conversations when recovering failed uploads",
+        "Improved sidebar performance during audio recording",
+        "Agent sessions now properly detect when coding tasks are complete",
+        "Fixed completed tasks taking up to 60 seconds to refresh in dashboard",
+        "Fixed cursor jumping bug when dismissing modals"
+      ]
+    },
+    {
       "version": "0.8.4",
       "date": "2026-02-15",
       "changes": [
