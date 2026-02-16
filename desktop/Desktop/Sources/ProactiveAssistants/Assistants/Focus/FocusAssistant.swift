@@ -106,9 +106,9 @@ actor FocusAssistant: ProactiveAssistant {
             pendingTasks.insert(task)
 
             // Remove the task from the set after it completes to prevent unbounded growth
-            Task {
+            Task { [weak self] in
                 _ = await task.result
-                self.pendingTasks.remove(task)
+                self?.pendingTasks.remove(task)
             }
         }
 

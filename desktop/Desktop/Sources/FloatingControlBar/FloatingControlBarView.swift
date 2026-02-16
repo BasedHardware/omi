@@ -3,6 +3,7 @@ import SwiftUI
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     weak var window: NSWindow?
     var onPlayPause: () -> Void
     var onAskAI: () -> Void
@@ -73,14 +74,14 @@ struct FloatingControlBarView: View {
             if state.isVoiceListening {
                 voiceListeningView
             } else {
-                compactButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
+                compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
                     onAskAI()
                 }
             }
 
             HStack(spacing: 6) {
                 compactLabel("Hide", keys: ["\u{2318}", "\\"])
-                compactLabel("Push to talk", keys: ["\u{2325}"])
+                compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
             }
         }
         .padding(.horizontal, 6)

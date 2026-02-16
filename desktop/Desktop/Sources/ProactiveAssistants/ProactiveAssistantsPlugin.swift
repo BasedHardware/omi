@@ -34,6 +34,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var lastStatus: FocusStatus?
     private var frameCount = 0
 
+    // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
+    // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
+    private var isProcessingRewindFrame = false
+    private var droppedFrameCount = 0
+
     // Failure tracking for screen capture recovery
     private var consecutiveFailures = 0
     private let maxConsecutiveFailures = 5
@@ -371,6 +376,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         isMonitoring = false
         isStartingMonitoring = false  // Reset in case stop was called during startup
+        isProcessingRewindFrame = false
+        if droppedFrameCount > 0 {
+            log("RewindBackpressure: Session total dropped frames: \(droppedFrameCount)")
+        }
+        droppedFrameCount = 0
         currentApp = nil
         currentWindowID = nil
         currentWindowTitle = nil
@@ -567,14 +577,28 @@ public class ProactiveAssistantsPlugin: NSObject {
                 }
 
                 // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
+                // Backpressure: skip this frame if the previous one is still being processed.
+                // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
+                // causing multi-GB memory growth when encoding can't keep up with capture rate.
                 if !isRewindExcluded {
-                    Task {
-                        await RewindIndexer.shared.processFrame(
-                            cgImage: cgImage,
-                            appName: appName,
-                            windowTitle: currentWindowTitle,
-                            captureTime: captureTime
-                        )
+                    if isProcessingRewindFrame {
+                        droppedFrameCount += 1
+                        if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+                            log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
+                        }
+                    } else {
+                        isProcessingRewindFrame = true
+                        Task { [weak self] in
+                            await RewindIndexer.shared.processFrame(
+                                cgImage: cgImage,
+                                appName: appName,
+                                windowTitle: currentWindowTitle,
+                                captureTime: captureTime
+                            )
+                            await MainActor.run {
+                                self?.isProcessingRewindFrame = false
+                            }
+                        }
                     }
                 }
             } else {
@@ -619,8 +643,19 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
             if !isRewindExcluded {
-                Task {
-                    await RewindIndexer.shared.processFrame(frame)
+                if isProcessingRewindFrame {
+                    droppedFrameCount += 1
+                    if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+                        log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
+                    }
+                } else {
+                    isProcessingRewindFrame = true
+                    Task { [weak self] in
+                        await RewindIndexer.shared.processFrame(frame)
+                        await MainActor.run {
+                            self?.isProcessingRewindFrame = false
+                        }
+                    }
                 }
             }
         } else {
