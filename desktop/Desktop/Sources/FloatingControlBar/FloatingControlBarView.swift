@@ -71,7 +71,7 @@ struct FloatingControlBarView: View {
 
     private var controlBarView: some View {
         VStack(spacing: 1) {
-            if state.isVoiceListening {
+            if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
             } else {
                 compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
@@ -195,8 +195,24 @@ struct FloatingControlBarView: View {
                 set: { state.aiResponseText = $0 }
             ),
             userInput: state.displayedQuery,
+            chatHistory: state.chatHistory,
+            isVoiceFollowUp: Binding(
+                get: { state.isVoiceFollowUp },
+                set: { state.isVoiceFollowUp = $0 }
+            ),
+            voiceFollowUpTranscript: Binding(
+                get: { state.voiceFollowUpTranscript },
+                set: { state.voiceFollowUpTranscript = $0 }
+            ),
             onClose: onCloseAI,
             onSendFollowUp: { message in
+                // Archive current exchange to chat history
+                let currentQuery = state.displayedQuery
+                let currentResponse = state.aiResponseText
+                if !currentQuery.isEmpty && !currentResponse.isEmpty {
+                    state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+                }
+
                 state.displayedQuery = message
                 let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {

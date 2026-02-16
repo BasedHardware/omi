@@ -197,12 +197,21 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     func closeAIConversation() {
         AnalyticsManager.shared.floatingBarAskOmiClosed()
+
+        // Cancel PTT if in follow-up mode
+        if state.isVoiceFollowUp {
+            PushToTalkManager.shared.cancelListening()
+        }
+
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
             state.aiResponseText = ""
             state.screenshotURL = nil
+            state.chatHistory = []
+            state.isVoiceFollowUp = false
+            state.voiceFollowUpTranscript = ""
         }
         resizeToFixedHeight(FloatingControlBarWindow.minBarSize.height, animated: true)
     }
@@ -585,6 +594,9 @@ class FloatingControlBarManager {
         window.state.aiInputText = ""
         window.state.aiResponseText = ""
         window.state.screenshotURL = nil
+        window.state.chatHistory = []
+        window.state.isVoiceFollowUp = false
+        window.state.voiceFollowUpTranscript = ""
 
         let provider = ChatProvider()
         self.chatProvider = provider
@@ -615,6 +627,34 @@ class FloatingControlBarManager {
         Task { @MainActor in
             await sendAIQuery(query, screenshotURL: screenshot, barWindow: window, provider: provider)
         }
+    }
+
+    /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
+    func sendFollowUpQuery(_ query: String) {
+        guard let window = window, window.state.showingAIResponse else {
+            // No active conversation — fall back to new conversation
+            openAIInputWithQuery(query, screenshot: nil)
+            return
+        }
+
+        // Archive current exchange
+        let currentQuery = window.state.displayedQuery
+        let currentResponse = window.state.aiResponseText
+        if !currentQuery.isEmpty && !currentResponse.isEmpty {
+            window.state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+        }
+
+        // Cancel existing streaming response if still in progress
+        chatCancellable?.cancel()
+        chatCancellable = nil
+
+        // Set up new query
+        window.state.displayedQuery = query
+        window.state.aiResponseText = ""
+        window.state.isAILoading = true
+
+        let screenshot = window.state.screenshotURL
+        window.onSendQuery?(query, screenshot)
     }
 
     /// Access the bar state for PTT updates.

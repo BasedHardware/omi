@@ -7,8 +7,12 @@ struct AIResponseView: View {
     @Binding var responseText: String
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
+    @FocusState private var isFollowUpFocused: Bool
 
     let userInput: String
+    let chatHistory: [ChatExchange]
+    @Binding var isVoiceFollowUp: Bool
+    @Binding var voiceFollowUpTranscript: String
 
     var onClose: (() -> Void)?
     var onSendFollowUp: ((String) -> Void)?
@@ -17,9 +21,52 @@ struct AIResponseView: View {
         VStack(alignment: .leading, spacing: 12) {
             headerView
                 .fixedSize(horizontal: false, vertical: true)
-            questionBar
-            contentView
-            if !isLoading {
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Previous chat exchanges
+                        ForEach(chatHistory) { exchange in
+                            chatExchangeView(exchange)
+                        }
+
+                        // Current question
+                        questionBar
+
+                        // Current response
+                        currentContentView
+
+                        // Voice follow-up indicator (shown inline when PTT is active during conversation)
+                        if isVoiceFollowUp {
+                            voiceFollowUpView
+                                .id("voiceFollowUp")
+                        }
+
+                        // Anchor for auto-scroll
+                        Color.clear.frame(height: 1).id("bottom")
+                    }
+                }
+                .onChange(of: responseText) { _ in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+                .onChange(of: chatHistory.count) { _ in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+                .onChange(of: isVoiceFollowUp) { newValue in
+                    if newValue {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("voiceFollowUp", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if !isLoading && !isVoiceFollowUp {
                 followUpInputView
             }
         }
@@ -27,6 +74,14 @@ struct AIResponseView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onExitCommand {
             onClose?()
+        }
+        .onChange(of: isLoading) { newValue in
+            if !newValue {
+                // Auto-focus follow-up field when loading finishes
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isFollowUpFocused = true
+                }
+            }
         }
     }
 
@@ -57,6 +112,38 @@ struct AIResponseView: View {
             .buttonStyle(.plain)
         }
     }
+
+    // MARK: - Chat History
+
+    private func chatExchangeView(_ exchange: ChatExchange) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Question bubble
+            HStack(alignment: .top, spacing: 8) {
+                Text(exchange.question)
+                    .scaledFont(size: 13)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(8)
+
+            // Response
+            Markdown(exchange.response)
+                .scaledMarkdownTheme(.ai)
+                .textSelection(.enabled)
+                .environment(\.colorScheme, .dark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+
+            Divider()
+                .background(Color.white.opacity(0.1))
+        }
+    }
+
+    // MARK: - Current Question & Response
 
     private var questionBar: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -115,6 +202,70 @@ struct AIResponseView: View {
         return size.height > font.pointSize * 1.5
     }
 
+    private var currentContentView: some View {
+        Group {
+            if isLoading && responseText.isEmpty {
+                Spacer()
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            } else if !responseText.isEmpty {
+                Markdown(responseText)
+                    .scaledMarkdownTheme(.ai)
+                    .textSelection(.enabled)
+                    .environment(\.colorScheme, .dark)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 8)
+                    .contextMenu {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(responseText, forType: .string)
+                        }
+                        Button("Copy Question & Answer") {
+                            let combined = "Q: \(userInput)\n\nA: \(responseText)"
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(combined, forType: .string)
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Voice Follow-Up
+
+    private var voiceFollowUpView: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 10, height: 10)
+                .scaleEffect(1.2)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isVoiceFollowUp)
+
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(.white)
+
+            if !voiceFollowUpTranscript.isEmpty {
+                Text(voiceFollowUpTranscript)
+                    .scaledFont(size: 13)
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+            } else {
+                Text("Listening...")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.white.opacity(0.5))
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.red.opacity(0.15))
+        .cornerRadius(8)
+    }
+
+    // MARK: - Follow-Up Input
+
     private var followUpInputView: some View {
         HStack(spacing: 6) {
             TextField("Ask follow up...", text: $followUpText)
@@ -124,6 +275,7 @@ struct AIResponseView: View {
                 .padding(.vertical, 7)
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(8)
+                .focused($isFollowUpFocused)
                 .onSubmit {
                     sendFollowUp()
                 }
@@ -146,36 +298,5 @@ struct AIResponseView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         onSendFollowUp?(trimmed)
-    }
-
-    private var contentView: some View {
-        Group {
-            if isLoading {
-                Spacer()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    Markdown(responseText)
-                        .scaledMarkdownTheme(.ai)
-                        .textSelection(.enabled)
-                        .environment(\.colorScheme, .dark)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contextMenu {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(responseText, forType: .string)
-                    }
-                    Button("Copy Question & Answer") {
-                        let combined = "Q: \(userInput)\n\nA: \(responseText)"
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(combined, forType: .string)
-                    }
-                }
-            }
-        }
     }
 }
