@@ -9,6 +9,7 @@ struct ShortcutsSettingsSection: View {
             backgroundStyleCard
             askOmiKeyCard
             pttKeyCard
+            pttTranscriptionModeCard
             doubleTapCard
             pttSoundsCard
             referenceCard
@@ -137,6 +138,55 @@ struct ShortcutsSettingsSection: View {
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
             )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var pttTranscriptionModeCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Transcription Mode")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text(settings.pttTranscriptionMode.description)
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ShortcutSettings.PTTTranscriptionMode.allCases, id: \.self) { mode in
+                    pttTranscriptionModeButton(mode)
+                }
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        )
+    }
+
+    private func pttTranscriptionModeButton(_ mode: ShortcutSettings.PTTTranscriptionMode) -> some View {
+        let isSelected = settings.pttTranscriptionMode == mode
+        return Button {
+            settings.pttTranscriptionMode = mode
+        } label: {
+            Text(mode.rawValue)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected
+                              ? OmiColors.purplePrimary.opacity(0.3)
+                              : OmiColors.backgroundTertiary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                )
         }
         .buttonStyle(.plain)
     }
