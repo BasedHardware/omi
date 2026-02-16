@@ -209,6 +209,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func hideBar() {
         self.orderOut(nil)
+        AnalyticsManager.shared.floatingBarToggled(visible: false, source: state.showingAIConversation ? "escape_ai" : "bar_button")
         onHide?()
     }
 
