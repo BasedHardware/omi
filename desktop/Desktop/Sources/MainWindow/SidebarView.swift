@@ -79,7 +79,6 @@ struct SidebarView: View {
     @ObservedObject private var adviceStorage = AdviceStorage.shared
     @ObservedObject private var focusStorage = FocusStorage.shared
     @ObservedObject private var deviceProvider = DeviceProvider.shared
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
 
     // State for Get Omi Widget (shown when no device is paired, dismissible)
@@ -161,7 +160,8 @@ struct SidebarView: View {
                         Group {
                             if item == .conversations {
                                 // Conversations - icon shows audio activity when recording
-                                NavItemWithStatusView(
+                                // Audio levels wrapped in a separate view to avoid re-rendering the entire sidebar
+                                AudioLevelNavItem(
                                     icon: item.icon,
                                     label: item.title,
                                     isSelected: selectedIndex == item.rawValue,
@@ -186,10 +186,7 @@ struct SidebarView: View {
                                     },
                                     onToggle: {
                                         toggleTranscription(enabled: !appState.isTranscribing)
-                                    },
-                                    micLevel: audioLevels.microphoneLevel,
-                                    systemLevel: audioLevels.systemLevel,
-                                    showAudioBars: true
+                                    }
                                 )
                             } else if item == .rewind {
                                 // Rewind - shows pulsing recording icon when both audio and screen are active
