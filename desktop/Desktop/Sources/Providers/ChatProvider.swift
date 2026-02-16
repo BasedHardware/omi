@@ -373,6 +373,11 @@ class ChatProvider: ObservableObject {
             }
     }
 
+    /// Pre-start the Claude bridge so the first query doesn't wait for process launch
+    func warmupBridge() async {
+        _ = await ensureBridgeStarted()
+    }
+
     /// Ensure the Claude Agent bridge is started (restarts if the process died)
     private func ensureBridgeStarted() async -> Bool {
         // If we thought the bridge was started but the process died, reset so we restart
