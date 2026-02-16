@@ -85,8 +85,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onAskAI: { [weak self] in self?.handleAskAI() },
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message, screenshotURL in self?.onSendQuery?(message, screenshotURL) },
-            onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onCaptureScreenshot: { [weak self] in self?.captureScreenshot() }
+            onCloseAI: { [weak self] in self?.closeAIConversation() }
         ).environmentObject(state)
 
         hostingView = NSHostingView(rootView: AnyView(
@@ -179,9 +178,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    /// Focus the text input field by finding the NSTextView in the view hierarchy
-    func focusInputField() {
-        guard let contentView = self.contentView else { return }
+    /// Focus the text input field by finding the NSTextView in the view hierarchy.
+    /// Returns `true` if the text view was found and focused.
+    @discardableResult
+    func focusInputField() -> Bool {
+        guard let contentView = self.contentView else { return false }
         // Find the NSTextView inside the hosting view hierarchy
         func findTextView(in view: NSView) -> NSTextView? {
             if let textView = view as? NSTextView { return textView }
@@ -193,7 +194,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         if let textView = findTextView(in: contentView) {
             makeKeyAndOrderFront(nil)
             makeFirstResponder(textView)
+            return true
         }
+        return false
     }
 
     func closeAIConversation() {
@@ -244,10 +247,18 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         resizeToFixedHeight(120, animated: true)
         setupInputHeightObserver()
 
-        // Focus input ASAP (minimal delay for SwiftUI to create the text view)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.makeKeyAndOrderFront(nil)
-            self?.focusInputField()
+        // Focus input after SwiftUI creates the text view.
+        // Use two attempts: first try quickly, retry if the text view isn't ready yet.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            self.makeKeyAndOrderFront(nil)
+            if !self.focusInputField() {
+                // Text view not ready yet — retry after a longer delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.makeKeyAndOrderFront(nil)
+                    self?.focusInputField()
+                }
+            }
         }
 
         // Capture screenshot in background without hiding the bar

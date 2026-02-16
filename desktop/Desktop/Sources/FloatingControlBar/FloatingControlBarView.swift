@@ -10,7 +10,6 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String, URL?) -> Void
     var onCloseAI: () -> Void
-    var onCaptureScreenshot: () -> Void
 
     @State private var isHovering = false
 
@@ -155,10 +154,6 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
-            screenshotURL: Binding(
-                get: { state.screenshotURL },
-                set: { state.screenshotURL = $0 }
-            ),
             onSend: { message in
                 state.displayedQuery = message
                 let screenshot = state.screenshotURL
@@ -174,8 +169,7 @@ struct FloatingControlBarView: View {
                 guard let state = state else { return }
                 let totalHeight = 50 + height + 24
                 state.inputViewHeight = totalHeight
-            },
-            onCaptureScreenshot: onCaptureScreenshot
+            }
         )
         .transition(
             .asymmetric(

@@ -3,14 +3,12 @@ import SwiftUI
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {
     @Binding var userInput: String
-    @Binding var screenshotURL: URL?
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
 
     var onSend: ((String) -> Void)?
     var onCancel: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
-    var onCaptureScreenshot: (() -> Void)?
 
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
@@ -33,43 +31,6 @@ struct AskAIInputView: View {
                 }
                 .padding(.top, 8)
                 .padding(.trailing, 16)
-            }
-
-            // Screenshot thumbnail
-            if let url = screenshotURL, let nsImage = NSImage(contentsOf: url) {
-                HStack(spacing: 8) {
-                    ZStack(alignment: .topTrailing) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 50)
-                            .cornerRadius(8)
-                            .clipped()
-
-                        Button(action: { screenshotURL = nil }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .scaledFont(size: 14)
-                                .foregroundColor(.white)
-                                .shadow(radius: 2)
-                        }
-                        .buttonStyle(.plain)
-                        .offset(x: 4, y: -4)
-                    }
-                    Text("Screenshot attached")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
-                    Spacer()
-
-                    Button(action: { onCaptureScreenshot?() }) {
-                        Image(systemName: "arrow.clockwise")
-                            .scaledFont(size: 12)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Retake screenshot")
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
             }
 
             HStack(spacing: 6) {
