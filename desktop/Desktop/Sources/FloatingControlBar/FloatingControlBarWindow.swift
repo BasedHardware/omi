@@ -722,7 +722,7 @@ class FloatingControlBarManager {
             fullMessage = "[Screenshot of user's screen attached: \(url.path)]\n\n\(message)"
         }
 
-        await provider.sendMessage(fullMessage, model: "claude-sonnet-4-5-20250929")
+        await provider.sendMessage(fullMessage, model: barWindow.state.selectedModel)
     }
 }
 

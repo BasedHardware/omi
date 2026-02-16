@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
+    @EnvironmentObject var state: FloatingControlBarState
     @Binding var isLoading: Bool
     @Binding var responseText: String
     @State private var isQuestionExpanded = false
@@ -100,6 +101,8 @@ struct AIResponseView: View {
                     .foregroundColor(.secondary)
             }
 
+            modelPicker
+
             Spacer()
 
             Button(action: { onClose?() }) {
@@ -111,6 +114,40 @@ struct AIResponseView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private var modelPicker: some View {
+        Menu {
+            ForEach(FloatingControlBarState.availableModels, id: \.id) { model in
+                Button(action: { state.selectedModel = model.id }) {
+                    HStack {
+                        Text(model.label)
+                        if state.selectedModel == model.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentModelLabel)
+                    .scaledFont(size: 11)
+                    .foregroundColor(.secondary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .scaledFont(size: 8)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(4)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var currentModelLabel: String {
+        FloatingControlBarState.availableModels.first { $0.id == state.selectedModel }?.label ?? "Sonnet"
     }
 
     // MARK: - Chat History

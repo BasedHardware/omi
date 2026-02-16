@@ -35,4 +35,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
     @Published var voiceFollowUpTranscript: String = ""
+
+    // Model selection
+    @Published var selectedModel: String = "claude-sonnet-4-5-20250929"
+
+    /// Available models for the floating bar picker
+    static let availableModels: [(id: String, label: String)] = [
+        ("claude-sonnet-4-5-20250929", "Sonnet"),
+        ("claude-opus-4-6", "Opus"),
+    ]
 }

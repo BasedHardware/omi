@@ -2,6 +2,7 @@ import SwiftUI
 
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {
+    @EnvironmentObject var state: FloatingControlBarState
     @Binding var userInput: String
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
@@ -15,9 +16,14 @@ struct AskAIInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Escape hint
+            // Top bar: model picker + escape hint
             HStack {
+                // Model picker
+                modelPicker
+                    .padding(.leading, 16)
+
                 Spacer()
+
                 HStack(spacing: 4) {
                     Text("esc")
                         .scaledFont(size: 11)
@@ -29,9 +35,9 @@ struct AskAIInputView: View {
                         .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
-                .padding(.top, 8)
                 .padding(.trailing, 16)
             }
+            .padding(.top, 8)
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
@@ -92,5 +98,39 @@ struct AskAIInputView: View {
         .onExitCommand {
             onCancel?()
         }
+    }
+
+    private var modelPicker: some View {
+        Menu {
+            ForEach(FloatingControlBarState.availableModels, id: \.id) { model in
+                Button(action: { state.selectedModel = model.id }) {
+                    HStack {
+                        Text(model.label)
+                        if state.selectedModel == model.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentModelLabel)
+                    .scaledFont(size: 11)
+                    .foregroundColor(.secondary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .scaledFont(size: 8)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(4)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var currentModelLabel: String {
+        FloatingControlBarState.availableModels.first { $0.id == state.selectedModel }?.label ?? "Sonnet"
     }
 }
