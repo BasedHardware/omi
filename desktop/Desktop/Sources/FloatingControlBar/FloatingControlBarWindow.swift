@@ -467,7 +467,7 @@ class FloatingControlBarManager {
     private init() {}
 
     /// Create the floating bar window and wire up AppState bindings.
-    func setup(appState: AppState) {
+    func setup(appState: AppState, chatProvider: ChatProvider) {
         guard window == nil else {
             log("FloatingControlBarManager: setup() called but window already exists")
             return
@@ -496,12 +496,11 @@ class FloatingControlBarManager {
         // Hide just orders out
         barWindow.onHide = {}
 
-        // Send query through a dedicated ChatProvider
-        let provider = ChatProvider()
-        self.chatProvider = provider
+        // Reuse the sidebar's ChatProvider (bridge is already warm from app startup)
+        self.chatProvider = chatProvider
 
-        barWindow.onSendQuery = { [weak self, weak barWindow] message, screenshotURL in
-            guard let self = self, let barWindow = barWindow else { return }
+        barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message, screenshotURL in
+            guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
             Task { @MainActor in
                 await self.sendAIQuery(message, screenshotURL: screenshotURL, barWindow: barWindow, provider: provider)
             }
@@ -611,12 +610,11 @@ class FloatingControlBarManager {
         window.state.isVoiceFollowUp = false
         window.state.voiceFollowUpTranscript = ""
 
-        let provider = ChatProvider()
-        self.chatProvider = provider
+        guard let provider = self.chatProvider else { return }
 
-        // Re-wire the onSendQuery to use the new provider
-        window.onSendQuery = { [weak self, weak window] message, screenshotURL in
-            guard let self = self, let window = window else { return }
+        // Re-wire the onSendQuery to use the shared provider
+        window.onSendQuery = { [weak self, weak window, weak provider] message, screenshotURL in
+            guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
                 await self.sendAIQuery(message, screenshotURL: screenshotURL, barWindow: window, provider: provider)
             }
@@ -638,7 +636,7 @@ class FloatingControlBarManager {
 
         // Auto-send the query
         Task { @MainActor in
-            await sendAIQuery(query, screenshotURL: screenshot, barWindow: window, provider: provider)
+            await self.sendAIQuery(query, screenshotURL: screenshot, barWindow: window, provider: provider)
         }
     }
 

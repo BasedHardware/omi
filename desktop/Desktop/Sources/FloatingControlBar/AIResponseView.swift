@@ -8,7 +8,6 @@ struct AIResponseView: View {
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
     @FocusState private var isFollowUpFocused: Bool
-    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
 
     let userInput: String
     let chatHistory: [ChatExchange]
@@ -103,23 +102,11 @@ struct AIResponseView: View {
 
             Spacer()
 
-            Button(action: {
-                shortcutSettings.solidBackground.toggle()
-            }) {
-                Image(systemName: shortcutSettings.solidBackground ? "square.fill" : "square.on.square")
-                    .scaledFont(size: 10)
-                    .foregroundColor(.secondary)
-                    .frame(width: 20, height: 20)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .help(shortcutSettings.solidBackground ? "Switch to transparent background" : "Switch to solid background")
-
             Button(action: { onClose?() }) {
                 Image(systemName: "xmark")
                     .scaledFont(size: 8)
                     .foregroundColor(.secondary)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 16, height: 16)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)

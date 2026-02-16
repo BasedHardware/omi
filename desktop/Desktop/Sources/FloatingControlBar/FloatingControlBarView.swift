@@ -81,11 +81,36 @@ struct FloatingControlBarView: View {
             HStack(spacing: 6) {
                 compactLabel("Hide", keys: ["\u{2318}", "\\"])
                 compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                if state.showingAIConversation {
+                    Spacer().frame(width: 2)
+                    compactToggle("Solid", isOn: $shortcutSettings.solidBackground)
+                }
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
         .frame(height: 50)
+    }
+
+    private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Button(action: { isOn.wrappedValue.toggle() }) {
+            HStack(spacing: 3) {
+                Text(title)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isOn.wrappedValue ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: 26, height: 15)
+                    .overlay(alignment: isOn.wrappedValue ? .trailing : .leading) {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 11, height: 11)
+                            .padding(2)
+                    }
+                    .animation(.easeInOut(duration: 0.15), value: isOn.wrappedValue)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func compactButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {

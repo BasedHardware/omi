@@ -96,7 +96,7 @@ struct DesktopHomeView: View {
                             }
 
                             // Set up floating control bar (only show if user hasn't disabled it)
-                            FloatingControlBarManager.shared.setup(appState: appState)
+                            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: viewModelContainer.chatProvider)
                             if FloatingControlBarManager.shared.isEnabled {
                                 FloatingControlBarManager.shared.show()
                             }

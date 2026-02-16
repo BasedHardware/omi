@@ -89,7 +89,10 @@ class ViewModelContainer: ObservableObject {
             }
             await memoriesViewModel.loadMemories()
         }
-        async let chat: Void = measurePerfAsync("DATA LOAD: Chat") { await chatProvider.initialize() }
+        async let chat: Void = measurePerfAsync("DATA LOAD: Chat") {
+            await chatProvider.initialize()
+            await chatProvider.warmupBridge()
+        }
 
         // Wait for all to complete
         _ = await (tasks, dashboard, apps, memories, chat)
