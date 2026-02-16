@@ -278,20 +278,45 @@ actor RewindDatabase {
                 }
             }
         }
-        dbQueue = queue
-        openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
 
-        try migrate(queue)
+        // Post-open health check: verify we can actually run queries on the opened database.
+        // This catches cases where the DB opens successfully (PRAGMAs pass) but data queries
+        // fail with SQLITE_IOERR — e.g., stale WAL files from migration, page-level corruption.
+        var activeQueue = queue
+        do {
+            try activeQueue.read { db in
+                _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
+            }
+        } catch {
+            if let dbError = error as? DatabaseError,
+               dbError.resultCode == .SQLITE_IOERR || dbError.resultCode == .SQLITE_CORRUPT {
+                log("RewindDatabase: Database opened but queries fail (\(error)), removing WAL and retrying...")
+                removeWALFiles(at: dbPath)
+                let retryQueue = try DatabaseQueue(path: dbPath, configuration: config)
+                try retryQueue.read { db in
+                    _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
+                }
+                activeQueue = retryQueue
+            } else {
+                throw error
+            }
+        }
+
+        dbQueue = activeQueue
+        openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        consecutiveQueryIOErrors = 0
+
+        try migrate(activeQueue)
 
         // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
         // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
         // (N only limits error reporting), so on large databases (e.g. 4+ GB) it can take 60-90s.
         if previousCrashed {
             log("RewindDatabase: Running lightweight integrity check after unclean shutdown...")
-            try verifyDatabaseIntegrity(queue)
+            try verifyDatabaseIntegrity(activeQueue)
         } else {
             // Still log journal mode on clean startup (cheap PRAGMA, no full check)
-            try await queue.read { db in
+            try await activeQueue.read { db in
                 let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
                 log("RewindDatabase: Journal mode is \(journalMode ?? "unknown")")
             }
