@@ -1,6 +1,21 @@
 {
   "releases": [
     {
+      "version": "0.8.6",
+      "date": "2026-02-15",
+      "changes": [
+        "Ask Omi floating bar now has a follow-up input field for continuing conversations",
+        "Added settings gear icon on the floating bar for quick access to configuration",
+        "New solid background option for the floating bar (Settings > Advanced > Ask Omi Floating Bar)",
+        "Copy entire conversation to clipboard with one click in AI Chat",
+        "Text selection now works across the entire chat area",
+        "Conversations auto-refresh silently without flickering or scroll jumps",
+        "Added auto-install updates option in Settings",
+        "Improved settings search with more keywords and subsections",
+        "Agent bridge now supports read-only Playwright tools in Ask mode"
+      ]
+    },
+    {
       "version": "0.8.5",
       "date": "2026-02-15",
       "changes": [
