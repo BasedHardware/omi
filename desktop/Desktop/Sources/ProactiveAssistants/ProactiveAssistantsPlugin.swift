@@ -588,11 +588,12 @@ public class ProactiveAssistantsPlugin: NSObject {
                         }
                     } else {
                         isProcessingRewindFrame = true
+                        let windowTitle = self.currentWindowTitle
                         Task { [weak self] in
                             await RewindIndexer.shared.processFrame(
                                 cgImage: cgImage,
                                 appName: appName,
-                                windowTitle: self.currentWindowTitle,
+                                windowTitle: windowTitle,
                                 captureTime: captureTime
                             )
                             await MainActor.run {

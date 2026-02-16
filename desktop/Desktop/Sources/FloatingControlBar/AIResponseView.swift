@@ -46,18 +46,18 @@ struct AIResponseView: View {
                         Color.clear.frame(height: 1).id("bottom")
                     }
                 }
-                .onChange(of: responseText) { _ in
+                .onChange(of: responseText) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: chatHistory.count) { _ in
+                .onChange(of: chatHistory.count) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onChange(of: isVoiceFollowUp) { newValue in
-                    if newValue {
+                .onChange(of: isVoiceFollowUp) {
+                    if isVoiceFollowUp {
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("voiceFollowUp", anchor: .bottom)
                         }
@@ -75,8 +75,8 @@ struct AIResponseView: View {
         .onExitCommand {
             onClose?()
         }
-        .onChange(of: isLoading) { newValue in
-            if !newValue {
+        .onChange(of: isLoading) {
+            if !isLoading {
                 // Auto-focus follow-up field when loading finishes
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     isFollowUpFocused = true
