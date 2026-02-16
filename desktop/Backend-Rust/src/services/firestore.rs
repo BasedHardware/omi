@@ -2872,7 +2872,7 @@ impl FirestoreService {
         Ok(migrated_count)
     }
 
-    /// Count active AI action items (source contains "screenshot", not completed, not deleted).
+    /// Count active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Used by the promotion system to determine if more tasks should be promoted.
     pub async fn count_active_ai_action_items(
         &self,
@@ -2880,7 +2880,7 @@ impl FirestoreService {
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        // Composite filter: source="screenshot" AND completed=false at Firestore level
+        // Composite filter: from_staged=true AND completed=false at Firestore level
         // so we don't miss items when users have thousands of action_items
         let query = json!({
             "structuredQuery": {
@@ -2898,9 +2898,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2930,10 +2930,7 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .count();
 

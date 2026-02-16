@@ -54,6 +54,9 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     // Chat session (local-only, not synced to backend)
     var chatSessionId: String?           // Firestore chat session ID for task-scoped chat
 
+    // Promotion tracking
+    var fromStaged: Bool                 // Whether this task was promoted from staged_tasks
+
     // Timestamps
     var createdAt: Date
     var updatedAt: Date
@@ -96,6 +99,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         agentCompletedAt: Date? = nil,
         agentEditedFilesJson: String? = nil,
         chatSessionId: String? = nil,
+        fromStaged: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -132,6 +136,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.agentCompletedAt = agentCompletedAt
         self.agentEditedFilesJson = agentEditedFilesJson
         self.chatSessionId = chatSessionId
+        self.fromStaged = fromStaged
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
