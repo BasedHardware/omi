@@ -214,6 +214,7 @@ struct SettingsContentView: View {
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
+        case askOmiFloatingBar = "Ask Omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
 
@@ -227,6 +228,7 @@ struct SettingsContentView: View {
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             }
@@ -1728,6 +1730,8 @@ struct SettingsContentView: View {
                 memoryAssistantSubsection
             case .analysisThrottle:
                 analysisThrottleSubsection
+            case .askOmiFloatingBar:
+                askOmiFloatingBarSubsection
             case .preferences:
                 preferencesSubsection
             case .troubleshooting:
@@ -2818,6 +2822,12 @@ struct SettingsContentView: View {
                         }
                 }
             }
+        }
+    }
+
+    private var askOmiFloatingBarSubsection: some View {
+        VStack(spacing: 20) {
+            ShortcutsSettingsSection()
         }
     }
 
