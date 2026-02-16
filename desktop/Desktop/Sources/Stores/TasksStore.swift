@@ -104,39 +104,50 @@ class TasksStore: ObservableObject {
         return a.createdAt > b.createdAt
     }
 
-    /// Overdue tasks (due date in the past but within 7 days)
-    var overdueTasks: [TaskActionItem] {
-        let startOfToday = Calendar.current.startOfDay(for: Date())
-        return incompleteTasks
-            .filter { task in
-                guard let dueAt = task.dueAt else { return false }
-                // Must be overdue (before today) but within 7 days (not too old)
-                return dueAt < startOfToday && dueAt >= sevenDaysAgo
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
-    }
+    /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
+    @Published var overdueTasks: [TaskActionItem] = []
 
-    /// Today's tasks (due today)
-    var todaysTasks: [TaskActionItem] {
+    /// Today's tasks (due today) — loaded from SQLite
+    @Published var todaysTasks: [TaskActionItem] = []
+
+    /// Tasks without due date (created within last 7 days) — loaded from SQLite
+    @Published var tasksWithoutDueDate: [TaskActionItem] = []
+
+    /// Load dashboard task lists directly from SQLite (avoids pagination issues)
+    func loadDashboardTasks() async {
         let calendar = Calendar.current
         let startOfToday = calendar.startOfDay(for: Date())
         let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
-        return incompleteTasks
-            .filter { task in
-                guard let dueAt = task.dueAt else { return false }
-                return dueAt >= startOfToday && dueAt < endOfToday
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
-    }
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
 
-    /// Tasks without due date (created within last 7 days)
-    var tasksWithoutDueDate: [TaskActionItem] {
-        incompleteTasks
-            .filter { task in
-                // No due date, but created within 7 days
-                task.dueAt == nil && task.createdAt >= sevenDaysAgo
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
+        do {
+            async let overdueResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateAfter: sevenDaysAgo,
+                dueDateBefore: startOfToday
+            )
+            async let todayResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateAfter: startOfToday,
+                dueDateBefore: endOfToday
+            )
+            async let noDueDateResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateIsNull: true,
+                createdAfter: sevenDaysAgo
+            )
+
+            let (overdue, today, noDueDate) = try await (overdueResult, todayResult, noDueDateResult)
+            overdueTasks = overdue.sorted(by: Self.sortByDueDateThenSource)
+            todaysTasks = today.sorted(by: Self.sortByDueDateThenSource)
+            tasksWithoutDueDate = noDueDate.sorted(by: Self.sortByDueDateThenSource)
+            log("TasksStore: Dashboard loaded from SQLite - overdue: \(overdue.count), today: \(today.count), noDeadline: \(noDueDate.count)")
+        } catch {
+            logError("TasksStore: Failed to load dashboard tasks from SQLite", error: error)
+        }
     }
 
     var todoCount: Int {
@@ -223,6 +234,7 @@ class TasksStore: ObservableObject {
             }
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
+            await loadDashboardTasks()
         } catch {
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
@@ -361,6 +373,7 @@ class TasksStore: ObservableObject {
     func loadTasksIfNeeded() async {
         guard !hasLoadedIncomplete else { return }
         await loadIncompleteTasks()
+        await loadDashboardTasks()
         // Also load deleted tasks in background so the filter count is ready
         if !hasLoadedDeleted {
             await loadDeletedTasks()
@@ -370,6 +383,7 @@ class TasksStore: ObservableObject {
     /// Legacy method - loads incomplete tasks
     func loadTasks() async {
         await loadIncompleteTasks()
+        await loadDashboardTasks()
         // Also load deleted tasks so the "Removed by AI" filter count is ready
         if !hasLoadedDeleted {
             await loadDeletedTasks()
@@ -687,6 +701,7 @@ class TasksStore: ObservableObject {
                 incompleteOffset = refreshed.count
                 hasMoreIncompleteTasks = refreshed.count >= pageSize
                 log("TasksStore: Refreshed UI after full sync - \(refreshed.count) incomplete tasks")
+                await loadDashboardTasks()
             } catch {
                 logError("TasksStore: Failed to refresh UI after full sync", error: error)
             }
