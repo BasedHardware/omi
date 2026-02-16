@@ -130,7 +130,7 @@ struct AIResponseView: View {
             }
         } label: {
             Text(currentModelLabel)
-                .scaledFont(size: 11)
+                .scaledFont(size: 14)
                 .foregroundColor(.secondary)
         }
         .menuStyle(.borderlessButton)
