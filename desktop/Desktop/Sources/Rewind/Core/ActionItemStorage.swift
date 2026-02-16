@@ -846,6 +846,11 @@ actor ActionItemStorage {
         includeDeleted: Bool = false
     ) async throws -> [(id: Int64, description: String, completed: Bool, deleted: Bool, deletedBy: String?, relevanceScore: Int?)] {
         let db = try await ensureInitialized()
+        // Sanitize FTS5 query: strip special characters that could be misinterpreted
+        let sanitizedQuery = query.map { $0.isLetter || $0.isNumber || $0 == "*" || $0 == " " ? $0 : Character(" ") }
+            .map(String.init).joined()
+            .components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
+        guard !sanitizedQuery.isEmpty else { return [] }
 
         return try await db.read { database in
             var sql = """

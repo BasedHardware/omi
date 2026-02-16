@@ -1133,7 +1133,9 @@ actor TaskAssistant: ProactiveAssistant {
         var results: [TaskSearchResult] = []
 
         do {
-            let words = query.components(separatedBy: .whitespaces).filter { $0.count >= 3 }
+            let words = query.components(separatedBy: .whitespaces)
+                .map { $0.filter { $0.isLetter || $0.isNumber } }  // Strip FTS5 special chars (- : * " etc.)
+                .filter { $0.count >= 3 }
             let ftsQuery = words.map { "\($0)*" }.joined(separator: " OR ")
 
             if !ftsQuery.isEmpty {
