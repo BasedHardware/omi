@@ -706,7 +706,7 @@ class TasksStore: ObservableObject {
     /// Sets the flag optimistically before the request to avoid retry loops on timeout.
     private func migrateAITasksToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "stagedTasksMigrationCompleted_v5_\(userId)"
+        let migrationKey = "stagedTasksMigrationCompleted_v4_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else {
             log("TasksStore: Staged tasks migration already completed for user \(userId)")
@@ -739,7 +739,7 @@ class TasksStore: ObservableObject {
     /// These were created by the old save_action_items path that bypassed the staging pipeline.
     private func migrateConversationItemsToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "conversationItemsMigrationCompleted_v5_\(userId)"
+        let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
 
