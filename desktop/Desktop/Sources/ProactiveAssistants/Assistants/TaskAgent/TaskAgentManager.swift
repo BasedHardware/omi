@@ -283,6 +283,9 @@ class TaskAgentManager: ObservableObject {
         try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
     }
 
+    /// Number of consecutive unchanged polls before considering a session idle
+    private let idleThreshold = 3
+
     private func startPolling(taskId: String, sessionName: String) {
         // Cancel any existing polling for this task
         pollingTasks[taskId]?.cancel()
@@ -291,6 +294,9 @@ class TaskAgentManager: ObservableObject {
             // Track last persisted state to avoid redundant writes
             var lastPersistedStatus: AgentStatus?
             var lastPersistedFileCount = 0
+            // Track consecutive unchanged outputs to detect idle sessions
+            var lastOutput: String?
+            var unchangedCount = 0
 
             while !Task.isCancelled {
                 guard let self = self else { break }
@@ -322,6 +328,24 @@ class TaskAgentManager: ObservableObject {
                     logMessage("TaskAgentManager: Session completed for task \(taskId) (\(editedFiles.count) files edited)")
                     break
                 }
+
+                // Detect idle sessions: if output hasn't changed for consecutive polls,
+                // the agent is done and waiting at the prompt
+                if output == lastOutput {
+                    unchangedCount += 1
+                    if unchangedCount >= self.idleThreshold {
+                        await MainActor.run {
+                            self.activeSessions[taskId]?.status = .completed
+                            self.activeSessions[taskId]?.completedAt = Date()
+                        }
+                        if let s = self.activeSessions[taskId] { self.persistSession(s) }
+                        logMessage("TaskAgentManager: Session idle for task \(taskId) (output unchanged for \(unchangedCount) polls, \(editedFiles.count) files edited), stopping poll")
+                        break
+                    }
+                } else {
+                    unchangedCount = 0
+                }
+                lastOutput = output
 
                 // Update status based on activity
                 if !editedFiles.isEmpty {
