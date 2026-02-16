@@ -41,6 +41,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// True while a programmatic scroll is in-flight, so we can distinguish
     /// user-initiated scrolls from our own.
     @State private var isProgrammaticScroll = false
+    /// True for ~1s after the view appears, suppressing shouldFollowContent=false
+    /// during the LazyVStack/Markdown layout settling period. Without this guard,
+    /// content height changes from lazy rendering are misinterpreted as user scrolling.
+    @State private var isSettlingAfterAppear = false
     /// Throttle token for scrollToBottom — prevents the streaming + scroll
     /// detection feedback loop from saturating the main thread.
     @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -109,9 +113,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                             isUserAtBottom = atBottom
                             if atBottom {
                                 shouldFollowContent = true
-                            } else if !isProgrammaticScroll {
+                            } else if !isProgrammaticScroll && !isSettlingAfterAppear {
                                 // Only stop following when the user actively scrolls up,
-                                // not when content grows past the viewport or we're mid-scroll.
+                                // not when content grows past the viewport, we're mid-scroll,
+                                // or the view is still settling after (re-)appearing.
                                 shouldFollowContent = false
                             }
                         }
@@ -147,10 +152,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     }
                 }
                 .onAppear {
-                    // Scroll immediately and again after layout settles
+                    // Suppress scroll-detection false positives while content settles
+                    isSettlingAfterAppear = true
+                    // Scroll immediately, after initial layout, and after full settle
                     scrollToBottom(proxy: proxy)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         scrollToBottom(proxy: proxy)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                        scrollToBottom(proxy: proxy)
+                    }
+                    // Allow normal scroll detection after content has settled
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        isSettlingAfterAppear = false
                     }
                 }
 
