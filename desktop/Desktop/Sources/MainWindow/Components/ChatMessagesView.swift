@@ -31,7 +31,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
-                    LazyVStack(spacing: 16) {
+                    VStack(spacing: 16) {
                         // Load more button at top
                         if hasMoreMessages {
                             Button {
@@ -83,6 +83,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         }
                     }
                     .padding()
+                    .textSelection(.enabled)
                     .background(
                         ScrollPositionDetector { atBottom in
                             isUserAtBottom = atBottom

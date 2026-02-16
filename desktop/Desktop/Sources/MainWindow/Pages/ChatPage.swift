@@ -512,7 +512,6 @@ struct ChatBubble: View {
                             if !text.isEmpty {
                                 Markdown(text)
                                     .scaledMarkdownTheme(.ai)
-                                    .textSelection(.enabled)
                                     .if_available_writingToolsNone()
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
@@ -537,7 +536,6 @@ struct ChatBubble: View {
                     // User messages or AI messages without content blocks (loaded from Firestore)
                     Markdown(message.text)
                         .scaledMarkdownTheme(message.sender)
-                        .textSelection(.enabled)
                         .if_available_writingToolsNone()
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
@@ -700,7 +698,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(10)
-                                .textSelection(.enabled)
                         }
                     }
 
@@ -715,7 +712,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(15)
-                                .textSelection(.enabled)
                         }
                     }
                 }
