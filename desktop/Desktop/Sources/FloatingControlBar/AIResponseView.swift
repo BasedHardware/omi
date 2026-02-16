@@ -25,6 +25,9 @@ struct AIResponseView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onExitCommand {
+            onClose?()
+        }
     }
 
     private var headerView: some View {

@@ -7,6 +7,7 @@ struct ShortcutsSettingsSection: View {
     var body: some View {
         VStack(spacing: 20) {
             backgroundStyleCard
+            askOmiKeyCard
             pttKeyCard
             doubleTapCard
             referenceCard
@@ -35,6 +36,55 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+    }
+
+    private var askOmiKeyCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Ask Omi Shortcut")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text("Global shortcut to open Ask Omi from anywhere.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ShortcutSettings.AskOmiKey.allCases, id: \.self) { key in
+                    askOmiKeyButton(key)
+                }
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        )
+    }
+
+    private func askOmiKeyButton(_ key: ShortcutSettings.AskOmiKey) -> some View {
+        let isSelected = settings.askOmiKey == key
+        return Button {
+            settings.askOmiKey = key
+        } label: {
+            Text(key.rawValue)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected
+                              ? OmiColors.purplePrimary.opacity(0.3)
+                              : OmiColors.backgroundTertiary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var pttKeyCard: some View {
@@ -118,7 +168,7 @@ struct ShortcutsSettingsSection: View {
                 .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            shortcutRow(label: "Ask omi", keys: "\u{2318}\u{21A9}\u{FE0E}")
+            shortcutRow(label: "Ask omi", keys: settings.askOmiKey.rawValue)
             shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
             shortcutRow(label: "Push to talk", keys: settings.pttKey.symbol + " hold")
             if settings.doubleTapForLock {

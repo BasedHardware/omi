@@ -154,6 +154,11 @@ class ResourceMonitor {
             components["focus_historyCount"] = await focusAssistant.analysisHistoryCount
         }
 
+        // Rewind backpressure stats (MainActor — direct access)
+        let plugin = ProactiveAssistantsPlugin.shared
+        components["rewind_droppedFrames"] = plugin.droppedFrameCount
+        components["rewind_isProcessing"] = plugin.isProcessingRewindFrame
+
         // Thread count is already in snapshot
         components["threadCount"] = snapshot.threadCount
 

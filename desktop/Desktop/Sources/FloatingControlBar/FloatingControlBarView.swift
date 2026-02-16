@@ -142,7 +142,7 @@ struct FloatingControlBarView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
             } else {
-                Text(state.isVoiceLocked ? "Tap \u{2325} to send" : "Release \u{2325} to send")
+                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
                     .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }

@@ -373,10 +373,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return event
         }
 
-        // Shared handler for Cmd+Enter (Ask AI) — works globally without activating main window
-        let cmdEnterHandler: (NSEvent) -> Bool = { event in
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if mods.contains(.command) && event.keyCode == 36 { // 36 = Return
+        // Shared handler for Ask AI shortcut — works globally without activating main window
+        let askOmiHandler: (NSEvent) -> Bool = { event in
+            let shortcut = ShortcutSettings.shared.askOmiKey
+            if shortcut.matches(event) {
                 Task { @MainActor in
                     FloatingControlBarManager.shared.openAIInput()
                 }
@@ -387,18 +387,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
         globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            if cmdEnterHandler(event) { return }
+            if askOmiHandler(event) { return }
             _ = hotkeyHandler(event)
         }
 
         // Local monitor - for when THIS app is focused
         localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if cmdEnterHandler(event) { return nil }
+            if askOmiHandler(event) { return nil }
             return hotkeyHandler(event)
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Cmd+Enter (Ask AI), Cmd+\\ (Toggle bar)")
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask AI (\(ShortcutSettings.shared.askOmiKey.rawValue)), Cmd+\\ (Toggle bar)")
     }
 
     /// Set up observers to show/hide dock icon when main window appears/disappears

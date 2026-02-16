@@ -36,8 +36,8 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
     // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
-    private var isProcessingRewindFrame = false
-    private var droppedFrameCount = 0
+    private(set) var isProcessingRewindFrame = false
+    private(set) var droppedFrameCount = 0
 
     // Failure tracking for screen capture recovery
     private var consecutiveFailures = 0

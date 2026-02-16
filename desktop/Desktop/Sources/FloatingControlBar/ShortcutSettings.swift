@@ -1,5 +1,4 @@
-import Carbon.HIToolbox.Events
-import Foundation
+import Cocoa
 
 /// Persistent settings for keyboard shortcuts.
 @MainActor
