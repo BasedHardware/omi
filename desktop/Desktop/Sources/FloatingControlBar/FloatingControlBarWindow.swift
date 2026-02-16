@@ -503,8 +503,10 @@ class FloatingControlBarManager {
             barWindow?.makeKeyAndOrderFront(nil)
         }
 
-        // Hide just orders out
-        barWindow.onHide = {}
+        // Hide persists the preference so bar stays hidden across restarts
+        barWindow.onHide = { [weak self] in
+            self?.isEnabled = false
+        }
 
         // Reuse the sidebar's ChatProvider (bridge is already warm from app startup)
         self.chatProvider = chatProvider
