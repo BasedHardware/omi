@@ -202,6 +202,7 @@ struct AIResponseView: View {
                             .scaledFont(size: 13)
                             .foregroundColor(.white)
                             .lineLimit(1)
+                            .truncationMode(.head)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
