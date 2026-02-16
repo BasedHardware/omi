@@ -797,8 +797,8 @@ struct SidebarView: View {
                 notificationPermissionRow
             }
 
-            // Accessibility permission
-            if !appState.hasAccessibilityPermission {
+            // Accessibility permission (also show if broken: TCC says yes but AX calls fail)
+            if !appState.hasAccessibilityPermission || appState.isAccessibilityBroken {
                 accessibilityPermissionRow
             }
         }

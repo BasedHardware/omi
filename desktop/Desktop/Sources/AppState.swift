@@ -90,6 +90,7 @@ class AppState: ObservableObject {
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
     @Published var hasAutomationPermission = false
     @Published var hasAccessibilityPermission = false
+    @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
 
     /// True if notifications are enabled but won't show visual banners
     var isNotificationBannerDisabled: Bool {
@@ -104,7 +105,7 @@ class AppState: ObservableObject {
         if !hasScreenRecordingPermission || isScreenCaptureKitBroken { missing.append("Screen Recording") }
         if !hasNotificationPermission { missing.append("Notifications") }
         else if isNotificationBannerDisabled { missing.append("Notification Banners") }
-        if !hasAccessibilityPermission { missing.append("Accessibility") }
+        if !hasAccessibilityPermission || isAccessibilityBroken { missing.append("Accessibility") }
         return missing
     }
 
@@ -661,13 +662,61 @@ class AppState: ObservableObject {
     }
 
     /// Check accessibility permission status
+    /// AXIsProcessTrusted() can return stale data after macOS updates or app re-signs,
+    /// so we also do a functional AX test to detect the "broken" state.
     func checkAccessibilityPermission() {
-        hasAccessibilityPermission = AXIsProcessTrusted()
+        let tccGranted = AXIsProcessTrusted()
+        hasAccessibilityPermission = tccGranted
+
+        if tccGranted {
+            // TCC says yes — verify with an actual AX call
+            let broken = !testAccessibilityPermission()
+            if broken != isAccessibilityBroken {
+                isAccessibilityBroken = broken
+                if broken {
+                    log("ACCESSIBILITY_CHECK: TCC says granted but AX calls fail — stuck/broken state detected")
+                } else {
+                    log("ACCESSIBILITY_CHECK: AX calls working normally")
+                }
+            }
+        } else {
+            // TCC not granted, clear broken flag
+            isAccessibilityBroken = false
+        }
+    }
+
+    /// Test if Accessibility API actually works by attempting a real AX call.
+    /// Returns true if AX calls succeed, false if permission is stuck/broken.
+    private func testAccessibilityPermission() -> Bool {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else {
+            // No frontmost app to test against — can't determine, assume OK
+            return true
+        }
+
+        let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+        var focusedWindow: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
+
+        // .success or .noValue (app has no windows) both mean AX is working
+        // .cannotComplete or .apiDisabled mean the permission is stuck
+        switch result {
+        case .success, .noValue, .notImplemented, .attributeUnsupported:
+            return true
+        case .apiDisabled:
+            log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck")
+            return false
+        case .cannotComplete:
+            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck")
+            return false
+        default:
+            // Other errors (parameterizedAttributeUnsupported, etc.) aren't permission-related
+            return true
+        }
     }
 
     /// Check if accessibility permission was explicitly denied
     func isAccessibilityPermissionDenied() -> Bool {
-        return hasCompletedOnboarding && !AXIsProcessTrusted()
+        return hasCompletedOnboarding && (!AXIsProcessTrusted() || isAccessibilityBroken)
     }
 
     /// Trigger accessibility permission prompt
@@ -709,6 +758,29 @@ class AppState: ObservableObject {
         } catch {
             log("Failed to run tccutil: \(error)")
             return false
+        }
+    }
+
+    /// Reset accessibility permission via tccutil and restart the app.
+    /// Mirrors ScreenCaptureService.resetScreenCapturePermissionAndRestart().
+    func resetAccessibilityPermissionAndRestart() {
+        if UpdaterViewModel.isUpdateInProgress {
+            log("Sparkle update in progress, skipping accessibility reset restart")
+            return
+        }
+
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            let success = self.resetAccessibilityPermissionDirect(shouldRestart: false)
+
+            await MainActor.run {
+                if success {
+                    log("Accessibility permission reset, restarting app...")
+                    self.restartApp()
+                } else {
+                    log("Accessibility permission reset failed")
+                }
+            }
         }
     }
 
