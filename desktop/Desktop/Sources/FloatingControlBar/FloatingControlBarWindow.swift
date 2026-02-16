@@ -329,8 +329,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         isResizingProgrammatically = true
 
+        // On macOS 26+ (Tahoe), animated setFrame triggers NSHostingView.updateAnimatedWindowSize
+        // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
+        // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
+        // during the resize to prevent the updateAnimatedWindowSize code path.
         NSAnimationContext.beginGrouping()
         NSAnimationContext.current.duration = animated ? 0.3 : 0
+        NSAnimationContext.current.allowsImplicitAnimation = false
         NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
         NSAnimationContext.endGrouping()
