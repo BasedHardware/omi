@@ -1229,9 +1229,10 @@ class TasksViewModel: ObservableObject {
     /// Load filtered tasks from SQLite when non-status filters are applied
     private func loadFilteredTasksFromDatabase() async {
         let nonStatusTags = selectedTags.filter { $0.group != .status && $0.group != .date }
+        let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
 
-        guard !nonStatusTags.isEmpty || hasDynamicFilters else {
+        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters else {
             filteredFromDatabase = []
             recomputeDisplayCaches()
             return
@@ -1308,6 +1309,11 @@ class TasksViewModel: ObservableObject {
 
         let includeDeleted = statusTags.contains(.removedByAI) || statusTags.contains(.removedByMe)
 
+        // Extract date filter (last7Days)
+        let dateAfter: Date? = dateTags.contains(.last7Days)
+            ? Calendar.current.date(byAdding: .day, value: -7, to: Date())
+            : nil
+
         do {
             let results = try await ActionItemStorage.shared.getFilteredActionItems(
                 limit: 10000,
@@ -1316,7 +1322,8 @@ class TasksViewModel: ObservableObject {
                 categories: categories.isEmpty ? nil : categories,
                 sources: sources.isEmpty ? nil : sources,
                 priorities: priorities,
-                originCategories: originCategories
+                originCategories: originCategories,
+                dateAfter: dateAfter
             )
             filteredFromDatabase = results
             log("TasksViewModel: Loaded \(results.count) filtered tasks from SQLite")
