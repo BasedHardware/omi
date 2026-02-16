@@ -14,22 +14,27 @@ struct HelpPage: View {
     }
 }
 
-/// Displays the persistent Crisp WKWebView from CrispManager
+/// Displays the persistent Crisp WKWebView from CrispManager.
+/// Uses Auto Layout constraints so the webview fills the container even when
+/// the container's initial bounds are zero (which is the case in makeNSView).
 struct CrispWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let container = NSView()
-        if let webView = CrispManager.shared.webView {
-            webView.frame = container.bounds
-            webView.autoresizingMask = [.width, .height]
-            container.addSubview(webView)
-        }
+        guard let webView = CrispManager.shared.webView else { return container }
+
+        // Reparent: remove from previous container if needed
+        webView.removeFromSuperview()
+
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
         return container
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        // Ensure webview fills container on layout changes
-        if let webView = CrispManager.shared.webView {
-            webView.frame = nsView.bounds
-        }
-    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
