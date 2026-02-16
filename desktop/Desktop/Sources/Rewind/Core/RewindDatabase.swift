@@ -284,7 +284,7 @@ actor RewindDatabase {
         // fail with SQLITE_IOERR — e.g., stale WAL files from migration, page-level corruption.
         var activeQueue = queue
         do {
-            try activeQueue.read { db in
+            try await activeQueue.read { db in
                 _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
             }
         } catch {
@@ -293,7 +293,7 @@ actor RewindDatabase {
                 log("RewindDatabase: Database opened but queries fail (\(error)), removing WAL and retrying...")
                 removeWALFiles(at: dbPath)
                 let retryQueue = try DatabaseQueue(path: dbPath, configuration: config)
-                try retryQueue.read { db in
+                try await retryQueue.read { db in
                     _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
                 }
                 activeQueue = retryQueue

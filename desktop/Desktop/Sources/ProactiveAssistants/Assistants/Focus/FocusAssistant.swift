@@ -87,6 +87,10 @@ actor FocusAssistant: ProactiveAssistant {
 
     // MARK: - Processing
 
+    private func removePendingTask(_ task: Task<Void, Never>) {
+        pendingTasks.remove(task)
+    }
+
     private func startProcessing() {
         isRunning = true
         processingTask = Task {
@@ -108,7 +112,7 @@ actor FocusAssistant: ProactiveAssistant {
             // Remove the task from the set after it completes to prevent unbounded growth
             Task { [weak self] in
                 _ = await task.result
-                self?.pendingTasks.remove(task)
+                await self?.removePendingTask(task)
             }
         }
 

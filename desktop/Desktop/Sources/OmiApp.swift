@@ -374,15 +374,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Shared handler for Ask AI shortcut — works globally without activating main window
+        // NSEvent monitors run on the main thread, so assumeIsolated is safe here
         let askOmiHandler: (NSEvent) -> Bool = { event in
-            let shortcut = ShortcutSettings.shared.askOmiKey
-            if shortcut.matches(event) {
-                Task { @MainActor in
+            return MainActor.assumeIsolated {
+                let shortcut = ShortcutSettings.shared.askOmiKey
+                if shortcut.matches(event) {
                     FloatingControlBarManager.shared.openAIInput()
+                    return true
                 }
-                return true
+                return false
             }
-            return false
         }
 
         // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
@@ -398,7 +399,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask AI (\(ShortcutSettings.shared.askOmiKey.rawValue)), Cmd+\\ (Toggle bar)")
+        let askOmiKeyLabel = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiKey.rawValue }
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask AI (\(askOmiKeyLabel)), Cmd+\\ (Toggle bar)")
     }
 
     /// Set up observers to show/hide dock icon when main window appears/disappears
