@@ -2076,6 +2076,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     let keptTaskId: String?
     /// ID of the goal this task is linked to
     let goalId: String?
+    /// Whether this task was promoted from staged_tasks
+    let fromStaged: Bool?
 
     // Ordering (synced to backend)
     var sortOrder: Int?            // Sort position within category
@@ -2129,6 +2131,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         case deletedReason = "deleted_reason"
         case keptTaskId = "kept_task_id"
         case goalId = "goal_id"
+        case fromStaged = "from_staged"
         case sortOrder = "sort_order"
         case indentLevel = "indent_level"
         case relevanceScore = "relevance_score"
@@ -2154,6 +2157,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason: String? = nil,
         keptTaskId: String? = nil,
         goalId: String? = nil,
+        fromStaged: Bool? = nil,
         sortOrder: Int? = nil,
         indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
@@ -2186,6 +2190,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         self.deletedReason = deletedReason
         self.keptTaskId = keptTaskId
         self.goalId = goalId
+        self.fromStaged = fromStaged
         self.sortOrder = sortOrder
         self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
@@ -2221,6 +2226,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
         keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
         goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
+        fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
         sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
         relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)

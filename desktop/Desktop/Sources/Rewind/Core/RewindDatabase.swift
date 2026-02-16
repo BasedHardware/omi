@@ -1909,6 +1909,10 @@ actor RewindDatabase {
             print("[RewindDatabase] Migration: Deleted \(deleted) orphaned unsynced memories with synced duplicates")
         }
 
+        migrator.registerMigration("addActionItemFromStaged") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN fromStaged BOOLEAN NOT NULL DEFAULT 0")
+        }
+
         try migrator.migrate(queue)
     }
 

@@ -300,6 +300,7 @@ extension ActionItemRecord {
             sortOrder: item.sortOrder,
             indentLevel: item.indentLevel,
             relevanceScore: item.relevanceScore,
+            fromStaged: item.fromStaged ?? false,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt ?? item.createdAt
         )
@@ -331,6 +332,9 @@ extension ActionItemRecord {
         self.category = item.category
         self.dueAt = item.dueAt
         self.metadataJson = item.metadata
+        if let staged = item.fromStaged {
+            self.fromStaged = staged
+        }
 
         // Only update updatedAt if the incoming timestamp is newer than local
         // This prevents sync from resetting local timestamps when backend data hasn't changed
@@ -414,6 +418,7 @@ extension ActionItemRecord {
             deletedAt: nil,  // Not stored locally
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
+            fromStaged: fromStaged,
             sortOrder: sortOrder,
             indentLevel: indentLevel,
             relevanceScore: relevanceScore,
