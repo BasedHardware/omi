@@ -158,11 +158,11 @@ async fn batch_update_staged_scores(
 
 /// POST /v1/staged-tasks/promote - Promote top staged task to action_items
 ///
-/// 1. Get active AI action_items (source contains "screenshot", !completed, !deleted)
+/// 1. Get active AI action_items (from_staged=true, !completed, !deleted)
 /// 2. If >= 5, return { promoted: false }
 /// 3. Get top-ranked staged tasks (batch of 10 for dedup)
 /// 4. Skip any whose description already exists in active action_items
-/// 5. Create in action_items with [screen] suffix
+/// 5. Create in action_items with from_staged=true
 /// 6. Hard-delete from staged_tasks (including skipped duplicates)
 /// 7. Return { promoted: true, promoted_task }
 async fn promote_staged_task(
@@ -285,25 +285,12 @@ async fn promote_staged_task(
         }
     };
 
-    // Step 4: Create in action_items with [screen] suffix
-    let tagged_description = if top_task.description.ends_with(" [screen]")
-        || top_task.description.starts_with("[screen] ")
-    {
-        // Already tagged — normalize to suffix form
-        let base = top_task
-            .description
-            .trim_start_matches("[screen] ")
-            .trim_end_matches(" [screen]");
-        format!("{} [screen]", base)
-    } else {
-        format!("{} [screen]", top_task.description)
-    };
-
+    // Step 4: Create in action_items (from_staged=true marks it as promoted)
     let promoted_item = match state
         .firestore
         .create_action_item(
             &user.uid,
-            &tagged_description,
+            &top_task.description,
             top_task.due_at,
             top_task.source.as_deref(),
             top_task.priority.as_deref(),
