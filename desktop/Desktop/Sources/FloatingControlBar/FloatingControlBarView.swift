@@ -83,7 +83,8 @@ struct FloatingControlBarView: View {
                 compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
                 if state.showingAIConversation {
                     Spacer().frame(width: 2)
-                    compactToggle("Solid", isOn: $shortcutSettings.solidBackground)
+                    compactToggle("Solid color", isOn: $shortcutSettings.solidBackground)
+                        .help("Toggle between solid dark background and semi-transparent blur")
                 }
             }
         }
