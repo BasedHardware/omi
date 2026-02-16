@@ -592,7 +592,7 @@ public class ProactiveAssistantsPlugin: NSObject {
                             await RewindIndexer.shared.processFrame(
                                 cgImage: cgImage,
                                 appName: appName,
-                                windowTitle: currentWindowTitle,
+                                windowTitle: self.currentWindowTitle,
                                 captureTime: captureTime
                             )
                             await MainActor.run {

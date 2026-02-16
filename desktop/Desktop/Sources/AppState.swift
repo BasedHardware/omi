@@ -1330,7 +1330,7 @@ class AppState: ObservableObject {
             // Sync to local database in background
             Task.detached(priority: .background) {
                 for conversation in fetchedConversations {
-                    try? await TranscriptionStorage.shared.syncServerConversation(conversation)
+                    _ = try? await TranscriptionStorage.shared.syncServerConversation(conversation)
                 }
             }
         } catch {
