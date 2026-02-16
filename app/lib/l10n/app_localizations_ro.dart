@@ -8186,6 +8186,45 @@ class AppLocalizationsRo extends AppLocalizations {
       'Apăsați și mențineți apăsat butonul de alimentare până când LED-ul clipește. Dispozitivul va fi detectabil.';
 
   @override
+  String get downloadingFromDevice => 'Se descarcă de pe dispozitiv';
+
+  @override
+  String get reconnectingToInternet => 'Se reconectează la internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Se încarcă $current din $total';
+  }
+
+  @override
+  String get processedStatus => 'Procesat';
+
+  @override
+  String get corruptedStatus => 'Corupt';
+
+  @override
+  String nPending(int count) {
+    return '$count în așteptare';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count procesate';
+  }
+
+  @override
+  String get synced => 'Sincronizat';
+
+  @override
+  String get noPendingRecordings => 'Nu există înregistrări în așteptare';
+
+  @override
+  String get noProcessedRecordings => 'Nu există încă înregistrări procesate';
+
+  @override
+  String get pending => 'În așteptare';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Ce este nou în $version';
   }

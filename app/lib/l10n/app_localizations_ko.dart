@@ -8010,6 +8010,45 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pairingDescNeoOne => '전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.';
 
   @override
+  String get downloadingFromDevice => '기기에서 다운로드 중';
+
+  @override
+  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total 업로드 중';
+  }
+
+  @override
+  String get processedStatus => '처리됨';
+
+  @override
+  String get corruptedStatus => '손상됨';
+
+  @override
+  String nPending(int count) {
+    return '$count개 대기 중';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count개 처리됨';
+  }
+
+  @override
+  String get synced => '동기화됨';
+
+  @override
+  String get noPendingRecordings => '대기 중인 녹음이 없습니다';
+
+  @override
+  String get noProcessedRecordings => '아직 처리된 녹음이 없습니다';
+
+  @override
+  String get pending => '대기 중';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version의 새로운 기능';
   }

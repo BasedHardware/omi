@@ -2665,5 +2665,16 @@
   "wifiConfigurationSubtitle": "Wprowadź dane WiFi, aby urządzenie mogło pobrać oprogramowanie.",
   "networkNameSsid": "Nazwa sieci (SSID)",
   "enterWifiNetworkName": "Wprowadź nazwę sieci WiFi",
-  "enterWifiPassword": "Wprowadź hasło WiFi"
+  "enterWifiPassword": "Wprowadź hasło WiFi",
+  "downloadingFromDevice": "Pobieranie z urządzenia",
+  "reconnectingToInternet": "Ponowne łączenie z internetem...",
+  "uploadingToCloud": "Przesyłanie {current} z {total}",
+  "processedStatus": "Przetworzono",
+  "corruptedStatus": "Uszkodzony",
+  "nPending": "{count} oczekujących",
+  "nProcessed": "{count} przetworzonych",
+  "synced": "Zsynchronizowano",
+  "noPendingRecordings": "Brak oczekujących nagrań",
+  "noProcessedRecordings": "Brak przetworzonych nagrań",
+  "pending": "Oczekujące"
 }

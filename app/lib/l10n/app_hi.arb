@@ -2631,5 +2631,16 @@
   "wifiConfigurationSubtitle": "डिवाइस को फ़र्मवेयर डाउनलोड करने देने के लिए अपने वाईफाई क्रेडेंशियल दर्ज करें।",
   "networkNameSsid": "नेटवर्क नाम (SSID)",
   "enterWifiNetworkName": "वाईफाई नेटवर्क का नाम दर्ज करें",
-  "enterWifiPassword": "वाईफाई पासवर्ड दर्ज करें"
+  "enterWifiPassword": "वाईफाई पासवर्ड दर्ज करें",
+  "downloadingFromDevice": "डिवाइस से डाउनलोड हो रहा है",
+  "reconnectingToInternet": "इंटरनेट से पुनः कनेक्ट हो रहा है...",
+  "uploadingToCloud": "{total} में से {current} अपलोड हो रहा है",
+  "processedStatus": "संसाधित",
+  "corruptedStatus": "दूषित",
+  "nPending": "{count} लंबित",
+  "nProcessed": "{count} संसाधित",
+  "synced": "सिंक हो गया",
+  "noPendingRecordings": "कोई लंबित रिकॉर्डिंग नहीं",
+  "noProcessedRecordings": "अभी तक कोई संसाधित रिकॉर्डिंग नहीं",
+  "pending": "लंबित"
 }

@@ -8223,6 +8223,45 @@ class AppLocalizationsFr extends AppLocalizations {
       'Appuyez longuement sur le bouton d\'alimentation jusqu\'à ce que la LED clignote. L\'appareil sera détectable.';
 
   @override
+  String get downloadingFromDevice => 'Téléchargement depuis l\'appareil';
+
+  @override
+  String get reconnectingToInternet => 'Reconnexion à internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Envoi de $current sur $total';
+  }
+
+  @override
+  String get processedStatus => 'Traité';
+
+  @override
+  String get corruptedStatus => 'Corrompu';
+
+  @override
+  String nPending(int count) {
+    return '$count en attente';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count traités';
+  }
+
+  @override
+  String get synced => 'Synchronisé';
+
+  @override
+  String get noPendingRecordings => 'Aucun enregistrement en attente';
+
+  @override
+  String get noProcessedRecordings => 'Aucun enregistrement traité pour le moment';
+
+  @override
+  String get pending => 'En attente';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Nouveautés de $version';
   }
