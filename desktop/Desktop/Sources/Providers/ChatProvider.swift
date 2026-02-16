@@ -289,6 +289,11 @@ class ChatProvider: ObservableObject {
     /// to the correct session instead of the default chat.
     var overrideAppId: String?
 
+    /// Override the Claude model for this provider's queries.
+    /// When set, the bridge uses this model instead of the default (Opus).
+    /// e.g. "claude-sonnet-4-5-20250929" for faster floating bar responses.
+    var modelOverride: String?
+
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
@@ -1183,7 +1188,10 @@ class ChatProvider: ObservableObject {
 
     /// Send a message and get AI response via Claude Agent SDK bridge
     /// Persists both user and AI messages to backend
-    func sendMessage(_ text: String) async {
+    /// - Parameters:
+    ///   - text: The message text
+    ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-5-20250929" for floating bar)
+    func sendMessage(_ text: String, model: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -1274,6 +1282,7 @@ class ChatProvider: ObservableObject {
                 systemPrompt: systemPrompt,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
+                model: modelOverride,
                 onTextDelta: { [weak self] delta in
                     Task { @MainActor [weak self] in
                         self?.appendToMessage(id: aiMessageId, text: delta)

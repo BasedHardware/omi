@@ -99,7 +99,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     };
 
     const options: Record<string, unknown> = {
-      model: "claude-opus-4-6",
+      model: msg.model || "claude-opus-4-6",
       abortController,
       systemPrompt: msg.systemPrompt,
       allowedTools,

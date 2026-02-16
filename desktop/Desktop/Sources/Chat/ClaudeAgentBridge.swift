@@ -179,6 +179,7 @@ actor ClaudeAgentBridge {
         systemPrompt: String,
         cwd: String? = nil,
         mode: String? = nil,
+        model: String? = nil,
         onTextDelta: @escaping TextDeltaHandler,
         onToolCall: @escaping ToolCallHandler,
         onToolActivity: @escaping ToolActivityHandler,
@@ -201,6 +202,9 @@ actor ClaudeAgentBridge {
         }
         if let mode = mode {
             queryDict["mode"] = mode
+        }
+        if let model = model {
+            queryDict["model"] = model
         }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
