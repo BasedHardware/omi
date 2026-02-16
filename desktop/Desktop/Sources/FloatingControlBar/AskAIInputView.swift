@@ -16,13 +16,11 @@ struct AskAIInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar: model picker + escape hint
+            // Top bar: escape hint + model picker
             HStack {
-                // Model picker
-                modelPicker
-                    .padding(.leading, 16)
-
                 Spacer()
+
+                modelPicker
 
                 HStack(spacing: 4) {
                     Text("esc")
@@ -35,9 +33,9 @@ struct AskAIInputView: View {
                         .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
-                .padding(.trailing, 16)
             }
             .padding(.top, 8)
+            .padding(.trailing, 16)
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
