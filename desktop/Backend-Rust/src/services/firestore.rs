@@ -2277,6 +2277,7 @@ impl FirestoreService {
         metadata: Option<&str>,
         category: Option<&str>,
         relevance_score: Option<i32>,
+        from_staged: Option<bool>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
