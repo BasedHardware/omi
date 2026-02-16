@@ -196,21 +196,30 @@ class PushToTalkManager: ObservableObject {
     // Play start-of-PTT sound
     NSSound(named: "Funk")?.play()
 
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: "hold")
+    // Check if an AI conversation is already active — enter follow-up mode
+    let isFollowUp = barState?.showingAIResponse == true
+    if isFollowUp {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
     updateBarState()
 
-    // Capture screenshot in background — do NOT block the main thread
-    Task.detached { [weak self] in
-      let url = ScreenCaptureManager.captureScreen()
-      guard let self else { return }
-      await MainActor.run {
-        self.capturedScreenshotURL = url
-        log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
+    // Only capture screenshot if not in follow-up mode (conversation already has context)
+    if !isFollowUp {
+      Task.detached { [weak self] in
+        let url = ScreenCaptureManager.captureScreen()
+        guard let self else { return }
+        await MainActor.run {
+          self.capturedScreenshotURL = url
+          log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
+        }
       }
     }
 
     startAudioTranscription()
-    log("PushToTalkManager: started listening (hold mode)")
+    log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
   }
 
   private func enterLockedListening() {
@@ -221,7 +230,14 @@ class PushToTalkManager: ObservableObject {
     // Play start-of-PTT sound for locked mode
     NSSound(named: "Funk")?.play()
 
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: "locked")
+    // Check if an AI conversation is already active — enter follow-up mode
+    let isFollowUp = barState?.showingAIResponse == true
+    if isFollowUp {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
 
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
@@ -229,11 +245,14 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       lastInterimText = ""
 
-      Task.detached { [weak self] in
-        let url = ScreenCaptureManager.captureScreen()
-        guard let self else { return }
-        await MainActor.run {
-          self.capturedScreenshotURL = url
+      // Only capture screenshot if not in follow-up mode
+      if !isFollowUp {
+        Task.detached { [weak self] in
+          let url = ScreenCaptureManager.captureScreen()
+          guard let self else { return }
+          await MainActor.run {
+            self.capturedScreenshotURL = url
+          }
         }
       }
 
@@ -241,7 +260,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    log("PushToTalkManager: entered locked listening mode")
+    log("PushToTalkManager: entered locked listening mode (followUp=\(isFollowUp))")
   }
 
   private func stopListening() {
@@ -253,6 +272,15 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     lastInterimText = ""
     updateBarState()
+  }
+
+  /// Cancel PTT without sending — used when conversation is closed mid-PTT.
+  func cancelListening() {
+    guard state != .idle else { return }
+    log("PushToTalkManager: cancelling listening")
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
+    stopListening()
   }
 
   private var finalizedMode: String = "hold"
@@ -297,6 +325,7 @@ class PushToTalkManager: ObservableObject {
     }
     let screenshot = capturedScreenshotURL
     let hasQuery = !query.isEmpty
+    let wasFollowUp = barState?.isVoiceFollowUp == true
 
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode,
@@ -304,21 +333,31 @@ class PushToTalkManager: ObservableObject {
       transcriptLength: query.count
     )
 
+    // Clear follow-up state
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
+
     // Reset state — skip PTT collapse resize when we have a query,
-    // because openAIInputWithQuery will resize to the correct size
+    // because openAIInputWithQuery will resize to the correct size.
+    // Also skip resize when in follow-up mode (panel is already at response size).
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
     capturedScreenshotURL = nil
-    updateBarState(skipResize: hasQuery)
+    updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
       return
     }
 
-    log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
-    FloatingControlBarManager.shared.openAIInputWithQuery(query, screenshot: screenshot)
+    if wasFollowUp {
+      log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
+      FloatingControlBarManager.shared.sendFollowUpQuery(query)
+    } else {
+      log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
+      FloatingControlBarManager.shared.openAIInputWithQuery(query, screenshot: screenshot)
+    }
   }
 
   // MARK: - Audio Transcription (Dedicated Session)
@@ -420,6 +459,11 @@ class PushToTalkManager: ObservableObject {
       liveText = committed.isEmpty ? segment.text : committed + " " + segment.text
     }
     barState?.voiceTranscript = liveText
+
+    // Also update follow-up transcript if in follow-up mode
+    if barState?.isVoiceFollowUp == true {
+      barState?.voiceFollowUpTranscript = liveText
+    }
   }
 
   // MARK: - Bar State Sync
@@ -434,8 +478,8 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
     }
 
-    // Resize the floating bar window for PTT state changes
-    guard !skipResize else { return }
+    // Skip resize when in follow-up mode (the panel is already at response size)
+    guard !skipResize && !barState.isVoiceFollowUp else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {
