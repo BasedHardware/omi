@@ -492,6 +492,10 @@ extension TranscriptionService {
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
             URLQueryItem(name: "diarize", value: "true"),
+            // Raw PCM parameters (same as streaming API uses)
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
         ]
 
         guard let url = components.url else {
@@ -501,7 +505,7 @@ extension TranscriptionService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("audio/l16;rate=16000;channels=1", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.httpBody = audioData
 
         log("TranscriptionService: Batch transcribing \(audioData.count) bytes")
