@@ -710,7 +710,7 @@ class AppState: ObservableObject {
     }
 
     /// Query the TCC automation permission status for System Events without triggering a prompt
-    private static func queryAutomationPermissionStatus() -> OSStatus {
+    nonisolated private static func queryAutomationPermissionStatus() -> OSStatus {
         let bundleIDString = "com.apple.systemevents"
         var addressDesc = AEAddressDesc()
 
