@@ -683,32 +683,35 @@ class FloatingControlBarManager {
     private func sendAIQuery(_ message: String, screenshotURL: URL?, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotURL != nil)
 
-        // Initialize the provider if needed
-        if provider.messages.isEmpty {
-            await provider.initialize()
-        }
+        // Provider is already initialized by ViewModelContainer at app launch
+
+        // Record message count before sending so we can detect the new AI response
+        // in a shared provider that may already have many messages
+        let messageCountBefore = provider.messages.count
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
         barWindow.state.aiResponseText = ""
         barWindow.state.isAILoading = true
         chatCancellable = provider.$messages
-            .dropFirst()  // Skip initial emission to prevent old response from flashing
             .receive(on: DispatchQueue.main)
             .sink { [weak barWindow] messages in
-                guard let lastMessage = messages.last, lastMessage.sender == .ai else { return }
-                if lastMessage.isStreaming {
+                // Find the AI response message added after our query
+                guard messages.count > messageCountBefore,
+                      let aiMessage = messages.last,
+                      aiMessage.sender == .ai else { return }
+                if aiMessage.isStreaming {
                     barWindow?.updateAIResponse(type: "data", text: "")
-                    barWindow?.state.aiResponseText = lastMessage.text
+                    barWindow?.state.aiResponseText = aiMessage.text
                     barWindow?.state.isAILoading = false
-                    if !barWindow!.state.showingAIResponse {
+                    if let barWindow = barWindow, !barWindow.state.showingAIResponse {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            barWindow?.state.showingAIResponse = true
+                            barWindow.state.showingAIResponse = true
                         }
-                        barWindow?.resizeToResponseHeightPublic(animated: true)
+                        barWindow.resizeToResponseHeightPublic(animated: true)
                     }
                 } else {
-                    barWindow?.state.aiResponseText = lastMessage.text
+                    barWindow?.state.aiResponseText = aiMessage.text
                     barWindow?.state.isAILoading = false
                 }
             }
