@@ -101,9 +101,9 @@ struct AIResponseView: View {
                     .foregroundColor(.secondary)
             }
 
-            modelPicker
-
             Spacer()
+
+            modelPicker
 
             Button(action: { onClose?() }) {
                 Image(systemName: "xmark")
@@ -129,18 +129,9 @@ struct AIResponseView: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
-                Text(currentModelLabel)
-                    .scaledFont(size: 11)
-                    .foregroundColor(.secondary)
-                Image(systemName: "chevron.up.chevron.down")
-                    .scaledFont(size: 8)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(4)
+            Text(currentModelLabel)
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
