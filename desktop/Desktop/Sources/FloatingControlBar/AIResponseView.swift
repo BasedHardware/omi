@@ -106,10 +106,11 @@ struct AIResponseView: View {
             Button(action: {
                 shortcutSettings.solidBackground.toggle()
             }) {
-                Image(systemName: shortcutSettings.solidBackground ? "rectangle.fill" : "rectangle.on.rectangle")
+                Image(systemName: shortcutSettings.solidBackground ? "square.fill" : "square.on.square")
                     .scaledFont(size: 10)
                     .foregroundColor(.secondary)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 20, height: 20)
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .help(shortcutSettings.solidBackground ? "Switch to transparent background" : "Switch to solid background")
@@ -118,7 +119,7 @@ struct AIResponseView: View {
                 Image(systemName: "xmark")
                     .scaledFont(size: 8)
                     .foregroundColor(.secondary)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 20, height: 20)
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)

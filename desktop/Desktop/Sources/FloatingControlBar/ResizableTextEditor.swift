@@ -1,6 +1,22 @@
 import Cocoa
 import SwiftUI
 
+/// NSScrollView subclass that auto-focuses its NSTextView when added to a window.
+private class AutoFocusScrollView: NSScrollView {
+    var shouldFocusOnAppear = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard shouldFocusOnAppear, let window = self.window,
+              let textView = self.documentView as? NSTextView else { return }
+        shouldFocusOnAppear = false
+        DispatchQueue.main.async {
+            window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(textView)
+        }
+    }
+}
+
 /// Auto-resizing NSTextView wrapper for the floating control bar input.
 struct ResizableTextEditor: NSViewRepresentable {
     @Binding var text: String
@@ -12,11 +28,7 @@ struct ResizableTextEditor: NSViewRepresentable {
     var focusOnAppear: Bool = false
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else {
-            return scrollView
-        }
-
+        let textView = NSTextView()
         textView.font = .systemFont(ofSize: 13)
         textView.textColor = .white
         textView.backgroundColor = .clear
@@ -31,17 +43,19 @@ struct ResizableTextEditor: NSViewRepresentable {
         textView.textContainer?.lineFragmentPadding = 8
         textView.textContainerInset = NSSize(width: 0, height: 8)
         textView.textContainer?.widthTracksTextView = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
+        let scrollView = AutoFocusScrollView()
+        scrollView.shouldFocusOnAppear = focusOnAppear
+        scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.backgroundColor = .clear
         scrollView.drawsBackground = false
-
-        // Store reference so the coordinator can focus it once it's in a window
-        if focusOnAppear {
-            context.coordinator.pendingFocusTextView = textView
-        }
 
         return scrollView
     }
@@ -52,15 +66,6 @@ struct ResizableTextEditor: NSViewRepresentable {
         if textView.string != text {
             textView.string = text
             context.coordinator.updateHeight(for: textView, scrollView: scrollView)
-        }
-
-        // Focus the text view once it's in a window (deferred from makeNSView)
-        if let pending = context.coordinator.pendingFocusTextView, pending.window != nil {
-            context.coordinator.pendingFocusTextView = nil
-            DispatchQueue.main.async {
-                pending.window?.makeKeyAndOrderFront(nil)
-                pending.window?.makeFirstResponder(pending)
-            }
         }
     }
 
@@ -81,8 +86,6 @@ struct ResizableTextEditor: NSViewRepresentable {
         let onHeightChange: (CGFloat) -> Void
         let onSubmit: (() -> Void)?
         private var lastHeight: CGFloat = 0
-        /// Holds the text view until it's in a window and can be focused.
-        weak var pendingFocusTextView: NSTextView?
 
         init(
             text: Binding<String>, minHeight: CGFloat, maxHeight: CGFloat,
