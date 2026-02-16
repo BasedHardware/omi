@@ -86,6 +86,11 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(solidBackground, forKey: "shortcut_solidBackground") }
     }
 
+    /// When true, push-to-talk plays start/end sounds.
+    @Published var pttSoundsEnabled: Bool {
+        didSet { UserDefaults.standard.set(pttSoundsEnabled, forKey: "shortcut_pttSoundsEnabled") }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttKey"),
            let key = PTTKey(rawValue: saved) {
