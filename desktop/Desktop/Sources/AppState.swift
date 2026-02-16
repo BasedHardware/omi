@@ -671,29 +671,58 @@ class AppState: ObservableObject {
     /// Uses AEDeterminePermissionToAutomateTarget to query TCC status for System Events
     func checkAutomationPermission() {
         Task.detached {
-            let bundleIDString = "com.apple.systemevents"
-            var addressDesc = AEAddressDesc()
-
-            let status: OSStatus = bundleIDString.withCString { cString in
-                AECreateDesc(typeApplicationBundleID, cString, strlen(cString), &addressDesc)
-                let result = AEDeterminePermissionToAutomateTarget(
-                    &addressDesc,
-                    typeWildCard,
-                    typeWildCard,
-                    false // askUserIfNeeded = false → never shows dialog
-                )
-                AEDisposeDesc(&addressDesc)
-                return result
-            }
+            let status = Self.queryAutomationPermissionStatus()
 
             // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, -1744 = not determined
-            let hasPermission = status == noErr
-            log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+            // -600 (procNotFound) = System Events not running — try to launch it and retry
+            if status == -600 {
+                log("AUTOMATION_CHECK: status=-600 (procNotFound), launching System Events and retrying...")
+                let launchScript = NSAppleScript(source: "launch application \"System Events\"")
+                var launchError: NSDictionary?
+                launchScript?.executeAndReturnError(&launchError)
 
-            await MainActor.run {
-                self.hasAutomationPermission = hasPermission
+                // Wait for System Events to initialize
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+                let retryStatus = Self.queryAutomationPermissionStatus()
+                let hasPermission = retryStatus == noErr
+                log("AUTOMATION_CHECK: retry status=\(retryStatus), hasPermission=\(hasPermission)")
+
+                await MainActor.run {
+                    self.hasAutomationPermission = hasPermission
+                    self.automationPermissionError = hasPermission ? 0 : retryStatus
+                }
+            } else {
+                let hasPermission = status == noErr
+                log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+
+                await MainActor.run {
+                    self.hasAutomationPermission = hasPermission
+                    // Track unexpected errors (not denied/not-determined, which are normal states)
+                    self.automationPermissionError = (status == noErr || status == -1743 || status == -1744) ? 0 : status
+                }
             }
         }
+    }
+
+    /// Query the TCC automation permission status for System Events without triggering a prompt
+    private static func queryAutomationPermissionStatus() -> OSStatus {
+        let bundleIDString = "com.apple.systemevents"
+        var addressDesc = AEAddressDesc()
+
+        let status: OSStatus = bundleIDString.withCString { cString in
+            AECreateDesc(typeApplicationBundleID, cString, strlen(cString), &addressDesc)
+            let result = AEDeterminePermissionToAutomateTarget(
+                &addressDesc,
+                typeWildCard,
+                typeWildCard,
+                false // askUserIfNeeded = false → never shows dialog
+            )
+            AEDisposeDesc(&addressDesc)
+            return result
+        }
+
+        return status
     }
 
     /// Check accessibility permission status
