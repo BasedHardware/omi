@@ -2259,6 +2259,8 @@ extension Notification.Name {
     static let navigateToTaskSettings = Notification.Name("navigateToTaskSettings")
     /// Posted to navigate to Ask Omi Floating Bar settings
     static let navigateToFloatingBarSettings = Notification.Name("navigateToFloatingBarSettings")
+    /// Posted to navigate to AI Chat settings
+    static let navigateToAIChatSettings = Notification.Name("navigateToAIChatSettings")
     /// Posted when a new Rewind frame is captured (for live frame count updates)
     static let rewindFrameCaptured = Notification.Name("rewindFrameCaptured")
     /// Posted when Rewind page finishes loading initial data

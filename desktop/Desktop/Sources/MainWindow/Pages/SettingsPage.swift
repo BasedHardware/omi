@@ -178,6 +178,7 @@ struct SettingsContentView: View {
     @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
     // AI Chat settings
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
     @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
     @State private var aiChatClaudeMdContent: String?
     @State private var aiChatClaudeMdPath: String?
@@ -1421,6 +1422,32 @@ struct SettingsContentView: View {
 
     private var aiChatSection: some View {
         VStack(spacing: 20) {
+            // Ask Mode card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Ask Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $askModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+
+                    Text("When enabled, shows an Ask/Act toggle in the chat. Ask mode restricts the AI to read-only actions. When disabled, the AI always runs in Act mode.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
             // CLAUDE.md card
             settingsCard {
                 VStack(alignment: .leading, spacing: 12) {

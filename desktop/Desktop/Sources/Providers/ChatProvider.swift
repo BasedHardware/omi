@@ -263,7 +263,7 @@ enum ChatMode: String, CaseIterable {
 @MainActor
 class ChatProvider: ObservableObject {
     // MARK: - Published State
-    @Published var chatMode: ChatMode = .ask
+    @Published var chatMode: ChatMode = .act
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
