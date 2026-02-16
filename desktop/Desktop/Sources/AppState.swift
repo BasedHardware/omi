@@ -90,6 +90,7 @@ class AppState: ObservableObject {
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
     @Published var hasAutomationPermission = false
     @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
+    private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
     @Published var hasAccessibilityPermission = false
     @Published var isAccessibilityBroken = false  // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs)
 
@@ -670,7 +671,10 @@ class AppState: ObservableObject {
     /// Check automation permission without triggering a prompt
     /// Uses AEDeterminePermissionToAutomateTarget to query TCC status for System Events
     func checkAutomationPermission() {
+        guard !isCheckingAutomationPermission else { return }
+        isCheckingAutomationPermission = true
         Task.detached {
+            defer { Task { @MainActor in self.isCheckingAutomationPermission = false } }
             let status = Self.queryAutomationPermissionStatus()
 
             // noErr (0) = granted, errAEEventNotPermitted (-1743) = denied, -1744 = not determined
