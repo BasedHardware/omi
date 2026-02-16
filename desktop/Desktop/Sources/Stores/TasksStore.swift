@@ -604,7 +604,7 @@ class TasksStore: ObservableObject {
     /// Ensures filter/search queries have the full dataset. Keyed per user so it runs once per account.
     private func performFullSyncIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let syncKey = "tasksFullSyncCompleted_v4_\(userId)"
+        let syncKey = "tasksFullSyncCompleted_v5_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: syncKey) else {
             log("TasksStore: Full sync already completed for user \(userId)")
@@ -706,7 +706,7 @@ class TasksStore: ObservableObject {
     /// Sets the flag optimistically before the request to avoid retry loops on timeout.
     private func migrateAITasksToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "stagedTasksMigrationCompleted_v4_\(userId)"
+        let migrationKey = "stagedTasksMigrationCompleted_v5_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else {
             log("TasksStore: Staged tasks migration already completed for user \(userId)")
@@ -739,7 +739,7 @@ class TasksStore: ObservableObject {
     /// These were created by the old save_action_items path that bypassed the staging pipeline.
     private func migrateConversationItemsToStagedIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
+        let migrationKey = "conversationItemsMigrationCompleted_v5_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
 
@@ -751,7 +751,7 @@ class TasksStore: ObservableObject {
             log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
 
             // Reset full sync flag so it re-runs and marks migrated items as staged locally
-            let syncKey = "tasksFullSyncCompleted_v4_\(userId)"
+            let syncKey = "tasksFullSyncCompleted_v5_\(userId)"
             UserDefaults.standard.set(false, forKey: syncKey)
 
             // Run full sync now to clean up local SQLite
