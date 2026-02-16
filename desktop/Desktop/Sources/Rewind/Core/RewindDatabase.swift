@@ -28,6 +28,12 @@ actor RewindDatabase {
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
 
+    /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
+    /// When this hits the threshold, we close the database so the next initialize() attempt
+    /// goes through the full recovery path (WAL cleanup, corruption detection, fresh DB).
+    private var consecutiveQueryIOErrors = 0
+    private let maxQueryIOErrorsBeforeRecovery = 5
+
     // MARK: - Initialization
 
     private init() {}
@@ -38,6 +44,35 @@ actor RewindDatabase {
     /// Get the database queue for other storage actors
     func getDatabaseQueue() -> DatabaseQueue? {
         return dbQueue
+    }
+
+    /// Report a query error from a storage actor or subsystem.
+    /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
+    /// closes the database so the next initialize() call triggers recovery.
+    func reportQueryError(_ error: Error) {
+        guard let dbError = error as? DatabaseError else { return }
+        let code = dbError.resultCode
+        let extendedCode = dbError.extendedResultCode.rawValue
+        let isIOError = code == .SQLITE_IOERR
+        let isCorrupt = code == .SQLITE_CORRUPT
+        let isCorruptFS = extendedCode == 6922
+
+        guard isIOError || isCorrupt || isCorruptFS else { return }
+
+        consecutiveQueryIOErrors += 1
+        if consecutiveQueryIOErrors >= maxQueryIOErrorsBeforeRecovery {
+            logError("RewindDatabase: \(consecutiveQueryIOErrors) consecutive I/O errors during queries, closing database for recovery")
+            close()
+            // Next getDatabaseQueue() returns nil → callers get databaseNotInitialized
+            // Next initialize() call will go through full recovery path
+        }
+    }
+
+    /// Report a successful query, resetting the runtime error counter.
+    func reportQuerySuccess() {
+        if consecutiveQueryIOErrors > 0 {
+            consecutiveQueryIOErrors = 0
+        }
     }
 
     /// Configure the database for a specific user.
