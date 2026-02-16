@@ -602,11 +602,34 @@ class TaskAgentManager: ObservableObject {
                 )
 
                 if isSessionAlive(sessionName: sessionName) {
-                    await MainActor.run {
-                        activeSessions[taskId] = session
+                    // Check if the session is actually idle (Claude waiting at prompt)
+                    // by reading output twice with a short delay
+                    let output1 = readTmuxOutput(sessionName: sessionName)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                    let output2 = readTmuxOutput(sessionName: sessionName)
+
+                    if output1 == output2 && !output1.isEmpty {
+                        // Output unchanged — session is idle, mark completed without polling
+                        var completedSession = session
+                        completedSession.status = .completed
+                        completedSession.completedAt = completedSession.completedAt ?? Date()
+                        completedSession.output = output1
+                        completedSession.editedFiles = parseEditedFiles(from: output1)
+
+                        let sessionToStore = completedSession
+                        await MainActor.run {
+                            activeSessions[taskId] = sessionToStore
+                        }
+                        persistSession(sessionToStore)
+                        logMessage("TaskAgentManager: Session idle for task \(taskId), marked completed (no polling needed)")
+                    } else {
+                        // Output is changing — session is actively working, start polling
+                        await MainActor.run {
+                            activeSessions[taskId] = session
+                        }
+                        startPolling(taskId: taskId, sessionName: sessionName)
+                        logMessage("TaskAgentManager: Restored active session for task \(taskId)")
                     }
-                    startPolling(taskId: taskId, sessionName: sessionName)
-                    logMessage("TaskAgentManager: Restored live session for task \(taskId)")
                 } else {
                     // Session is dead — mark final state
                     let finalStatus: AgentStatus = session.editedFiles.isEmpty ? .failed : .completed
