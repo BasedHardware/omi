@@ -492,6 +492,8 @@ actor RewindIndexer {
                         try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
                     } catch {
                         logError("RewindIndexer: Backfill OCR failed for screenshot \(id): \(error)")
+                        // Clear flag to prevent infinite retry loop for permanently broken screenshots
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
                     }
 
                     // Small delay to avoid hogging CPU
