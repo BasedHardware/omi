@@ -580,15 +580,45 @@ struct ChatBubble: View {
                             TypingIndicator()
                         }
                     }
+                } else if isDuplicate && !isExpanded {
+                    // Collapsed duplicate message
+                    Button(action: { isExpanded = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc")
+                                .scaledFont(size: 11)
+                            Text("Duplicate message")
+                                .scaledFont(size: 12)
+                            Image(systemName: "chevron.down")
+                                .scaledFont(size: 9)
+                        }
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .cornerRadius(18)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     // User messages or AI messages without content blocks (loaded from Firestore)
-                    Markdown(message.text)
-                        .scaledMarkdownTheme(message.sender)
-                        .if_available_writingToolsNone()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                        .cornerRadius(18)
+                    VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+                        Markdown(displayText)
+                            .scaledMarkdownTheme(message.sender)
+                            .if_available_writingToolsNone()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                            .cornerRadius(18)
+
+                        // Show more / Show less toggle for long messages
+                        if message.text.count > Self.truncationThreshold {
+                            Button(action: { isExpanded.toggle() }) {
+                                Text(isExpanded ? "Show less" : "Show more (\(message.text.count) chars)")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.purplePrimary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 // Citation cards for AI messages with citations

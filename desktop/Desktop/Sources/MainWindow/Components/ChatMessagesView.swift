@@ -15,6 +15,24 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     var onCitationTap: ((Citation) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
+    /// IDs of messages that are near-duplicates of an earlier message in the same session.
+    /// Computed once per messages change to avoid O(n^2) per render.
+    private var duplicateMessageIds: Set<String> {
+        var seen: [String: String] = [:]  // truncated text → first message ID
+        var dupes = Set<String>()
+        for msg in messages {
+            guard msg.text.count > 200 else { continue }  // only dedup long messages
+            // Use first 200 chars as fingerprint (handles minor trailing diffs)
+            let fingerprint = String(msg.text.prefix(200))
+            if let _ = seen[fingerprint] {
+                dupes.insert(msg.id)
+            } else {
+                seen[fingerprint] = msg.id
+            }
+        }
+        return dupes
+    }
+
     @State private var isUserAtBottom = true
     /// Tracks whether we should follow new content (survives the race between
     /// content growth and scroll position detection). Only set to false when
@@ -67,6 +85,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         } else if messages.isEmpty {
                             welcomeContent()
                         } else {
+                            let dupeIds = duplicateMessageIds
                             ForEach(messages) { message in
                                 ChatBubble(
                                     message: message,
@@ -76,7 +95,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                     },
                                     onCitationTap: { citation in
                                         onCitationTap?(citation)
-                                    }
+                                    },
+                                    isDuplicate: dupeIds.contains(message.id)
                                 )
                                 .id(message.id)
                             }
