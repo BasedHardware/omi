@@ -557,8 +557,7 @@ struct SidebarView: View {
         }) {
             HStack(spacing: 12) {
                 // Omi device image
-                if let deviceUrl = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp"),
-                   let deviceImage = NSImage(contentsOf: deviceUrl) {
+                if let deviceImage = OmiDeviceImage.shared {
                     Image(nsImage: deviceImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -674,8 +673,7 @@ struct SidebarView: View {
                 // Device icon with status indicator
                 ZStack(alignment: .bottomTrailing) {
                     // Device image or icon
-                    if let deviceUrl = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp"),
-                       let deviceImage = NSImage(contentsOf: deviceUrl) {
+                    if let deviceImage = OmiDeviceImage.shared {
                         Image(nsImage: deviceImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -1742,4 +1740,54 @@ struct BottomNavItemView: View {
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
     }
+}
+
+// MARK: - Audio Level Nav Item Wrapper
+
+/// Isolates AudioLevelMonitor observation so audio level changes
+/// only re-render this small wrapper, not the entire SidebarView.
+private struct AudioLevelNavItem: View {
+    let icon: String
+    let label: String
+    let isSelected: Bool
+    let isCollapsed: Bool
+    let iconWidth: CGFloat
+    let isOn: Bool
+    let isToggling: Bool
+    var isPageLoading: Bool = false
+    let onTap: () -> Void
+    let onToggle: () -> Void
+
+    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
+
+    var body: some View {
+        NavItemWithStatusView(
+            icon: icon,
+            label: label,
+            isSelected: isSelected,
+            isCollapsed: isCollapsed,
+            iconWidth: iconWidth,
+            isOn: isOn,
+            isToggling: isToggling,
+            isPageLoading: isPageLoading,
+            onTap: onTap,
+            onToggle: onToggle,
+            micLevel: audioLevels.microphoneLevel,
+            systemLevel: audioLevels.systemLevel,
+            showAudioBars: true
+        )
+    }
+}
+
+// MARK: - Cached Omi Device Image
+
+/// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
+/// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
+enum OmiDeviceImage {
+    static let shared: NSImage? = {
+        guard let url = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }()
 }
