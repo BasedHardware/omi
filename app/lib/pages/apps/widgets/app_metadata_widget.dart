@@ -130,60 +130,60 @@ class AppMetadataWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Image picker
-                      Column(
+                      Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Stack(
-                            children: [
-                              GestureDetector(
+                          GestureDetector(
+                            onTap: pickImage,
+                            child: Container(
+                              width: 110,
+                              height: 105,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16.0),
+                                border: Border.all(color: const Color(0xFF35343B), width: 2.0),
+                              ),
+                              child: imageFile != null || imageUrl != null
+                                  ? (imageUrl == null
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(14.0),
+                                          child: Image.file(imageFile!, fit: BoxFit.cover))
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(14.0),
+                                          child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
+                                        ))
+                                  : Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '${context.l10n.appIconLabel}*',
+                                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                          if (imageFile != null || imageUrl != null)
+                            Positioned(
+                              bottom: -4,
+                              right: -4,
+                              child: GestureDetector(
                                 onTap: pickImage,
                                 child: Container(
-                                  width: 110,
-                                  height: 105,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(16.0),
-                                    border: Border.all(color: const Color(0xFF35343B), width: 2.0),
+                                  padding: const EdgeInsets.all(6.0),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF35343B),
+                                    shape: BoxShape.circle,
                                   ),
-                                  child: imageFile != null || imageUrl != null
-                                      ? (imageUrl == null
-                                          ? ClipRRect(
-                                              borderRadius: BorderRadius.circular(14.0),
-                                              child: Image.file(imageFile!, fit: BoxFit.cover))
-                                          : ClipRRect(
-                                              borderRadius: BorderRadius.circular(14.0),
-                                              child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
-                                            ))
-                                      : const Center(
-                                          child: FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
-                                        ),
+                                  child: const FaIcon(
+                                    FontAwesomeIcons.pen,
+                                    color: Colors.white,
+                                    size: 12,
+                                  ),
                                 ),
                               ),
-                              if (imageFile != null || imageUrl != null)
-                                Positioned(
-                                  bottom: -4,
-                                  right: -4,
-                                  child: GestureDetector(
-                                    onTap: pickImage,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6.0),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF35343B),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const FaIcon(
-                                        FontAwesomeIcons.pen,
-                                        color: Colors.white,
-                                        size: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${context.l10n.appIconLabel}*',
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                          ),
+                            ),
                         ],
                       ),
                       const SizedBox(width: 14),
