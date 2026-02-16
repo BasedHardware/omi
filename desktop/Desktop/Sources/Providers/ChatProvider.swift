@@ -1381,6 +1381,11 @@ class ChatProvider: ObservableObject {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
+            // Flush any remaining buffered streaming text before handling the error
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
+
             // Only remove the AI message if it's still empty (no streamed text yet).
             // If text was already streamed and visible, keep it and just stop streaming.
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
