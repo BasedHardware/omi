@@ -156,6 +156,47 @@ class TranscriptionRetryService {
         }
     }
 
+    // MARK: - Stuck Session Recovery
+
+    /// Recover a session stuck in 'uploading' — check if backend already has it before re-uploading
+    private func recoverStuckSession(_ session: TranscriptionSessionRecord) async {
+        guard let sessionId = session.id else { return }
+
+        log("TranscriptionRetryService: Recovering stuck session \(sessionId)")
+
+        // Check if the backend already has a conversation for this time window
+        // (upload succeeded but markSessionCompleted failed silently)
+        do {
+            let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
+            let existing = try await APIClient.shared.getConversations(
+                limit: 5,
+                startDate: session.startedAt.addingTimeInterval(-2),
+                endDate: finishedAt.addingTimeInterval(2)
+            )
+
+            // Look for a conversation with matching started_at/finished_at
+            if let match = existing.first(where: { conv in
+                guard let convStarted = conv.startedAt, let convFinished = conv.finishedAt else { return false }
+                return abs(convStarted.timeIntervalSince(session.startedAt)) < 5
+                    && abs(convFinished.timeIntervalSince(finishedAt)) < 5
+            }) {
+                log("TranscriptionRetryService: Session \(sessionId) already exists on backend as \(match.id), marking completed")
+                try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
+                return
+            }
+        } catch {
+            log("TranscriptionRetryService: Could not check backend for session \(sessionId), will re-upload: \(error.localizedDescription)")
+        }
+
+        // No match found — mark as pending so it gets re-uploaded
+        log("TranscriptionRetryService: Session \(sessionId) not found on backend, marking as pending upload")
+        do {
+            try await TranscriptionStorage.shared.finishSession(id: sessionId)
+        } catch {
+            logError("TranscriptionRetryService: Failed to mark session \(sessionId) as pending", error: error)
+        }
+    }
+
     // MARK: - Upload
 
     /// Upload a session to the backend
