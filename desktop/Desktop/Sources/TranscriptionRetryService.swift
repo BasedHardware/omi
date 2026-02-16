@@ -79,6 +79,16 @@ class TranscriptionRetryService {
                 }
             }
 
+            // Recover sessions stuck in 'uploading' (app quit/crash during upload, or markSessionCompleted failed)
+            let stuckUploadingSessions = try await TranscriptionStorage.shared.getStuckUploadingSessions(olderThan: 300)
+            if !stuckUploadingSessions.isEmpty {
+                log("TranscriptionRetryService: Found \(stuckUploadingSessions.count) stuck uploading sessions")
+                for session in stuckUploadingSessions {
+                    log("TranscriptionRetryService: Marking stuck uploading session \(session.id!) as pending upload")
+                    try await TranscriptionStorage.shared.finishSession(id: session.id!)
+                }
+            }
+
             // Also check for failed sessions that can be retried
             let failedSessions = try await TranscriptionStorage.shared.getFailedSessions(maxRetries: maxRetries)
             if !failedSessions.isEmpty {
@@ -120,6 +130,13 @@ class TranscriptionRetryService {
 
             for session in pendingSessions {
                 await uploadSession(session)
+            }
+
+            // Recover sessions stuck in 'uploading' for more than 5 minutes
+            let stuckSessions = try await TranscriptionStorage.shared.getStuckUploadingSessions(olderThan: 300)
+            for session in stuckSessions {
+                log("TranscriptionRetryService: Marking stuck uploading session \(session.id!) as pending upload")
+                try? await TranscriptionStorage.shared.finishSession(id: session.id!)
             }
 
             // Get failed sessions that are ready for retry

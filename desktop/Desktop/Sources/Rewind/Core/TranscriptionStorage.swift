@@ -357,6 +357,21 @@ actor TranscriptionStorage {
         }
     }
 
+    /// Get sessions stuck in 'uploading' status for longer than the given threshold (in seconds)
+    /// These are sessions where the app quit/crashed during upload or markSessionCompleted failed silently
+    func getStuckUploadingSessions(olderThan seconds: TimeInterval) async throws -> [TranscriptionSessionRecord] {
+        let db = try await ensureInitialized()
+        let cutoff = Date().addingTimeInterval(-seconds)
+
+        return try await db.read { database in
+            try TranscriptionSessionRecord
+                .filter(Column("status") == TranscriptionSessionStatus.uploading.rawValue)
+                .filter(Column("updatedAt") < cutoff)
+                .order(Column("createdAt").asc)
+                .fetchAll(database)
+        }
+    }
+
     /// Get a session with its segments
     func getSessionWithSegments(id: Int64) async throws -> TranscriptionSessionWithSegments? {
         let db = try await ensureInitialized()

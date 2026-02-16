@@ -1549,7 +1549,13 @@ class AppState: ObservableObject {
 
             // Mark session as completed in DB
             if let sessionId = sessionId {
-                try? await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: response.id)
+                do {
+                    try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: response.id)
+                } catch {
+                    logError("Transcription: Failed to mark session \(sessionId) as completed (backendId: \(response.id))", error: error)
+                    // Session is stuck in 'uploading' state — mark as failed so retry service can recover it
+                    try? await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: "markSessionCompleted failed: \(error.localizedDescription)")
+                }
             }
 
             if response.discarded {
