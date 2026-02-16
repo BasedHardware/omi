@@ -444,7 +444,7 @@ struct ChatPage: View {
 
     /// Copy the entire conversation to clipboard
     private func copyConversation() {
-        let text = chatProvider.messages.map { message in
+        let text: String = chatProvider.messages.map { message in
             let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
             return "\(sender): \(message.text)"
         }.joined(separator: "\n\n")
