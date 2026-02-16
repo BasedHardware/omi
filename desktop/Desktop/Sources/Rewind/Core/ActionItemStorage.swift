@@ -859,7 +859,7 @@ actor ActionItemStorage {
                 JOIN action_items_fts fts ON fts.rowid = a.id
                 WHERE action_items_fts MATCH ?
                 """
-            var arguments: [DatabaseValueConvertible] = [query]
+            var arguments: [DatabaseValueConvertible] = [sanitizedQuery]
 
             if !includeCompleted {
                 sql += " AND a.completed = 0"

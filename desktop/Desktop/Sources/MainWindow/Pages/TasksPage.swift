@@ -3518,7 +3518,7 @@ struct TaskRow: View {
                         .disabled(isMultiSelectMode)
                         .onKeyPress(.escape) {
                             debounceTask?.cancel()
-                            editText = task.description
+                            commitEdit()
                             isTextFieldFocused = false
                             return .handled
                         }

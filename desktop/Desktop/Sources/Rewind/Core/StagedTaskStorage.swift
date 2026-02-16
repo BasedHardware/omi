@@ -263,6 +263,11 @@ actor StagedTaskStorage {
         limit: Int = 20
     ) async throws -> [(id: Int64, description: String, relevanceScore: Int?)] {
         let db = try await ensureInitialized()
+        // Sanitize FTS5 query: strip special characters that could be misinterpreted
+        let sanitizedQuery = query.map { $0.isLetter || $0.isNumber || $0 == "*" || $0 == " " ? $0 : Character(" ") }
+            .map(String.init).joined()
+            .components(separatedBy: .whitespaces).filter { !$0.isEmpty }.joined(separator: " ")
+        guard !sanitizedQuery.isEmpty else { return [] }
 
         return try await db.read { database in
             let sql = """
@@ -274,7 +279,7 @@ actor StagedTaskStorage {
                 ORDER BY bm25(staged_tasks_fts) ASC LIMIT ?
             """
 
-            return try Row.fetchAll(database, sql: sql, arguments: [query, limit]).map { row in
+            return try Row.fetchAll(database, sql: sql, arguments: [sanitizedQuery, limit]).map { row in
                 (
                     id: row["id"] as Int64,
                     description: row["description"] as String,
