@@ -1141,9 +1141,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await _registerSingleChunk(wal, file, timerStart);
-          timerStart += sdcardChunkSizeSecs;
         } catch (e) {
           Logger.debug('SDCardWalSync WiFi: Error flushing chunk: $e');
+        } finally {
+          timerStart += sdcardChunkSizeSecs;
         }
       }
 
