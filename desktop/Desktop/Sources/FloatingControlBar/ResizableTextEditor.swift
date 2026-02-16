@@ -8,6 +8,8 @@ struct ResizableTextEditor: NSViewRepresentable {
     let maxHeight: CGFloat
     let onHeightChange: (CGFloat) -> Void
     var onSubmit: (() -> Void)?
+    /// When true, the text view will request first-responder status after appearing.
+    var focusOnAppear: Bool = false
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -36,6 +38,11 @@ struct ResizableTextEditor: NSViewRepresentable {
         scrollView.backgroundColor = .clear
         scrollView.drawsBackground = false
 
+        // Store reference so the coordinator can focus it once it's in a window
+        if focusOnAppear {
+            context.coordinator.pendingFocusTextView = textView
+        }
+
         return scrollView
     }
 
@@ -45,6 +52,15 @@ struct ResizableTextEditor: NSViewRepresentable {
         if textView.string != text {
             textView.string = text
             context.coordinator.updateHeight(for: textView, scrollView: scrollView)
+        }
+
+        // Focus the text view once it's in a window (deferred from makeNSView)
+        if let pending = context.coordinator.pendingFocusTextView, pending.window != nil {
+            context.coordinator.pendingFocusTextView = nil
+            DispatchQueue.main.async {
+                pending.window?.makeKeyAndOrderFront(nil)
+                pending.window?.makeFirstResponder(pending)
+            }
         }
     }
 
