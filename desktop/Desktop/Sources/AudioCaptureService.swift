@@ -1,10 +1,11 @@
 import Foundation
 import AVFoundation
 import CoreAudio
-import ObjCExceptionCatcher
 
 /// Service for capturing microphone audio as 16-bit PCM at 16kHz
-/// Suitable for streaming to speech-to-text services like DeepGram
+/// Uses CoreAudio IOProc directly on the default input device to avoid
+/// AVAudioEngine's implicit aggregate device creation, which degrades
+/// system audio output quality (especially Bluetooth A2DP → SCO switch).
 class AudioCaptureService {
 
     // MARK: - Types
@@ -37,7 +38,10 @@ class AudioCaptureService {
 
     // MARK: - Properties
 
-    private let audioEngine = AVAudioEngine()
+    private var deviceID: AudioDeviceID = kAudioObjectUnknown
+    private var ioProcID: AudioDeviceIOProcID?
+    private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
     private var isCapturing = false
     private var onAudioChunk: AudioChunkHandler?
     private var onAudioLevel: AudioLevelHandler?
@@ -57,8 +61,8 @@ class AudioCaptureService {
     private let decayRate: Float = 0.85    // Decay multiplier per frame (lower = faster decay)
 
     // Device change handling
-    private var configChangeObserver: NSObjectProtocol?
     private var isReconfiguring = false
+    private let listenerQueue = DispatchQueue(label: "com.omi.audiocapture.listener")
 
     // MARK: - Public Methods
 
@@ -106,22 +110,49 @@ class AudioCaptureService {
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
 
-        let inputNode = audioEngine.inputNode
+        // 1. Get default input device
+        var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
 
-        // Get the hardware input format
-        let hwFormat = inputNode.inputFormat(forBus: 0)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &inputDeviceID
+        )
 
-        guard hwFormat.channelCount > 0 else {
+        guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
+            throw AudioCaptureError.noInputAvailable
+        }
+        self.deviceID = inputDeviceID
+
+        // 2. Get device stream format
+        guard let streamFormat = getStreamFormat(for: deviceID) else {
             throw AudioCaptureError.noInputAvailable
         }
 
-        detectedSampleRate = hwFormat.sampleRate
-        self.inputFormat = hwFormat
+        detectedSampleRate = streamFormat.mSampleRate
+        log("AudioCapture: Hardware format - \(streamFormat.mSampleRate)Hz, \(streamFormat.mChannelsPerFrame) channels")
 
-        log("AudioCapture: Hardware format - \(hwFormat.sampleRate)Hz, \(hwFormat.channelCount) channels")
+        // 3. Create mono input format (we mix to mono before conversion)
+        guard let inputFmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: streamFormat.mSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw AudioCaptureError.converterCreationFailed
+        }
+        self.inputFormat = inputFmt
 
-        // Create target format: Float32 at 16kHz mono (standard format)
-        // We'll convert Float32 to Int16 manually for DeepGram
+        // 4. Create target format: Float32 at 16kHz mono
         guard let targetFmt = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: 1) else {
             throw AudioCaptureError.converterCreationFailed
         }
@@ -129,158 +160,58 @@ class AudioCaptureService {
 
         log("AudioCapture: Target format - \(targetFmt.sampleRate)Hz, \(targetFmt.channelCount) channels, Float32")
 
-        // Create audio converter for resampling
-        guard let converter = AVAudioConverter(from: hwFormat, to: targetFmt) else {
+        // 5. Create audio converter for resampling
+        guard let converter = AVAudioConverter(from: inputFmt, to: targetFmt) else {
             throw AudioCaptureError.converterCreationFailed
         }
         self.audioConverter = converter
 
-        // Install tap on input node
-        let bufferSize: AVAudioFrameCount = 512
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: hwFormat) { [weak self] buffer, time in
-            self?.processAudioBuffer(buffer)
+        // 6. Create IOProc on the input device directly (no aggregate device)
+        var procID: AudioDeviceIOProcID?
+        let ioProcStatus = AudioDeviceCreateIOProcIDWithBlock(&procID, deviceID, nil) {
+            [weak self] inNow, inInputData, inInputTime, outOutputData, inOutputTime in
+            self?.handleAudioInput(inInputData, timestamp: inInputTime)
         }
 
-        // Start the audio engine
-        do {
-            try audioEngine.start()
-            isCapturing = true
-            log("AudioCapture: Started capturing")
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            throw AudioCaptureError.engineStartFailed(error)
+        guard ioProcStatus == noErr, let validProcID = procID else {
+            throw AudioCaptureError.engineStartFailed(
+                NSError(domain: "AudioCapture", code: Int(ioProcStatus),
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to create IOProc: \(ioProcStatus)"])
+            )
+        }
+        self.ioProcID = validProcID
+
+        // 7. Start the device
+        let startStatus = AudioDeviceStart(deviceID, validProcID)
+        guard startStatus == noErr else {
+            AudioDeviceDestroyIOProcID(deviceID, validProcID)
+            self.ioProcID = nil
+            throw AudioCaptureError.engineStartFailed(
+                NSError(domain: "AudioCapture", code: Int(startStatus),
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to start device: \(startStatus)"])
+            )
         }
 
-        // Listen for audio device/configuration changes
-        setupConfigurationChangeObserver()
-    }
+        isCapturing = true
+        log("AudioCapture: Started capturing")
 
-    /// Set up observer for audio configuration changes (device switches, format changes)
-    private func setupConfigurationChangeObserver() {
-        // Remove any existing observer
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-
-        configChangeObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: audioEngine,
-            queue: nil
-        ) { [weak self] _ in
-            // IMPORTANT: Don't do work directly in callback - use async to avoid deadlock
-            DispatchQueue.main.async {
-                self?.handleConfigurationChange()
-            }
-        }
-    }
-
-    /// Handle audio configuration change (e.g., user switched microphone)
-    private func handleConfigurationChange() {
-        guard isCapturing, !isReconfiguring else { return }
-        isReconfiguring = true
-
-        log("AudioCapture: Configuration changed, restarting with new device...")
-
-        // Fully stop and reset the engine to ensure clean state
-        // This removes all taps and resets internal connections
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.stop()
-        audioEngine.reset()
-
-        // Delay to let the audio hardware settle after device change
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.reconfigureAfterChange(retryCount: 0)
-        }
-    }
-
-    private static let maxRetries = 3
-
-    private func reconfigureAfterChange(retryCount: Int) {
-        let inputNode = audioEngine.inputNode
-        let newHwFormat = inputNode.inputFormat(forBus: 0)
-
-        guard newHwFormat.channelCount > 0, newHwFormat.sampleRate > 0 else {
-            log("AudioCapture: No valid input after config change (attempt \(retryCount + 1))")
-            if retryCount < Self.maxRetries {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.reconfigureAfterChange(retryCount: retryCount + 1)
-                }
-            } else {
-                logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
-                isReconfiguring = false
-            }
-            return
-        }
-
-        log("AudioCapture: New hardware format - \(newHwFormat.sampleRate)Hz, \(newHwFormat.channelCount) channels (attempt \(retryCount + 1))")
-
-        // Update stored format info
-        detectedSampleRate = newHwFormat.sampleRate
-        inputFormat = newHwFormat
-
-        // Recreate converter with new input format
-        guard let targetFmt = targetFormat,
-              let newConverter = AVAudioConverter(from: newHwFormat, to: targetFmt) else {
-            logError("AudioCapture: Failed to create converter for new format")
-            retryOrGiveUp(retryCount: retryCount)
-            return
-        }
-        audioConverter = newConverter
-
-        // Install tap with ObjC exception handling (installTap throws NSException, not Swift Error)
-        let bufferSize: AVAudioFrameCount = 512
-        let exception = ObjCExceptionCatcher.catching {
-            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: newHwFormat) { [weak self] buffer, time in
-                self?.processAudioBuffer(buffer)
-            }
-        }
-
-        if let exception = exception {
-            logError("AudioCapture: Failed to install tap: \(exception.name.rawValue) - \(exception.reason ?? "unknown") (attempt \(retryCount + 1))")
-            retryOrGiveUp(retryCount: retryCount)
-            return
-        }
-
-        // Restart the engine
-        do {
-            try audioEngine.start()
-            log("AudioCapture: Restarted with new configuration")
-            isReconfiguring = false
-        } catch {
-            logError("AudioCapture: Failed to restart engine: \(error.localizedDescription) (attempt \(retryCount + 1))")
-            inputNode.removeTap(onBus: 0)
-            audioEngine.reset()
-            retryOrGiveUp(retryCount: retryCount)
-        }
-    }
-
-    private func retryOrGiveUp(retryCount: Int) {
-        if retryCount < Self.maxRetries {
-            let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
-            log("AudioCapture: Retrying in \(delay)s...")
-            audioEngine.stop()
-            audioEngine.reset()
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.reconfigureAfterChange(retryCount: retryCount + 1)
-            }
-        } else {
-            logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
-            isReconfiguring = false
-        }
+        // 8. Install property listeners for device changes
+        installPropertyListeners()
     }
 
     /// Stop capturing audio
     func stopCapture() {
         guard isCapturing else { return }
 
-        // Remove configuration change observer
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            configChangeObserver = nil
+        removePropertyListeners()
+
+        if let procID = ioProcID, deviceID != kAudioObjectUnknown {
+            AudioDeviceStop(deviceID, procID)
+            AudioDeviceDestroyIOProcID(deviceID, procID)
+            ioProcID = nil
         }
 
-        audioEngine.inputNode.removeTap(onBus: 0)
-        audioEngine.stop()
+        deviceID = kAudioObjectUnknown
         isCapturing = false
         isReconfiguring = false
         onAudioChunk = nil
@@ -347,22 +278,69 @@ class AudioCaptureService {
 
     // MARK: - Private Methods
 
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard isCapturing else { return }
+    /// Get stream format for a device on input scope
+    private func getStreamFormat(for deviceID: AudioObjectID) -> AudioStreamBasicDescription? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamFormat,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
 
-        let frameLength = Int(buffer.frameLength)
-        guard frameLength > 0 else { return }
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
 
-        guard let converter = audioConverter, let targetFmt = targetFormat else { return }
+        let status = AudioObjectGetPropertyData(
+            deviceID,
+            &address,
+            0,
+            nil,
+            &size,
+            &format
+        )
 
-        // Calculate output buffer size based on sample rate conversion ratio
-        let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameLength) * targetSampleRate / detectedSampleRate))
+        return status == noErr ? format : nil
+    }
 
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else {
-            return
+    /// Handle incoming audio data from the IOProc callback
+    private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?, timestamp: UnsafePointer<AudioTimeStamp>?) {
+        guard isCapturing,
+              let bufferList = inputData?.pointee,
+              let converter = audioConverter,
+              let targetFmt = targetFormat,
+              let inputFmt = inputFormat else { return }
+
+        let buffer = bufferList.mBuffers
+        guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return }
+
+        let bytesPerFrame = UInt32(MemoryLayout<Float32>.size) * buffer.mNumberChannels
+        let frameCount = buffer.mDataByteSize / bytesPerFrame
+        guard frameCount > 0 else { return }
+
+        // Create mono input buffer for converter
+        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFmt, frameCapacity: frameCount) else { return }
+        inputBuffer.frameLength = frameCount
+
+        let srcPtr = data.assumingMemoryBound(to: Float32.self)
+        let channelCount = Int(buffer.mNumberChannels)
+        guard let floatData = inputBuffer.floatChannelData else { return }
+        let monoPtr = floatData[0]
+
+        if channelCount >= 2 {
+            // Mix stereo to mono by averaging channels
+            for i in 0..<Int(frameCount) {
+                let left = srcPtr[i * channelCount]
+                let right = srcPtr[i * channelCount + 1]
+                monoPtr[i] = (left + right) / 2.0
+            }
+        } else {
+            // Already mono, just copy
+            memcpy(monoPtr, srcPtr, Int(buffer.mDataByteSize))
         }
 
-        // Convert using input block pattern (same as OMI Watch app)
+        // Convert to target format (16kHz mono)
+        let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / detectedSampleRate))
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else { return }
+
         var error: NSError?
         var hasConsumedInput = false
 
@@ -373,7 +351,7 @@ class AudioCaptureService {
             }
             hasConsumedInput = true
             outStatus.pointee = .haveData
-            return buffer
+            return inputBuffer
         }
 
         converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
@@ -384,9 +362,7 @@ class AudioCaptureService {
         }
 
         // Convert Float32 samples to Int16 (linear16 PCM for DeepGram)
-        guard let channelData = outputBuffer.floatChannelData?[0] else {
-            return
-        }
+        guard let channelData = outputBuffer.floatChannelData?[0] else { return }
 
         let processedFrameLength = Int(outputBuffer.frameLength)
         var pcmData = [Int16]()
@@ -438,5 +414,259 @@ class AudioCaptureService {
 
         // Send to callback
         onAudioChunk?(byteData)
+    }
+
+    // MARK: - Property Listeners
+
+    private func installPropertyListeners() {
+        // Listen for default input device changes
+        var defaultDeviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            DispatchQueue.main.async {
+                self?.handleConfigurationChange()
+            }
+        }
+        self.defaultDeviceListenerBlock = deviceBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultDeviceAddress,
+            listenerQueue,
+            deviceBlock
+        )
+
+        // Listen for format changes on current device
+        var formatAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamFormat,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            DispatchQueue.main.async {
+                self?.handleConfigurationChange()
+            }
+        }
+        self.deviceFormatListenerBlock = formatBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &formatAddress,
+            listenerQueue,
+            formatBlock
+        )
+    }
+
+    private func removePropertyListeners() {
+        if let block = defaultDeviceListenerBlock {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                listenerQueue,
+                block
+            )
+            defaultDeviceListenerBlock = nil
+        }
+
+        if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreamFormat,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                deviceID,
+                &address,
+                listenerQueue,
+                block
+            )
+            deviceFormatListenerBlock = nil
+        }
+    }
+
+    // MARK: - Device Change Handling
+
+    /// Handle audio configuration change (e.g., user switched microphone)
+    private func handleConfigurationChange() {
+        guard isCapturing, !isReconfiguring else { return }
+        isReconfiguring = true
+
+        log("AudioCapture: Configuration changed, restarting with new device...")
+
+        // Stop IOProc on old device
+        if let procID = ioProcID, deviceID != kAudioObjectUnknown {
+            AudioDeviceStop(deviceID, procID)
+            AudioDeviceDestroyIOProcID(deviceID, procID)
+            ioProcID = nil
+        }
+
+        // Remove old format listener (device may have changed)
+        if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreamFormat,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectRemovePropertyListenerBlock(
+                deviceID,
+                &address,
+                listenerQueue,
+                block
+            )
+            deviceFormatListenerBlock = nil
+        }
+
+        // Delay to let the audio hardware settle after device change
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.reconfigureAfterChange(retryCount: 0)
+        }
+    }
+
+    private static let maxRetries = 3
+
+    private func reconfigureAfterChange(retryCount: Int) {
+        // Get new default input device
+        var newDeviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &newDeviceID
+        )
+
+        guard status == noErr, newDeviceID != kAudioObjectUnknown else {
+            log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+
+        self.deviceID = newDeviceID
+
+        // Get new format
+        guard let streamFormat = getStreamFormat(for: deviceID) else {
+            log("AudioCapture: Failed to get stream format (attempt \(retryCount + 1))")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+
+        guard streamFormat.mSampleRate > 0, streamFormat.mChannelsPerFrame > 0 else {
+            log("AudioCapture: No valid format after config change (attempt \(retryCount + 1))")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+
+        detectedSampleRate = streamFormat.mSampleRate
+        log("AudioCapture: New hardware format - \(streamFormat.mSampleRate)Hz, \(streamFormat.mChannelsPerFrame) channels (attempt \(retryCount + 1))")
+
+        // Recreate input format and converter
+        guard let inputFmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: streamFormat.mSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            logError("AudioCapture: Failed to create input format")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+        self.inputFormat = inputFmt
+
+        guard let targetFmt = targetFormat,
+              let newConverter = AVAudioConverter(from: inputFmt, to: targetFmt) else {
+            logError("AudioCapture: Failed to create converter for new format")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+        audioConverter = newConverter
+
+        // Create new IOProc
+        var procID: AudioDeviceIOProcID?
+        let ioProcStatus = AudioDeviceCreateIOProcIDWithBlock(&procID, deviceID, nil) {
+            [weak self] inNow, inInputData, inInputTime, outOutputData, inOutputTime in
+            self?.handleAudioInput(inInputData, timestamp: inInputTime)
+        }
+
+        guard ioProcStatus == noErr, let validProcID = procID else {
+            logError("AudioCapture: Failed to create IOProc: \(ioProcStatus) (attempt \(retryCount + 1))")
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+        self.ioProcID = validProcID
+
+        // Start device
+        let startStatus = AudioDeviceStart(deviceID, validProcID)
+        guard startStatus == noErr else {
+            logError("AudioCapture: Failed to start device: \(startStatus) (attempt \(retryCount + 1))")
+            AudioDeviceDestroyIOProcID(deviceID, validProcID)
+            self.ioProcID = nil
+            retryOrGiveUp(retryCount: retryCount)
+            return
+        }
+
+        // Install format listener on new device
+        var formatAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamFormat,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            DispatchQueue.main.async {
+                self?.handleConfigurationChange()
+            }
+        }
+        self.deviceFormatListenerBlock = formatBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &formatAddress,
+            listenerQueue,
+            formatBlock
+        )
+
+        log("AudioCapture: Restarted with new configuration")
+        isReconfiguring = false
+    }
+
+    private func retryOrGiveUp(retryCount: Int) {
+        if retryCount < Self.maxRetries {
+            let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
+            log("AudioCapture: Retrying in \(delay)s...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.reconfigureAfterChange(retryCount: retryCount + 1)
+            }
+        } else {
+            logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
+            isReconfiguring = false
+        }
+    }
+
+    deinit {
+        if isCapturing {
+            removePropertyListeners()
+            if let procID = ioProcID, deviceID != kAudioObjectUnknown {
+                AudioDeviceStop(deviceID, procID)
+                AudioDeviceDestroyIOProcID(deviceID, procID)
+            }
+        }
     }
 }
