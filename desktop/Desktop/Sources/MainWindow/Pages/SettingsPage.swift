@@ -578,6 +578,14 @@ struct SettingsContentView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
 
+                    // Keyboard shortcuts for font size
+                    VStack(spacing: 6) {
+                        fontShortcutRow(label: "Increase font size", keys: "\u{2318}+")
+                        fontShortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
+                        fontShortcutRow(label: "Reset font size", keys: "\u{2318}0")
+                    }
+                    .padding(.top, 4)
+
                     HStack {
                         Spacer()
                         Button(action: {
@@ -3303,6 +3311,22 @@ struct SettingsContentView: View {
     }
 
     // MARK: - Helper Views
+
+    private func fontShortcutRow(label: String, keys: String) -> some View {
+        HStack {
+            Text(label)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            Text(keys)
+                .scaledMonospacedFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+                .cornerRadius(5)
+        }
+    }
 
     private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()

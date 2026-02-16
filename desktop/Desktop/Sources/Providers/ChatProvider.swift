@@ -522,19 +522,27 @@ class ChatProvider: ObservableObject {
 
     /// Load more (older) messages for the current session
     func loadMoreMessages() async {
-        guard let sessionId = currentSessionId,
-              hasMoreMessages,
+        guard hasMoreMessages,
               !isLoadingMoreMessages else { return }
 
         isLoadingMoreMessages = true
 
         do {
             let offset = messages.count
-            let olderMessages = try await APIClient.shared.getMessages(
-                sessionId: sessionId,
-                limit: messagesPageSize,
-                offset: offset
-            )
+            let olderMessages: [ChatMessageDB]
+            if let sessionId = currentSessionId {
+                olderMessages = try await APIClient.shared.getMessages(
+                    sessionId: sessionId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            } else {
+                olderMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            }
 
             let newMessages = olderMessages.map(ChatMessage.init(from:))
 
