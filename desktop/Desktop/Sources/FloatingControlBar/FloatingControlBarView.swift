@@ -9,7 +9,6 @@ struct FloatingControlBarView: View {
     var onHide: () -> Void
     var onSendQuery: (String, URL?) -> Void
     var onCloseAI: () -> Void
-    var onAskFollowUp: () -> Void
     var onCaptureScreenshot: () -> Void
 
     var body: some View {
@@ -166,7 +165,15 @@ struct FloatingControlBarView: View {
             ),
             userInput: state.displayedQuery,
             onClose: onCloseAI,
-            onAskFollowUp: onAskFollowUp
+            onSendFollowUp: { message in
+                state.displayedQuery = message
+                let screenshot = state.screenshotURL
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    state.isAILoading = true
+                    state.aiResponseText = ""
+                }
+                onSendQuery(message, screenshot)
+            }
         )
         .transition(
             .asymmetric(

@@ -1290,9 +1290,94 @@ class AppState: ObservableObject {
         NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
     }
 
-    /// Refresh conversations (for pull-to-refresh)
+    /// Refresh conversations silently (for auto-refresh timer and app-activate).
+    /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
     func refreshConversations() async {
-        await loadConversations()
+        // Skip if currently doing a full load
+        guard !isLoadingConversations else { return }
+
+        // Calculate date range if date filter is set
+        let startDate: Date?
+        let endDate: Date?
+        if let filterDate = selectedDateFilter {
+            let calendar = Calendar.current
+            startDate = calendar.startOfDay(for: filterDate)
+            endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
+        } else {
+            startDate = nil
+            endDate = nil
+        }
+
+        do {
+            let fetchedConversations = try await APIClient.shared.getConversations(
+                limit: 50,
+                offset: 0,
+                statuses: [.completed, .processing],
+                includeDiscarded: false,
+                startDate: startDate,
+                endDate: endDate,
+                folderId: selectedFolderId,
+                starred: showStarredOnly ? true : nil
+            )
+
+            // Merge in-place: update existing, add new, remove gone
+            let merged = mergeConversations(source: fetchedConversations, current: conversations)
+            if merged != conversations {
+                conversations = merged
+                log("Conversations: Auto-refresh updated (\(merged.count) items)")
+            }
+
+            // Sync to local database in background
+            Task.detached(priority: .background) {
+                for conversation in fetchedConversations {
+                    try? await TranscriptionStorage.shared.syncServerConversation(conversation)
+                }
+            }
+        } catch {
+            // Silently ignore errors during auto-refresh — cached data stays visible
+            logError("Conversations: Auto-refresh failed", error: error)
+        }
+
+        // Update total count
+        do {
+            let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
+            if totalConversationsCount != count {
+                totalConversationsCount = count
+            }
+        } catch {
+            // Keep existing count
+        }
+    }
+
+    /// Merge fetched conversations into the current list in-place.
+    /// Updates changed items, adds new ones, removes ones no longer in source.
+    private func mergeConversations(source: [ServerConversation], current: [ServerConversation]) -> [ServerConversation] {
+        let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
+        let sourceIds = Set(source.map { $0.id })
+        let currentIds = Set(current.map { $0.id })
+
+        var result = current
+
+        // Update existing items in-place
+        for i in result.indices {
+            if let updated = sourceById[result[i].id], updated != result[i] {
+                result[i] = updated
+            }
+        }
+
+        // Remove items no longer in source
+        result.removeAll { !sourceIds.contains($0.id) }
+
+        // Add new items from source that aren't in current
+        let newIds = sourceIds.subtracting(currentIds)
+        if !newIds.isEmpty {
+            let newItems = source.filter { newIds.contains($0.id) }
+            result.append(contentsOf: newItems)
+            // Re-sort by createdAt descending (newest first) to maintain order
+            result.sort { $0.createdAt > $1.createdAt }
+        }
+
+        return result
     }
 
     /// Update the starred status of a conversation locally

@@ -519,7 +519,21 @@ enum ConversationSource: String, Codable {
     }
 }
 
-struct ServerConversation: Codable, Identifiable {
+struct ServerConversation: Codable, Identifiable, Equatable {
+    static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.createdAt == rhs.createdAt &&
+        lhs.startedAt == rhs.startedAt &&
+        lhs.finishedAt == rhs.finishedAt &&
+        lhs.structured == rhs.structured &&
+        lhs.status == rhs.status &&
+        lhs.discarded == rhs.discarded &&
+        lhs.deleted == rhs.deleted &&
+        lhs.starred == rhs.starred &&
+        lhs.folderId == rhs.folderId &&
+        lhs.source == rhs.source
+    }
+
     let id: String
     let createdAt: Date
     let startedAt: Date?
@@ -667,7 +681,7 @@ struct ServerConversation: Codable, Identifiable {
     }
 }
 
-struct Structured: Codable {
+struct Structured: Codable, Equatable {
     var title: String
     let overview: String
     let emoji: String
@@ -710,7 +724,7 @@ struct Structured: Codable {
     }
 }
 
-struct ActionItem: Codable, Identifiable {
+struct ActionItem: Codable, Identifiable, Equatable {
     var id: String { description }
     let description: String
     let completed: Bool
@@ -730,7 +744,7 @@ struct ActionItem: Codable, Identifiable {
     }
 }
 
-struct Event: Codable, Identifiable {
+struct Event: Codable, Identifiable, Equatable {
     var id: String { title + startsAt.description }
     let title: String
     let startsAt: Date

@@ -86,7 +86,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onHide: { [weak self] in self?.hideBar() },
             onSendQuery: { [weak self] message, screenshotURL in self?.onSendQuery?(message, screenshotURL) },
             onCloseAI: { [weak self] in self?.closeAIConversation() },
-            onAskFollowUp: { [weak self] in self?.resetToInputView() },
             onCaptureScreenshot: { [weak self] in self?.captureScreenshot() }
         ).environmentObject(state)
 
@@ -206,18 +205,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.screenshotURL = nil
         }
         resizeToFixedHeight(FloatingControlBarWindow.minBarSize.height, animated: true)
-    }
-
-    private func resetToInputView() {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            state.showingAIResponse = false
-            state.aiResponseText = ""
-            state.aiInputText = ""
-            state.isAILoading = false
-            state.inputViewHeight = 120
-        }
-        resizeToFixedHeight(120, animated: true)
-        setupInputHeightObserver()
     }
 
     private func hideBar() {

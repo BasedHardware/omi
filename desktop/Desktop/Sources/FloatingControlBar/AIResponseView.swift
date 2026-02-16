@@ -6,11 +6,12 @@ struct AIResponseView: View {
     @Binding var isLoading: Bool
     @Binding var responseText: String
     @State private var isQuestionExpanded = false
+    @State private var followUpText: String = ""
 
     let userInput: String
 
     var onClose: (() -> Void)?
-    var onAskFollowUp: (() -> Void)?
+    var onSendFollowUp: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -18,6 +19,9 @@ struct AIResponseView: View {
                 .fixedSize(horizontal: false, vertical: true)
             questionBar
             contentView
+            if !isLoading {
+                followUpInputView
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,18 +43,6 @@ struct AIResponseView: View {
             }
 
             Spacer()
-
-            if !isLoading {
-                Button("Ask follow up") {
-                    onAskFollowUp?()
-                }
-                .scaledFont(size: 12)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(8)
-                .buttonStyle(.plain)
-            }
 
             Button(action: { onClose?() }) {
                 Image(systemName: "xmark")
@@ -118,6 +110,39 @@ struct AIResponseView: View {
             attributes: attributes
         ).size
         return size.height > font.pointSize * 1.5
+    }
+
+    private var followUpInputView: some View {
+        HStack(spacing: 6) {
+            TextField("Ask follow up...", text: $followUpText)
+                .textFieldStyle(.plain)
+                .scaledFont(size: 13)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+                .onSubmit {
+                    sendFollowUp()
+                }
+
+            Button(action: { sendFollowUp() }) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .scaledFont(size: 20)
+                    .foregroundColor(
+                        followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? .secondary : .white
+                    )
+            }
+            .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func sendFollowUp() {
+        let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        followUpText = ""
+        onSendFollowUp?(trimmed)
     }
 
     private var contentView: some View {
