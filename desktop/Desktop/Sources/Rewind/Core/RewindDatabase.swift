@@ -245,15 +245,15 @@ actor RewindDatabase {
             try db.execute(sql: "PRAGMA busy_timeout = 5000")
         }
 
-        let queue: DatabaseQueue
+        let queue: DatabasePool
         do {
-            queue = try DatabaseQueue(path: dbPath, configuration: config)
+            queue = try DatabasePool(path: dbPath, configuration: config)
         } catch {
             // If opening fails (e.g. disk I/O error on WAL), try once more without WAL files
             log("RewindDatabase: Failed to open database: \(error), cleaning WAL and retrying...")
             removeWALFiles(at: dbPath)
             do {
-                queue = try DatabaseQueue(path: dbPath, configuration: config)
+                queue = try DatabasePool(path: dbPath, configuration: config)
             } catch let retryError {
                 // If still failing, check for database corruption:
                 //   - SQLITE_CORRUPT (error 11): malformed database
@@ -272,7 +272,7 @@ actor RewindDatabase {
                     log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
                     try await handleCorruptedDatabase(at: dbPath, in: omiDir)
                     // Retry with recovered or fresh database
-                    queue = try DatabaseQueue(path: dbPath, configuration: config)
+                    queue = try DatabasePool(path: dbPath, configuration: config)
                 } else {
                     throw retryError
                 }
@@ -292,7 +292,7 @@ actor RewindDatabase {
                dbError.resultCode == .SQLITE_IOERR || dbError.resultCode == .SQLITE_CORRUPT {
                 log("RewindDatabase: Database opened but queries fail (\(error)), removing WAL and retrying...")
                 removeWALFiles(at: dbPath)
-                let retryQueue = try DatabaseQueue(path: dbPath, configuration: config)
+                let retryQueue = try DatabasePool(path: dbPath, configuration: config)
                 try await retryQueue.read { db in
                     _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
                 }
@@ -755,7 +755,7 @@ actor RewindDatabase {
     }
 
     /// Verify database integrity after successful initialization
-    private func verifyDatabaseIntegrity(_ queue: DatabaseQueue) throws {
+    private func verifyDatabaseIntegrity(_ queue: DatabasePool) throws {
         try queue.read { db in
             // Cheap schema-level check: verify we can read from a core table and the page count.
             // Avoids PRAGMA quick_check which scans the entire DB (75s+ on 4 GB databases).
@@ -781,7 +781,7 @@ actor RewindDatabase {
 
     // MARK: - Migrations
 
-    private func migrate(_ queue: DatabaseQueue) throws {
+    private func migrate(_ queue: DatabasePool) throws {
         var migrator = DatabaseMigrator()
 
         // Migration 1: Create screenshots table

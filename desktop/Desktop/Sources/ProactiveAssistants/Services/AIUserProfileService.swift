@@ -33,8 +33,8 @@ actor AIUserProfileService {
     /// Whether profile generation is currently in progress
     private var isGenerating = false
 
-    /// Cached database queue
-    private var _dbQueue: DatabaseQueue?
+    /// Cached database pool
+    private var _dbQueue: DatabasePool?
 
     /// Invalidate cached DB queue (called on user switch / sign-out)
     func invalidateCache() {
@@ -43,7 +43,7 @@ actor AIUserProfileService {
 
     // MARK: - Database Access
 
-    private func ensureDB() async throws -> DatabaseQueue {
+    private func ensureDB() async throws -> DatabasePool {
         if let db = _dbQueue { return db }
         try await RewindDatabase.shared.initialize()
         guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
