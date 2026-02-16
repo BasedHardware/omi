@@ -1043,6 +1043,7 @@ class TasksStore: ObservableObject {
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+            await loadDashboardTasks()
         } catch {
             logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
             // Revert SQLite
