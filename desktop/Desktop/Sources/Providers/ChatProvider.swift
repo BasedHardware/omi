@@ -339,6 +339,8 @@ class ChatProvider: ObservableObject {
     private var memoriesLoaded = false
     private var cachedGoals: [Goal] = []
     private var goalsLoaded = false
+    private var cachedTasks: [TaskActionItem] = []
+    private var tasksLoaded = false
     private var cachedAIProfile: String = ""
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
@@ -711,6 +713,50 @@ class ChatProvider: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: - Load Tasks
+
+    /// Fetches the latest 20 active tasks from local database for context
+    private func loadTasksIfNeeded() async {
+        guard !tasksLoaded else { return }
+
+        do {
+            cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: 20,
+                completed: false
+            )
+            tasksLoaded = true
+            log("ChatProvider loaded \(cachedTasks.count) tasks for context")
+        } catch {
+            logError("Failed to load tasks for chat context", error: error)
+            tasksLoaded = true
+        }
+    }
+
+    /// Formats cached tasks into a prompt section
+    private func formatTasksSection() -> String {
+        guard !cachedTasks.isEmpty else { return "" }
+
+        var lines: [String] = ["\n<user_tasks>", "Current tasks:"]
+        for task in cachedTasks {
+            var line = "- \(task.description)"
+            if let priority = task.priority {
+                line += " [priority: \(priority)]"
+            }
+            if let dueAt = task.dueAt {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                line += " [due: \(formatter.string(from: dueAt))]"
+            }
+            if let category = task.category {
+                line += " [category: \(category)]"
+            }
+            lines.append(line)
+        }
+        lines.append("</user_tasks>")
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Load AI User Profile
 
     /// Fetches the latest AI-generated user profile from local database
@@ -883,6 +929,7 @@ class ChatProvider: ObservableObject {
 
         // Build individual sections
         let goalSection = formatGoalSection()
+        let tasksSection = formatTasksSection()
         let aiProfileSection = formatAIProfileSection()
         let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
         let historyCount = min(historyMessages.count, 20)
@@ -892,6 +939,7 @@ class ChatProvider: ObservableObject {
             userName: userName,
             memoriesSection: contextSection,
             goalSection: goalSection,
+            tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
             databaseSchema: cachedDatabaseSchema
         )
@@ -1010,6 +1058,7 @@ class ChatProvider: ObservableObject {
         }
         await loadMemoriesIfNeeded()
         await loadGoalsIfNeeded()
+        await loadTasksIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
         discoverClaudeConfig()
