@@ -298,6 +298,15 @@ class ChatProvider: ObservableObject {
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
 
+    // MARK: - Streaming Buffer
+    /// Accumulates text deltas during streaming and flushes them to the published
+    /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
+    private var streamingTextBuffer: String = ""
+    private var streamingThinkingBuffer: String = ""
+    private var streamingBufferMessageId: String?
+    private var streamingFlushWorkItem: DispatchWorkItem?
+    private let streamingFlushInterval: TimeInterval = 0.1
+
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
         // Filter out "empty" sessions (only AI greeting, no user messages)
@@ -1298,6 +1307,11 @@ class ChatProvider: ObservableObject {
                 }
             )
 
+            // Flush any remaining buffered streaming text before finalizing
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
+
             // Extract citations from the response and strip markers for display
             let citationSources = cachedContext?.citationSources ?? []
             let citations = extractCitations(from: queryResult.text, sources: citationSources)
@@ -1458,17 +1472,59 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append text to a streaming message, updating content blocks for visual separation
+    /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
+    /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
     private func appendToMessage(id: String, text: String) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[index].text += text
+        streamingBufferMessageId = id
+        streamingTextBuffer += text
 
-        // Update content blocks: append to last text block, or create new one after tool calls
-        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-           case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-            messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + text)
-        } else {
-            messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: text))
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        }
+    }
+
+    /// Flush accumulated text and thinking deltas to the published messages array.
+    private func flushStreamingBuffer() {
+        streamingFlushWorkItem = nil
+
+        guard let id = streamingBufferMessageId,
+              let index = messages.firstIndex(where: { $0.id == id }) else {
+            streamingTextBuffer = ""
+            streamingThinkingBuffer = ""
+            return
+        }
+
+        // Flush text buffer
+        if !streamingTextBuffer.isEmpty {
+            let buffered = streamingTextBuffer
+            streamingTextBuffer = ""
+
+            messages[index].text += buffered
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+            }
+        }
+
+        // Flush thinking buffer
+        if !streamingThinkingBuffer.isEmpty {
+            let buffered = streamingThinkingBuffer
+            streamingThinkingBuffer = ""
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
+            }
         }
     }
 
@@ -1532,16 +1588,18 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append thinking text to the streaming message
+    /// Append thinking text to the streaming message via the shared buffer.
     private func appendThinking(messageId: String, text: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        streamingBufferMessageId = messageId
+        streamingThinkingBuffer += text
 
-        // Append to the last thinking block if it exists, otherwise create new
-        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-           case .thinking(let id, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-            messages[index].contentBlocks[lastBlockIndex] = .thinking(id: id, text: existing + text)
-        } else {
-            messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: text))
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
         }
     }
 
