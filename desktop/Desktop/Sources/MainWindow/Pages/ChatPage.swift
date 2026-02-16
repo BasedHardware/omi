@@ -495,8 +495,26 @@ struct ChatBubble: View {
     let app: OmiApp?
     let onRate: (Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var isDuplicate: Bool = false
 
     @State private var isHovering = false
+    @State private var isExpanded = false
+
+    /// Messages longer than this are truncated with a "Show more" button
+    private static let truncationThreshold = 500
+
+    /// Whether this message should be truncated
+    private var shouldTruncate: Bool {
+        !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    }
+
+    /// The text to display (truncated or full)
+    private var displayText: String {
+        if shouldTruncate {
+            return String(message.text.prefix(Self.truncationThreshold)) + "…"
+        }
+        return message.text
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

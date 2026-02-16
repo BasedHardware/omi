@@ -31,7 +31,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
-                    VStack(spacing: 16) {
+                    LazyVStack(spacing: 16) {
                         // Load more button at top
                         if hasMoreMessages {
                             Button {
