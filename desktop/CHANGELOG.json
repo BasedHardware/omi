@@ -1,6 +1,22 @@
 {
   "releases": [
     {
+      "version": "0.8.4",
+      "date": "2026-02-15",
+      "changes": [
+        "Fixed audio recording quality on Bluetooth headphones (no more automatic switch to low-quality call mode)",
+        "All users now have access to all features",
+        "Improved app startup speed with optimized database checks",
+        "Simplified Rewind page controls",
+        "Fixed database corruption during user data migration",
+        "Fixed memory leaks in Focus Assistant and Live Notes",
+        "Fixed app not staying in menu bar when all windows closed",
+        "Fixed floating control bar auto-showing on startup",
+        "Improved screen capture permission reset reliability",
+        "Added memory diagnostics for performance troubleshooting"
+      ]
+    },
+    {
       "version": "0.8.3",
       "date": "2026-02-14",
       "changes": [
