@@ -253,6 +253,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             self?.makeKeyAndOrderFront(nil)
         }
 
+        // Fallback: explicitly focus the input after SwiftUI layout settles.
+        // The AutoFocusScrollView.viewDidMoveToWindow() fires once and can miss
+        // if the window isn't yet key at that moment.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.focusInputField()
+        }
+
         // Capture screenshot in background without hiding the bar
         Task.detached { [weak self] in
             let url = ScreenCaptureManager.captureScreen()
@@ -574,6 +581,10 @@ class FloatingControlBarManager {
     /// Open the AI input panel.
     func openAIInput() {
         guard let window = window else { return }
+
+        // Activate the app so the window can become key and accept keyboard input.
+        // Without this, makeFirstResponder silently fails when triggered from a global shortcut.
+        NSApp.activate(ignoringOtherApps: true)
 
         // If a conversation is already showing, just focus the follow-up input
         if window.state.showingAIConversation && window.state.showingAIResponse {
