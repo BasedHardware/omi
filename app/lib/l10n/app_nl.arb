@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Netwerknaam (SSID)",
   "enterWifiNetworkName": "Voer de WiFi-netwerknaam in",
   "enterWifiPassword": "Voer het WiFi-wachtwoord in",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Downloaden van apparaat",
   "reconnectingToInternet": "Opnieuw verbinden met internet...",
   "uploadingToCloud": "{current} van {total} uploaden",

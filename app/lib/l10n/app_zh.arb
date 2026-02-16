@@ -2653,6 +2653,7 @@
   "networkNameSsid": "网络名称 (SSID)",
   "enterWifiNetworkName": "输入WiFi网络名称",
   "enterWifiPassword": "输入WiFi密码",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "正在从设备下载",
   "reconnectingToInternet": "正在重新连接互联网...",
   "uploadingToCloud": "正在上传 {current}/{total}",

@@ -8197,4 +8197,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'वाईफाई पासवर्ड दर्ज करें';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

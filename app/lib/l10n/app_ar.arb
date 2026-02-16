@@ -2598,6 +2598,7 @@
   "networkNameSsid": "اسم الشبكة (SSID)",
   "enterWifiNetworkName": "أدخل اسم شبكة الواي فاي",
   "enterWifiPassword": "أدخل كلمة مرور الواي فاي",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "جارٍ التنزيل من الجهاز",
   "reconnectingToInternet": "جارٍ إعادة الاتصال بالإنترنت...",
   "uploadingToCloud": "جارٍ رفع {current} من {total}",

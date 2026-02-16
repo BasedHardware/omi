@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Όνομα δικτύου (SSID)",
   "enterWifiNetworkName": "Εισαγάγετε το όνομα δικτύου WiFi",
   "enterWifiPassword": "Εισαγάγετε τον κωδικό WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Λήψη από τη συσκευή",
   "reconnectingToInternet": "Επανασύνδεση στο διαδίκτυο...",
   "uploadingToCloud": "Μεταφόρτωση {current} από {total}",

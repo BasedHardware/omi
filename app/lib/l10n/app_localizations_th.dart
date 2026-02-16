@@ -8173,4 +8173,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'ป้อนรหัสผ่าน WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

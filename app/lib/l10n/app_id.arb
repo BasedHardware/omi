@@ -2673,6 +2673,7 @@
   "networkNameSsid": "Nama Jaringan (SSID)",
   "enterWifiNetworkName": "Masukkan nama jaringan WiFi",
   "enterWifiPassword": "Masukkan kata sandi WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Mengunduh dari perangkat",
   "reconnectingToInternet": "Menyambung kembali ke internet...",
   "uploadingToCloud": "Mengunggah {current} dari {total}",

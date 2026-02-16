@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Nettverksnavn (SSID)",
   "enterWifiNetworkName": "Skriv inn WiFi-nettverksnavn",
   "enterWifiPassword": "Skriv inn WiFi-passord",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Laster ned fra enhet",
   "reconnectingToInternet": "Kobler til internett på nytt...",
   "uploadingToCloud": "Laster opp {current} av {total}",

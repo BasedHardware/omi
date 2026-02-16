@@ -8158,4 +8158,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

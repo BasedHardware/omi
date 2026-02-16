@@ -8077,4 +8077,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'WiFiパスワードを入力';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

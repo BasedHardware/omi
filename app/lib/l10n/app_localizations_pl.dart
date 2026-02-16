@@ -8235,4 +8235,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Wprowadź hasło WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

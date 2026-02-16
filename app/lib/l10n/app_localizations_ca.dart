@@ -8266,4 +8266,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

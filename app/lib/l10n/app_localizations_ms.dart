@@ -8240,4 +8240,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Masukkan kata laluan WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

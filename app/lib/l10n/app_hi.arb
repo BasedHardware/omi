@@ -2632,6 +2632,7 @@
   "networkNameSsid": "नेटवर्क नाम (SSID)",
   "enterWifiNetworkName": "वाईफाई नेटवर्क का नाम दर्ज करें",
   "enterWifiPassword": "वाईफाई पासवर्ड दर्ज करें",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "डिवाइस से डाउनलोड हो रहा है",
   "reconnectingToInternet": "इंटरनेट से पुनः कनेक्ट हो रहा है...",
   "uploadingToCloud": "{total} में से {current} अपलोड हो रहा है",

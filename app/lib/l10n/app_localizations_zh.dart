@@ -8067,4 +8067,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enterWifiPassword => '输入WiFi密码';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

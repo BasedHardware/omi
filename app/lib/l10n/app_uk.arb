@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Назва мережі (SSID)",
   "enterWifiNetworkName": "Введіть назву мережі WiFi",
   "enterWifiPassword": "Введіть пароль WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Завантаження з пристрою",
   "reconnectingToInternet": "Повторне підключення до інтернету...",
   "uploadingToCloud": "Завантаження {current} з {total}",

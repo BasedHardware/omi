@@ -8219,4 +8219,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Nhập mật khẩu WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

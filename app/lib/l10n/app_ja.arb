@@ -2632,6 +2632,7 @@
   "networkNameSsid": "ネットワーク名（SSID）",
   "enterWifiNetworkName": "WiFiネットワーク名を入力",
   "enterWifiPassword": "WiFiパスワードを入力",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "デバイスからダウンロード中",
   "reconnectingToInternet": "インターネットに再接続中...",
   "uploadingToCloud": "{current}/{total}をアップロード中",

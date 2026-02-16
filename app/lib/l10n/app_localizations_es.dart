@@ -8232,4 +8232,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Ingrese la contraseña WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

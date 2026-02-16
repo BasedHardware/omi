@@ -2599,6 +2599,7 @@
   "networkNameSsid": "Netzwerkname (SSID)",
   "enterWifiNetworkName": "WLAN-Netzwerknamen eingeben",
   "enterWifiPassword": "WLAN-Passwort eingeben",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Wird vom Gerät heruntergeladen",
   "reconnectingToInternet": "Verbindung zum Internet wird wiederhergestellt...",
   "uploadingToCloud": "Hochladen von {current} von {total}",

@@ -2666,6 +2666,7 @@
   "networkNameSsid": "Имя сети (SSID)",
   "enterWifiNetworkName": "Введите имя сети WiFi",
   "enterWifiPassword": "Введите пароль WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Загрузка с устройства",
   "reconnectingToInternet": "Повторное подключение к интернету...",
   "uploadingToCloud": "Загрузка {current} из {total}",

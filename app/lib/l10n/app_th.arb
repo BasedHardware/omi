@@ -2631,6 +2631,7 @@
   "networkNameSsid": "ชื่อเครือข่าย (SSID)",
   "enterWifiNetworkName": "ป้อนชื่อเครือข่าย WiFi",
   "enterWifiPassword": "ป้อนรหัสผ่าน WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "กำลังดาวน์โหลดจากอุปกรณ์",
   "reconnectingToInternet": "กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...",
   "uploadingToCloud": "กำลังอัปโหลด {current} จาก {total}",

@@ -8206,4 +8206,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Zadajte heslo WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

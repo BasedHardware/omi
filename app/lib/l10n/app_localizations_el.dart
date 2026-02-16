@@ -8278,4 +8278,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Εισαγάγετε τον κωδικό WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

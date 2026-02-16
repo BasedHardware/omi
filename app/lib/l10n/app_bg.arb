@@ -2600,6 +2600,7 @@
   "networkNameSsid": "Име на мрежата (SSID)",
   "enterWifiNetworkName": "Въведете името на WiFi мрежата",
   "enterWifiPassword": "Въведете парола за WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Изтегляне от устройството",
   "reconnectingToInternet": "Повторно свързване с интернет...",
   "uploadingToCloud": "Качване на {current} от {total}",

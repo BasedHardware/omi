@@ -8254,4 +8254,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Adja meg a WiFi jelszót';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

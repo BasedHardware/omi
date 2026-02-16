@@ -2600,6 +2600,7 @@
   "networkNameSsid": "Název sítě (SSID)",
   "enterWifiNetworkName": "Zadejte název WiFi sítě",
   "enterWifiPassword": "Zadejte heslo WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Stahování ze zařízení",
   "reconnectingToInternet": "Opětovné připojování k internetu...",
   "uploadingToCloud": "Nahrávání {current} z {total}",

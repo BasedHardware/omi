@@ -2631,6 +2631,7 @@
   "networkNameSsid": "네트워크 이름 (SSID)",
   "enterWifiNetworkName": "WiFi 네트워크 이름을 입력하세요",
   "enterWifiPassword": "WiFi 비밀번호를 입력하세요",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "기기에서 다운로드 중",
   "reconnectingToInternet": "인터넷에 다시 연결 중...",
   "uploadingToCloud": "{current}/{total} 업로드 중",

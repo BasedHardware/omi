@@ -2640,6 +2640,7 @@
   "networkNameSsid": "Netværksnavn (SSID)",
   "enterWifiNetworkName": "Indtast WiFi-netværksnavn",
   "enterWifiPassword": "Indtast WiFi-adgangskode",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Downloader fra enhed",
   "reconnectingToInternet": "Genopretter forbindelse til internet...",
   "uploadingToCloud": "Uploader {current} af {total}",

@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Tīkla nosaukums (SSID)",
   "enterWifiNetworkName": "Ievadiet WiFi tīkla nosaukumu",
   "enterWifiPassword": "Ievadiet WiFi paroli",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Lejupielāde no ierīces",
   "reconnectingToInternet": "Atkārtota savienošana ar internetu...",
   "uploadingToCloud": "Augšupielāde {current} no {total}",

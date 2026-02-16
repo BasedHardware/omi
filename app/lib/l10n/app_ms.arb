@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Nama Rangkaian (SSID)",
   "enterWifiNetworkName": "Masukkan nama rangkaian WiFi",
   "enterWifiPassword": "Masukkan kata laluan WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Memuat turun dari peranti",
   "reconnectingToInternet": "Menyambung semula ke internet...",
   "uploadingToCloud": "Memuat naik {current} daripada {total}",

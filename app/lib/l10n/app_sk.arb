@@ -2636,6 +2636,7 @@
   "networkNameSsid": "Názov siete (SSID)",
   "enterWifiNetworkName": "Zadajte názov WiFi siete",
   "enterWifiPassword": "Zadajte heslo WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Sťahovanie zo zariadenia",
   "reconnectingToInternet": "Opätovné pripájanie k internetu...",
   "uploadingToCloud": "Nahrávanie {current} z {total}",

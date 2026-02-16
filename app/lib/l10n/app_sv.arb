@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Nätverksnamn (SSID)",
   "enterWifiNetworkName": "Ange WiFi-nätverksnamn",
   "enterWifiPassword": "Ange WiFi-lösenord",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Laddar ner från enhet",
   "reconnectingToInternet": "Återansluter till internet...",
   "uploadingToCloud": "Laddar upp {current} av {total}",

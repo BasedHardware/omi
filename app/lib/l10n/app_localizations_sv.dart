@@ -8220,4 +8220,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Ange WiFi-lösenord';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

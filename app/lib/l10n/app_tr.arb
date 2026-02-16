@@ -2666,6 +2666,7 @@
   "networkNameSsid": "Ağ Adı (SSID)",
   "enterWifiNetworkName": "WiFi ağ adını girin",
   "enterWifiPassword": "WiFi şifresini girin",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Cihazdan indiriliyor",
   "reconnectingToInternet": "İnternete yeniden bağlanılıyor...",
   "uploadingToCloud": "{current}/{total} yükleniyor",

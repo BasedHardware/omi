@@ -2636,6 +2636,7 @@
   "networkNameSsid": "Tên mạng (SSID)",
   "enterWifiNetworkName": "Nhập tên mạng WiFi",
   "enterWifiPassword": "Nhập mật khẩu WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Đang tải xuống từ thiết bị",
   "reconnectingToInternet": "Đang kết nối lại internet...",
   "uploadingToCloud": "Đang tải lên {current}/{total}",

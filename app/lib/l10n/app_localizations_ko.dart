@@ -8079,4 +8079,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

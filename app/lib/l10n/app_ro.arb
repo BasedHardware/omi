@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Numele rețelei (SSID)",
   "enterWifiNetworkName": "Introduceți numele rețelei WiFi",
   "enterWifiPassword": "Introduceți parola WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Se descarcă de pe dispozitiv",
   "reconnectingToInternet": "Se reconectează la internet...",
   "uploadingToCloud": "Se încarcă {current} din {total}",

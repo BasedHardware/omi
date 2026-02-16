@@ -8210,4 +8210,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Skriv inn WiFi-passord';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

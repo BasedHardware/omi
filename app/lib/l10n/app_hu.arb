@@ -2727,6 +2727,7 @@
   "networkNameSsid": "Hálózat neve (SSID)",
   "enterWifiNetworkName": "Adja meg a WiFi hálózat nevét",
   "enterWifiPassword": "Adja meg a WiFi jelszót",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Letöltés az eszközről",
   "reconnectingToInternet": "Újracsatlakozás az internethez...",
   "uploadingToCloud": "{current}/{total} feltöltése",

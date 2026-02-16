@@ -2632,6 +2632,7 @@
   "networkNameSsid": "Nombre de red (SSID)",
   "enterWifiNetworkName": "Ingrese el nombre de la red WiFi",
   "enterWifiPassword": "Ingrese la contraseña WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Descargando del dispositivo",
   "reconnectingToInternet": "Reconectando a internet...",
   "uploadingToCloud": "Subiendo {current} de {total}",

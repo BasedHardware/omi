@@ -2631,6 +2631,7 @@
   "networkNameSsid": "Võrgu nimi (SSID)",
   "enterWifiNetworkName": "Sisestage WiFi võrgu nimi",
   "enterWifiPassword": "Sisestage WiFi parool",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Seadmest allalaadimine",
   "reconnectingToInternet": "Internetiga uuesti ühendamine...",
   "uploadingToCloud": "{current}/{total} üleslaadimine",

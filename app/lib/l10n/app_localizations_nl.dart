@@ -8242,4 +8242,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Voer het WiFi-wachtwoord in';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

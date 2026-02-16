@@ -8242,4 +8242,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Введите пароль WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

@@ -2600,6 +2600,7 @@
   "networkNameSsid": "Nom de la xarxa (SSID)",
   "enterWifiNetworkName": "Introduïu el nom de la xarxa WiFi",
   "enterWifiPassword": "Introduïu la contrasenya WiFi",
+  "appIconLabel": "App Icon",
   "downloadingFromDevice": "Descarregant del dispositiu",
   "reconnectingToInternet": "Reconnectant a internet...",
   "uploadingToCloud": "Pujant {current} de {total}",
