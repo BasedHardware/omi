@@ -26,8 +26,8 @@ struct ChatInputView: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            // Input field with floating toggle and send button
+        HStack(alignment: .bottom, spacing: 8) {
+            // Input field with floating toggle
             ZStack(alignment: .topTrailing) {
                 // Input field — TextEditor with auto-grow height
                 ZStack(alignment: .topLeading) {
@@ -84,26 +84,22 @@ struct ChatInputView: View {
                 }
             }
 
-            // Send/Stop button row — right-aligned below the input
-            HStack {
-                Spacer()
-
-                if isSending && !hasText {
-                    Button(action: { onStop?() }) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 24)
-                            .foregroundColor(.red.opacity(0.8))
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Button(action: handleSubmit) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .scaledFont(size: 24)
-                            .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasText)
+            // Send/Stop button — inline to the right of the input
+            if isSending && !hasText {
+                Button(action: { onStop?() }) {
+                    Image(systemName: "stop.circle.fill")
+                        .scaledFont(size: 24)
+                        .foregroundColor(.red.opacity(0.8))
                 }
+                .buttonStyle(.plain)
+            } else {
+                Button(action: handleSubmit) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(size: 24)
+                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasText)
             }
         }
         .onAppear {
