@@ -301,3 +301,29 @@ struct AIResponseView: View {
         onSendFollowUp?(trimmed)
     }
 }
+
+// MARK: - Thinking Animation
+
+/// Animated dots that pulse sequentially to indicate AI is processing.
+struct ThinkingDotsView: View {
+    @State private var activeDot = 0
+
+    private let dotCount = 3
+    private let dotSize: CGFloat = 6
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<dotCount, id: \.self) { index in
+                Circle()
+                    .fill(Color.white.opacity(index == activeDot ? 0.9 : 0.25))
+                    .frame(width: dotSize, height: dotSize)
+                    .scaleEffect(index == activeDot ? 1.3 : 1.0)
+                    .animation(.easeInOut(duration: 0.3), value: activeDot)
+            }
+        }
+        .onReceive(timer) { _ in
+            activeDot = (activeDot + 1) % dotCount
+        }
+    }
+}

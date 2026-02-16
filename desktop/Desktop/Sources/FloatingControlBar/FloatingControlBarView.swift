@@ -38,16 +38,16 @@ struct FloatingControlBarView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topTrailing) {
-            if isHovering && !state.showingAIConversation && !state.isVoiceListening {
+            if isHovering && !state.isVoiceListening {
                 Button {
                     openFloatingBarSettings()
                 } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.6))
-                        .frame(width: 18, height: 18)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(4)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(5)
                 }
                 .buttonStyle(.plain)
                 .padding(6)
