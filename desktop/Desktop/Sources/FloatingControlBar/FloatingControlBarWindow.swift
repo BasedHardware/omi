@@ -570,6 +570,12 @@ class FloatingControlBarManager {
         window?.orderOut(nil)
     }
 
+    /// Cancel any in-flight chat streaming.
+    func cancelChat() {
+        chatCancellable?.cancel()
+        chatCancellable = nil
+    }
+
     /// Toggle visibility.
     func toggle() {
         guard let window = window else { return }
