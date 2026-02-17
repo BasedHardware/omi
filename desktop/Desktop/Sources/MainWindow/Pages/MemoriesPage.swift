@@ -896,11 +896,8 @@ struct MemoriesPage: View {
 
     private var mainMemoriesView: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header (includes search, filters, and action buttons)
             header
-
-            // Filter bar
-            filterBar
 
             // Content
             if viewModel.isLoading && viewModel.memories.isEmpty {
@@ -1017,99 +1014,133 @@ struct MemoriesPage: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Memories")
-                    .scaledFont(size: 24, weight: .semibold)
+        HStack(spacing: 8) {
+            // Search field
+            HStack(spacing: 10) {
+                if viewModel.isSearching || viewModel.isLoadingFiltered {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                TextField("Search memories...", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
                     .foregroundColor(OmiColors.textPrimary)
 
-                HStack(spacing: 8) {
-                    if !viewModel.searchText.isEmpty {
-                        Text("\(viewModel.filteredMemories.count) results")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                        Text("\(viewModel.totalMemoriesCount) memories")
-                            .scaledFont(size: 13)
+                if !viewModel.searchText.isEmpty {
+                    Button {
+                        viewModel.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
                             .foregroundColor(OmiColors.textTertiary)
                     }
-
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundTertiary)
+            .cornerRadius(8)
 
-            Spacer()
-
-            HStack(spacing: 8) {
-                // Memory Graph button
-                Button {
-                    showingMemoryGraph = true
-                } label: {
-                    Image(systemName: "brain")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
-                        .cornerRadius(8)
+            // Category filter dropdown
+            Button {
+                pendingSelectedTags = viewModel.selectedTags
+                categorySearchText = ""
+                showCategoryFilter = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .scaledFont(size: 12)
+                    Text(categoryFilterLabel)
+                        .scaledFont(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
+                    Image(systemName: "chevron.down")
+                        .scaledFont(size: 10)
                 }
-                .buttonStyle(.plain)
-                .help("View Memory Graph")
+                .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundTertiary)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
+                categoryFilterPopover
+            }
 
-                Button {
-                    viewModel.showingAddMemory = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                        Text("Add Memory")
-                    }
-                    .scaledFont(size: 13, weight: .medium)
+            // Memory Graph button (commented out — functionality not ready yet)
+            // Button {
+            //     showingMemoryGraph = true
+            // } label: {
+            //     Image(systemName: "brain")
+            //         .scaledFont(size: 14)
+            //         .foregroundColor(OmiColors.textSecondary)
+            //         .frame(width: 32, height: 32)
+            //         .background(OmiColors.backgroundTertiary)
+            //         .cornerRadius(8)
+            // }
+            // .buttonStyle(.plain)
+            // .help("View Memory Graph")
+
+            // Add Memory button (icon only)
+            Button {
+                viewModel.showingAddMemory = true
+            } label: {
+                Image(systemName: "plus")
+                    .scaledFont(size: 14)
                     .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .frame(width: 32, height: 32)
                     .background(Color.white)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(OmiColors.border, lineWidth: 1)
                     )
-                }
-                .buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .help("Add Memory")
 
-                // Refresh button
-                Button {
-                    Task { await viewModel.loadMemories() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
-                        .cornerRadius(8)
-                        .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                        .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoading)
-                .help("Refresh memories")
+            // Refresh button
+            Button {
+                Task { await viewModel.loadMemories() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(OmiColors.backgroundTertiary)
+                    .cornerRadius(8)
+                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
+                    .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isLoading)
+            .help("Refresh memories")
 
-                // Management menu
-                Button {
-                    showManagementMenu = true
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(.black)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-                    managementMenuPopover
-                }
+            // Management menu
+            Button {
+                showManagementMenu = true
+            } label: {
+                Image(systemName: "chevron.down")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(.black)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(OmiColors.border, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
+                managementMenuPopover
             }
         }
         .padding(.horizontal, 24)
