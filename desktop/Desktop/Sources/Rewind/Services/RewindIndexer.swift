@@ -134,10 +134,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }
@@ -298,10 +303,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }

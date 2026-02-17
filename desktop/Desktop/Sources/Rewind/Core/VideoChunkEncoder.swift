@@ -268,10 +268,16 @@ actor VideoChunkEncoder {
             throw RewindError.storageError("FFmpeg not ready")
         }
 
-        // Scale image if needed and convert to PNG data
-        let scaledImage = scaleImage(image, to: outputSize)
-        guard let pngData = createPNGData(from: scaledImage) else {
-            throw RewindError.storageError("Failed to create PNG data")
+        // Wrap image scaling + PNG encoding in autoreleasepool to prevent
+        // CGContext/NSBitmapImageRep accumulation in async actor contexts.
+        // Without this, temporary Obj-C objects from each frame pile up
+        // because Swift concurrency doesn't drain autorelease pools between tasks.
+        let pngData: Data = try autoreleasepool {
+            let scaledImage = scaleImage(image, to: outputSize)
+            guard let data = createPNGData(from: scaledImage) else {
+                throw RewindError.storageError("Failed to create PNG data")
+            }
+            return data
         }
 
         // Write to ffmpeg stdin
