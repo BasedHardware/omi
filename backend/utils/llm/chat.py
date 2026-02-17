@@ -18,6 +18,7 @@ from models.chat import Message, MessageSender, PageContext
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
+from utils.config import get_app_name
 from utils.llms.memory import get_prompt_memories
 
 # ****************************************
@@ -29,7 +30,7 @@ def initial_chat_message(uid: str, plugin: Optional[App] = None, prev_messages_s
     user_name, memories_str = get_prompt_memories(uid)
     if plugin is None:
         prompt = f"""
-You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
+You are '{get_app_name()}', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
 You know the following about {user_name}: {memories_str}.
 
 {prev_messages_str}
@@ -87,30 +88,30 @@ def requires_context(question: str) -> bool:
 
 
 class IsAnOmiQuestion(BaseModel):
-    value: bool = Field(description="If the message is an Omi/Friend related question")
+    value: bool = Field(description="If the message is an app-related question")
 
 
 def retrieve_is_an_omi_question(question: str) -> bool:
+    app_name = get_app_name()
     prompt = f'''
-    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing) 
+    Task: Determine if the user is asking about the {app_name} app itself (product features, functionality, purchasing)
     OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
     CRITICAL DISTINCTION:
-    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does {app_name} work?", "What features does {app_name} have?")
     - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
     - ACTION/TASK REQUESTS = False (e.g., "Remind me to...", "Create a task...", "Set an alarm...")
 
-    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.), 
-    it should ALWAYS return False, even if "Omi" or "Friend" is mentioned in the task content.
+    **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.),
+    it should ALWAYS return False, even if "{app_name}" is mentioned in the task content.
 
-    Examples of Omi/Friend App Questions (return True):
-    - "How does Omi work?"
-    - "What can Omi do?"
+    Examples of {app_name} App Questions (return True):
+    - "How does {app_name} work?"
+    - "What can {app_name} do?"
     - "How can I buy the device?"
-    - "Where do I get Friend?"
     - "What features does the app have?"
-    - "How do I set up Omi?"
-    - "Does Omi support multiple languages?"
+    - "How do I set up {app_name}?"
+    - "Does {app_name} support multiple languages?"
     - "What is the battery life?"
     - "How do I connect my device?"
 
@@ -125,25 +126,23 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     - "When did I last talk to John?"
 
     Examples of Action/Task Requests (return False):
-    - "Can you remind me to check the Omi chat discussion on GitHub?"
-    - "Remind me to update the Omi firmware"
-    - "Create a task to review Friend documentation"
-    - "Set an alarm for my Omi meeting"
-    - "Add to my list: check Omi updates"
-    - "Schedule a reminder about the Friend app launch"
+    - "Can you remind me to check the {app_name} chat discussion on GitHub?"
+    - "Remind me to update the {app_name} firmware"
+    - "Create a task to review documentation"
+    - "Set an alarm for my {app_name} meeting"
+    - "Add to my list: check {app_name} updates"
+    - "Schedule a reminder about the app launch"
 
-    KEY RULES: 
+    KEY RULES:
     1. If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
     2. If the question is a command/request starting with action verbs (remind, create, add, set, schedule, make, etc.), return False.
-    3. Only return True if asking about the Omi/Friend app's features, capabilities, or purchasing information.
+    3. Only return True if asking about the {app_name} app's features, capabilities, or purchasing information.
 
     User's Question:
     {question}
-    
-    Is this asking about the Omi/Friend app product itself?
-    '''.replace(
-        '    ', ''
-    ).strip()
+
+    Is this asking about the {app_name} app product itself?
+    '''.replace('    ', '').strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
