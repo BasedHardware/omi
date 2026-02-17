@@ -1056,15 +1056,6 @@ struct MemoriesPage: View {
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
-                    if viewModel.unreadTipsCount > 0 && viewModel.searchText.isEmpty {
-                        Text("\(viewModel.unreadTipsCount) new tips")
-                            .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(4)
-                    }
                 }
             }
 
@@ -1500,10 +1491,6 @@ struct MemoriesPage: View {
                         memory: memory,
                         onTap: {
                             viewModel.selectedMemory = memory
-                            // Auto-mark tips as read when opened
-                            if memory.isTip && !memory.isRead {
-                                Task { await viewModel.markAsRead(memory) }
-                            }
                         },
                         categoryIcon: categoryIcon,
                         categoryColor: categoryColor,
