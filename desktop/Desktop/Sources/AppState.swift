@@ -1804,9 +1804,7 @@ class AppState: ObservableObject {
             }
 
             // Check daily goal generation
-            log("GoalGenerationService: About to call onConversationCreated")
             Task { @MainActor in
-                log("GoalGenerationService: Inside Task, calling onConversationCreated")
                 GoalGenerationService.shared.onConversationCreated()
             }
 

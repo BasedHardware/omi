@@ -109,50 +109,54 @@ async fn get_unread_messages(
     let auth = BASE64.encode(format!("{}:{}", identifier, key));
     let client = reqwest::Client::new();
 
-    // Search conversations by email
-    let conversations_url = format!(
-        "https://api.crisp.chat/v1/website/{}/conversations/1?search_query={}&search_type=segment",
-        website_id,
-        urlencoding::encode(&email)
-    );
+    // List conversations (paginated, page 1) and find one matching this email
+    // Using the basic list endpoint which works on all Crisp plans
+    let mut session_id: Option<String> = None;
+    for page in 1..=5 {
+        let conversations_url = format!(
+            "https://api.crisp.chat/v1/website/{}/conversations/{}",
+            website_id, page
+        );
 
-    let conv_response = client
-        .get(&conversations_url)
-        .header("Authorization", format!("Basic {}", auth))
-        .header("X-Crisp-Tier", "plugin")
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::warn!("Crisp API conversations request failed: {}", e);
+        let conv_response = client
+            .get(&conversations_url)
+            .header("Authorization", format!("Basic {}", auth))
+            .header("X-Crisp-Tier", "plugin")
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::warn!("Crisp API conversations request failed: {}", e);
+                StatusCode::BAD_GATEWAY
+            })?;
+
+        if !conv_response.status().is_success() {
+            let status = conv_response.status();
+            let body = conv_response.text().await.unwrap_or_default();
+            tracing::warn!("Crisp API conversations page {} returned {}: {}", page, status, body);
+            break;
+        }
+
+        let conversations: CrispConversationsResponse = conv_response.json().await.map_err(|e| {
+            tracing::warn!("Failed to parse Crisp conversations: {}", e);
             StatusCode::BAD_GATEWAY
         })?;
 
-    if !conv_response.status().is_success() {
-        let status = conv_response.status();
-        let body = conv_response.text().await.unwrap_or_default();
-        tracing::warn!("Crisp API conversations returned {}: {}", status, body);
-        return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
+        let convs = conversations.data.unwrap_or_default();
+        if convs.is_empty() {
+            break;
+        }
+
+        if let Some(found) = convs.iter().find(|c| {
+            c.meta
+                .as_ref()
+                .and_then(|m| m.email.as_ref())
+                .map(|e| e.eq_ignore_ascii_case(&email))
+                .unwrap_or(false)
+        }) {
+            session_id = Some(found.session_id.clone());
+            break;
+        }
     }
-
-    let conversations: CrispConversationsResponse = conv_response.json().await.map_err(|e| {
-        tracing::warn!("Failed to parse Crisp conversations: {}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
-
-    // Find the conversation matching this email
-    let session_id = conversations
-        .data
-        .as_ref()
-        .and_then(|convs| {
-            convs.iter().find(|c| {
-                c.meta
-                    .as_ref()
-                    .and_then(|m| m.email.as_ref())
-                    .map(|e| e.eq_ignore_ascii_case(&email))
-                    .unwrap_or(false)
-            })
-        })
-        .map(|c| c.session_id.clone());
 
     let session_id = match session_id {
         Some(id) => {
