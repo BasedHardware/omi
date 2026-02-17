@@ -242,15 +242,6 @@ struct Citation: Identifiable {
         case conversation
         case memory
     }
-
-    init(from source: CitationSource) {
-        self.id = source.id
-        self.sourceType = source.sourceType == "conversation" ? .conversation : .memory
-        self.title = source.title
-        self.preview = source.preview
-        self.emoji = source.emoji
-        self.createdAt = source.createdAt
-    }
 }
 
 // MARK: - Chat Mode
@@ -339,7 +330,6 @@ class ChatProvider: ObservableObject {
     }
 
     // MARK: - Cached Context for Prompts
-    private var cachedContext: ChatContextResponse?
     private var cachedMemories: [ServerMemory] = []
     private var memoriesLoaded = false
     private var cachedGoals: [Goal] = []
@@ -925,40 +915,6 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    // MARK: - Fetch Context from Backend
-
-    /// Fetches rich context (conversations + memories) from backend using LLM-based retrieval
-    private func fetchContext(for question: String) async -> String {
-        // Build previous messages for context
-        let previousMessages: [(text: String, sender: String)] = messages.suffix(10).map { msg in
-            (text: msg.text, sender: msg.sender == .user ? "human" : "ai")
-        }
-
-        do {
-            let context = try await APIClient.shared.getChatContext(
-                question: question,
-                timezone: TimeZone.current.identifier,
-                appId: selectedAppId,
-                previousMessages: previousMessages
-            )
-
-            cachedContext = context
-
-            if context.requiresContext {
-                log("ChatProvider fetched context: \(context.conversations.count) conversations, \(context.memories.count) memories")
-                return context.contextString
-            } else {
-                log("ChatProvider: question doesn't require context")
-                // Return just memories for personalization
-                return context.contextString
-            }
-        } catch {
-            logError("Failed to fetch chat context", error: error)
-            // Fall back to cached memories
-            return formatMemoriesSection()
-        }
-    }
-
     // MARK: - Build System Prompt with Variables
 
     /// Builds the system prompt with dynamic template variables
@@ -1046,45 +1002,6 @@ class ChatProvider: ObservableObject {
             let role = msg.sender == .user ? "human" : "assistant"
             return "\(role): \(msg.text)"
         }.joined(separator: "\n")
-    }
-
-    // MARK: - Citation Extraction
-
-    /// Extracts citations from an AI response based on [N] patterns
-    /// - Parameters:
-    ///   - response: The AI response text containing citation markers
-    ///   - sources: Available citation sources from the context
-    /// - Returns: Array of citations that were actually referenced in the response
-    private func extractCitations(from response: String, sources: [CitationSource]) -> [Citation] {
-        guard !sources.isEmpty else { return [] }
-
-        // Find all [N] patterns in response
-        let pattern = "\\[(\\d+)\\]"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        let range = NSRange(response.startIndex..., in: response)
-        let matches = regex.matches(in: response, range: range)
-
-        // Extract unique indices
-        var citedIndices = Set<Int>()
-        for match in matches {
-            if let indexRange = Range(match.range(at: 1), in: response),
-               let index = Int(response[indexRange]) {
-                citedIndices.insert(index)
-            }
-        }
-
-        // Map to Citation objects (only cited sources)
-        return sources
-            .filter { citedIndices.contains($0.index) }
-            .map { Citation(from: $0) }
-    }
-
-    /// Strips citation markers [N] from display text
-    /// - Parameter text: Text containing citation markers
-    /// - Returns: Cleaned text without citation markers
-    private func stripCitationMarkers(from text: String) -> String {
-        text.replacingOccurrences(of: "\\[\\d+\\]", with: "", options: .regularExpression)
     }
 
     /// Initialize chat: fetch sessions and load messages
@@ -1444,28 +1361,18 @@ class ChatProvider: ObservableObject {
             streamingFlushWorkItem = nil
             flushStreamingBuffer()
 
-            // Extract citations from the response and strip markers for display
-            let citationSources = cachedContext?.citationSources ?? []
-            let citations = extractCitations(from: queryResult.text, sources: citationSources)
-            let displayText = stripCitationMarkers(from: queryResult.text)
-
             // Determine the final text to display and save
             let messageText: String
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
-                messageText = messages[index].text.isEmpty ? displayText : stripCitationMarkers(from: messages[index].text)
+                messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                 messages[index].text = messageText
-                messages[index].citations = citations
                 messages[index].isStreaming = false
                 completeRemainingToolCalls(messageId: aiMessageId)
-
-                if !citations.isEmpty {
-                    log("Extracted \(citations.count) citation(s) from response")
-                }
             } else {
                 // Message no longer in memory (user switched away from this session).
                 // Still need to persist the response to the backend.
-                messageText = displayText
+                messageText = queryResult.text
                 log("Chat response arrived after session switch, persisting to backend only")
             }
 
