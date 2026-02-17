@@ -372,10 +372,11 @@ extension PostHogManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext
+            "has_context": hasContext,
+            "source": source
         ])
     }
 

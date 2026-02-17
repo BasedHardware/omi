@@ -94,11 +94,10 @@ actor AgentSyncService {
     // MARK: - Sync loop
 
     private func syncLoop() {
-        syncTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self = self, self.isRunning else { break }
-                await self.syncTick()
-                try? await Task.sleep(nanoseconds: self.syncInterval)
+        syncTask = Task {
+            while !Task.isCancelled && isRunning {
+                await syncTick()
+                try? await Task.sleep(nanoseconds: syncInterval)
             }
         }
     }

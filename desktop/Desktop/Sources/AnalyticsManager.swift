@@ -350,9 +350,9 @@ class AnalyticsManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
-        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
-        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
+        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
     }
 
     // MARK: - Search Events

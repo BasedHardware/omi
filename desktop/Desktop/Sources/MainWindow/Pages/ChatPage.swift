@@ -441,7 +441,7 @@ struct ChatPage: View {
     private var inputArea: some View {
         ChatInputView(
             onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil)
+                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
                 Task { await chatProvider.sendMessage(text) }
             },
             onFollowUp: { text in

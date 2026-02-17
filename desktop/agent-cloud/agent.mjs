@@ -27,23 +27,6 @@ const SYNC_TABLES = new Set([
   "ai_user_profiles", "task_dedup_log",
 ]);
 
-// FTS rebuild queries — run after sync inserts to keep full-text indexes current.
-// INSERT OR REPLACE fires the existing delete+insert triggers, but we do an
-// explicit rebuild per-row as a safety net.
-const FTS_REBUILD = {
-  screenshots: {
-    sql: `INSERT OR REPLACE INTO screenshots_fts(rowid, ocrText, windowTitle, appName)
-          SELECT id, ocrText, windowTitle, appName FROM screenshots WHERE id = ?`,
-  },
-  action_items: {
-    sql: `INSERT OR REPLACE INTO action_items_fts(rowid, description)
-          SELECT id, description FROM action_items WHERE id = ?`,
-  },
-  staged_tasks: {
-    sql: `INSERT OR REPLACE INTO staged_tasks_fts(rowid, description)
-          SELECT id, description FROM staged_tasks WHERE id = ?`,
-  },
-};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
@@ -646,19 +629,8 @@ function startServer() {
 
           insertMany(rows);
 
-          // Rebuild FTS for tables that have FTS indexes
-          // The DB has triggers, but INSERT OR REPLACE fires DELETE+INSERT which
-          // the triggers handle. However, if FTS gets out of sync, we rebuild explicitly.
-          if (FTS_REBUILD[table]) {
-            const fts = FTS_REBUILD[table];
-            const ids = rows.map((r) => r.id).filter(Boolean);
-            if (ids.length > 0) {
-              const rebuildStmt = db.prepare(fts.sql);
-              for (const id of ids) {
-                rebuildStmt.run(id);
-              }
-            }
-          }
+          // FTS is kept in sync by triggers on the content tables.
+          // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
           log(`Sync: ${rows.length} rows → ${table}`);
           res.writeHead(200, { "Content-Type": "application/json" });

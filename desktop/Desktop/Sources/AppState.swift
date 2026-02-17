@@ -271,6 +271,8 @@ class AppState: ObservableObject {
                     self.stopAudioCapture()
                     self.clearTranscriptionState()
                 }
+                // Flush final sync changes before sleep
+                await AgentSyncService.shared.stop()
             }
         }
 

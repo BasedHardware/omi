@@ -52,6 +52,7 @@ struct TaskChatPanel: View {
                 // Input area
                 ChatInputView(
                     onSend: { text in
+                        AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                         Task { await chatProvider.sendMessage(text) }
                     },
                     onFollowUp: { text in
