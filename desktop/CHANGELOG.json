@@ -1,6 +1,22 @@
 {
   "releases": [
     {
+      "version": "0.9.0",
+      "date": "2026-02-17",
+      "changes": [
+        "Browser extension support: AI agent can use your logged-in Chrome sessions instead of an isolated browser",
+        "Cloud agent VMs auto-stop after 30 min idle and auto-restart when needed, saving resources",
+        "Fixed 2+ second hangs when opening large conversations with lazy-loading transcript segments",
+        "Hardware-accelerated screen recording (hevc_videotoolbox) for lower CPU usage",
+        "Auto-detects video calls (Zoom, Teams, Meet) and reduces capture frequency to avoid slowdowns",
+        "Floating bar shows OMI logo and no longer drifts across the screen or off-screen on monitor disconnect",
+        "AI agent turn limit removed — tasks can run as many steps as needed",
+        "Capped in-memory embeddings to 5,000 entries to prevent unbounded memory growth",
+        "Fixed database crashes from concurrent sync operations during memory and action item writes",
+        "Reduced error noise: cleaner Sentry logs, quieter Crisp polling, slower recovery retries"
+      ]
+    },
+    {
       "version": "0.8.9",
       "date": "2026-02-16",
       "changes": [
