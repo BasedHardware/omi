@@ -454,14 +454,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         styleMask.remove(.resizable)
         isResizingProgrammatically = true
-
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.2
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
-        NSAnimationContext.endGrouping()
-
+        // Non-animated setFrame avoids race between window-server animation and
+        // NSTrackingArea updates that causes hover flicker. SwiftUI handles the visual transition.
+        self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
         self.isResizingProgrammatically = false
     }
 
