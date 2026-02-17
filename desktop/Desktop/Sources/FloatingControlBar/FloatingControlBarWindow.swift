@@ -341,7 +341,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             width: max(size.width, FloatingControlBarWindow.minBarSize.width),
             height: max(size.height, FloatingControlBarWindow.minBarSize.height)
         )
-        let newOrigin = originForTopLeftAnchor(newSize: constrainedSize)
+        let newOrigin = originForCenterAnchor(newSize: constrainedSize)
 
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
@@ -369,8 +369,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
-        // Use expanded bar width for AI panels, compact pill for collapsed
-        let width = height <= FloatingControlBarWindow.expandedBarSize.height ? FloatingControlBarWindow.expandedBarSize.width : FloatingControlBarWindow.expandedWidth
+        // Use expanded bar width for AI input panels — only response view uses the wider expandedWidth
+        let width = FloatingControlBarWindow.expandedBarSize.width
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
