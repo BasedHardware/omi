@@ -427,7 +427,7 @@ async function checkIdleAndStop() {
   const idleMs = Date.now() - lastActivityAt;
   if (idleMs < IDLE_TIMEOUT_MS) return;
 
-  log(`Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
+  console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
 
   try {
     const metaHeaders = { "Metadata-Flavor": "Google" };
@@ -451,14 +451,14 @@ async function checkIdleAndStop() {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
-    log(`Stop request sent for ${name}: HTTP ${resp.status}`);
+    console.log(`[server] Stop request sent for ${name}: HTTP ${resp.status}`);
   } catch (err) {
-    log(`GCE API stop failed: ${err.message} — trying shutdown command`);
+    console.log(`[server] GCE API stop failed: ${err.message} — trying shutdown command`);
     const { execSync } = await import("child_process");
     try {
       execSync("sudo shutdown -h now");
     } catch (e) {
-      log(`Shutdown command also failed: ${e.message}`);
+      console.log(`[server] Shutdown command also failed: ${e.message}`);
     }
   }
 }
