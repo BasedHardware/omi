@@ -16,7 +16,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var inputHeightCancellable: AnyCancellable?
-    private var hoverCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
 
     var onPlayPause: (() -> Void)?
@@ -138,18 +137,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.state.isDragging = false
             }
         }
-
-        // Observe hover state to resize between compact circle and expanded bar
-        hoverCancellable = state.$isHoveringBar
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] isHovering in
-                guard let self = self,
-                      !self.state.showingAIConversation,
-                      !self.state.isVoiceListening else { return }
-                let size = isHovering ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
-                self.resizeAnchored(to: size, makeResizable: false, animated: true)
-            }
     }
 
     // MARK: - AI Actions
