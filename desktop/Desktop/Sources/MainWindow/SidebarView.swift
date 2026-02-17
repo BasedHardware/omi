@@ -1206,12 +1206,22 @@ struct NavItemView: View {
                         .frame(width: iconWidth)
                 }
 
-                // Badge on icon when collapsed (hidden when locked)
-                if isCollapsed && badge > 0 && !isLocked {
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 8, height: 8)
-                        .offset(x: 4, y: -4)
+                // Badge on icon (collapsed = dot, expanded = count)
+                if badge > 0 && !isLocked {
+                    if isCollapsed {
+                        Circle()
+                            .fill(OmiColors.purplePrimary)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 4, y: -4)
+                    } else {
+                        Text("\(badge)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(minWidth: 14, minHeight: 14)
+                            .background(OmiColors.purplePrimary)
+                            .clipShape(Circle())
+                            .offset(x: 6, y: -6)
+                    }
                 }
 
                 // Status indicator when collapsed (for Focus, hidden when locked)
@@ -1247,16 +1257,7 @@ struct NavItemView: View {
                             .frame(width: 8, height: 8)
                     }
 
-                    // Badge count when expanded
-                    if badge > 0 {
-                        Text("\(badge)")
-                            .scaledFont(size: 11, weight: .semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(OmiColors.purplePrimary)
-                            .clipShape(Capsule())
-                    }
+                    // Badge count now shown on icon (see ZStack above)
                 }
             }
         }
