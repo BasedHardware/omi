@@ -569,26 +569,23 @@ struct ConversationDetailView: View {
 
     // MARK: - Transcript Bubbles (shared)
 
-    private var transcriptBubblesView: some View {
+    /// Flat content intended to be placed inside a parent LazyVStack.
+    /// Do NOT wrap this in another LazyVStack or VStack — it emits ForEach items directly.
+    @ViewBuilder
+    private var transcriptBubblesContent: some View {
         let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
-        return LazyVStack(spacing: 12) {
-            ForEach(displayConversation.transcriptSegments) { segment in
-                SpeakerBubbleView(
-                    segment: segment,
-                    isUser: segment.isUser,
-                    personName: segment.personId.flatMap { peopleDict[$0]?.name },
-                    onSpeakerTapped: segment.isUser ? nil : {
-                        selectedSegmentForNaming = segment
-                        showNameSpeakerSheet = true
-                    }
-                )
-            }
+        ForEach(displayConversation.transcriptSegments) { segment in
+            SpeakerBubbleView(
+                segment: segment,
+                isUser: segment.isUser,
+                personName: segment.personId.flatMap { peopleDict[$0]?.name },
+                onSpeakerTapped: segment.isUser ? nil : {
+                    selectedSegmentForNaming = segment
+                    showNameSpeakerSheet = true
+                }
+            )
+            .padding(.horizontal, 16)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(OmiColors.backgroundSecondary)
-        )
     }
 
     // MARK: - Overview Section
@@ -670,27 +667,6 @@ struct ConversationDetailView: View {
             Capsule()
                 .fill(OmiColors.backgroundTertiary)
         )
-    }
-
-    // MARK: - Transcript Section
-
-    private var transcriptSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Transcript")
-                    .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
-
-                Spacer()
-
-                Text("\(displayConversation.transcriptSegments.count) segments")
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
-            }
-
-            // Transcript content
-            transcriptBubblesView
-        }
     }
 
     // MARK: - App Results Section

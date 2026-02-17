@@ -50,6 +50,40 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Daily settings state tracking
     private var settingsStateTimer: Timer?
 
+    // Video call throttling: reduce capture frequency when a call app is frontmost
+    // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
+    private var videoCallFrameCounter = 0
+    private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
+
+    /// Apps whose primary purpose is video/audio calls.
+    private static let videoCallApps: Set<String> = [
+        "Microsoft Teams",
+        "zoom.us",
+        "FaceTime",
+        "Webex",
+        "Cisco Webex Meetings",
+        "GoTo Meeting",
+        "GoToMeeting",
+    ]
+
+    /// Keywords in browser window titles that indicate a video call.
+    private static let videoCallBrowserKeywords: [String] = [
+        "Google Meet",
+        "meet.google.com",
+        "Teams - Microsoft",  // Teams web app
+    ]
+
+    /// Browser app names (for window-title-based call detection).
+    private static let browserApps: Set<String> = [
+        "Google Chrome",
+        "Arc",
+        "Safari",
+        "Firefox",
+        "Microsoft Edge",
+        "Brave Browser",
+        "Opera",
+    ]
+
     // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
     private var isInRecoveryMode = false
     private var recoveryRetryCount = 0
@@ -501,6 +535,19 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Check if the current app is excluded from Rewind capture
         let isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
 
+        // Throttle capture when a video call app is frontmost to reduce CPU contention.
+        // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
+        if isVideoCallApp(appName: realAppName, windowTitle: windowTitle) {
+            videoCallFrameCounter += 1
+            if videoCallFrameCounter < videoCallThrottleFactor {
+                return  // Skip this frame
+            }
+            // This frame will be captured — reset counter for next cycle
+            videoCallFrameCounter = 0
+        } else {
+            videoCallFrameCounter = 0  // Reset when leaving a call app
+        }
+
         // Unified context switch detection (covers app changes, window ID changes, and title changes)
         // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
         if let appForCheck = realAppName ?? currentApp {
@@ -898,6 +945,30 @@ public class ProactiveAssistantsPlugin: NSObject {
             log("ProactiveAssistantsPlugin: Capture failing with permission granted, entering recovery mode")
             enterRecoveryMode()
         }
+    }
+
+    // MARK: - Video Call Detection
+
+    /// Check if the frontmost app (and optionally window title) indicates an active video call.
+    private func isVideoCallApp(appName: String?, windowTitle: String?) -> Bool {
+        guard let appName = appName else { return false }
+
+        // Direct match: dedicated video call apps
+        if Self.videoCallApps.contains(appName) {
+            return true
+        }
+
+        // Browser-based calls: check window title for call keywords
+        if Self.browserApps.contains(appName), let title = windowTitle {
+            let lowercaseTitle = title.lowercased()
+            for keyword in Self.videoCallBrowserKeywords {
+                if lowercaseTitle.contains(keyword.lowercased()) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     // MARK: - Special System Mode Detection
