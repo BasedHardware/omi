@@ -540,12 +540,16 @@ public class ProactiveAssistantsPlugin: NSObject {
         if isVideoCallApp(appName: realAppName, windowTitle: windowTitle) {
             videoCallFrameCounter += 1
             if videoCallFrameCounter < videoCallThrottleFactor {
+                if videoCallFrameCounter == 1 {
+                    log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
+                }
                 return  // Skip this frame
             }
             // This frame will be captured — reset counter for next cycle
             videoCallFrameCounter = 0
-        } else {
-            videoCallFrameCounter = 0  // Reset when leaving a call app
+        } else if videoCallFrameCounter > 0 {
+            log("VideoCallThrottle: Left call app, resuming normal capture")
+            videoCallFrameCounter = 0
         }
 
         // Unified context switch detection (covers app changes, window ID changes, and title changes)
