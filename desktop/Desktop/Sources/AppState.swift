@@ -459,32 +459,8 @@ class AppState: ObservableObject {
 
     /// Trigger screen recording permission prompt
     func triggerScreenRecordingPermission() {
-        // Run Launch Services registration on a background thread, then request permissions
-        // after registration completes. CGRequestScreenCaptureAccess() requires the app to be
-        // registered in Launch Services first, otherwise the app won't appear in System Settings.
-        Task.detached {
-            // Register synchronously on background thread (lsregister must finish first)
-            ScreenCaptureService.ensureLaunchServicesRegistrationSync()
-
-            await MainActor.run {
-                // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list
-                CGRequestScreenCaptureAccess()
-
-                // Request ScreenCaptureKit permission too (macOS 14+)
-                if #available(macOS 14.0, *) {
-                    Task {
-                        _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
-                    }
-                }
-
-                // Open System Settings after a brief delay so the app appears in the list
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if !CGPreflightScreenCaptureAccess() {
-                        ScreenCaptureService.openScreenRecordingPreferences()
-                    }
-                }
-            }
-        }
+        // Request both traditional TCC and ScreenCaptureKit permissions
+        ScreenCaptureService.requestAllScreenCapturePermissions()
     }
 
     /// Trigger automation permission by attempting to use Apple Events
