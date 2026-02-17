@@ -16,11 +16,11 @@ struct AskAIInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar: escape hint + model picker
+            // Top bar: escape hint (model picker moved to Settings)
             HStack {
                 Spacer()
 
-                modelPicker
+                // modelPicker — moved to Settings > Ask Omi Floating Bar
 
                 HStack(spacing: 4) {
                     Text("esc")
@@ -98,39 +98,8 @@ struct AskAIInputView: View {
         }
     }
 
-    private var modelPicker: some View {
-        HStack(spacing: 2) {
-            Text(currentModelLabel)
-            Image(systemName: "chevron.down")
-                .imageScale(.small)
-        }
-        .scaledFont(size: 11)
-        .foregroundColor(.secondary)
-        .fixedSize()
-        .contentShape(Rectangle())
-        .onTapGesture {
-            showModelMenu()
-        }
-    }
-
-    private func showModelMenu() {
-        let menu = NSMenu()
-        for model in FloatingControlBarState.availableModels {
-            let item = NSMenuItem(title: model.label, action: #selector(ModelMenuTarget.selectModel(_:)), keyEquivalent: "")
-            item.state = state.selectedModel == model.id ? .on : .off
-            item.representedObject = model.id
-            item.target = ModelMenuTarget.shared
-            menu.addItem(item)
-        }
-        ModelMenuTarget.shared.onSelect = { [state] modelId in
-            state.selectedModel = modelId
-        }
-        if let event = NSApp.currentEvent, let contentView = event.window?.contentView {
-            menu.popUp(positioning: nil, at: event.locationInWindow, in: contentView)
-        }
-    }
-
-    private var currentModelLabel: String {
-        FloatingControlBarState.availableModels.first { $0.id == state.selectedModel }?.label ?? "Sonnet"
-    }
+    // Model picker moved to Settings > Ask Omi Floating Bar
+    // private var modelPicker: some View { ... }
+    // private func showModelMenu() { ... }
+    // private var currentModelLabel: String { ... }
 }

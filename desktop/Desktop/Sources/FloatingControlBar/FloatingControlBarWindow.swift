@@ -744,7 +744,7 @@ class FloatingControlBarManager {
             fullMessage = "[Screenshot of user's screen attached: \(url.path)]\n\n\(message)"
         }
 
-        await provider.sendMessage(fullMessage, model: barWindow.state.selectedModel)
+        await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel)
     }
 }
 
