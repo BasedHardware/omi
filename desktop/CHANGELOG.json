@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "0.9.1",
+      "date": "2026-02-17",
+      "changes": [
+        "Redesigned Memories page: compact horizontal layout with hover info popovers for details",
+        "Unified Rewind toggle: single switch controls both screen capture and audio recording",
+        "Smarter AI chat: proactively searches your local database before saying 'I don't know'",
+        "Floating bar visual refresh: new OMI text logo, better contrast, smoother hover animations",
+        "Draggable floating bar is now opt-in via Settings > Shortcuts",
+        "Fixed crash when backend is unreachable: sync now uses exponential backoff instead of hammering every 3 seconds",
+        "Fixed potential crash from unsafe URL construction in sync service",
+        "Fixed click-through handler that could permanently block clicks if deallocated mid-operation",
+        "Chrome extension auto-installs when browser mode is enabled",
+        "Simplified dashboard: weekly score view, full-width tasks widget",
+        "Rewind storage stats now shown in Settings",
+        "Settings search supports multi-word queries"
+      ]
+    },
+    {
       "version": "0.9.0",
       "date": "2026-02-17",
       "changes": [
