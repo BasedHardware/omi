@@ -206,11 +206,107 @@ class AuthService {
         }
     }
 
-    // MARK: - Sign in with Apple (Web OAuth Flow)
+    // MARK: - Sign in with Apple (Native)
 
     @MainActor
     func signInWithApple() async throws {
-        try await signIn(provider: "apple")
+        guard !isLoading else {
+            NSLog("OMI AUTH: Sign in already in progress, ignoring duplicate request")
+            return
+        }
+
+        NSLog("OMI AUTH: Starting native Apple Sign In")
+        isLoading = true
+        error = nil
+        AnalyticsManager.shared.signInStarted(provider: "apple")
+        defer { isLoading = false }
+
+        do {
+            // Step 1: Generate nonce for security
+            let nonce = generateNonce()
+            currentNonce = nonce
+            let hashedNonce = sha256(nonce)
+
+            // Step 2: Perform native Apple Sign In
+            let appleCredential = try await performAppleSignIn(hashedNonce: hashedNonce)
+            appleSignInDelegate = nil  // Clean up
+
+            // Step 3: Extract identity token
+            guard let identityTokenData = appleCredential.identityToken,
+                  let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+                throw AuthError.missingToken
+            }
+            NSLog("OMI AUTH: Got Apple identity token")
+
+            // Save user name if provided (Apple only sends name on first sign-in)
+            if let fullName = appleCredential.fullName {
+                let given = fullName.givenName ?? ""
+                let family = fullName.familyName ?? ""
+                if !given.isEmpty {
+                    givenName = given
+                    familyName = family
+                    NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
+                }
+            }
+            if let email = appleCredential.email {
+                AuthState.shared.userEmail = email
+            }
+
+            // Step 4: Sign in with Firebase using Apple identity token (REST API)
+            NSLog("OMI AUTH: Signing in with Firebase using Apple identity token...")
+            let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
+
+            // Step 5: Store tokens
+            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
+
+            // Also try Firebase SDK sign-in (best effort for other Firebase features)
+            do {
+                let credential = OAuthProvider.credential(withProviderID: "apple.com", idToken: identityToken, rawNonce: nonce)
+                let authResult = try await Auth.auth().signIn(with: credential)
+                NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
+            } catch let firebaseError as NSError {
+                NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
+            }
+
+            isSignedIn = true
+
+            // Extract email from identity token if not provided by Apple
+            if AuthState.shared.userEmail == nil {
+                if let payload = decodeJWT(identityToken),
+                   let email = payload["email"] as? String {
+                    AuthState.shared.userEmail = email
+                }
+            }
+
+            let userId = firebaseTokens.localId
+            saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
+
+            if givenName.isEmpty {
+                loadNameFromFirebaseIfNeeded()
+            }
+
+            AnalyticsManager.shared.identify()
+            AnalyticsManager.shared.signInCompleted(provider: "apple")
+
+            if !AnalyticsManager.isDevBuild {
+                let sentryUser = User(userId: userId)
+                sentryUser.email = AuthState.shared.userEmail
+                sentryUser.username = displayName.isEmpty ? nil : displayName
+                SentrySDK.setUser(sentryUser)
+            }
+
+            NSLog("OMI AUTH: Apple Sign in complete!")
+            fetchConversations()
+
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            NSLog("OMI AUTH: User cancelled Apple Sign In")
+            // User cancelled - don't show error or track as failure
+        } catch {
+            NSLog("OMI AUTH: Error during Apple sign in: %@", error.localizedDescription)
+            AnalyticsManager.shared.signInFailed(provider: "apple", error: error.localizedDescription)
+            self.error = error.localizedDescription
+            throw error
+        }
     }
 
     // MARK: - Sign in with Google (Web OAuth Flow)
@@ -877,6 +973,140 @@ class AuthService {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    // MARK: - Native Apple Sign In Helpers
+
+    /// Show the native Apple Sign In dialog and return the credential
+    private func performAppleSignIn(hashedNonce: String) async throws -> ASAuthorizationAppleIDCredential {
+        try await withCheckedThrowingContinuation { continuation in
+            let provider = ASAuthorizationAppleIDProvider()
+            let request = provider.createRequest()
+            request.requestedScopes = [.fullName, .email]
+            request.nonce = hashedNonce
+
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            let delegate = AppleSignInDelegate(continuation: continuation)
+            self.appleSignInDelegate = delegate  // Keep delegate alive
+            controller.delegate = delegate
+            controller.presentationContextProvider = delegate
+            controller.performRequests()
+        }
+    }
+
+    /// Sign in with Firebase using an Apple identity token via REST API
+    /// This bypasses the backend entirely - Firebase verifies the Apple JWT directly
+    private func signInWithAppleIdentityToken(identityToken: String, nonce: String) async throws -> FirebaseTokenResult {
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let postBody = "id_token=\(identityToken)&providerId=apple.com&nonce=\(nonce)"
+        let body: [String: Any] = [
+            "postBody": postBody,
+            "requestUri": "http://localhost",
+            "returnIdpCredential": true,
+            "returnSecureToken": true
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+            NSLog("OMI AUTH: Firebase signInWithIdp error: %@", errorBody)
+            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = json["idToken"] as? String,
+              let refreshToken = json["refreshToken"] as? String else {
+            NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response")
+            throw AuthError.invalidResponse
+        }
+
+        let expiresIn: Int
+        if let expiresInStr = json["expiresIn"] as? String {
+            expiresIn = Int(expiresInStr) ?? 3600
+        } else if let expiresInInt = json["expiresIn"] as? Int {
+            expiresIn = expiresInInt
+        } else {
+            expiresIn = 3600
+        }
+
+        var localId = json["localId"] as? String ?? ""
+        if localId.isEmpty {
+            if let payload = decodeJWT(idToken),
+               let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
+                localId = userId
+            }
+        }
+
+        // Get email from response if not already set
+        if AuthState.shared.userEmail == nil {
+            if let email = json["email"] as? String {
+                AuthState.shared.userEmail = email
+            }
+        }
+
+        return FirebaseTokenResult(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            localId: localId
+        )
+    }
+
+    /// Generate a random nonce string for Apple Sign In
+    private func generateNonce(length: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    /// SHA-256 hash of a string (for Apple Sign In nonce)
+    private func sha256(_ input: String) -> String {
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - Apple Sign In Delegate
+
+private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>?
+
+    init(continuation: CheckedContinuation<ASAuthorizationAppleIDCredential, Error>) {
+        self.continuation = continuation
+        super.init()
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            continuation?.resume(throwing: AuthError.invalidCredential)
+            continuation = nil
+            return
+        }
+        continuation?.resume(returning: credential)
+        continuation = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return NSApp.keyWindow ?? NSApp.windows.first!
     }
 }
 
