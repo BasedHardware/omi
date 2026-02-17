@@ -206,7 +206,7 @@ class AuthService {
         }
     }
 
-    // MARK: - Sign in with Apple (Native)
+    // MARK: - Sign in with Apple (Native with Web OAuth Fallback)
 
     @MainActor
     func signInWithApple() async throws {
@@ -215,98 +215,110 @@ class AuthService {
             return
         }
 
+        // Try native Apple Sign In first (works in release builds with proper entitlements)
+        // Falls back to web OAuth if native fails (e.g., dev builds without provisioning profile)
+        do {
+            try await signInWithAppleNative()
+            return
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            NSLog("OMI AUTH: User cancelled Apple Sign In")
+            return
+        } catch let error as ASAuthorizationError where error.code == .unknown {
+            // Error 1000 = missing entitlement (dev builds signed with Developer ID)
+            NSLog("OMI AUTH: Native Apple Sign In unavailable (error 1000), falling back to web OAuth")
+        } catch {
+            NSLog("OMI AUTH: Native Apple Sign In failed (%@), falling back to web OAuth", error.localizedDescription)
+        }
+
+        // Fall back to web OAuth flow (browser-based, works without special entitlements)
+        try await signIn(provider: "apple")
+    }
+
+    // MARK: - Native Apple Sign In (requires com.apple.developer.applesignin entitlement)
+
+    @MainActor
+    private func signInWithAppleNative() async throws {
         NSLog("OMI AUTH: Starting native Apple Sign In")
         isLoading = true
         error = nil
         AnalyticsManager.shared.signInStarted(provider: "apple")
         defer { isLoading = false }
 
+        // Step 1: Generate nonce for security
+        let nonce = generateNonce()
+        currentNonce = nonce
+        let hashedNonce = sha256(nonce)
+
+        // Step 2: Perform native Apple Sign In
+        let appleCredential = try await performAppleSignIn(hashedNonce: hashedNonce)
+        appleSignInDelegate = nil  // Clean up
+
+        // Step 3: Extract identity token
+        guard let identityTokenData = appleCredential.identityToken,
+              let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+            throw AuthError.missingToken
+        }
+        NSLog("OMI AUTH: Got Apple identity token")
+
+        // Save user name if provided (Apple only sends name on first sign-in)
+        if let fullName = appleCredential.fullName {
+            let given = fullName.givenName ?? ""
+            let family = fullName.familyName ?? ""
+            if !given.isEmpty {
+                givenName = given
+                familyName = family
+                NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
+            }
+        }
+        if let email = appleCredential.email {
+            AuthState.shared.userEmail = email
+        }
+
+        // Step 4: Sign in with Firebase using Apple identity token (REST API)
+        NSLog("OMI AUTH: Signing in with Firebase using Apple identity token...")
+        let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
+
+        // Step 5: Store tokens
+        saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
+
+        // Also try Firebase SDK sign-in (best effort for other Firebase features)
         do {
-            // Step 1: Generate nonce for security
-            let nonce = generateNonce()
-            currentNonce = nonce
-            let hashedNonce = sha256(nonce)
+            let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
+            let authResult = try await Auth.auth().signIn(with: credential)
+            NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
+        } catch let firebaseError as NSError {
+            NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
+        }
 
-            // Step 2: Perform native Apple Sign In
-            let appleCredential = try await performAppleSignIn(hashedNonce: hashedNonce)
-            appleSignInDelegate = nil  // Clean up
+        isSignedIn = true
 
-            // Step 3: Extract identity token
-            guard let identityTokenData = appleCredential.identityToken,
-                  let identityToken = String(data: identityTokenData, encoding: .utf8) else {
-                throw AuthError.missingToken
-            }
-            NSLog("OMI AUTH: Got Apple identity token")
-
-            // Save user name if provided (Apple only sends name on first sign-in)
-            if let fullName = appleCredential.fullName {
-                let given = fullName.givenName ?? ""
-                let family = fullName.familyName ?? ""
-                if !given.isEmpty {
-                    givenName = given
-                    familyName = family
-                    NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
-                }
-            }
-            if let email = appleCredential.email {
+        // Extract email from identity token if not provided by Apple
+        if AuthState.shared.userEmail == nil {
+            if let payload = decodeJWT(identityToken),
+               let email = payload["email"] as? String {
                 AuthState.shared.userEmail = email
             }
-
-            // Step 4: Sign in with Firebase using Apple identity token (REST API)
-            NSLog("OMI AUTH: Signing in with Firebase using Apple identity token...")
-            let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
-
-            // Step 5: Store tokens
-            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
-
-            // Also try Firebase SDK sign-in (best effort for other Firebase features)
-            do {
-                let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
-                let authResult = try await Auth.auth().signIn(with: credential)
-                NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
-            } catch let firebaseError as NSError {
-                NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
-            }
-
-            isSignedIn = true
-
-            // Extract email from identity token if not provided by Apple
-            if AuthState.shared.userEmail == nil {
-                if let payload = decodeJWT(identityToken),
-                   let email = payload["email"] as? String {
-                    AuthState.shared.userEmail = email
-                }
-            }
-
-            let userId = firebaseTokens.localId
-            saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
-
-            if givenName.isEmpty {
-                loadNameFromFirebaseIfNeeded()
-            }
-
-            AnalyticsManager.shared.identify()
-            AnalyticsManager.shared.signInCompleted(provider: "apple")
-
-            if !AnalyticsManager.isDevBuild {
-                let sentryUser = User(userId: userId)
-                sentryUser.email = AuthState.shared.userEmail
-                sentryUser.username = displayName.isEmpty ? nil : displayName
-                SentrySDK.setUser(sentryUser)
-            }
-
-            NSLog("OMI AUTH: Apple Sign in complete!")
-            fetchConversations()
-
-        } catch let error as ASAuthorizationError where error.code == .canceled {
-            NSLog("OMI AUTH: User cancelled Apple Sign In")
-            // User cancelled - don't show error or track as failure
-        } catch {
-            NSLog("OMI AUTH: Error during Apple sign in: %@", error.localizedDescription)
-            AnalyticsManager.shared.signInFailed(provider: "apple", error: error.localizedDescription)
-            self.error = error.localizedDescription
-            throw error
         }
+
+        let userId = firebaseTokens.localId
+        saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
+
+        if givenName.isEmpty {
+            loadNameFromFirebaseIfNeeded()
+        }
+
+        AnalyticsManager.shared.identify()
+        AnalyticsManager.shared.signInCompleted(provider: "apple")
+
+        if !AnalyticsManager.isDevBuild {
+            let sentryUser = User(userId: userId)
+            sentryUser.email = AuthState.shared.userEmail
+            sentryUser.username = displayName.isEmpty ? nil : displayName
+            SentrySDK.setUser(sentryUser)
+        }
+
+        NSLog("OMI AUTH: Apple Sign in complete!")
+        fetchConversations()
     }
 
     // MARK: - Sign in with Google (Web OAuth Flow)
